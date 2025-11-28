@@ -15,11 +15,30 @@ export function ForgotPasswordForm() {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      // Call forgot password API
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to send reset email");
+      }
+
+      // Success! Show confirmation
       setIsSubmitted(true);
-    }, 1500);
+    } catch (error: any) {
+      console.error("Forgot password error:", error);
+      alert(error.message || "Failed to send reset email. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (isSubmitted) {

@@ -12,17 +12,43 @@ export function SignInForm() {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError("");
+    try {
+      // Call signin API
+      const response = await fetch("/api/auth/signin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      });
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to sign in");
+      }
+
+      // Success! Redirect to dashboard
       router.push("/dashboard");
-    }, 1500);
+      router.refresh(); // Refresh to update auth state
+    } catch (error: any) {
+      console.error("Sign in error:", error);
+      setError(
+        error.message || "Failed to sign in. Please check your credentials."
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -34,6 +60,22 @@ export function SignInForm() {
           </h1>
           <p className="text-slate-700 text-sm">Sign in to your account</p>
         </div>
+
+        {/* Custom error message box */}
+        {error && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between mb-2">
+            <div>
+              <p className="text-sm text-red-600 font-medium">{error}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setError("")}
+              className="ml-4 px-3 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200 text-xs font-semibold transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <FormField

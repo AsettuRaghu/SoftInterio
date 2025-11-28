@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { Header } from "@/components/layout/Header";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { Sidebar } from "@/components/layout/SidebarNew";
 import { cn } from "@/utils/cn";
 
 interface DashboardLayoutProps {
@@ -29,7 +29,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         <main
           className={cn(
             "flex-1 min-h-screen pt-20 transition-all duration-300 ease-in-out",
-            isSidebarExpanded ? "ml-52" : "ml-14"
+            isSidebarExpanded ? "ml-60" : "ml-14"
           )}
         >
           <div className="p-8">{children}</div>

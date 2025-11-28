@@ -15,7 +15,15 @@ interface FormData {
   password: string;
   confirmPassword: string;
   companyName: string;
+  companyType: string;
   selectedPlan: string;
+}
+
+interface CompanyType {
+  value: string;
+  label: string;
+  description: string;
+  icon: string;
 }
 
 interface Plan {
@@ -30,6 +38,15 @@ interface Plan {
   highlight: string;
   popular?: boolean;
 }
+
+const companyTypes: CompanyType[] = [
+  {
+    value: "interiors",
+    label: "Interior Design Company",
+    description: "Interior design companies and studios",
+    icon: "",
+  },
+];
 
 const plans: Plan[] = [
   {
@@ -98,9 +115,11 @@ export function SignUpForm() {
     password: "",
     confirmPassword: "",
     companyName: "",
+    companyType: "interiors",
     selectedPlan: "",
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
   const router = useRouter();
 
   const handleInputChange = (field: keyof FormData, value: string) => {
@@ -109,25 +128,19 @@ export function SignUpForm() {
 
   const handleStep1Submit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Basic validation
-    if (formData.password !== formData.confirmPassword) {
-      alert("Passwords don't match");
-      return;
-    }
-
+    setError("");
     if (
       !formData.firstName ||
       !formData.lastName ||
       !formData.email ||
       !formData.phone ||
       !formData.password ||
-      !formData.companyName
+      !formData.companyName ||
+      !formData.companyType
     ) {
-      alert("Please fill in all required fields");
+      setError("Please fill in all required fields");
       return;
     }
-
     setStep(2);
   };
 
@@ -137,51 +150,117 @@ export function SignUpForm() {
 
   const handleFinalSubmit = async () => {
     if (!formData.selectedPlan) {
-      alert("Please select a subscription plan");
+      setError("Please select a subscription plan");
       return;
     }
-
     setIsLoading(true);
-
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
+    setError("");
+    try {
+      // Call signup API
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password,
+          name: `${formData.firstName} ${formData.lastName}`,
+          company_name: formData.companyName,
+          tenant_type: formData.companyType,
+          phone: formData.phone,
+          selected_plan: formData.selectedPlan,
+        }),
+      });
+      // Log response status for debugging
+      console.log("Response status:", response.status);
+      console.log("Response headers:", response.headers.get("content-type"));
+      // Check if response is JSON
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        console.error("Non-JSON response:", text);
+        throw new Error("Server error. Please check the console for details.");
+      }
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to create account");
+      }
+      // Success! Redirect to activation page
       router.push("/auth/activate");
-    }, 2000);
+    } catch (error: any) {
+      console.error("Signup error:", error);
+      setError(error.message || "Failed to create account. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const renderStep1 = () => (
-    <div className="max-w-md mx-auto">
-      <div className="space-y-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-2">
-            Create Your Account
-          </h1>
-          <p className="text-gray-600 text-sm">
-            Step 1 of 2: Personal & Company Details
-          </p>
+    <div className="w-full max-w-2xl mx-auto px-4">
+      <div className="text-center mb-4">
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">
+          Create Your Account
+        </h1>
+        <p className="text-gray-600 text-sm">
+          Step 1 of 2: Personal & Company Details
+        </p>
+      </div>
+
+      {/* Modal Popup for Error */}
+      {error && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setError("")}
+          ></div>
+          <div className="relative bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4 flex flex-col items-center">
+            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-3">
+              <svg
+                className="w-6 h-6 text-red-600"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+            </div>
+            <p className="text-base text-gray-800 font-medium text-center mb-4">
+              {error}
+            </p>
+            <Button onClick={() => setError("")} className="w-full" size="sm">
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={handleStep1Submit} className="space-y-3">
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            label="First Name"
+            id="firstName"
+            value={formData.firstName}
+            onChange={(e) => handleInputChange("firstName", e.target.value)}
+            placeholder="First name"
+            required
+          />
+          <FormField
+            label="Last Name"
+            id="lastName"
+            value={formData.lastName}
+            onChange={(e) => handleInputChange("lastName", e.target.value)}
+            placeholder="Last name"
+            required
+          />
         </div>
 
-        <form onSubmit={handleStep1Submit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <FormField
-              label="First Name"
-              id="firstName"
-              value={formData.firstName}
-              onChange={(e) => handleInputChange("firstName", e.target.value)}
-              placeholder="First name"
-              required
-            />
-            <FormField
-              label="Last Name"
-              id="lastName"
-              value={formData.lastName}
-              onChange={(e) => handleInputChange("lastName", e.target.value)}
-              placeholder="Last name"
-              required
-            />
-          </div>
-
+        <div className="grid grid-cols-2 gap-4">
           <FormField
             label="Email"
             id="email"
@@ -191,7 +270,6 @@ export function SignUpForm() {
             placeholder="Enter your email"
             required
           />
-
           <FormField
             label="Phone Number"
             id="phone"
@@ -201,16 +279,36 @@ export function SignUpForm() {
             placeholder="Enter your phone number"
             required
           />
+        </div>
 
+        <div className="grid grid-cols-2 gap-4">
           <FormField
-            label="Registered Company Name"
+            label="Company Name"
             id="companyName"
             value={formData.companyName}
             onChange={(e) => handleInputChange("companyName", e.target.value)}
             placeholder="Your company name"
             required
           />
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-gray-900">
+              Company Type <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={formData.companyType}
+              onChange={(e) => handleInputChange("companyType", e.target.value)}
+              className="w-full h-11 px-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              {companyTypes.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
 
+        <div className="grid grid-cols-2 gap-4">
           <FormField
             label="Password"
             id="password"
@@ -220,7 +318,6 @@ export function SignUpForm() {
             placeholder="Create a password"
             required
           />
-
           <FormField
             label="Confirm Password"
             id="confirmPassword"
@@ -232,131 +329,150 @@ export function SignUpForm() {
             placeholder="Confirm your password"
             required
           />
+        </div>
 
+        <div className="pt-2">
           <Button type="submit" className="w-full" size="lg">
             Continue to Plans
           </Button>
-        </form>
-
-        <div className="text-center">
-          <p className="text-sm text-gray-600">
-            Already have an account?{" "}
-            <Link
-              href="/auth/signin"
-              className="text-blue-600 hover:text-blue-500 font-medium"
-            >
-              Sign in
-            </Link>
-          </p>
         </div>
+      </form>
+
+      <div className="text-center mt-4">
+        <p className="text-sm text-gray-600">
+          Already have an account?{" "}
+          <Link
+            href="/auth/signin"
+            className="text-blue-600 hover:text-blue-500 font-medium"
+          >
+            Sign in
+          </Link>
+        </p>
       </div>
     </div>
   );
 
   const renderStep2 = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-3">
+    <div className="w-full max-w-5xl mx-auto px-4">
+      <div className="text-center mb-4">
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">
           Choose Your Plan
         </h1>
-        <p className="text-gray-600 text-base">
-          Step 2 of 2: Select the perfect plan for your studio
+        <p className="text-gray-600 text-sm">
+          Step 2 of 2: Select a subscription plan
         </p>
       </div>
 
-      <div className="max-w-6xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {plans.map((plan) => (
-            <div
-              key={plan.id}
-              className={`relative border-2 rounded-2xl p-8 cursor-pointer transition-all duration-300 hover:shadow-xl ${
-                formData.selectedPlan === plan.id
-                  ? "border-blue-500 bg-blue-50 shadow-lg scale-105"
-                  : "border-gray-200 hover:border-blue-300 hover:shadow-md"
-              } ${plan.popular ? "ring-2 ring-blue-200 shadow-lg" : ""}`}
-              onClick={() => handlePlanSelection(plan.id)}
-            >
-              {plan.popular && (
-                <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 bg-linear-to-r from-blue-500 to-blue-600 text-white text-base font-semibold px-6 py-2.5 rounded-full shadow-lg">
-                  ⭐ Most Popular
-                </div>
-              )}
+      {/* Modal Popup for Error */}
+      {error && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setError("")}
+          ></div>
+          <div className="relative bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4 flex flex-col items-center">
+            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-3">
+              <svg
+                className="w-6 h-6 text-red-600"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+            </div>
+            <p className="text-base text-gray-800 font-medium text-center mb-4">
+              {error}
+            </p>
+            <Button onClick={() => setError("")} className="w-full" size="sm">
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      )}
 
-              {/* Plan Header */}
-              <div className="text-center mb-6">
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                  {plan.name}
-                </h3>
-                <p className="text-lg font-semibold text-blue-600 mb-3">
-                  {plan.subtitle}
-                </p>
-
-                {/* Pricing */}
-                <div className="mb-4">
-                  <div className="flex items-baseline justify-center mb-1">
-                    <span className="text-xl font-bold text-gray-900">
-                      {plan.price}
-                    </span>
-                    <span className="text-lg text-gray-600 ml-1">
-                      /{plan.period.split(" ")[1]}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-500">{plan.period}</p>
-                </div>
-
-                <p className="text-sm text-gray-600 leading-relaxed">
-                  {plan.description}
-                </p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {plans.map((plan) => (
+          <div
+            key={plan.id}
+            onClick={() => handlePlanSelection(plan.id)}
+            className={`relative flex flex-col rounded-2xl border-2 p-6 cursor-pointer transition-all duration-300 ${
+              formData.selectedPlan === plan.id
+                ? "border-blue-500 bg-blue-50 shadow-xl scale-[1.02]"
+                : "border-gray-200 bg-white hover:border-blue-300 hover:shadow-lg"
+            } ${plan.popular ? "ring-2 ring-blue-400" : ""}`}
+          >
+            {plan.popular && (
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-xs font-bold px-4 py-1 rounded-full shadow">
+                Most Popular
               </div>
+            )}
 
-              {/* Features List */}
-              <div className="mb-6">
-                <div className="text-sm font-semibold text-gray-800 mb-4">
-                  What's included:
-                </div>
-                <div className="space-y-3">
-                  {plan.features.map((feature, idx) => (
-                    <div key={idx} className="flex items-start">
-                      <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center mr-3 mt-0.5 shrink-0">
-                        <svg
-                          className="w-3 h-3 text-green-600"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                      </div>
-                      <span className="text-sm text-gray-700 leading-relaxed">
-                        {feature}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+            {/* Selection indicator */}
+            <div className="absolute top-4 right-4">
+              <div
+                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                  formData.selectedPlan === plan.id
+                    ? "border-blue-500 bg-blue-500"
+                    : "border-gray-300"
+                }`}
+              >
+                {formData.selectedPlan === plan.id && (
+                  <svg
+                    className="w-4 h-4 text-white"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                )}
               </div>
+            </div>
 
-              {/* Highlight */}
-              <div className="border-t border-gray-200 pt-4">
-                <p className="text-sm text-blue-600 font-medium text-center italic">
-                  {plan.highlight}
-                </p>
-              </div>
+            {/* Plan header */}
+            <div className="text-center mb-4 pt-2">
+              <h3 className="text-xl font-bold text-gray-900 mb-1">
+                {plan.name}
+              </h3>
+              <p className="text-sm text-blue-600 font-medium">
+                {plan.subtitle}
+              </p>
+            </div>
 
-              {/* Selection Indicator */}
-              <div className="absolute top-6 right-6">
-                <div
-                  className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
-                    formData.selectedPlan === plan.id
-                      ? "border-blue-500 bg-blue-500 shadow-md"
-                      : "border-gray-300"
-                  }`}
-                >
-                  {formData.selectedPlan === plan.id && (
+            {/* Price */}
+            <div className="text-center mb-4">
+              <span className="text-3xl font-bold text-gray-900">
+                {plan.price}
+              </span>
+              <span className="text-gray-500 text-sm">
+                /{plan.period.split(" ")[1]}
+              </span>
+            </div>
+
+            {/* Description */}
+            <p className="text-sm text-gray-600 text-center mb-4">
+              {plan.description}
+            </p>
+
+            {/* Features */}
+            <div className="flex-1">
+              <ul className="space-y-2">
+                {plan.features.map((feature, idx) => (
+                  <li
+                    key={idx}
+                    className="flex items-start text-sm text-gray-700"
+                  >
                     <svg
-                      className="w-3 h-3 text-white"
+                      className="w-4 h-4 text-green-500 mr-2 mt-0.5 shrink-0"
                       fill="currentColor"
                       viewBox="0 0 20 20"
                     >
@@ -366,18 +482,34 @@ export function SignUpForm() {
                         clipRule="evenodd"
                       />
                     </svg>
-                  )}
-                </div>
-              </div>
+                    {feature}
+                  </li>
+                ))}
+              </ul>
             </div>
-          ))}
-        </div>
+
+            {/* Highlight */}
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <p className="text-xs text-blue-600 italic text-center">
+                {plan.highlight}
+              </p>
+            </div>
+          </div>
+        ))}
       </div>
 
-      <div className="max-w-md mx-auto space-y-3">
+      <div className="flex flex-col sm:flex-row justify-center items-center gap-4 max-w-md mx-auto">
+        <Button
+          variant="outline"
+          onClick={() => setStep(1)}
+          className="w-full sm:w-auto px-8"
+          size="lg"
+        >
+          Back
+        </Button>
         <Button
           onClick={handleFinalSubmit}
-          className="w-full"
+          className="w-full sm:w-auto px-8"
           disabled={!formData.selectedPlan || isLoading}
           size="lg"
         >
@@ -390,30 +522,13 @@ export function SignUpForm() {
             "Create Account"
           )}
         </Button>
-
-        <Button
-          variant="outline"
-          onClick={() => setStep(1)}
-          className="w-full"
-          size="lg"
-        >
-          Back to Details
-        </Button>
-      </div>
-
-      <div className="text-xs text-gray-600 text-center">
-        By creating an account, you agree to our{" "}
-        <a href="#" className="text-blue-600 hover:text-blue-500">
-          Terms of Service
-        </a>{" "}
-        and{" "}
-        <a href="#" className="text-blue-600 hover:text-blue-500">
-          Privacy Policy
-        </a>
-        .
       </div>
     </div>
   );
 
-  return step === 1 ? renderStep1() : renderStep2();
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-slate-50 to-blue-50 px-4 py-6">
+      {step === 1 ? renderStep1() : renderStep2()}
+    </div>
+  );
 }

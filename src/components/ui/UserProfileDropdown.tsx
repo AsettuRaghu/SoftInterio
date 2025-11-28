@@ -1,29 +1,25 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { cn } from "@/utils/cn";
+import { useRouter, usePathname } from "next/navigation";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
-interface UserProfileDropdownProps {
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-  role?: string;
-}
-
-export function UserProfileDropdown({
-  firstName = "John",
-  lastName = "Doe",
-  email = "john.doe@softinterio.com",
-  role = "Interior Designer",
-}: UserProfileDropdownProps) {
+export function UserProfileDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const pathname = usePathname();
+  const { user, isLoading } = useCurrentUser();
 
-  const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`;
-  const fullName = `${firstName} ${lastName}`;
+  const firstName = user?.firstName || "User";
+  const lastName = user?.lastName || "";
+  const email = user?.email || "";
+  const role = user?.designation || user?.primaryRole || "Team Member";
+
+  const initials = `${firstName.charAt(0)}${
+    lastName.charAt(0) || firstName.charAt(1) || ""
+  }`.toUpperCase();
+  const fullName = `${firstName} ${lastName}`.trim();
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -39,20 +35,53 @@ export function UserProfileDropdown({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleSignOut = () => {
-    // For demo purposes, redirect to home page
-    router.push("/");
+  const handleSignOut = async () => {
+    try {
+      console.log("[LOGOUT] Signing out...");
+
+      const response = await fetch("/api/auth/signout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        console.log("[LOGOUT] Sign out successful, redirecting to signin...");
+        router.push("/auth/signin");
+        router.refresh();
+      } else {
+        console.error("[LOGOUT] Sign out failed:", response.status);
+        router.push("/auth/signin");
+      }
+    } catch (error) {
+      console.error("[LOGOUT] Sign out error:", error);
+      router.push("/auth/signin");
+    }
   };
 
-  const handleMenuClick = () => {
+  const handleProfileClick = () => {
     setIsOpen(false);
+    router.push("/dashboard/settings/profile");
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center space-x-3 p-2">
+        <div className="hidden sm:block text-right">
+          <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
+          <div className="h-3 w-16 bg-gray-200 rounded animate-pulse mt-1"></div>
+        </div>
+        <div className="w-9 h-9 bg-gray-200 rounded-full animate-pulse"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+        className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
       >
         <div className="flex items-center space-x-3">
           <div className="hidden sm:block text-right">
@@ -77,11 +106,11 @@ export function UserProfileDropdown({
                   {initials}
                 </span>
               </div>
-              <div className="flex-1">
-                <div className="text-sm font-semibold text-gray-900">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-gray-900 truncate">
                   {fullName}
                 </div>
-                <div className="text-xs text-gray-500">{email}</div>
+                <div className="text-xs text-gray-500 truncate">{email}</div>
                 <div className="text-xs text-blue-600">{role}</div>
               </div>
             </div>
@@ -89,10 +118,11 @@ export function UserProfileDropdown({
 
           {/* Menu Items Section */}
           <div className="py-2">
-            <Link
-              href="/dashboard/settings"
-              onClick={handleMenuClick}
-              className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+            <button
+              onClick={handleProfileClick}
+              className={`flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer ${
+                pathname === "/dashboard/settings/profile" ? "bg-gray-50" : ""
+              }`}
             >
               <svg
                 className="w-4 h-4 mr-3 text-gray-500"
@@ -108,40 +138,14 @@ export function UserProfileDropdown({
                 />
               </svg>
               My Profile
-            </Link>
-            <Link
-              href="/dashboard/settings"
-              onClick={handleMenuClick}
-              className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-            >
-              <svg
-                className="w-4 h-4 mr-3 text-gray-500"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>
-              Settings
-            </Link>
+            </button>
           </div>
 
           {/* Sign Out Section */}
           <div className="border-t border-gray-200 py-2">
             <button
               onClick={handleSignOut}
-              className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+              className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
             >
               <svg
                 className="w-4 h-4 mr-3"
