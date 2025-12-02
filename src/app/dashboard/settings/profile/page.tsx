@@ -461,7 +461,7 @@ export default function ProfileSettingsPage() {
           <div className="p-5">
             {/* Avatar + Name Section */}
             <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
-              <div className="w-16 h-16 shrink-0 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-lg font-bold shadow-lg shadow-blue-500/20">
+              <div className="w-16 h-16 shrink-0 bg-linear-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-lg font-bold shadow-lg shadow-blue-500/20">
                 {profile ? getInitials(profile.name) : "?"}
               </div>
               <div className="min-w-0">

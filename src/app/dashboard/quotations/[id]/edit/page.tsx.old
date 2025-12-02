@@ -1,0 +1,1420 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter, useParams } from "next/navigation";
+
+// Types for the hierarchical quotation structure
+interface Attribute {
+  id: string;
+  name: string;
+  type: "measurement" | "rate" | "count" | "percentage";
+  value: number;
+  unit: string;
+  calculatedCost: number;
+}
+
+interface Material {
+  id: string;
+  name: string;
+  type: string;
+  specification: string;
+  attributes: Attribute[];
+  totalCost: number;
+  expanded: boolean;
+}
+
+interface Component {
+  id: string;
+  name: string;
+  type: string;
+  description: string;
+  materials: Material[];
+  totalCost: number;
+  expanded: boolean;
+}
+
+interface Space {
+  id: string;
+  name: string;
+  type: string;
+  area: number;
+  components: Component[];
+  totalCost: number;
+  expanded: boolean;
+}
+
+// Utility function to generate unique IDs
+const generateId = () => Math.random().toString(36).substr(2, 9);
+
+// Sample template data
+const spaceTemplates = [
+  { name: "Master Bedroom", type: "bedroom", defaultArea: 180 },
+  { name: "Kitchen", type: "kitchen", defaultArea: 120 },
+  { name: "Living Room", type: "living_room", defaultArea: 250 },
+  { name: "Kids Bedroom", type: "bedroom", defaultArea: 140 },
+  { name: "Bathroom", type: "bathroom", defaultArea: 60 },
+  { name: "Study Room", type: "study", defaultArea: 100 },
+];
+
+const componentTemplates: Record<string, { name: string; type: string }[]> = {
+  bedroom: [
+    { name: "Wardrobe", type: "wardrobe" },
+    { name: "TV Unit", type: "tv_unit" },
+    { name: "False Ceiling", type: "false_ceiling" },
+    { name: "Study Table", type: "study_table" },
+    { name: "Bed Back Panel", type: "wall_panel" },
+  ],
+  kitchen: [
+    { name: "Base Cabinets", type: "cabinet" },
+    { name: "Wall Cabinets", type: "cabinet" },
+    { name: "Kitchen Island", type: "island" },
+    { name: "Countertop", type: "countertop" },
+    { name: "Backsplash", type: "tiles" },
+  ],
+  living_room: [
+    { name: "TV Unit", type: "tv_unit" },
+    { name: "False Ceiling", type: "false_ceiling" },
+    { name: "Display Unit", type: "display_unit" },
+    { name: "Sofa Back Panel", type: "wall_panel" },
+  ],
+  bathroom: [
+    { name: "Vanity", type: "vanity" },
+    { name: "Mirror Cabinet", type: "cabinet" },
+    { name: "Wall Tiles", type: "tiles" },
+    { name: "Floor Tiles", type: "tiles" },
+  ],
+  study: [
+    { name: "Study Table", type: "study_table" },
+    { name: "Bookshelf", type: "bookshelf" },
+    { name: "False Ceiling", type: "false_ceiling" },
+  ],
+};
+
+const materialTemplates = [
+  {
+    name: "BWP Plywood",
+    type: "core_material",
+    specification: "18mm BWP Grade",
+  },
+  { name: "MDF Board", type: "core_material", specification: "18mm MDF" },
+  { name: "Laminate", type: "finish", specification: "Merino/Greenlam 1mm" },
+  { name: "PU Finish", type: "finish", specification: "Polyurethane Paint" },
+  {
+    name: "Acrylic Finish",
+    type: "finish",
+    specification: "High Gloss Acrylic",
+  },
+  {
+    name: "Hardware - Hinges",
+    type: "hardware",
+    specification: "Hettich Soft-close",
+  },
+  {
+    name: "Hardware - Channels",
+    type: "hardware",
+    specification: "Hettich Drawer System",
+  },
+  {
+    name: "Handles",
+    type: "hardware",
+    specification: "Stainless Steel G-Profile",
+  },
+];
+
+const defaultAttributes: Record<string, Attribute[]> = {
+  core_material: [
+    {
+      id: generateId(),
+      name: "Area",
+      type: "measurement",
+      value: 0,
+      unit: "sqft",
+      calculatedCost: 0,
+    },
+    {
+      id: generateId(),
+      name: "Rate",
+      type: "rate",
+      value: 85,
+      unit: "₹/sqft",
+      calculatedCost: 0,
+    },
+  ],
+  finish: [
+    {
+      id: generateId(),
+      name: "Area",
+      type: "measurement",
+      value: 0,
+      unit: "sqft",
+      calculatedCost: 0,
+    },
+    {
+      id: generateId(),
+      name: "Rate",
+      type: "rate",
+      value: 65,
+      unit: "₹/sqft",
+      calculatedCost: 0,
+    },
+  ],
+  hardware: [
+    {
+      id: generateId(),
+      name: "Quantity",
+      type: "count",
+      value: 0,
+      unit: "pcs",
+      calculatedCost: 0,
+    },
+    {
+      id: generateId(),
+      name: "Unit Price",
+      type: "rate",
+      value: 250,
+      unit: "₹/pc",
+      calculatedCost: 0,
+    },
+  ],
+};
+
+// Sample quotation data for editing
+const sampleQuotationData = {
+  id: "1",
+  quotationName: "Modern Villa Interior",
+  clientName: "John & Sarah Smith",
+  projectName: "Modern Villa Renovation",
+  validUntil: "2025-02-15",
+  spaces: [
+    {
+      id: "1",
+      name: "Master Bedroom",
+      type: "bedroom",
+      area: 180,
+      expanded: true,
+      totalCost: 42600,
+      components: [
+        {
+          id: "1-1",
+          name: "Wardrobe",
+          type: "wardrobe",
+          description: "8ft x 7ft sliding wardrobe with loft",
+          expanded: true,
+          totalCost: 30000,
+          materials: [
+            {
+              id: "1-1-1",
+              name: "BWP Plywood",
+              type: "core_material",
+              specification: "18mm BWP Grade",
+              expanded: true,
+              totalCost: 10200,
+              attributes: [
+                {
+                  id: "a1",
+                  name: "Area",
+                  type: "measurement" as const,
+                  value: 120,
+                  unit: "sqft",
+                  calculatedCost: 0,
+                },
+                {
+                  id: "a2",
+                  name: "Rate",
+                  type: "rate" as const,
+                  value: 85,
+                  unit: "₹/sqft",
+                  calculatedCost: 0,
+                },
+              ],
+            },
+            {
+              id: "1-1-2",
+              name: "Laminate",
+              type: "finish",
+              specification: "Merino 1mm",
+              expanded: true,
+              totalCost: 15600,
+              attributes: [
+                {
+                  id: "a3",
+                  name: "Area",
+                  type: "measurement" as const,
+                  value: 240,
+                  unit: "sqft",
+                  calculatedCost: 0,
+                },
+                {
+                  id: "a4",
+                  name: "Rate",
+                  type: "rate" as const,
+                  value: 65,
+                  unit: "₹/sqft",
+                  calculatedCost: 0,
+                },
+              ],
+            },
+            {
+              id: "1-1-3",
+              name: "Hardware - Hinges",
+              type: "hardware",
+              specification: "Hettich Soft-close",
+              expanded: true,
+              totalCost: 4200,
+              attributes: [
+                {
+                  id: "a5",
+                  name: "Quantity",
+                  type: "count" as const,
+                  value: 12,
+                  unit: "pcs",
+                  calculatedCost: 0,
+                },
+                {
+                  id: "a6",
+                  name: "Unit Price",
+                  type: "rate" as const,
+                  value: 350,
+                  unit: "₹/pc",
+                  calculatedCost: 0,
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: "1-2",
+          name: "TV Unit",
+          type: "tv_unit",
+          description: "6ft wall mounted TV unit",
+          expanded: true,
+          totalCost: 12600,
+          materials: [
+            {
+              id: "1-2-1",
+              name: "MDF Board",
+              type: "core_material",
+              specification: "18mm MDF",
+              expanded: true,
+              totalCost: 3000,
+              attributes: [
+                {
+                  id: "a7",
+                  name: "Area",
+                  type: "measurement" as const,
+                  value: 40,
+                  unit: "sqft",
+                  calculatedCost: 0,
+                },
+                {
+                  id: "a8",
+                  name: "Rate",
+                  type: "rate" as const,
+                  value: 75,
+                  unit: "₹/sqft",
+                  calculatedCost: 0,
+                },
+              ],
+            },
+            {
+              id: "1-2-2",
+              name: "PU Finish",
+              type: "finish",
+              specification: "Polyurethane Paint - White",
+              expanded: true,
+              totalCost: 9600,
+              attributes: [
+                {
+                  id: "a9",
+                  name: "Area",
+                  type: "measurement" as const,
+                  value: 80,
+                  unit: "sqft",
+                  calculatedCost: 0,
+                },
+                {
+                  id: "a10",
+                  name: "Rate",
+                  type: "rate" as const,
+                  value: 120,
+                  unit: "₹/sqft",
+                  calculatedCost: 0,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+export default function EditQuotationPage() {
+  const router = useRouter();
+  const params = useParams();
+  const [loading, setLoading] = useState(true);
+  const [quotationName, setQuotationName] = useState("");
+  const [clientName, setClientName] = useState("");
+  const [projectName, setProjectName] = useState("");
+  const [validUntil, setValidUntil] = useState("");
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [showAddSpaceModal, setShowAddSpaceModal] = useState(false);
+  const [showAddComponentModal, setShowAddComponentModal] = useState<
+    string | null
+  >(null);
+  const [showAddMaterialModal, setShowAddMaterialModal] = useState<{
+    spaceId: string;
+    componentId: string;
+  } | null>(null);
+  const [showNewVersionModal, setShowNewVersionModal] = useState(false);
+
+  // Load quotation data
+  useEffect(() => {
+    // Simulate API call to fetch quotation
+    setTimeout(() => {
+      setQuotationName(sampleQuotationData.quotationName);
+      setClientName(sampleQuotationData.clientName);
+      setProjectName(sampleQuotationData.projectName);
+      setValidUntil(sampleQuotationData.validUntil);
+      setSpaces(sampleQuotationData.spaces);
+      setLoading(false);
+    }, 500);
+  }, [params.id]);
+
+  // Calculate totals
+  const calculateAttributesCost = (attrs: Attribute[]): number => {
+    const areaAttr = attrs.find(
+      (a) => a.name === "Area" || a.name === "Quantity"
+    );
+    const rateAttr = attrs.find(
+      (a) => a.name === "Rate" || a.name === "Unit Price"
+    );
+    if (areaAttr && rateAttr) {
+      return areaAttr.value * rateAttr.value;
+    }
+    return 0;
+  };
+
+  const calculateMaterialCost = (material: Material): number => {
+    return calculateAttributesCost(material.attributes);
+  };
+
+  const calculateComponentCost = (component: Component): number => {
+    return component.materials.reduce(
+      (sum, mat) => sum + calculateMaterialCost(mat),
+      0
+    );
+  };
+
+  const calculateSpaceCost = (space: Space): number => {
+    return space.components.reduce(
+      (sum, comp) => sum + calculateComponentCost(comp),
+      0
+    );
+  };
+
+  const calculateTotalCost = (): number => {
+    return spaces.reduce((sum, space) => sum + calculateSpaceCost(space), 0);
+  };
+
+  // Add a new space
+  const addSpace = (template: (typeof spaceTemplates)[0]) => {
+    const newSpace: Space = {
+      id: generateId(),
+      name: template.name,
+      type: template.type,
+      area: template.defaultArea,
+      components: [],
+      totalCost: 0,
+      expanded: true,
+    };
+    setSpaces([...spaces, newSpace]);
+    setShowAddSpaceModal(false);
+  };
+
+  // Add a new component to a space
+  const addComponent = (
+    spaceId: string,
+    template: { name: string; type: string }
+  ) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id === spaceId) {
+          return {
+            ...space,
+            components: [
+              ...space.components,
+              {
+                id: generateId(),
+                name: template.name,
+                type: template.type,
+                description: "",
+                materials: [],
+                totalCost: 0,
+                expanded: true,
+              },
+            ],
+          };
+        }
+        return space;
+      })
+    );
+    setShowAddComponentModal(null);
+  };
+
+  // Add a new material to a component
+  const addMaterial = (
+    spaceId: string,
+    componentId: string,
+    template: (typeof materialTemplates)[0]
+  ) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id === spaceId) {
+          return {
+            ...space,
+            components: space.components.map((comp) => {
+              if (comp.id === componentId) {
+                const attrs = (defaultAttributes[template.type] || []).map(
+                  (attr) => ({
+                    ...attr,
+                    id: generateId(),
+                  })
+                );
+                return {
+                  ...comp,
+                  materials: [
+                    ...comp.materials,
+                    {
+                      id: generateId(),
+                      name: template.name,
+                      type: template.type,
+                      specification: template.specification,
+                      attributes: attrs,
+                      totalCost: 0,
+                      expanded: true,
+                    },
+                  ],
+                };
+              }
+              return comp;
+            }),
+          };
+        }
+        return space;
+      })
+    );
+    setShowAddMaterialModal(null);
+  };
+
+  // Update attribute value
+  const updateAttribute = (
+    spaceId: string,
+    componentId: string,
+    materialId: string,
+    attributeId: string,
+    value: number
+  ) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id === spaceId) {
+          return {
+            ...space,
+            components: space.components.map((comp) => {
+              if (comp.id === componentId) {
+                return {
+                  ...comp,
+                  materials: comp.materials.map((mat) => {
+                    if (mat.id === materialId) {
+                      return {
+                        ...mat,
+                        attributes: mat.attributes.map((attr) => {
+                          if (attr.id === attributeId) {
+                            return { ...attr, value };
+                          }
+                          return attr;
+                        }),
+                      };
+                    }
+                    return mat;
+                  }),
+                };
+              }
+              return comp;
+            }),
+          };
+        }
+        return space;
+      })
+    );
+  };
+
+  // Toggle expand/collapse
+  const toggleSpaceExpand = (spaceId: string) => {
+    setSpaces(
+      spaces.map((s) =>
+        s.id === spaceId ? { ...s, expanded: !s.expanded } : s
+      )
+    );
+  };
+
+  const toggleComponentExpand = (spaceId: string, componentId: string) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id === spaceId) {
+          return {
+            ...space,
+            components: space.components.map((comp) =>
+              comp.id === componentId
+                ? { ...comp, expanded: !comp.expanded }
+                : comp
+            ),
+          };
+        }
+        return space;
+      })
+    );
+  };
+
+  const toggleMaterialExpand = (
+    spaceId: string,
+    componentId: string,
+    materialId: string
+  ) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id === spaceId) {
+          return {
+            ...space,
+            components: space.components.map((comp) => {
+              if (comp.id === componentId) {
+                return {
+                  ...comp,
+                  materials: comp.materials.map((mat) =>
+                    mat.id === materialId
+                      ? { ...mat, expanded: !mat.expanded }
+                      : mat
+                  ),
+                };
+              }
+              return comp;
+            }),
+          };
+        }
+        return space;
+      })
+    );
+  };
+
+  // Delete items
+  const deleteSpace = (spaceId: string) => {
+    setSpaces(spaces.filter((s) => s.id !== spaceId));
+  };
+
+  const deleteComponent = (spaceId: string, componentId: string) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id === spaceId) {
+          return {
+            ...space,
+            components: space.components.filter((c) => c.id !== componentId),
+          };
+        }
+        return space;
+      })
+    );
+  };
+
+  const deleteMaterial = (
+    spaceId: string,
+    componentId: string,
+    materialId: string
+  ) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id === spaceId) {
+          return {
+            ...space,
+            components: space.components.map((comp) => {
+              if (comp.id === componentId) {
+                return {
+                  ...comp,
+                  materials: comp.materials.filter((m) => m.id !== materialId),
+                };
+              }
+              return comp;
+            }),
+          };
+        }
+        return space;
+      })
+    );
+  };
+
+  // Format currency
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading quotation...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link
+                href={`/dashboard/quotations/${params.id}`}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                  />
+                </svg>
+              </Link>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-bold text-gray-900">
+                    Edit Quotation
+                  </h1>
+                  <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                    Editing
+                  </span>
+                </div>
+                <p className="text-sm text-gray-500">{quotationName}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowNewVersionModal(true)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Save as New Version
+              </button>
+              <button className="px-4 py-2 text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50">
+                Save Changes
+              </button>
+              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                Update & Generate PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex">
+        {/* Main Content */}
+        <div className="flex-1 p-6 overflow-auto">
+          {/* Quotation Details */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Quotation Details
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Quotation Name
+                </label>
+                <input
+                  type="text"
+                  value={quotationName}
+                  onChange={(e) => setQuotationName(e.target.value)}
+                  placeholder="e.g., Villa Interior - Phase 1"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Client Name
+                </label>
+                <input
+                  type="text"
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                  placeholder="e.g., John Smith"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Project Name
+                </label>
+                <input
+                  type="text"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  placeholder="e.g., 3BHK Apartment Renovation"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Valid Until
+                </label>
+                <input
+                  type="date"
+                  value={validUntil}
+                  onChange={(e) => setValidUntil(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Spaces Section */}
+          <div className="space-y-4">
+            {spaces.map((space) => (
+              <div
+                key={space.id}
+                className="bg-white rounded-xl border border-gray-200"
+              >
+                {/* Space Header */}
+                <div
+                  className="flex items-center justify-between px-4 py-3 bg-blue-50 border-b border-blue-100 cursor-pointer rounded-t-xl"
+                  onClick={() => toggleSpaceExpand(space.id)}
+                >
+                  <div className="flex items-center gap-3">
+                    <button className="text-blue-600">
+                      <svg
+                        className={`w-5 h-5 transition-transform ${
+                          space.expanded ? "rotate-90" : ""
+                        }`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 5l7 7-7 7"
+                        />
+                      </svg>
+                    </button>
+                    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                      <svg
+                        className="w-4 h-4 text-white"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                        />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">
+                        {space.name}
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        {space.components.length} components • {space.area} sqft
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-lg font-bold text-blue-600">
+                      {formatCurrency(calculateSpaceCost(space))}
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteSpace(space.id);
+                      }}
+                      className="text-gray-400 hover:text-red-600"
+                    >
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Space Content (Components) */}
+                {space.expanded && (
+                  <div className="p-4 space-y-3">
+                    {space.components.map((component) => (
+                      <div
+                        key={component.id}
+                        className="border border-gray-200 rounded-lg"
+                      >
+                        {/* Component Header */}
+                        <div
+                          className="flex items-center justify-between px-4 py-3 bg-gray-50 cursor-pointer rounded-t-lg"
+                          onClick={() =>
+                            toggleComponentExpand(space.id, component.id)
+                          }
+                        >
+                          <div className="flex items-center gap-3">
+                            <button className="text-gray-600">
+                              <svg
+                                className={`w-4 h-4 transition-transform ${
+                                  component.expanded ? "rotate-90" : ""
+                                }`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M9 5l7 7-7 7"
+                                />
+                              </svg>
+                            </button>
+                            <div className="w-6 h-6 bg-purple-600 rounded flex items-center justify-center">
+                              <svg
+                                className="w-3 h-3 text-white"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                                />
+                              </svg>
+                            </div>
+                            <div>
+                              <h4 className="font-medium text-gray-900">
+                                {component.name}
+                              </h4>
+                              <p className="text-xs text-gray-500">
+                                {component.materials.length} materials
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <span className="font-semibold text-purple-600">
+                              {formatCurrency(
+                                calculateComponentCost(component)
+                              )}
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteComponent(space.id, component.id);
+                              }}
+                              className="text-gray-400 hover:text-red-600"
+                            >
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Component Content (Materials) */}
+                        {component.expanded && (
+                          <div className="p-3 space-y-2">
+                            {component.materials.map((material) => (
+                              <div
+                                key={material.id}
+                                className="border border-gray-100 rounded-lg bg-white"
+                              >
+                                {/* Material Header */}
+                                <div
+                                  className="flex items-center justify-between px-3 py-2 cursor-pointer"
+                                  onClick={() =>
+                                    toggleMaterialExpand(
+                                      space.id,
+                                      component.id,
+                                      material.id
+                                    )
+                                  }
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <button className="text-gray-400">
+                                      <svg
+                                        className={`w-3 h-3 transition-transform ${
+                                          material.expanded ? "rotate-90" : ""
+                                        }`}
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M9 5l7 7-7 7"
+                                        />
+                                      </svg>
+                                    </button>
+                                    <div className="w-5 h-5 bg-green-500 rounded flex items-center justify-center">
+                                      <svg
+                                        className="w-3 h-3 text-white"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"
+                                        />
+                                      </svg>
+                                    </div>
+                                    <div>
+                                      <span className="text-sm font-medium text-gray-900">
+                                        {material.name}
+                                      </span>
+                                      <span className="text-xs text-gray-500 ml-2">
+                                        ({material.specification})
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-sm font-medium text-green-600">
+                                      {formatCurrency(
+                                        calculateMaterialCost(material)
+                                      )}
+                                    </span>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        deleteMaterial(
+                                          space.id,
+                                          component.id,
+                                          material.id
+                                        );
+                                      }}
+                                      className="text-gray-400 hover:text-red-600"
+                                    >
+                                      <svg
+                                        className="w-4 h-4"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M6 18L18 6M6 6l12 12"
+                                        />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Material Content (Attributes) */}
+                                {material.expanded && (
+                                  <div className="px-3 pb-3 border-t border-gray-100">
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3">
+                                      {material.attributes.map((attr) => (
+                                        <div key={attr.id}>
+                                          <label className="block text-xs text-gray-500 mb-1">
+                                            {attr.name} ({attr.unit})
+                                          </label>
+                                          <input
+                                            type="number"
+                                            value={attr.value}
+                                            onChange={(e) =>
+                                              updateAttribute(
+                                                space.id,
+                                                component.id,
+                                                material.id,
+                                                attr.id,
+                                                parseFloat(e.target.value) || 0
+                                              )
+                                            }
+                                            className="w-full px-2 py-1 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                          />
+                                        </div>
+                                      ))}
+                                      <div>
+                                        <label className="block text-xs text-gray-500 mb-1">
+                                          Subtotal
+                                        </label>
+                                        <div className="px-2 py-1 text-sm font-medium bg-gray-50 rounded text-gray-900">
+                                          {formatCurrency(
+                                            calculateMaterialCost(material)
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+
+                            {/* Add Material Button */}
+                            <button
+                              onClick={() =>
+                                setShowAddMaterialModal({
+                                  spaceId: space.id,
+                                  componentId: component.id,
+                                })
+                              }
+                              className="w-full py-2 text-sm text-green-600 hover:text-green-700 hover:bg-green-50 rounded-lg border border-dashed border-green-300 flex items-center justify-center gap-1"
+                            >
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 4v16m8-8H4"
+                                />
+                              </svg>
+                              Add Material
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Add Component Button */}
+                    <button
+                      onClick={() => setShowAddComponentModal(space.id)}
+                      className="w-full py-3 text-sm text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded-lg border border-dashed border-purple-300 flex items-center justify-center gap-1"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 4v16m8-8H4"
+                        />
+                      </svg>
+                      Add Component
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Add Space Button */}
+            <button
+              onClick={() => setShowAddSpaceModal(true)}
+              className="w-full py-4 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-xl border-2 border-dashed border-blue-300 flex items-center justify-center gap-2"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              Add Space
+            </button>
+          </div>
+        </div>
+
+        {/* Right Sidebar - Summary */}
+        <div className="w-80 bg-white border-l border-gray-200 p-6 sticky top-[65px] h-[calc(100vh-65px)] overflow-auto">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            Cost Summary
+          </h2>
+
+          <div className="space-y-3 mb-6">
+            {spaces.map((space) => (
+              <div
+                key={space.id}
+                className="flex items-center justify-between py-2 border-b border-gray-100"
+              >
+                <span className="text-sm text-gray-600">{space.name}</span>
+                <span className="text-sm font-medium text-gray-900">
+                  {formatCurrency(calculateSpaceCost(space))}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {spaces.length > 0 && (
+            <>
+              <div className="border-t border-gray-200 pt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-gray-600">Subtotal</span>
+                  <span className="font-medium text-gray-900">
+                    {formatCurrency(calculateTotalCost())}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-gray-600">GST (18%)</span>
+                  <span className="font-medium text-gray-900">
+                    {formatCurrency(calculateTotalCost() * 0.18)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+                  <span className="text-lg font-semibold text-gray-900">
+                    Grand Total
+                  </span>
+                  <span className="text-xl font-bold text-blue-600">
+                    {formatCurrency(calculateTotalCost() * 1.18)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                <h3 className="text-sm font-medium text-blue-900 mb-2">
+                  Quick Stats
+                </h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-blue-700">Total Spaces</span>
+                    <span className="font-medium text-blue-900">
+                      {spaces.length}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-blue-700">Total Components</span>
+                    <span className="font-medium text-blue-900">
+                      {spaces.reduce((sum, s) => sum + s.components.length, 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-blue-700">Total Materials</span>
+                    <span className="font-medium text-blue-900">
+                      {spaces.reduce(
+                        (sum, s) =>
+                          sum +
+                          s.components.reduce(
+                            (cSum, c) => cSum + c.materials.length,
+                            0
+                          ),
+                        0
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Add Space Modal */}
+      {showAddSpaceModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl w-full max-w-md p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Add Space
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Select a space type to add to your quotation
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {spaceTemplates.map((template, index) => (
+                <button
+                  key={index}
+                  onClick={() => addSpace(template)}
+                  className="p-4 text-left border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
+                >
+                  <div className="font-medium text-gray-900">
+                    {template.name}
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    {template.defaultArea} sqft
+                  </div>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowAddSpaceModal(false)}
+              className="w-full mt-4 py-2 text-gray-600 hover:text-gray-900"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Add Component Modal */}
+      {showAddComponentModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl w-full max-w-md p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Add Component
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Select a component to add
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {(() => {
+                const space = spaces.find(
+                  (s) => s.id === showAddComponentModal
+                );
+                const templates = space
+                  ? componentTemplates[space.type] || []
+                  : [];
+                return templates.map((template, index) => (
+                  <button
+                    key={index}
+                    onClick={() =>
+                      addComponent(showAddComponentModal, template)
+                    }
+                    className="p-4 text-left border border-gray-200 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-colors"
+                  >
+                    <div className="font-medium text-gray-900">
+                      {template.name}
+                    </div>
+                  </button>
+                ));
+              })()}
+            </div>
+            <button
+              onClick={() => setShowAddComponentModal(null)}
+              className="w-full mt-4 py-2 text-gray-600 hover:text-gray-900"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Add Material Modal */}
+      {showAddMaterialModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl w-full max-w-md p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Add Material
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Select a material to add
+            </p>
+            <div className="space-y-2 max-h-80 overflow-auto">
+              {materialTemplates.map((template, index) => (
+                <button
+                  key={index}
+                  onClick={() =>
+                    addMaterial(
+                      showAddMaterialModal.spaceId,
+                      showAddMaterialModal.componentId,
+                      template
+                    )
+                  }
+                  className="w-full p-3 text-left border border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors"
+                >
+                  <div className="font-medium text-gray-900">
+                    {template.name}
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    {template.specification}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowAddMaterialModal(null)}
+              className="w-full mt-4 py-2 text-gray-600 hover:text-gray-900"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* New Version Modal */}
+      {showNewVersionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl w-full max-w-md p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Create New Version
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              This will save the current changes as a new version (v2) while
+              keeping the original version intact.
+            </p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Version Notes (Optional)
+              </label>
+              <textarea
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                rows={3}
+                placeholder="Describe what changed in this version..."
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowNewVersionModal(false)}
+                className="flex-1 py-2 text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  // TODO: API call to create new version
+                  setShowNewVersionModal(false);
+                  router.push("/dashboard/quotations");
+                }}
+                className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Create Version
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

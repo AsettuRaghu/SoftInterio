@@ -9,6 +9,8 @@ import {
   createTenant,
   registerUser,
   sendVerificationEmail,
+  checkExistingUser,
+  registerExistingUserToNewTenant,
 } from "@/lib/auth/service";
 import type { SignUpData } from "@/types/database.types";
 
@@ -61,8 +63,70 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. Create tenant (company account)
-    console.log("[SIGNUP API] Creating tenant...");
+    // FIRST: Check if user already exists
+    console.log("[SIGNUP API] Checking for existing user...");
+    const existingUserCheck = await checkExistingUser(body.email);
+
+    if (existingUserCheck.exists) {
+      if (existingUserCheck.isActive) {
+        // Active user - they should sign in first
+        return NextResponse.json(
+          {
+            success: false,
+            error: "An account with this email already exists and is active. Please sign in to your existing account first.",
+          },
+          { status: 409 }
+        );
+      }
+
+      // Disabled user - allow them to create a new company
+      console.log("[SIGNUP API] Existing disabled user, creating new company...");
+      
+      // Create tenant with company email (not user email to avoid unique constraint)
+      // Use company name-based email or generate unique one
+      const tenantEmail = `${body.company_name.toLowerCase().replace(/[^a-z0-9]/g, '')}-${Date.now()}@company.internal`;
+      
+      const tenant = await createTenant({
+        tenant_type: body.tenant_type,
+        company_name: body.company_name,
+        email: tenantEmail, // Use generated email to avoid conflict
+        phone: body.phone,
+        selected_plan: body.selected_plan,
+      });
+      console.log("[SIGNUP API] Tenant created for existing user:", tenant.id);
+
+      // Register existing user to new tenant
+      const result = await registerExistingUserToNewTenant(
+        existingUserCheck.authUserId!,
+        existingUserCheck.userRecord!,
+        tenant.id,
+        body
+      );
+
+      return NextResponse.json(
+        {
+          success: true,
+          message: "Your new company has been created! We've sent you an email to set up your password. Please check your inbox and click the link to complete the setup.",
+          data: {
+            tenant: {
+              id: tenant.id,
+              company_name: tenant.company_name,
+              tenant_type: tenant.tenant_type,
+            },
+            user: {
+              id: result.user.id,
+              name: result.user.name,
+              email: result.user.email,
+            },
+            requiresPasswordReset: true,
+          },
+        },
+        { status: 201 }
+      );
+    }
+
+    // NEW USER FLOW: Create tenant first, then user
+    console.log("[SIGNUP API] New user, creating tenant...");
     const tenant = await createTenant({
       tenant_type: body.tenant_type,
       company_name: body.company_name,
@@ -72,12 +136,12 @@ export async function POST(request: NextRequest) {
     });
     console.log("[SIGNUP API] Tenant created successfully:", tenant.id);
 
-    // 2. Register user (this will be the super admin)
-    console.log("[SIGNUP API] Registering user...");
+    // Register new user
+    console.log("[SIGNUP API] Registering new user...");
     const { user } = await registerUser(body, tenant.id);
     console.log("[SIGNUP API] User registered successfully:", user.id);
 
-    // 3. Send verification email (non-blocking)
+    // Send verification email
     sendVerificationEmail(body.email).catch((error) => {
       console.error("Failed to send verification email:", error);
     });
@@ -85,8 +149,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        message:
-          "Account created successfully. Please check your email to verify your account.",
+        message: "Account created successfully. Please check your email to verify your account.",
         data: {
           tenant: {
             id: tenant.id,
@@ -98,6 +161,7 @@ export async function POST(request: NextRequest) {
             name: user.name,
             email: user.email,
           },
+          requiresPasswordReset: false,
         },
       },
       { status: 201 }
@@ -113,13 +177,22 @@ export async function POST(request: NextRequest) {
     console.error("[SIGNUP API] ============================");
 
     // Handle specific errors
+    if (error.message?.includes("already exists and is active")) {
+      // Active user trying to create another company
+      console.log("[SIGNUP API] Returning 409 - Active user exists");
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 409 }
+      );
+    }
+
     if (
       error.message?.includes("duplicate key") ||
-      error.message?.includes("already exists")
+      error.message?.includes("already registered")
     ) {
       console.log("[SIGNUP API] Returning 409 - Duplicate account");
       return NextResponse.json(
-        { success: false, error: "An account with this email already exists" },
+        { success: false, error: error.message },
         { status: 409 }
       );
     }

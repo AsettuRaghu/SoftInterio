@@ -224,7 +224,14 @@ export default function TeamSettingsPage() {
       const data = await response.json();
 
       if (data.success) {
-        setSuccess("Invitation sent successfully!");
+        // Show appropriate message based on user type
+        if (data.data?.isExistingUser) {
+          setSuccess(
+            "A sign-in link has been sent to the user. They can click it to join your organization."
+          );
+        } else {
+          setSuccess("Invitation sent successfully!");
+        }
         setShowInviteModal(false);
         setModalError(null);
 

@@ -13,6 +13,144 @@ import type {
 } from "@/types/database.types";
 
 /**
+ * Check if a user already exists by email
+ * Returns status information about the user
+ */
+export async function checkExistingUser(email: string): Promise<{
+  exists: boolean;
+  isActive: boolean;
+  authUserId?: string;
+  userRecord?: any;
+}> {
+  const supabase = createAdminClient();
+
+  // Check auth.users
+  const { data: existingUsers } = await supabase.auth.admin.listUsers();
+  const existingAuthUser = existingUsers?.users?.find(
+    (u) => u.email?.toLowerCase() === email.toLowerCase()
+  );
+
+  if (!existingAuthUser) {
+    return { exists: false, isActive: false };
+  }
+
+  // Check users table for status
+  const { data: userRecord } = await supabase
+    .from("users")
+    .select("id, tenant_id, status, name, phone, avatar_url, primary_tenant_id")
+    .eq("id", existingAuthUser.id)
+    .single();
+
+  if (!userRecord) {
+    // Auth exists but no user record - treat as new
+    return { exists: false, isActive: false, authUserId: existingAuthUser.id };
+  }
+
+  return {
+    exists: true,
+    isActive: userRecord.status === "active",
+    authUserId: existingAuthUser.id,
+    userRecord,
+  };
+}
+
+/**
+ * Register an existing (disabled) user to a new tenant
+ * Sends password reset email for them to set up new password
+ */
+export async function registerExistingUserToNewTenant(
+  authUserId: string,
+  existingUserRecord: any,
+  tenantId: string,
+  signUpData: SignUpData
+): Promise<{ user: User }> {
+  const supabase = createAdminClient();
+  const clientSupabase = await createClient();
+
+  console.log(
+    "[AUTH SERVICE] Registering existing user to new tenant:",
+    authUserId,
+    tenantId
+  );
+
+  // Update user record to point to new tenant FIRST
+  const { error: updateError } = await supabase
+    .from("users")
+    .update({
+      tenant_id: tenantId,
+      status: "pending_verification",
+      is_super_admin: true,
+      name: signUpData.name || existingUserRecord.name,
+      updated_at: new Date().toISOString(),
+      primary_tenant_id: existingUserRecord.primary_tenant_id || tenantId,
+    })
+    .eq("id", authUserId);
+
+  if (updateError) {
+    console.error("[AUTH SERVICE] Error updating user record:", updateError);
+    throw new Error("Failed to set up new company. Please try again.");
+  }
+
+  // Create tenant_users membership (if table exists)
+  const { error: membershipError } = await supabase
+    .from("tenant_users")
+    .insert({
+      tenant_id: tenantId,
+      user_id: authUserId,
+      is_active: true,
+      is_primary_tenant: !existingUserRecord.primary_tenant_id,
+      joined_at: new Date().toISOString(),
+    });
+
+  if (membershipError) {
+    console.log(
+      "[AUTH SERVICE] Note: tenant_users insert skipped:",
+      membershipError.message
+    );
+  }
+
+  // Assign Owner role
+  await assignOwnerRole(supabase, authUserId, tenantId);
+
+  // Update tenant with created_by_user_id
+  await supabase
+    .from("tenants")
+    .update({ created_by_user_id: authUserId })
+    .eq("id", tenantId);
+
+  // Send password reset email - this actually sends the email
+  console.log(
+    "[AUTH SERVICE] Sending password reset email to:",
+    signUpData.email
+  );
+  const { error: resetError } = await clientSupabase.auth.resetPasswordForEmail(
+    signUpData.email,
+    {
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/reset-password`,
+    }
+  );
+
+  if (resetError) {
+    console.error("[AUTH SERVICE] Error sending reset email:", resetError);
+    // Non-fatal - user can use forgot password later
+  } else {
+    console.log("[AUTH SERVICE] Password reset email sent successfully");
+  }
+
+  console.log(
+    "[AUTH SERVICE] Existing user registered to new tenant successfully"
+  );
+
+  return {
+    user: {
+      ...existingUserRecord,
+      tenant_id: tenantId,
+      status: "pending_verification",
+    } as User,
+  };
+}
+
+/**
  * Create a new tenant (company account)
  */
 export async function createTenant(data: CreateTenantInput): Promise<Tenant> {
@@ -149,55 +287,55 @@ export async function createTenant(data: CreateTenantInput): Promise<Tenant> {
 }
 
 /**
- * Register a new user with Supabase Auth and create user record
+ * Register a NEW user with Supabase Auth and create user record
+ * Note: Existing users are handled by registerExistingUserToNewTenant
  */
 export async function registerUser(
   signUpData: SignUpData,
   tenantId: string
-): Promise<{ user: User; authUserId: string }> {
+): Promise<{ user: User; authUserId: string; isExistingUser: boolean }> {
   console.log(
-    "[AUTH SERVICE] registerUser called for:",
+    "[AUTH SERVICE] registerUser called for NEW user:",
     signUpData.email,
     "tenant:",
     tenantId
   );
   const supabase = createAdminClient();
 
-  // 1. Create user in Supabase Auth
-  console.log("[AUTH SERVICE] Creating Supabase Auth user...");
+  // Create new auth user
+  console.log("[AUTH SERVICE] Creating new Supabase Auth user...");
   const { data: authData, error: authError } =
     await supabase.auth.admin.createUser({
       email: signUpData.email,
       password: signUpData.password,
-      email_confirm: false, // We'll send verification email separately
+      email_confirm: false,
       user_metadata: {
         name: signUpData.name,
         tenant_id: tenantId,
       },
     });
 
-  if (authError || !authData.user) {
+  if (authError) {
     console.error("[AUTH SERVICE] Error creating auth user:", authError);
-    console.error(
-      "[AUTH SERVICE] Auth error details:",
-      JSON.stringify(authError, null, 2)
-    );
-    throw new Error(authError?.message || "Failed to create user account");
+    throw new Error(`Failed to create account: ${authError.message}`);
   }
-  console.log("[AUTH SERVICE] Auth user created:", authData.user.id);
 
-  // 2. Create user record in our users table
+  const authUserId = authData.user.id;
+  console.log("[AUTH SERVICE] Auth user created:", authUserId);
+
+  // Create user record in our users table
   console.log("[AUTH SERVICE] Creating user record in database...");
   const { data: user, error: userError } = await supabase
     .from("users")
     .insert({
-      id: authData.user.id, // Link to Supabase auth user
+      id: authUserId,
       tenant_id: tenantId,
       name: signUpData.name,
       email: signUpData.email,
       phone: signUpData.phone,
       status: "pending_verification",
-      is_super_admin: true, // First user is super admin
+      is_super_admin: true,
+      primary_tenant_id: tenantId,
     })
     .select()
     .single();
@@ -206,12 +344,57 @@ export async function registerUser(
     // Rollback: Delete auth user if user record creation fails
     console.error("[AUTH SERVICE] Error creating user record:", userError);
     console.error("[AUTH SERVICE] Rolling back auth user...");
-    await supabase.auth.admin.deleteUser(authData.user.id);
+    await supabase.auth.admin.deleteUser(authUserId);
     throw new Error(`Failed to create user record: ${userError?.message}`);
   }
   console.log("[AUTH SERVICE] User record created:", user.id);
 
-  // 3. Assign Owner role to first user (tenant creator)
+  // Create tenant_users membership
+  console.log("[AUTH SERVICE] Creating tenant_users membership...");
+  const { error: membershipError } = await supabase
+    .from("tenant_users")
+    .insert({
+      tenant_id: tenantId,
+      user_id: authUserId,
+      is_active: true,
+      is_primary_tenant: true,
+      joined_at: new Date().toISOString(),
+    });
+
+  if (membershipError) {
+    console.log(
+      "[AUTH SERVICE] Note: tenant_users insert skipped:",
+      membershipError.message
+    );
+    // Non-fatal - table may not exist yet
+  }
+
+  // Assign Owner role
+  await assignOwnerRole(supabase, user.id, tenantId);
+
+  // Update tenant with created_by_user_id
+  console.log("[AUTH SERVICE] Updating tenant with creator user ID...");
+  const { error: tenantUpdateError } = await supabase
+    .from("tenants")
+    .update({ created_by_user_id: user.id })
+    .eq("id", tenantId);
+
+  if (tenantUpdateError) {
+    console.error("[AUTH SERVICE] Error updating tenant:", tenantUpdateError);
+  }
+
+  console.log("[AUTH SERVICE] registerUser completed successfully");
+  return { user, authUserId: authUserId!, isExistingUser: false };
+}
+
+/**
+ * Helper function to assign Owner role to a user
+ */
+async function assignOwnerRole(
+  supabase: ReturnType<typeof createAdminClient>,
+  userId: string,
+  tenantId: string
+) {
   console.log("[AUTH SERVICE] Assigning Owner role...");
   const { data: ownerRole, error: roleQueryError } = await supabase
     .from("roles")
@@ -222,13 +405,16 @@ export async function registerUser(
 
   if (roleQueryError) {
     console.error("[AUTH SERVICE] Error finding Owner role:", roleQueryError);
-  } else if (ownerRole) {
+    return;
+  }
+
+  if (ownerRole) {
     const { error: roleAssignError } = await supabase
       .from("user_roles")
       .insert({
-        user_id: user.id,
+        user_id: userId,
         role_id: ownerRole.id,
-        assigned_by_user_id: user.id,
+        assigned_by_user_id: userId,
       });
 
     if (roleAssignError) {
@@ -236,25 +422,7 @@ export async function registerUser(
     } else {
       console.log("[AUTH SERVICE] Owner role assigned successfully");
     }
-  } else {
-    console.warn("[AUTH SERVICE] Owner role not found in database");
   }
-
-  // 4. Update tenant with created_by_user_id
-  console.log("[AUTH SERVICE] Updating tenant with creator user ID...");
-  const { error: tenantUpdateError } = await supabase
-    .from("tenants")
-    .update({ created_by_user_id: user.id })
-    .eq("id", tenantId);
-
-  if (tenantUpdateError) {
-    console.error("[AUTH SERVICE] Error updating tenant:", tenantUpdateError);
-  } else {
-    console.log("[AUTH SERVICE] Tenant updated successfully");
-  }
-
-  console.log("[AUTH SERVICE] registerUser completed successfully");
-  return { user, authUserId: authData.user.id };
 }
 
 /**
@@ -282,6 +450,7 @@ export async function sendVerificationEmail(email: string): Promise<void> {
  */
 export async function signInWithEmail(email: string, password: string) {
   const supabase = await createClient();
+  const adminClient = createAdminClient();
 
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
@@ -292,14 +461,63 @@ export async function signInWithEmail(email: string, password: string) {
     throw new Error(error.message);
   }
 
-  // Update last login timestamp
-  if (data.user) {
-    const adminClient = createAdminClient();
-    await adminClient
-      .from("users")
-      .update({ last_login_at: new Date().toISOString() })
-      .eq("id", data.user.id);
+  if (!data.user) {
+    throw new Error("Authentication failed");
   }
+
+  // Get the user's tenant_id from users table
+  const { data: userData, error: userError } = await adminClient
+    .from("users")
+    .select("id, tenant_id, status")
+    .eq("id", data.user.id)
+    .single();
+
+  if (userError || !userData) {
+    console.error(
+      "[AUTH SERVICE] User not found in users table:",
+      data.user.id
+    );
+    await supabase.auth.signOut(); // Sign them out
+    throw new Error("Account not found. Please contact support.");
+  }
+
+  // Check if user status is disabled or deleted
+  if (userData.status === "disabled" || userData.status === "deleted") {
+    console.log("[AUTH SERVICE] User account is disabled:", data.user.id);
+    await supabase.auth.signOut();
+    throw new Error(
+      "Your account has been deactivated. Please contact your administrator."
+    );
+  }
+
+  // Check tenant_users for active membership (if table exists)
+  if (userData.tenant_id) {
+    const { data: membership, error: membershipError } = await adminClient
+      .from("tenant_users")
+      .select("is_active")
+      .eq("user_id", data.user.id)
+      .eq("tenant_id", userData.tenant_id)
+      .single();
+
+    // If tenant_users table exists and user is not active, deny login
+    if (!membershipError && membership && !membership.is_active) {
+      console.log(
+        "[AUTH SERVICE] User membership is inactive:",
+        data.user.id,
+        userData.tenant_id
+      );
+      await supabase.auth.signOut();
+      throw new Error(
+        "Your access to this organization has been revoked. Please contact your administrator."
+      );
+    }
+  }
+
+  // Update last login timestamp
+  await adminClient
+    .from("users")
+    .update({ last_login_at: new Date().toISOString() })
+    .eq("id", data.user.id);
 
   return data;
 }

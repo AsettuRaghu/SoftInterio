@@ -30,10 +30,9 @@ export default function PipelinePage() {
       name: "Qualification",
       color: "bg-blue-50 border-blue-300",
     },
-    { id: "proposal", name: "Proposal", color: "bg-amber-50 border-amber-300" },
     {
-      id: "negotiation",
-      name: "Negotiation",
+      id: "proposal",
+      name: "Proposal & Negotiation",
       color: "bg-orange-50 border-orange-300",
     },
     {
@@ -136,13 +135,13 @@ export default function PipelinePage() {
       lastActivity: "Design concepts under review",
       projectType: "Commercial",
     },
-    // Negotiation
+    // Proposal & Negotiation (additional)
     {
       id: 8,
       name: "Corporate HQ Redesign",
       client: "TechVentures Inc.",
       value: 450000,
-      stage: "negotiation",
+      stage: "proposal",
       probability: 75,
       assignedTo: "David Anderson",
       expectedClose: "2025-02-15",
@@ -154,7 +153,7 @@ export default function PipelinePage() {
       name: "Boutique Hotel Suites",
       client: "Urban Oasis Hotels",
       value: 285000,
-      stage: "negotiation",
+      stage: "proposal",
       probability: 80,
       assignedTo: "Sarah Mitchell",
       expectedClose: "2025-02-10",

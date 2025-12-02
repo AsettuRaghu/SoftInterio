@@ -3,25 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import {
-  Tenant,
-  TenantSettings,
-  TenantSubscription,
-} from "@/types/database.types";
-
-// Extended interfaces for joined data
-interface SubscriptionPlanDetails {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  price_monthly: number;
-  price_yearly: number;
-}
-
-interface TenantSubscriptionWithPlan extends TenantSubscription {
-  subscription_plans?: SubscriptionPlanDetails;
-}
+import { Tenant, TenantSettings } from "@/types/database.types";
 
 interface CompanyFormData {
   company_name: string;
@@ -230,8 +212,6 @@ export default function CompanySettingsPage() {
   const [tenantSettings, setTenantSettings] = useState<TenantSettings | null>(
     null
   );
-  const [tenantSubscription, setTenantSubscription] =
-    useState<TenantSubscriptionWithPlan | null>(null);
 
   const [formData, setFormData] = useState<CompanyFormData>({
     company_name: "",
@@ -293,20 +273,14 @@ export default function CompanySettingsPage() {
 
       const tenantId = userData.tenant_id;
 
-      const [tenantResult, settingsResult, subscriptionResult] =
-        await Promise.all([
-          supabase.from("tenants").select("*").eq("id", tenantId).single(),
-          supabase
-            .from("tenant_settings")
-            .select("*")
-            .eq("tenant_id", tenantId)
-            .single(),
-          supabase
-            .from("tenant_subscriptions")
-            .select("*, subscription_plans(*)")
-            .eq("tenant_id", tenantId)
-            .single(),
-        ]);
+      const [tenantResult, settingsResult] = await Promise.all([
+        supabase.from("tenants").select("*").eq("id", tenantId).single(),
+        supabase
+          .from("tenant_settings")
+          .select("*")
+          .eq("tenant_id", tenantId)
+          .single(),
+      ]);
 
       if (tenantResult.error) {
         setError("Failed to load company details");
@@ -318,12 +292,6 @@ export default function CompanySettingsPage() {
 
       if (!settingsResult.error && settingsResult.data) {
         setTenantSettings(settingsResult.data);
-      }
-
-      if (!subscriptionResult.error && subscriptionResult.data) {
-        setTenantSubscription(
-          subscriptionResult.data as TenantSubscriptionWithPlan
-        );
       }
 
       const formValues: CompanyFormData = {
@@ -479,15 +447,6 @@ export default function CompanySettingsPage() {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
-    });
-  };
-
-  const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return "-";
-    return new Date(dateString).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
     });
   };
 
@@ -826,91 +785,6 @@ export default function CompanySettingsPage() {
               />
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Section 2: Subscription Plan */}
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        {/* Section Header */}
-        <div className="px-5 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-linear-to-br from-blue-500 to-blue-700 rounded-lg flex items-center justify-center text-white shadow-sm">
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
-                />
-              </svg>
-            </div>
-            <div>
-              <h2 className="text-base font-semibold text-slate-900">
-                Subscription Plan
-              </h2>
-              <p className="text-sm text-slate-500">
-                Your current subscription and billing details
-              </p>
-            </div>
-          </div>
-          <Link
-            href="/dashboard/settings/billing"
-            className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-100 rounded-lg hover:bg-blue-100"
-          >
-            Manage Billing
-          </Link>
-        </div>
-
-        {/* Section Content */}
-        <div className="p-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4">
-            <FieldDisplay
-              label="Subscription Plan"
-              value={
-                tenantSubscription?.subscription_plans?.name
-                  ? `${tenantSubscription.subscription_plans.name} Plan`
-                  : company?.status === "trial"
-                  ? "Free Trial"
-                  : "No Plan Selected"
-              }
-              required
-            />
-            <FieldDisplay
-              label="Plan Start Date"
-              value={formatDate(tenantSubscription?.current_period_start)}
-              required
-            />
-            <FieldDisplay
-              label="Plan End Date"
-              value={formatDate(tenantSubscription?.current_period_end)}
-              required
-            />
-            <FieldDisplay
-              label="Trial Start Date"
-              value={formatDate(
-                tenantSubscription?.trial_start_date ||
-                  (company?.status === "trial" ? company.created_at : null)
-              )}
-            />
-            <FieldDisplay
-              label="Trial End Date"
-              value={formatDate(tenantSubscription?.trial_end_date)}
-            />
-            <FieldDisplay
-              label="Billing Cycle"
-              value={
-                tenantSubscription?.billing_cycle
-                  ? tenantSubscription.billing_cycle.charAt(0).toUpperCase() +
-                    tenantSubscription.billing_cycle.slice(1)
-                  : undefined
-              }
-            />
-          </div>
         </div>
       </div>
     </div>

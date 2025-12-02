@@ -250,9 +250,16 @@ export const navigationConfig: NavigationItem[] = [
     icon: Icons.sales,
     permission: "sales.view",
     subItems: [
-      { name: "Leads", href: "/dashboard/sales/leads" },
-      { name: "Pipeline", href: "/dashboard/sales/pipeline" },
-      { name: "Contacts", href: "/dashboard/sales/contacts" },
+      {
+        name: "Leads",
+        href: "/dashboard/sales/leads",
+        permission: "sales.leads.view",
+      },
+      {
+        name: "Reports",
+        href: "/dashboard/sales/reports",
+        permission: "sales.reports.view",
+      },
     ],
   },
   {
@@ -266,6 +273,19 @@ export const navigationConfig: NavigationItem[] = [
     href: "/dashboard/quotations",
     icon: Icons.quotations,
     permission: "quotations.view",
+    subItems: [
+      {
+        name: "Quotation List",
+        href: "/dashboard/quotations",
+        permission: "quotations.view",
+      },
+      {
+        name: "Templates",
+        href: "/dashboard/quotations/templates",
+        // Uses quotations.view for now; can change to quotations.templates.view after running migration 010
+        permission: "quotations.view",
+      },
+    ],
   },
   {
     name: "Stock & Procurement",
@@ -302,6 +322,18 @@ export const navigationConfig: NavigationItem[] = [
     href: "/dashboard/tasks",
     icon: Icons.tasks,
     permission: "tasks.view",
+    subItems: [
+      {
+        name: "Task List",
+        href: "/dashboard/tasks",
+        permission: "tasks.view",
+      },
+      {
+        name: "Task Templates",
+        href: "/dashboard/tasks/templates",
+        permission: "tasks.templates.view",
+      },
+    ],
   },
   {
     name: "Calendar",
@@ -349,24 +381,9 @@ export const navigationConfig: NavigationItem[] = [
         permission: "settings.team.view",
       },
       {
-        name: "Workflows",
-        href: "/dashboard/settings/workflows",
-        permission: "settings.workflows.view",
-      },
-      {
-        name: "Preferences",
-        href: "/dashboard/settings/preferences",
-        permission: "settings.preferences.view",
-      },
-      {
-        name: "Billing",
+        name: "Subscription",
         href: "/dashboard/settings/billing",
         permission: "settings.billing",
-      },
-      {
-        name: "Integrations",
-        href: "/dashboard/settings/integrations",
-        permission: "settings.integrations.view",
       },
     ],
   },

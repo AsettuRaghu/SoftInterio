@@ -60,14 +60,14 @@ export default function SalesPage() {
       name: "Corporate HQ Redesign",
       client: "TechVentures Inc.",
       value: 450000,
-      stage: "Negotiation",
+      stage: "Proposal & Negotiation",
       probability: 75,
     },
     {
       name: "Luxury Resort Villas",
       client: "Paradise Resorts",
       value: 380000,
-      stage: "Proposal",
+      stage: "Proposal & Negotiation",
       probability: 60,
     },
     {
@@ -402,10 +402,8 @@ export default function SalesPage() {
                 <div className="flex items-center gap-3">
                   <span
                     className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                      deal.stage === "Negotiation"
-                        ? "bg-green-100 text-green-700"
-                        : deal.stage === "Proposal"
-                        ? "bg-blue-100 text-blue-700"
+                      deal.stage === "Proposal & Negotiation"
+                        ? "bg-orange-100 text-orange-700"
                         : "bg-amber-100 text-amber-700"
                     }`}
                   >

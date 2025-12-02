@@ -96,9 +96,33 @@ export function Sidebar({ isExpanded, setIsExpanded }: SidebarProps) {
   // Check if any sub-item is active (for showing expanded state)
   const hasActiveSubItem = (item: NavigationItem & { disabled: boolean }) => {
     if (!item.subItems) return false;
-    return item.subItems.some(
-      (sub) => pathname === sub.href || pathname.startsWith(sub.href + "/")
-    );
+    return item.subItems.some((sub) => isSubItemActive(sub.href));
+  };
+
+  // Check if a sub-item is active - exact match or child route
+  // Special handling: /dashboard/quotations should NOT match /dashboard/quotations/templates
+  const isSubItemActive = (href: string) => {
+    if (pathname === href) return true;
+    // For sub-items, only match if pathname starts with href followed by /
+    // But NOT if there's another sub-item that's a better match
+    if (pathname.startsWith(href + "/")) {
+      // Check if there's a more specific sub-item that matches
+      // e.g., if we're at /dashboard/quotations/templates, don't match /dashboard/quotations
+      const currentItem = navigationItems.find((item) =>
+        item.subItems?.some((sub) => sub.href === href)
+      );
+      if (currentItem?.subItems) {
+        // Check if any other sub-item is a more specific match
+        const moreSpecificMatch = currentItem.subItems.find(
+          (sub) =>
+            sub.href !== href &&
+            (pathname === sub.href || pathname.startsWith(sub.href + "/"))
+        );
+        if (moreSpecificMatch) return false;
+      }
+      return true;
+    }
+    return false;
   };
 
   // Render a menu item
@@ -236,9 +260,7 @@ export function Sidebar({ isExpanded, setIsExpanded }: SidebarProps) {
         {hasSubItems && isExpanded && isSubMenuExpanded && (
           <div className="mt-1 ml-4 pl-4 border-l border-slate-200 space-y-0.5">
             {(item.subItems as FilteredSubItem[]).map((subItem) => {
-              const isSubActive =
-                pathname === subItem.href ||
-                pathname.startsWith(subItem.href + "/");
+              const isSubActive = isSubItemActive(subItem.href);
               return (
                 <Link
                   key={subItem.name}

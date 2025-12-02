@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
@@ -14,6 +14,21 @@ export function SignInForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Check for error params from middleware redirects
+  useEffect(() => {
+    const errorParam = searchParams.get("error");
+    if (errorParam === "account_deactivated") {
+      setError(
+        "Your account has been deactivated. Please contact your administrator."
+      );
+    } else if (errorParam === "access_revoked") {
+      setError(
+        "Your access to this organization has been revoked. Please contact your administrator."
+      );
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

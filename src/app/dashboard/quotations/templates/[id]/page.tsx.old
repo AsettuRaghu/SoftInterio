@@ -1,0 +1,1096 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+
+// Types
+interface TemplateSpace {
+  id: string;
+  name: string;
+  space_type: string;
+  description?: string;
+  display_order: number;
+  components: TemplateComponent[];
+  subtotal: number;
+}
+
+interface TemplateComponent {
+  id: string;
+  name: string;
+  component_type: string;
+  description?: string;
+  width?: number;
+  height?: number;
+  depth?: number;
+  display_order: number;
+  materials: TemplateMaterial[];
+  subtotal: number;
+}
+
+interface TemplateMaterial {
+  id: string;
+  name: string;
+  category: string;
+  specifications?: Record<string, string>;
+  unit: string;
+  rate: number;
+  display_order: number;
+  cost_attributes: TemplateCostAttribute[];
+  subtotal: number;
+}
+
+interface TemplateCostAttribute {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  rate: number;
+  amount: number;
+}
+
+interface QuotationTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  property_type: string;
+  quality_tier: string;
+  base_price: number;
+  status: "active" | "draft" | "archived";
+  usage_count: number;
+  spaces: TemplateSpace[];
+  created_at: string;
+  updated_at: string;
+  created_by?: {
+    id: string;
+    name: string;
+  };
+}
+
+// Status configurations
+const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> =
+  {
+    active: { bg: "bg-green-100", text: "text-green-700", dot: "bg-green-500" },
+    draft: {
+      bg: "bg-yellow-100",
+      text: "text-yellow-700",
+      dot: "bg-yellow-500",
+    },
+    archived: {
+      bg: "bg-slate-100",
+      text: "text-slate-700",
+      dot: "bg-slate-500",
+    },
+  };
+
+const QUALITY_TIER_COLORS: Record<string, string> = {
+  luxury: "bg-purple-100 text-purple-700",
+  premium: "bg-blue-100 text-blue-700",
+  standard: "bg-green-100 text-green-700",
+  basic: "bg-slate-100 text-slate-700",
+};
+
+const PROPERTY_TYPES: Record<string, string> = {
+  "1bhk": "1BHK Apartment",
+  "2bhk": "2BHK Apartment",
+  "3bhk": "3BHK Apartment",
+  "4bhk": "4BHK Apartment",
+  studio: "Studio",
+  villa: "Villa",
+  penthouse: "Penthouse",
+  office: "Commercial Office",
+  retail: "Retail",
+};
+
+export default function TemplateDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const [template, setTemplate] = useState<QuotationTemplate | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [expandedSpaces, setExpandedSpaces] = useState<string[]>([]);
+  const [expandedComponents, setExpandedComponents] = useState<string[]>([]);
+
+  // Fetch template
+  const fetchTemplate = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/quotations/templates/${params.id}`);
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch template");
+      }
+
+      const data = await response.json();
+      setTemplate(data.template);
+
+      // Expand all spaces by default
+      if (data.template?.spaces) {
+        setExpandedSpaces(data.template.spaces.map((s: TemplateSpace) => s.id));
+      }
+    } catch (err) {
+      console.error("Error fetching template:", err);
+      // Use sample data for now
+      const sampleTemplate = getSampleTemplate(params.id as string);
+      setTemplate(sampleTemplate);
+      if (sampleTemplate?.spaces) {
+        setExpandedSpaces(sampleTemplate.spaces.map((s) => s.id));
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [params.id]);
+
+  useEffect(() => {
+    fetchTemplate();
+  }, [fetchTemplate]);
+
+  const toggleSpace = (spaceId: string) => {
+    setExpandedSpaces((prev) =>
+      prev.includes(spaceId)
+        ? prev.filter((id) => id !== spaceId)
+        : [...prev, spaceId]
+    );
+  };
+
+  const toggleComponent = (componentId: string) => {
+    setExpandedComponents((prev) =>
+      prev.includes(componentId)
+        ? prev.filter((id) => id !== componentId)
+        : [...prev, componentId]
+    );
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "—";
+    return new Date(dateString).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (error || !template) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+          <svg
+            className="w-8 h-8 text-slate-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+            />
+          </svg>
+        </div>
+        <p className="text-lg font-medium text-slate-900 mb-2">
+          {error || "Template not found"}
+        </p>
+        <Link
+          href="/dashboard/quotations/templates"
+          className="text-blue-600 hover:underline"
+        >
+          ← Back to Templates
+        </Link>
+      </div>
+    );
+  }
+
+  const currentStatusColors =
+    STATUS_COLORS[template.status] || STATUS_COLORS.draft;
+  const totalSpaces = template.spaces?.length || 0;
+  const totalComponents =
+    template.spaces?.reduce((sum, s) => sum + (s.components?.length || 0), 0) ||
+    0;
+  const totalMaterials =
+    template.spaces?.reduce(
+      (sum, s) =>
+        sum +
+          s.components?.reduce(
+            (cSum, c) => cSum + (c.materials?.length || 0),
+            0
+          ) || 0,
+      0
+    ) || 0;
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="bg-white rounded-lg border border-slate-200 px-5 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4 min-w-0">
+            {/* Breadcrumb */}
+            <div className="flex items-center gap-2 text-sm text-slate-500 shrink-0">
+              <Link
+                href="/dashboard/quotations"
+                className="hover:text-blue-600"
+              >
+                Quotations
+              </Link>
+              <span>/</span>
+              <Link
+                href="/dashboard/quotations/templates"
+                className="hover:text-blue-600"
+              >
+                Templates
+              </Link>
+              <span>/</span>
+              <span className="text-slate-700 font-medium truncate max-w-[200px]">
+                {template.name}
+              </span>
+            </div>
+
+            {/* Separator */}
+            <div className="h-5 w-px bg-slate-200 shrink-0" />
+
+            {/* Title */}
+            <h1 className="text-xl font-bold text-slate-900 truncate">
+              {template.name}
+            </h1>
+
+            {/* Status Badge */}
+            <span
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full shrink-0 ${currentStatusColors.bg} ${currentStatusColors.text}`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${currentStatusColors.dot}`}
+              ></span>
+              {template.status.charAt(0).toUpperCase() +
+                template.status.slice(1)}
+            </span>
+
+            {/* Quality Tier Badge */}
+            <span
+              className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium shrink-0 ${
+                QUALITY_TIER_COLORS[template.quality_tier?.toLowerCase()] ||
+                QUALITY_TIER_COLORS.standard
+              }`}
+            >
+              {template.quality_tier?.charAt(0).toUpperCase() +
+                template.quality_tier?.slice(1)}
+            </span>
+
+            {/* Property Type */}
+            <span className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-lg shrink-0">
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                />
+              </svg>
+              {PROPERTY_TYPES[template.property_type] || template.property_type}
+            </span>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() =>
+                router.push(`/dashboard/quotations/new?template=${template.id}`)
+              }
+              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              Use Template
+            </button>
+            <Link
+              href={`/dashboard/quotations/templates/${params.id}/edit`}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                />
+              </svg>
+              Edit
+            </Link>
+            <button
+              onClick={() =>
+                router.push(
+                  `/dashboard/quotations/templates/new?clone=${template.id}`
+                )
+              }
+              className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                />
+              </svg>
+              Save as New Template
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-4">
+        {/* Main Content */}
+        <div className="flex-1 space-y-4">
+          {/* Template Info Card */}
+          <div className="bg-white rounded-lg border border-slate-200 p-5">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">
+              Template Details
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">
+                  Property Type
+                </label>
+                <p className="text-sm text-slate-900">
+                  {PROPERTY_TYPES[template.property_type] ||
+                    template.property_type}
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">
+                  Quality Tier
+                </label>
+                <p className="text-sm text-slate-900">
+                  {template.quality_tier?.charAt(0).toUpperCase() +
+                    template.quality_tier?.slice(1)}
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">
+                  Base Price
+                </label>
+                <p className="text-sm text-slate-900 font-semibold">
+                  {formatCurrency(template.base_price)}
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">
+                  Usage Count
+                </label>
+                <p className="text-sm text-slate-900">
+                  {template.usage_count} times
+                </p>
+              </div>
+            </div>
+            {template.description && (
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <label className="block text-xs font-medium text-slate-500 mb-1">
+                  Description
+                </label>
+                <p className="text-sm text-slate-700">{template.description}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Template Structure */}
+          <div className="bg-white rounded-lg border border-slate-200 p-5">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">
+              Template Structure
+            </h3>
+
+            {!template.spaces || template.spaces.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <svg
+                    className="w-6 h-6 text-slate-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                    />
+                  </svg>
+                </div>
+                <h4 className="text-sm font-medium text-slate-900 mb-1">
+                  No Spaces Defined
+                </h4>
+                <p className="text-sm text-slate-500 mb-4">
+                  This template doesn&apos;t have any spaces configured yet.
+                </p>
+                <Link
+                  href={`/dashboard/quotations/templates/${params.id}/edit`}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                    />
+                  </svg>
+                  Add Spaces
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {template.spaces.map((space) => (
+                  <div
+                    key={space.id}
+                    className="border border-slate-200 rounded-lg overflow-hidden"
+                  >
+                    {/* Space Header */}
+                    <div
+                      className="flex items-center justify-between px-4 py-3 bg-slate-50 cursor-pointer"
+                      onClick={() => toggleSpace(space.id)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <button className="text-slate-600">
+                          <svg
+                            className={`w-5 h-5 transition-transform ${
+                              expandedSpaces.includes(space.id)
+                                ? "rotate-90"
+                                : ""
+                            }`}
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 5l7 7-7 7"
+                            />
+                          </svg>
+                        </button>
+                        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                          <svg
+                            className="w-4 h-4 text-white"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                            />
+                          </svg>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-900">
+                            {space.name}
+                          </h4>
+                          <p className="text-xs text-slate-500">
+                            {space.space_type} • {space.components?.length || 0}{" "}
+                            components
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-sm font-bold text-blue-600">
+                        {formatCurrency(space.subtotal)}
+                      </span>
+                    </div>
+
+                    {/* Space Content - Components */}
+                    {expandedSpaces.includes(space.id) && (
+                      <div className="p-4 space-y-3 border-t border-slate-100">
+                        {!space.components || space.components.length === 0 ? (
+                          <p className="text-sm text-slate-500 text-center py-4">
+                            No components in this space
+                          </p>
+                        ) : (
+                          space.components.map((component) => (
+                            <div
+                              key={component.id}
+                              className="border border-slate-200 rounded-lg overflow-hidden"
+                            >
+                              {/* Component Header */}
+                              <div
+                                className="flex items-center justify-between px-4 py-2.5 bg-slate-50 cursor-pointer"
+                                onClick={() => toggleComponent(component.id)}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <button className="text-slate-500">
+                                    <svg
+                                      className={`w-4 h-4 transition-transform ${
+                                        expandedComponents.includes(
+                                          component.id
+                                        )
+                                          ? "rotate-90"
+                                          : ""
+                                      }`}
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      stroke="currentColor"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M9 5l7 7-7 7"
+                                      />
+                                    </svg>
+                                  </button>
+                                  <div className="w-6 h-6 bg-purple-600 rounded flex items-center justify-center">
+                                    <svg
+                                      className="w-3 h-3 text-white"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      stroke="currentColor"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                                      />
+                                    </svg>
+                                  </div>
+                                  <div>
+                                    <h5 className="text-sm font-medium text-slate-900">
+                                      {component.name}
+                                    </h5>
+                                    <p className="text-xs text-slate-500">
+                                      {component.component_type}
+                                      {component.width && component.height && (
+                                        <>
+                                          {" "}
+                                          • {component.width}&apos; ×{" "}
+                                          {component.height}&apos;
+                                        </>
+                                      )}
+                                      {component.depth && (
+                                        <> × {component.depth}&apos;</>
+                                      )}
+                                    </p>
+                                  </div>
+                                </div>
+                                <span className="text-sm font-semibold text-purple-600">
+                                  {formatCurrency(component.subtotal)}
+                                </span>
+                              </div>
+
+                              {/* Component Content - Materials */}
+                              {expandedComponents.includes(component.id) && (
+                                <div className="p-3 border-t border-slate-100">
+                                  {!component.materials ||
+                                  component.materials.length === 0 ? (
+                                    <p className="text-sm text-slate-500 text-center py-2">
+                                      No materials configured
+                                    </p>
+                                  ) : (
+                                    <table className="w-full text-sm">
+                                      <thead className="bg-slate-50">
+                                        <tr>
+                                          <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">
+                                            Material
+                                          </th>
+                                          <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">
+                                            Category
+                                          </th>
+                                          <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">
+                                            Unit
+                                          </th>
+                                          <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase">
+                                            Rate
+                                          </th>
+                                          <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase">
+                                            Amount
+                                          </th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100">
+                                        {component.materials.map((material) => (
+                                          <tr
+                                            key={material.id}
+                                            className="hover:bg-slate-50"
+                                          >
+                                            <td className="px-3 py-2">
+                                              <span className="font-medium text-slate-900">
+                                                {material.name}
+                                              </span>
+                                            </td>
+                                            <td className="px-3 py-2 text-slate-600">
+                                              {material.category}
+                                            </td>
+                                            <td className="px-3 py-2 text-slate-600">
+                                              {material.unit}
+                                            </td>
+                                            <td className="px-3 py-2 text-right text-slate-600">
+                                              {formatCurrency(material.rate)}/
+                                              {material.unit}
+                                            </td>
+                                            <td className="px-3 py-2 text-right font-medium text-green-600">
+                                              {formatCurrency(
+                                                material.subtotal
+                                              )}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Sidebar */}
+        <div className="w-80 shrink-0 space-y-4">
+          {/* Summary Card */}
+          <div className="bg-white rounded-lg border border-slate-200 p-5">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">
+              Template Summary
+            </h3>
+
+            {template.spaces && template.spaces.length > 0 ? (
+              <div className="space-y-2 mb-4">
+                {template.spaces.map((space) => (
+                  <div
+                    key={space.id}
+                    className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0"
+                  >
+                    <span className="text-sm text-slate-600">{space.name}</span>
+                    <span className="text-sm font-medium text-slate-900">
+                      {formatCurrency(space.subtotal)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 mb-4">
+                No spaces defined yet.
+              </p>
+            )}
+
+            <div className="border-t border-slate-200 pt-4">
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-sm font-semibold text-slate-900">
+                  Base Price
+                </span>
+                <span className="text-lg font-bold text-blue-600">
+                  {formatCurrency(template.base_price)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Statistics Card */}
+          <div className="bg-white rounded-lg border border-slate-200 p-5">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">
+              Statistics
+            </h3>
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600">Total Spaces</span>
+                <span className="font-medium text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
+                  {totalSpaces}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600">Total Components</span>
+                <span className="font-medium text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
+                  {totalComponents}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600">Total Materials</span>
+                <span className="font-medium text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
+                  {totalMaterials}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600">Times Used</span>
+                <span className="font-medium text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
+                  {template.usage_count}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Info Card */}
+          <div className="bg-white rounded-lg border border-slate-200 p-5">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">
+              Information
+            </h3>
+            <div className="space-y-3 text-sm">
+              <div>
+                <span className="text-slate-500">Created</span>
+                <p className="text-slate-900">
+                  {formatDate(template.created_at)}
+                  {template.created_by && ` by ${template.created_by.name}`}
+                </p>
+              </div>
+              <div>
+                <span className="text-slate-500">Last Updated</span>
+                <p className="text-slate-900">
+                  {formatDate(template.updated_at)}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Sample template for development
+function getSampleTemplate(id: string): QuotationTemplate | null {
+  const templates: Record<string, QuotationTemplate> = {
+    "1": {
+      id: "1",
+      name: "Modern 2BHK Premium",
+      description:
+        "Complete interior package for modern 2BHK apartments with premium finishes including modular kitchen, wardrobes, and living room furniture.",
+      property_type: "2bhk",
+      quality_tier: "premium",
+      base_price: 850000,
+      status: "active",
+      usage_count: 24,
+      created_at: "2024-01-10T09:00:00Z",
+      updated_at: "2024-11-15T14:30:00Z",
+      created_by: { id: "1", name: "Admin User" },
+      spaces: [
+        {
+          id: "s1",
+          name: "Master Bedroom",
+          space_type: "Bedroom",
+          display_order: 1,
+          subtotal: 250000,
+          components: [
+            {
+              id: "c1",
+              name: "Sliding Wardrobe",
+              component_type: "Wardrobe",
+              description: "8ft sliding wardrobe with loft",
+              width: 8,
+              height: 9,
+              depth: 2,
+              display_order: 1,
+              subtotal: 180000,
+              materials: [
+                {
+                  id: "m1",
+                  name: "18mm BWP Plywood",
+                  category: "Carcass",
+                  unit: "sqft",
+                  rate: 375,
+                  display_order: 1,
+                  subtotal: 45000,
+                  cost_attributes: [],
+                },
+                {
+                  id: "m2",
+                  name: "Acrylic Laminate",
+                  category: "Shutter",
+                  unit: "sqft",
+                  rate: 1500,
+                  display_order: 2,
+                  subtotal: 85000,
+                  cost_attributes: [],
+                },
+                {
+                  id: "m3",
+                  name: "Hettich Premium Hardware",
+                  category: "Hardware",
+                  unit: "set",
+                  rate: 35000,
+                  display_order: 3,
+                  subtotal: 35000,
+                  cost_attributes: [],
+                },
+                {
+                  id: "m4",
+                  name: "LED Strip & Accessories",
+                  category: "Accessories",
+                  unit: "set",
+                  rate: 15000,
+                  display_order: 4,
+                  subtotal: 15000,
+                  cost_attributes: [],
+                },
+              ],
+            },
+            {
+              id: "c2",
+              name: "TV Unit",
+              component_type: "TV Unit",
+              width: 6,
+              height: 7,
+              display_order: 2,
+              subtotal: 70000,
+              materials: [
+                {
+                  id: "m5",
+                  name: "18mm BWP Plywood",
+                  category: "Carcass",
+                  unit: "sqft",
+                  rate: 375,
+                  display_order: 1,
+                  subtotal: 30000,
+                  cost_attributes: [],
+                },
+                {
+                  id: "m6",
+                  name: "Acrylic Laminate",
+                  category: "Shutter",
+                  unit: "sqft",
+                  rate: 1500,
+                  display_order: 2,
+                  subtotal: 40000,
+                  cost_attributes: [],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: "s2",
+          name: "Living Room",
+          space_type: "Living Room",
+          display_order: 2,
+          subtotal: 200000,
+          components: [
+            {
+              id: "c3",
+              name: "Entertainment Unit",
+              component_type: "TV Unit",
+              width: 10,
+              height: 8,
+              display_order: 1,
+              subtotal: 120000,
+              materials: [
+                {
+                  id: "m7",
+                  name: "18mm BWP Plywood",
+                  category: "Carcass",
+                  unit: "sqft",
+                  rate: 375,
+                  display_order: 1,
+                  subtotal: 50000,
+                  cost_attributes: [],
+                },
+                {
+                  id: "m8",
+                  name: "Veneer Finish",
+                  category: "Shutter",
+                  unit: "sqft",
+                  rate: 1200,
+                  display_order: 2,
+                  subtotal: 70000,
+                  cost_attributes: [],
+                },
+              ],
+            },
+            {
+              id: "c4",
+              name: "Shoe Cabinet",
+              component_type: "Storage",
+              width: 4,
+              height: 5,
+              display_order: 2,
+              subtotal: 80000,
+              materials: [
+                {
+                  id: "m9",
+                  name: "MDF Board",
+                  category: "Carcass",
+                  unit: "sqft",
+                  rate: 280,
+                  display_order: 1,
+                  subtotal: 40000,
+                  cost_attributes: [],
+                },
+                {
+                  id: "m10",
+                  name: "PU Finish",
+                  category: "Finish",
+                  unit: "sqft",
+                  rate: 800,
+                  display_order: 2,
+                  subtotal: 40000,
+                  cost_attributes: [],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: "s3",
+          name: "Kitchen",
+          space_type: "Kitchen",
+          display_order: 3,
+          subtotal: 350000,
+          components: [
+            {
+              id: "c5",
+              name: "L-Shape Modular Kitchen",
+              component_type: "Modular Kitchen",
+              width: 12,
+              height: 9,
+              display_order: 1,
+              subtotal: 350000,
+              materials: [
+                {
+                  id: "m11",
+                  name: "Marine Plywood",
+                  category: "Carcass",
+                  unit: "sqft",
+                  rate: 450,
+                  display_order: 1,
+                  subtotal: 100000,
+                  cost_attributes: [],
+                },
+                {
+                  id: "m12",
+                  name: "Acrylic Shutter",
+                  category: "Shutter",
+                  unit: "sqft",
+                  rate: 1800,
+                  display_order: 2,
+                  subtotal: 120000,
+                  cost_attributes: [],
+                },
+                {
+                  id: "m13",
+                  name: "Quartz Countertop",
+                  category: "Countertop",
+                  unit: "sqft",
+                  rate: 350,
+                  display_order: 3,
+                  subtotal: 35000,
+                  cost_attributes: [],
+                },
+                {
+                  id: "m14",
+                  name: "Hettich Premium Hardware",
+                  category: "Hardware",
+                  unit: "set",
+                  rate: 65000,
+                  display_order: 4,
+                  subtotal: 65000,
+                  cost_attributes: [],
+                },
+                {
+                  id: "m15",
+                  name: "Kitchen Accessories",
+                  category: "Accessories",
+                  unit: "set",
+                  rate: 30000,
+                  display_order: 5,
+                  subtotal: 30000,
+                  cost_attributes: [],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: "s4",
+          name: "Guest Bedroom",
+          space_type: "Bedroom",
+          display_order: 4,
+          subtotal: 50000,
+          components: [
+            {
+              id: "c6",
+              name: "Study Table with Storage",
+              component_type: "Study Table",
+              width: 4,
+              height: 3,
+              display_order: 1,
+              subtotal: 50000,
+              materials: [
+                {
+                  id: "m16",
+                  name: "18mm BWP Plywood",
+                  category: "Carcass",
+                  unit: "sqft",
+                  rate: 375,
+                  display_order: 1,
+                  subtotal: 25000,
+                  cost_attributes: [],
+                },
+                {
+                  id: "m17",
+                  name: "Laminate Finish",
+                  category: "Shutter",
+                  unit: "sqft",
+                  rate: 500,
+                  display_order: 2,
+                  subtotal: 25000,
+                  cost_attributes: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  return templates[id] || templates["1"];
+}

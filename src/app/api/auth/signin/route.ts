@@ -44,12 +44,28 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error: any) {
-    console.error("Sign in error:", error);
+    console.error("Sign in error:", error.message);
 
-    // Handle specific errors
+    // Handle specific errors - pass through meaningful messages
+    const errorMessage = error.message || "";
+
+    // Account deactivated or access revoked
     if (
-      error.message?.includes("Invalid") ||
-      error.message?.includes("credentials")
+      errorMessage.includes("deactivated") ||
+      errorMessage.includes("revoked") ||
+      errorMessage.includes("Account not found")
+    ) {
+      return NextResponse.json(
+        { success: false, error: errorMessage },
+        { status: 403 }
+      );
+    }
+
+    // Invalid credentials
+    if (
+      errorMessage.includes("Invalid") ||
+      errorMessage.includes("credentials") ||
+      errorMessage.includes("Invalid login credentials")
     ) {
       return NextResponse.json(
         { success: false, error: "Invalid email or password" },
@@ -57,7 +73,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (error.message?.includes("Email not confirmed")) {
+    // Email not confirmed
+    if (errorMessage.includes("Email not confirmed")) {
       return NextResponse.json(
         { success: false, error: "Please verify your email before signing in" },
         { status: 403 }
@@ -65,7 +82,10 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { success: false, error: "Failed to sign in. Please try again." },
+      {
+        success: false,
+        error: errorMessage || "Failed to sign in. Please try again.",
+      },
       { status: 500 }
     );
   }

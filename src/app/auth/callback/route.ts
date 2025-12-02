@@ -16,11 +16,12 @@ export async function GET(request: Request) {
   const error_description = requestUrl.searchParams.get("error_description");
 
   console.log("[Auth Callback] Received:", {
-    code,
-    token_hash,
+    code: code ? "present" : "missing",
+    token_hash: token_hash ? "present" : "missing",
     type,
     next,
     error,
+    fullUrl: request.url,
   });
 
   // Handle errors from Supabase
@@ -38,6 +39,7 @@ export async function GET(request: Request) {
 
   // Handle PKCE code exchange (most common flow)
   if (code) {
+    console.log("[Auth Callback] Exchanging code for session...");
     const { data, error: exchangeError } =
       await supabase.auth.exchangeCodeForSession(code);
 
@@ -52,9 +54,13 @@ export async function GET(request: Request) {
     }
 
     console.log("[Auth Callback] Session established for:", data.user?.email);
+    console.log("[Auth Callback] User metadata:", data.user?.user_metadata);
 
     // For invite type, redirect to password setup
     if (type === "invite" || type === "signup") {
+      console.log(
+        "[Auth Callback] Redirecting to setup-password for invite/signup"
+      );
       return NextResponse.redirect(
         new URL("/auth/setup-password", requestUrl.origin)
       );
@@ -62,6 +68,7 @@ export async function GET(request: Request) {
 
     // For password recovery
     if (type === "recovery") {
+      console.log("[Auth Callback] Redirecting to reset-password for recovery");
       return NextResponse.redirect(
         new URL("/auth/reset-password", requestUrl.origin)
       );
@@ -72,10 +79,12 @@ export async function GET(request: Request) {
 
   // Handle token hash (older flow)
   if (token_hash) {
-    const { error: verifyError } = await supabase.auth.verifyOtp({
-      token_hash,
-      type: (type as any) || "email",
-    });
+    console.log("[Auth Callback] Verifying token hash...");
+    const { data: verifyData, error: verifyError } =
+      await supabase.auth.verifyOtp({
+        token_hash,
+        type: (type as any) || "email",
+      });
 
     if (verifyError) {
       console.error("[Auth Callback] Token verification error:", verifyError);
@@ -87,8 +96,11 @@ export async function GET(request: Request) {
       );
     }
 
+    console.log("[Auth Callback] Token verified for:", verifyData?.user?.email);
+
     // For invite type, redirect to password setup
     if (type === "invite") {
+      console.log("[Auth Callback] Redirecting to setup-password for invite");
       return NextResponse.redirect(
         new URL("/auth/setup-password", requestUrl.origin)
       );
@@ -103,9 +115,13 @@ export async function GET(request: Request) {
   } = await supabase.auth.getUser();
 
   if (user) {
+    console.log("[Auth Callback] User already authenticated:", user.email);
     return NextResponse.redirect(new URL(next, requestUrl.origin));
   }
 
+  console.log(
+    "[Auth Callback] No code, token, or user - redirecting to signin"
+  );
   // Fallback to signin
   return NextResponse.redirect(new URL("/auth/signin", requestUrl.origin));
 }

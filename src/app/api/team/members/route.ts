@@ -56,40 +56,75 @@ export async function GET(request: NextRequest) {
 
     console.log("[TEAM API] Current user tenant:", currentUser.tenant_id);
 
-    // Get all team members - use admin client to bypass RLS
-    // Include active, invited, pending_verification, and disabled users
-    // (disabled = soft-deleted, shown as "Inactive")
-    const { data: members, error: membersError } = await adminClient
-      .from("users")
-      .select(
-        "id, name, email, phone, avatar_url, status, is_super_admin, last_login_at, created_at, tenant_id"
-      )
-      .eq("tenant_id", currentUser.tenant_id)
-      .in("status", ["active", "invited", "pending_verification", "disabled"])
-      .order("created_at", { ascending: true });
+    // Get all team members using tenant_users for membership status
+    // First try with tenant_users, fallback to users.status for backwards compatibility
+    let members: any[] = [];
 
-    if (membersError) {
-      console.error("[TEAM API] Failed to get members:", membersError);
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Failed to get team members",
-          details: membersError.message,
-        },
-        { status: 500 }
-      );
+    // Try to get members via tenant_users (new approach)
+    const { data: tenantMemberships, error: membershipError } =
+      await adminClient
+        .from("tenant_users")
+        .select(
+          `
+        user_id,
+        is_active,
+        joined_at,
+        removed_at
+      `
+        )
+        .eq("tenant_id", currentUser.tenant_id);
+
+    if (!membershipError && tenantMemberships && tenantMemberships.length > 0) {
+      // New approach: Get users based on tenant_users
+      const userIds = tenantMemberships.map((m) => m.user_id);
+
+      const { data: usersData, error: usersError } = await adminClient
+        .from("users")
+        .select(
+          "id, name, email, phone, avatar_url, status, is_super_admin, last_login_at, created_at, tenant_id"
+        )
+        .in("id", userIds)
+        .eq("tenant_id", currentUser.tenant_id);
+
+      if (!usersError && usersData) {
+        // Merge user data with membership status
+        members = usersData
+          .map((user) => {
+            const membership = tenantMemberships.find(
+              (m) => m.user_id === user.id
+            );
+            return {
+              ...user,
+              // Override status based on tenant_users.is_active
+              membershipActive: membership?.is_active ?? true,
+              joinedAt: membership?.joined_at,
+              removedAt: membership?.removed_at,
+            };
+          })
+          .filter((m) => m.membershipActive); // Only show active members
+      }
     }
 
-    console.log("[TEAM API] Found", members?.length, "members");
-    console.log(
-      "[TEAM API] Members:",
-      members?.map((m) => ({
-        id: m.id,
-        email: m.email,
-        status: m.status,
-        tenant_id: m.tenant_id,
-      }))
-    );
+    // Fallback to legacy approach if tenant_users is empty
+    if (members.length === 0) {
+      const { data: legacyMembers, error: legacyError } = await adminClient
+        .from("users")
+        .select(
+          "id, name, email, phone, avatar_url, status, is_super_admin, last_login_at, created_at, tenant_id"
+        )
+        .eq("tenant_id", currentUser.tenant_id)
+        .in("status", ["active", "invited", "pending_verification"])
+        .order("created_at", { ascending: true });
+
+      if (!legacyError && legacyMembers) {
+        members = legacyMembers.map((m) => ({
+          ...m,
+          membershipActive: true,
+        }));
+      }
+    }
+
+    console.log("[TEAM API] Found", members?.length, "active members");
 
     // Now get roles for each member separately - use admin client
     const memberIds = members?.map((m) => m.id) || [];
@@ -293,24 +328,87 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Soft delete - set status to 'disabled'
-    const { error: updateError } = await adminClient
+    // ALWAYS set users.status = 'disabled' first (works without migration)
+    // This is the primary security mechanism
+    const { error: userStatusError } = await adminClient
       .from("users")
       .update({
         status: "disabled",
         updated_at: new Date().toISOString(),
       })
-      .eq("id", memberId);
+      .eq("id", memberId)
+      .eq("tenant_id", currentUser.tenant_id);
 
-    if (updateError) {
-      console.error("[TEAM API] Failed to disable member:", updateError);
+    if (userStatusError) {
+      console.error(
+        "[TEAM API] Failed to disable user status:",
+        userStatusError
+      );
       return NextResponse.json(
         { success: false, error: "Failed to remove member" },
         { status: 500 }
       );
     }
+    console.log("[TEAM API] User status set to disabled:", memberId);
 
-    console.log("[TEAM API] Member disabled successfully:", memberId);
+    // Also try to update tenant_users if the table exists (for multi-tenant support)
+    const { error: membershipError } = await adminClient
+      .from("tenant_users")
+      .update({
+        is_active: false,
+        removed_at: new Date().toISOString(),
+        removed_by: authUser.id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", memberId)
+      .eq("tenant_id", currentUser.tenant_id);
+
+    if (membershipError) {
+      console.log(
+        "[TEAM API] Note: tenant_users update skipped (table may not exist):",
+        membershipError.message
+      );
+      // Not an error - tenant_users table may not exist yet
+    } else {
+      console.log("[TEAM API] tenant_users membership deactivated:", memberId);
+    }
+
+    // Delete user_roles for this user (tenant-specific cleanup)
+    const { error: rolesDeleteError } = await adminClient
+      .from("user_roles")
+      .delete()
+      .eq("user_id", memberId);
+
+    if (rolesDeleteError) {
+      console.error(
+        "[TEAM API] Failed to delete user roles:",
+        rolesDeleteError
+      );
+      // Non-fatal - continue
+    }
+
+    // SECURITY: Invalidate the user's session immediately
+    // This forces them to be logged out across all devices
+    try {
+      const { error: signOutError } = await adminClient.auth.admin.signOut(
+        memberId,
+        "global" // Sign out from all sessions
+      );
+      if (signOutError) {
+        console.error(
+          "[TEAM API] Failed to invalidate user session:",
+          signOutError
+        );
+        // Non-fatal - middleware will catch them on next request
+      } else {
+        console.log("[TEAM API] User session invalidated:", memberId);
+      }
+    } catch (signOutErr) {
+      console.error("[TEAM API] Error invalidating session:", signOutErr);
+      // Non-fatal - middleware will catch them on next request
+    }
+
+    console.log("[TEAM API] Member removed successfully:", memberId);
 
     return NextResponse.json({
       success: true,

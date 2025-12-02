@@ -26,21 +26,56 @@ export default function SetupPasswordPage() {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        // First, handle any hash fragments from the invite link
+        console.log("[SetupPassword] Checking session...");
+        console.log("[SetupPassword] Full URL:", window.location.href);
+        console.log("[SetupPassword] Hash:", window.location.hash);
+        console.log("[SetupPassword] Search:", window.location.search);
+
+        // First, try to detect and refresh any existing session
+        // This helps when Supabase has already set cookies but the client doesn't see them yet
+        const { data: initialSession, error: initialError } =
+          await supabase.auth.getSession();
+        console.log("[SetupPassword] Initial session check:", {
+          hasSession: !!initialSession?.session,
+          error: initialError?.message,
+        });
+
+        // First, handle any hash fragments from the invite link (Supabase implicit flow)
         const hashParams = new URLSearchParams(
           window.location.hash.substring(1)
         );
         const accessToken = hashParams.get("access_token");
         const refreshToken = hashParams.get("refresh_token");
-        const type = hashParams.get("type");
+        const hashType = hashParams.get("type");
+        const errorInHash = hashParams.get("error");
+        const errorDescInHash = hashParams.get("error_description");
 
         console.log("[SetupPassword] Hash params:", {
           accessToken: !!accessToken,
-          type,
+          refreshToken: !!refreshToken,
+          type: hashType,
+          error: errorInHash,
         });
+
+        // Handle error in hash
+        if (errorInHash) {
+          console.error(
+            "[SetupPassword] Error in hash:",
+            errorInHash,
+            errorDescInHash
+          );
+          setError(
+            errorDescInHash ||
+              errorInHash ||
+              "Authentication failed. Please try again."
+          );
+          setIsCheckingSession(false);
+          return;
+        }
 
         // If we have tokens in the hash, set the session
         if (accessToken && refreshToken) {
+          console.log("[SetupPassword] Setting session from hash tokens...");
           const { data, error: sessionError } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
@@ -56,30 +91,83 @@ export default function SetupPasswordPage() {
           }
 
           if (data.user) {
+            console.log("[SetupPassword] Session set for:", data.user.email);
             setUserEmail(data.user.email || null);
             // Clear the hash from URL for security
             window.history.replaceState(null, "", window.location.pathname);
+            setIsCheckingSession(false);
+            return;
           }
-        } else {
-          // Check existing session
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
+        }
 
-          if (!user) {
+        // Check for PKCE code in URL (callback might have redirected here)
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get("code");
+
+        if (code) {
+          console.log("[SetupPassword] Found PKCE code, exchanging...");
+          const { data, error: exchangeError } =
+            await supabase.auth.exchangeCodeForSession(code);
+
+          if (exchangeError) {
+            console.error(
+              "[SetupPassword] Code exchange error:",
+              exchangeError
+            );
             setError(
-              "No valid session found. Please use the invitation link from your email."
+              "Invalid or expired invitation link. Please request a new invite."
             );
             setIsCheckingSession(false);
             return;
           }
 
-          setUserEmail(user.email || null);
+          if (data.user) {
+            console.log(
+              "[SetupPassword] Session established for:",
+              data.user.email
+            );
+            setUserEmail(data.user.email || null);
+            // Clear the code from URL
+            window.history.replaceState(null, "", window.location.pathname);
+            setIsCheckingSession(false);
+            return;
+          }
         }
+
+        // Check existing session (may have been set by callback route)
+        const { data: sessionData } = await supabase.auth.getSession();
+
+        if (sessionData?.session?.user) {
+          console.log(
+            "[SetupPassword] Found existing session:",
+            sessionData.session.user.email
+          );
+          setUserEmail(sessionData.session.user.email || null);
+          setIsCheckingSession(false);
+          return;
+        }
+
+        // Last resort: check getUser
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (user) {
+          console.log("[SetupPassword] Found user via getUser:", user.email);
+          setUserEmail(user.email || null);
+          setIsCheckingSession(false);
+          return;
+        }
+
+        // No session found
+        console.log("[SetupPassword] No valid session found");
+        setError(
+          "No valid session found. Please click the invitation link from your email again."
+        );
+        setIsCheckingSession(false);
       } catch (err) {
         console.error("[SetupPassword] Error:", err);
         setError("Something went wrong. Please try again.");
-      } finally {
         setIsCheckingSession(false);
       }
     };
@@ -245,6 +333,18 @@ export default function SetupPasswordPage() {
             </h1>
             <p className="text-gray-600 text-sm mt-2">{error}</p>
           </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <h3 className="font-medium text-amber-800 mb-2">
+              What you can try:
+            </h3>
+            <ul className="text-sm text-amber-700 list-disc list-inside space-y-1">
+              <li>Click the invitation link from your email again</li>
+              <li>Ask your team admin to resend the invitation</li>
+              <li>Make sure you&apos;re using the latest invitation email</li>
+            </ul>
+          </div>
+
           <div className="text-center">
             <a
               href="/auth/signin"
@@ -278,11 +378,10 @@ export default function SetupPasswordPage() {
             </svg>
           </div>
           <h1 className="text-2xl font-semibold text-gray-900 mb-2">
-            Set Your Password
+            Welcome to SoftInterio!
           </h1>
           <p className="text-gray-600 text-sm">
-            Welcome to SoftInterio! Please create a password to complete your
-            account setup.
+            Create a password to complete your account setup and get started.
           </p>
           {userEmail && (
             <p className="text-sm text-blue-600 mt-2 font-medium">

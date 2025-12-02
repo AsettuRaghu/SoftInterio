@@ -1,0 +1,2222 @@
+"use client";
+
+import React, { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
+
+// V2 Schema Types
+interface Unit {
+  id: string;
+  name: string;
+  symbol: string;
+  unit_type: "length" | "area" | "volume" | "count" | "currency";
+}
+
+interface CostItemCategory {
+  id: string;
+  name: string;
+  display_order: number;
+  color_code: string;
+}
+
+interface CostItem {
+  id: string;
+  name: string;
+  description: string;
+  category_id: string;
+  default_unit_id: string;
+  calculation_type: "area" | "length" | "quantity" | "fixed";
+  base_rate: number;
+  category?: CostItemCategory;
+  unit?: Unit;
+}
+
+interface ComponentVariant {
+  id: string;
+  component_type: string;
+  variant_name: string;
+  description: string;
+}
+
+// Quotation types (what we're editing)
+interface QuotationLineItem {
+  id: string;
+  quotation_component_id: string;
+  cost_item_id: string;
+  cost_item?: CostItem;
+  length: number | null;
+  width: number | null;
+  quantity: number;
+  unit_id: string;
+  unit?: Unit;
+  rate: number;
+  amount: number;
+  notes: string;
+}
+
+interface QuotationComponent {
+  id: string;
+  quotation_space_id: string;
+  component_variant_id: string | null;
+  component_variant?: ComponentVariant;
+  custom_name: string;
+  description?: string; // User notes/description for this component
+  sequence_order: number;
+  line_items: QuotationLineItem[];
+}
+
+interface QuotationSpace {
+  id: string;
+  quotation_id: string;
+  space_name: string;
+  space_type: string;
+  sequence_order: number;
+  components: QuotationComponent[];
+}
+
+interface Quotation {
+  id: string;
+  quotation_number: string;
+  name: string;
+  version: number;
+  status: "draft" | "sent" | "approved" | "rejected" | "revised";
+  lead_id: string | null;
+  template_id: string | null;
+  subtotal: number;
+  tax_amount: number;
+  total_amount: number;
+  valid_until: string | null;
+  notes: string;
+  terms_and_conditions: string;
+  created_at: string;
+  updated_at: string;
+  spaces: QuotationSpace[];
+}
+
+// Template types for loading templates
+interface QuotationTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  property_type: string;
+  quality_tier: string;
+  spaces: Array<{
+    space_type_id: string;
+    default_name?: string;
+    space_type?: { id: string; name: string; slug: string };
+  }>;
+  line_items: Array<{
+    space_type_id?: string;
+    component_type_id?: string;
+    component_variant_id?: string;
+    cost_item_id: string;
+    rate?: number;
+    space_type?: { id: string; name: string; slug: string };
+    component_type?: { id: string; name: string; slug: string };
+    component_variant?: { id: string; name: string; slug: string };
+    cost_item?: {
+      id: string;
+      name: string;
+      slug: string;
+      unit_code: string;
+      default_rate: number;
+      category?: { id: string; name: string; slug: string; color?: string };
+    };
+  }>;
+}
+
+// UI State types
+interface ExpandState {
+  spaces: Record<string, boolean>;
+  components: Record<string, boolean>;
+}
+
+// Utility function to generate unique IDs
+const generateId = () => Math.random().toString(36).substr(2, 9);
+
+// Format currency
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(amount);
+};
+
+// Unit code to measurement type mapping
+const UNIT_MEASUREMENT_INFO: Record<
+  string,
+  { type: string; label: string; color: string }
+> = {
+  sqft: { type: "area", label: "L×W", color: "bg-blue-100 text-blue-700" },
+  rft: {
+    type: "length",
+    label: "Length",
+    color: "bg-green-100 text-green-700",
+  },
+  nos: {
+    type: "quantity",
+    label: "Qty",
+    color: "bg-purple-100 text-purple-700",
+  },
+  set: {
+    type: "quantity",
+    label: "Qty",
+    color: "bg-purple-100 text-purple-700",
+  },
+  lot: { type: "fixed", label: "Fixed", color: "bg-gray-100 text-gray-700" },
+  lumpsum: {
+    type: "fixed",
+    label: "Fixed",
+    color: "bg-gray-100 text-gray-700",
+  },
+  kg: {
+    type: "quantity",
+    label: "Qty",
+    color: "bg-purple-100 text-purple-700",
+  },
+  ltr: {
+    type: "quantity",
+    label: "Qty",
+    color: "bg-purple-100 text-purple-700",
+  },
+};
+
+const getMeasurementInfo = (unitCode: string) => {
+  return (
+    UNIT_MEASUREMENT_INFO[unitCode?.toLowerCase()] || {
+      type: "quantity",
+      label: "Qty",
+      color: "bg-gray-100 text-gray-600",
+    }
+  );
+};
+
+export default function EditQuotationPage() {
+  const router = useRouter();
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const quotationId = params.id as string;
+  const shouldOpenTemplateModal = searchParams.get("useTemplate") === "true";
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Quotation data
+  const [quotation, setQuotation] = useState<Quotation | null>(null);
+  const [quotationName, setQuotationName] = useState("");
+  const [validUntil, setValidUntil] = useState("");
+  const [notes, setNotes] = useState("");
+  const [spaces, setSpaces] = useState<QuotationSpace[]>([]);
+
+  // Master data
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [costItems, setCostItems] = useState<CostItem[]>([]);
+  const [costItemCategories, setCostItemCategories] = useState<
+    CostItemCategory[]
+  >([]);
+  const [componentVariants, setComponentVariants] = useState<
+    ComponentVariant[]
+  >([]);
+
+  // UI state
+  const [expandState, setExpandState] = useState<ExpandState>({
+    spaces: {},
+    components: {},
+  });
+
+  // Modals
+  const [showAddSpaceModal, setShowAddSpaceModal] = useState(false);
+  const [showAddComponentModal, setShowAddComponentModal] = useState<
+    string | null
+  >(null);
+  const [showAddCostItemModal, setShowAddCostItemModal] = useState<{
+    spaceId: string;
+    componentId: string;
+  } | null>(null);
+  const [showNewVersionModal, setShowNewVersionModal] = useState(false);
+  const [versionNotes, setVersionNotes] = useState("");
+
+  // Template selection modal
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [templateSearchTerm, setTemplateSearchTerm] = useState("");
+  const [templates, setTemplates] = useState<QuotationTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
+    null
+  );
+  const [loadingTemplate, setLoadingTemplate] = useState(false);
+
+  // New item form state
+  const [newSpaceName, setNewSpaceName] = useState("");
+  const [newSpaceType, setNewSpaceType] = useState("room");
+  const [newComponentName, setNewComponentName] = useState("");
+  const [selectedVariant, setSelectedVariant] = useState<string>("");
+
+  // Load quotation and master data
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Fetch quotation and master data in parallel
+        const [quotationRes, masterDataRes] = await Promise.all([
+          fetch(`/api/quotations/${quotationId}`),
+          fetch("/api/quotations/master-data"),
+        ]);
+
+        if (!quotationRes.ok) {
+          throw new Error("Failed to load quotation");
+        }
+
+        if (!masterDataRes.ok) {
+          throw new Error("Failed to load master data");
+        }
+
+        const quotationData = await quotationRes.json();
+        const masterData = await masterDataRes.json();
+
+        // Set master data
+        setUnits(masterData.data?.units || []);
+        setCostItems(masterData.data?.cost_items || []);
+        setCostItemCategories(masterData.data?.cost_item_categories || []);
+        setComponentVariants(masterData.data?.component_variants || []);
+
+        // Set quotation data - API returns { quotation, spaces, ... } structure
+        const q = quotationData.quotation;
+        if (!q) {
+          throw new Error("Quotation data not found");
+        }
+
+        // Transform spaces to match the expected format with components and line items
+        const transformedSpaces: QuotationSpace[] = (
+          quotationData.spaces || []
+        ).map(
+          (
+            space: {
+              id: string;
+              quotation_id: string;
+              name: string;
+              space_type?: { slug?: string };
+              sort_order: number;
+              components?: Array<{
+                id: string;
+                component_variant_id: string | null;
+                component_variant?: ComponentVariant;
+                name: string;
+                description?: string;
+                sort_order: number;
+                lineItems?: QuotationLineItem[];
+              }>;
+              lineItems?: QuotationLineItem[];
+            },
+            index: number
+          ) => ({
+            id: space.id,
+            quotation_id: space.quotation_id || q.id,
+            space_name: space.name || `Space ${index + 1}`,
+            space_type: space.space_type?.slug || "room",
+            sequence_order: space.sort_order || index + 1,
+            components: (space.components || []).map(
+              (comp, compIndex: number) => ({
+                id: comp.id,
+                quotation_space_id: space.id,
+                component_variant_id: comp.component_variant_id,
+                component_variant: comp.component_variant,
+                custom_name: comp.name || `Component ${compIndex + 1}`,
+                description: comp.description || "",
+                sequence_order: comp.sort_order || compIndex + 1,
+                line_items: (comp.lineItems || []).map(
+                  (item: QuotationLineItem) => ({
+                    ...item,
+                    cost_item:
+                      item.cost_item ||
+                      costItems.find((c) => c.id === item.cost_item_id),
+                  })
+                ),
+              })
+            ),
+          })
+        );
+
+        setQuotation({
+          ...q,
+          spaces: transformedSpaces,
+        });
+        setQuotationName(q.title || q.name || "");
+        setValidUntil(q.valid_until ? q.valid_until.split("T")[0] : "");
+        setNotes(q.notes || "");
+        setSpaces(transformedSpaces);
+
+        // Expand all spaces and components by default
+        const initialExpandState: ExpandState = { spaces: {}, components: {} };
+        transformedSpaces.forEach((space: QuotationSpace) => {
+          initialExpandState.spaces[space.id] = true;
+          (space.components || []).forEach((comp: QuotationComponent) => {
+            initialExpandState.components[comp.id] = true;
+          });
+        });
+        setExpandState(initialExpandState);
+      } catch (err) {
+        console.error("Error loading data:", err);
+        setError(err instanceof Error ? err.message : "Failed to load data");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (quotationId) {
+      fetchData();
+    }
+  }, [quotationId]);
+
+  // Auto-open template modal if URL has useTemplate=true
+  useEffect(() => {
+    if (shouldOpenTemplateModal && !loading) {
+      setShowTemplateModal(true);
+      fetchTemplates();
+      // Clean up the URL parameter
+      router.replace(`/dashboard/quotations/${quotationId}/edit`, {
+        scroll: false,
+      });
+    }
+  }, [shouldOpenTemplateModal, loading, quotationId, router]);
+
+  // Fetch templates when modal opens
+  const fetchTemplates = useCallback(async (search?: string) => {
+    try {
+      setLoadingTemplates(true);
+      const params = new URLSearchParams();
+      params.set("status", "active");
+      if (search) params.set("search", search);
+      params.set("include_details", "true");
+
+      const response = await fetch(
+        `/api/quotations/templates?${params.toString()}`
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setTemplates(data.templates || []);
+      }
+    } catch (err) {
+      console.error("Error fetching templates:", err);
+    } finally {
+      setLoadingTemplates(false);
+    }
+  }, []);
+
+  // Load template and convert to quotation format
+  const loadTemplate = useCallback(
+    async (templateId: string) => {
+      try {
+        setLoadingTemplate(true);
+        const response = await fetch(`/api/quotations/templates/${templateId}`);
+        if (!response.ok) throw new Error("Failed to load template");
+
+        const data = await response.json();
+        const template = data.template as QuotationTemplate;
+
+        if (!template) throw new Error("Template not found");
+
+        // Convert template to quotation spaces format
+        const newSpaces: QuotationSpace[] = [];
+
+        // Group line items by space and component
+        const lineItemsBySpace: Record<
+          string,
+          Record<string, typeof template.line_items>
+        > = {};
+
+        template.line_items.forEach((item) => {
+          const spaceKey = item.space_type_id || "ungrouped";
+          const componentKey = item.component_type_id
+            ? `${item.component_type_id}-${
+                item.component_variant_id || "default"
+              }`
+            : "direct";
+
+          if (!lineItemsBySpace[spaceKey]) {
+            lineItemsBySpace[spaceKey] = {};
+          }
+          if (!lineItemsBySpace[spaceKey][componentKey]) {
+            lineItemsBySpace[spaceKey][componentKey] = [];
+          }
+          lineItemsBySpace[spaceKey][componentKey].push(item);
+        });
+
+        // Create spaces from template
+        template.spaces.forEach((templateSpace, spaceIndex) => {
+          const spaceId = `new-${generateId()}`;
+          const spaceLineItems =
+            lineItemsBySpace[templateSpace.space_type_id] || {};
+
+          // Create components for this space
+          const components: QuotationComponent[] = [];
+
+          Object.entries(spaceLineItems).forEach(
+            ([componentKey, items], compIndex) => {
+              if (componentKey === "direct") {
+                // Direct line items without component - create a "General" component
+                if (items.length > 0) {
+                  const componentId = `new-${generateId()}`;
+                  components.push({
+                    id: componentId,
+                    quotation_space_id: spaceId,
+                    component_variant_id: null,
+                    custom_name: "General Items",
+                    description: "",
+                    sequence_order: compIndex + 1,
+                    line_items: items.map((item) => {
+                      const costItem = item.cost_item;
+                      const unit = units.find(
+                        (u) =>
+                          u.symbol?.toLowerCase() ===
+                          costItem?.unit_code?.toLowerCase()
+                      );
+                      const measurementInfo = getMeasurementInfo(
+                        costItem?.unit_code || ""
+                      );
+
+                      return {
+                        id: `new-${generateId()}`,
+                        quotation_component_id: componentId,
+                        cost_item_id: item.cost_item_id,
+                        cost_item: costItem
+                          ? {
+                              id: costItem.id,
+                              name: costItem.name,
+                              description: "",
+                              category_id: costItem.category?.id || "",
+                              default_unit_id: unit?.id || "",
+                              calculation_type: measurementInfo.type as
+                                | "area"
+                                | "length"
+                                | "quantity"
+                                | "fixed",
+                              base_rate: costItem.default_rate,
+                              category: costItem.category
+                                ? {
+                                    id: costItem.category.id,
+                                    name: costItem.category.name,
+                                    display_order: 0,
+                                    color_code:
+                                      costItem.category.color || "#6B7280",
+                                  }
+                                : undefined,
+                              unit: unit,
+                            }
+                          : undefined,
+                        length: null,
+                        width: null,
+                        quantity: 1,
+                        unit_id: unit?.id || "",
+                        unit: unit,
+                        rate: item.rate || costItem?.default_rate || 0,
+                        amount: 0,
+                        notes: "",
+                      };
+                    }),
+                  });
+                }
+              } else {
+                // Items grouped by component
+                const firstItem = items[0];
+                const componentId = `new-${generateId()}`;
+                const componentType = firstItem.component_type;
+                const componentVariant = firstItem.component_variant;
+
+                components.push({
+                  id: componentId,
+                  quotation_space_id: spaceId,
+                  component_variant_id: componentVariant?.id || null,
+                  component_variant: componentVariant
+                    ? {
+                        id: componentVariant.id,
+                        component_type: componentType?.name || "",
+                        variant_name: componentVariant.name,
+                        description: "",
+                      }
+                    : undefined,
+                  custom_name: componentType?.name || "Component",
+                  description: "",
+                  sequence_order: compIndex + 1,
+                  line_items: items.map((item) => {
+                    const costItem = item.cost_item;
+                    const unit = units.find(
+                      (u) =>
+                        u.symbol?.toLowerCase() ===
+                        costItem?.unit_code?.toLowerCase()
+                    );
+                    const measurementInfo = getMeasurementInfo(
+                      costItem?.unit_code || ""
+                    );
+
+                    return {
+                      id: `new-${generateId()}`,
+                      quotation_component_id: componentId,
+                      cost_item_id: item.cost_item_id,
+                      cost_item: costItem
+                        ? {
+                            id: costItem.id,
+                            name: costItem.name,
+                            description: "",
+                            category_id: costItem.category?.id || "",
+                            default_unit_id: unit?.id || "",
+                            calculation_type: measurementInfo.type as
+                              | "area"
+                              | "length"
+                              | "quantity"
+                              | "fixed",
+                            base_rate: costItem.default_rate,
+                            category: costItem.category
+                              ? {
+                                  id: costItem.category.id,
+                                  name: costItem.category.name,
+                                  display_order: 0,
+                                  color_code:
+                                    costItem.category.color || "#6B7280",
+                                }
+                              : undefined,
+                            unit: unit,
+                          }
+                        : undefined,
+                      length: null,
+                      width: null,
+                      quantity: 1,
+                      unit_id: unit?.id || "",
+                      unit: unit,
+                      rate: item.rate || costItem?.default_rate || 0,
+                      amount: 0,
+                      notes: "",
+                    };
+                  }),
+                });
+              }
+            }
+          );
+
+          newSpaces.push({
+            id: spaceId,
+            quotation_id: quotationId,
+            space_name:
+              templateSpace.default_name ||
+              templateSpace.space_type?.name ||
+              "Space",
+            space_type: templateSpace.space_type?.slug || "room",
+            sequence_order: spaceIndex + 1,
+            components,
+          });
+        });
+
+        // Set the new spaces
+        setSpaces(newSpaces);
+
+        // Expand all spaces and components
+        const newExpandState: ExpandState = { spaces: {}, components: {} };
+        newSpaces.forEach((space) => {
+          newExpandState.spaces[space.id] = true;
+          space.components.forEach((comp) => {
+            newExpandState.components[comp.id] = true;
+          });
+        });
+        setExpandState(newExpandState);
+
+        // Close modal
+        setShowTemplateModal(false);
+        setSelectedTemplateId(null);
+        setTemplateSearchTerm("");
+      } catch (err) {
+        console.error("Error loading template:", err);
+        alert(err instanceof Error ? err.message : "Failed to load template");
+      } finally {
+        setLoadingTemplate(false);
+      }
+    },
+    [quotationId, units]
+  );
+
+  // Open template modal
+  const openTemplateModal = () => {
+    setShowTemplateModal(true);
+    fetchTemplates();
+  };
+
+  // Search templates with debounce
+  useEffect(() => {
+    if (!showTemplateModal) return;
+
+    const timer = setTimeout(() => {
+      fetchTemplates(templateSearchTerm);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [templateSearchTerm, showTemplateModal, fetchTemplates]);
+
+  // Calculate amount for a line item based on calculation type
+  const calculateAmount = useCallback((item: QuotationLineItem): number => {
+    const costItem = item.cost_item;
+    if (!costItem) return item.quantity * item.rate;
+
+    switch (costItem.calculation_type) {
+      case "area":
+        return (item.length || 0) * (item.width || 0) * item.rate;
+      case "length":
+        return (item.length || 0) * item.rate;
+      case "quantity":
+        return item.quantity * item.rate;
+      case "fixed":
+        return item.rate;
+      default:
+        return item.quantity * item.rate;
+    }
+  }, []);
+
+  // Recalculate totals
+  const calculateTotals = useCallback(() => {
+    let subtotal = 0;
+    spaces.forEach((space) => {
+      space.components.forEach((component) => {
+        component.line_items.forEach((item) => {
+          subtotal += calculateAmount(item);
+        });
+      });
+    });
+    const taxAmount = subtotal * 0.18; // 18% GST
+    const totalAmount = subtotal + taxAmount;
+    return { subtotal, taxAmount, totalAmount };
+  }, [spaces, calculateAmount]);
+
+  // Toggle expand/collapse
+  const toggleSpaceExpand = (spaceId: string) => {
+    setExpandState((prev) => ({
+      ...prev,
+      spaces: { ...prev.spaces, [spaceId]: !prev.spaces[spaceId] },
+    }));
+  };
+
+  const toggleComponentExpand = (componentId: string) => {
+    setExpandState((prev) => ({
+      ...prev,
+      components: {
+        ...prev.components,
+        [componentId]: !prev.components[componentId],
+      },
+    }));
+  };
+
+  // Update line item
+  const updateLineItem = (
+    spaceId: string,
+    componentId: string,
+    itemId: string,
+    updates: Partial<QuotationLineItem>
+  ) => {
+    setSpaces((prev) =>
+      prev.map((space) => {
+        if (space.id !== spaceId) return space;
+        return {
+          ...space,
+          components: space.components.map((comp) => {
+            if (comp.id !== componentId) return comp;
+            return {
+              ...comp,
+              line_items: comp.line_items.map((item) => {
+                if (item.id !== itemId) return item;
+                const updated = { ...item, ...updates };
+                // Recalculate amount
+                updated.amount = calculateAmount(updated);
+                return updated;
+              }),
+            };
+          }),
+        };
+      })
+    );
+  };
+
+  // Delete line item
+  const deleteLineItem = (
+    spaceId: string,
+    componentId: string,
+    itemId: string
+  ) => {
+    setSpaces((prev) =>
+      prev.map((space) => {
+        if (space.id !== spaceId) return space;
+        return {
+          ...space,
+          components: space.components.map((comp) => {
+            if (comp.id !== componentId) return comp;
+            return {
+              ...comp,
+              line_items: comp.line_items.filter((item) => item.id !== itemId),
+            };
+          }),
+        };
+      })
+    );
+  };
+
+  // Update component description/notes
+  const updateComponentDescription = (
+    spaceId: string,
+    componentId: string,
+    description: string
+  ) => {
+    setSpaces((prev) =>
+      prev.map((space) => {
+        if (space.id !== spaceId) return space;
+        return {
+          ...space,
+          components: space.components.map((comp) => {
+            if (comp.id !== componentId) return comp;
+            return { ...comp, description };
+          }),
+        };
+      })
+    );
+  };
+
+  // Add new space
+  const addSpace = () => {
+    if (!newSpaceName.trim()) return;
+
+    const newSpace: QuotationSpace = {
+      id: `new-${generateId()}`,
+      quotation_id: quotationId,
+      space_name: newSpaceName.trim(),
+      space_type: newSpaceType,
+      sequence_order: spaces.length + 1,
+      components: [],
+    };
+
+    setSpaces((prev) => [...prev, newSpace]);
+    setExpandState((prev) => ({
+      ...prev,
+      spaces: { ...prev.spaces, [newSpace.id]: true },
+    }));
+    setNewSpaceName("");
+    setNewSpaceType("room");
+    setShowAddSpaceModal(false);
+  };
+
+  // Delete space
+  const deleteSpace = (spaceId: string) => {
+    setSpaces((prev) => prev.filter((s) => s.id !== spaceId));
+  };
+
+  // Add new component
+  const addComponent = (spaceId: string) => {
+    if (!newComponentName.trim()) return;
+
+    const variant = componentVariants.find((v) => v.id === selectedVariant);
+
+    const newComponent: QuotationComponent = {
+      id: `new-${generateId()}`,
+      quotation_space_id: spaceId,
+      component_variant_id: selectedVariant || null,
+      component_variant: variant,
+      custom_name: newComponentName.trim(),
+      sequence_order: 1,
+      line_items: [],
+    };
+
+    setSpaces((prev) =>
+      prev.map((space) => {
+        if (space.id !== spaceId) return space;
+        return {
+          ...space,
+          components: [
+            ...space.components,
+            {
+              ...newComponent,
+              sequence_order: space.components.length + 1,
+            },
+          ],
+        };
+      })
+    );
+
+    setExpandState((prev) => ({
+      ...prev,
+      components: { ...prev.components, [newComponent.id]: true },
+    }));
+
+    setNewComponentName("");
+    setSelectedVariant("");
+    setShowAddComponentModal(null);
+  };
+
+  // Delete component
+  const deleteComponent = (spaceId: string, componentId: string) => {
+    setSpaces((prev) =>
+      prev.map((space) => {
+        if (space.id !== spaceId) return space;
+        return {
+          ...space,
+          components: space.components.filter((c) => c.id !== componentId),
+        };
+      })
+    );
+  };
+
+  // Add cost item to component
+  const addCostItem = (
+    spaceId: string,
+    componentId: string,
+    costItem: CostItem
+  ) => {
+    const unit = units.find((u) => u.id === costItem.default_unit_id);
+
+    const newLineItem: QuotationLineItem = {
+      id: `new-${generateId()}`,
+      quotation_component_id: componentId,
+      cost_item_id: costItem.id,
+      cost_item: costItem,
+      length: null,
+      width: null,
+      quantity: 1,
+      unit_id: costItem.default_unit_id,
+      unit: unit,
+      rate: costItem.base_rate,
+      amount: costItem.calculation_type === "fixed" ? costItem.base_rate : 0,
+      notes: "",
+    };
+
+    setSpaces((prev) =>
+      prev.map((space) => {
+        if (space.id !== spaceId) return space;
+        return {
+          ...space,
+          components: space.components.map((comp) => {
+            if (comp.id !== componentId) return comp;
+            return {
+              ...comp,
+              line_items: [...comp.line_items, newLineItem],
+            };
+          }),
+        };
+      })
+    );
+
+    setShowAddCostItemModal(null);
+  };
+
+  // Save quotation
+  const saveQuotation = async (createNewVersion = false) => {
+    try {
+      setSaving(true);
+      setError(null);
+
+      const { subtotal, taxAmount, totalAmount } = calculateTotals();
+
+      const payload = {
+        name: quotationName,
+        valid_until: validUntil || null,
+        notes: notes,
+        subtotal,
+        tax_amount: taxAmount,
+        total_amount: totalAmount,
+        create_new_version: createNewVersion,
+        version_notes: createNewVersion ? versionNotes : undefined,
+        spaces: spaces.map((space, spaceIndex) => ({
+          id: space.id.startsWith("new-") ? undefined : space.id,
+          space_name: space.space_name,
+          space_type: space.space_type,
+          sequence_order: spaceIndex + 1,
+          components: space.components.map((comp, compIndex) => ({
+            id: comp.id.startsWith("new-") ? undefined : comp.id,
+            component_variant_id: comp.component_variant_id,
+            custom_name: comp.custom_name,
+            sequence_order: compIndex + 1,
+            line_items: comp.line_items.map((item) => ({
+              id: item.id.startsWith("new-") ? undefined : item.id,
+              cost_item_id: item.cost_item_id,
+              length: item.length,
+              width: item.width,
+              quantity: item.quantity,
+              unit_id: item.unit_id,
+              rate: item.rate,
+              amount: calculateAmount(item),
+              notes: item.notes,
+            })),
+          })),
+        })),
+      };
+
+      const res = await fetch(`/api/quotations/${quotationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to save quotation");
+      }
+
+      const result = await res.json();
+
+      if (createNewVersion && result.data?.id) {
+        // Redirect to the new version
+        router.push(`/dashboard/quotations/${result.data.id}`);
+      } else {
+        // Stay on the same page, show success
+        router.push(`/dashboard/quotations/${quotationId}`);
+      }
+    } catch (err) {
+      console.error("Error saving:", err);
+      setError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Get category color
+  const getCategoryColor = (categoryId: string) => {
+    const category = costItemCategories.find((c) => c.id === categoryId);
+    return category?.color_code || "#6B7280";
+  };
+
+  // Get category name
+  const getCategoryName = (categoryId: string) => {
+    const category = costItemCategories.find((c) => c.id === categoryId);
+    return category?.name || "Uncategorized";
+  };
+
+  // Group cost items by category
+  const costItemsByCategory = costItems.reduce((acc, item) => {
+    const catId = item.category_id || "uncategorized";
+    if (!acc[catId]) acc[catId] = [];
+    acc[catId].push(item);
+    return acc;
+  }, {} as Record<string, CostItem[]>);
+
+  const totals = calculateTotals();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading quotation...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !quotation) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg
+              className="w-8 h-8 text-red-600"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            Failed to load quotation
+          </h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <Link
+            href="/dashboard/quotations"
+            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Back to Quotations
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link
+                href={`/dashboard/quotations/${quotationId}`}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                  />
+                </svg>
+              </Link>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-bold text-gray-900">
+                    Edit Quotation
+                  </h1>
+                  <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                    v{quotation?.version || 1}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-500">
+                  {quotation?.quotation_number}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={openTemplateModal}
+                className="px-4 py-2 text-purple-600 hover:text-purple-700 border border-purple-300 rounded-lg hover:bg-purple-50 flex items-center gap-2"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
+                  />
+                </svg>
+                Use Template
+              </button>
+              <button
+                onClick={() => setShowNewVersionModal(true)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Save as New Version
+              </button>
+              <button
+                onClick={() => saveQuotation(false)}
+                disabled={saving}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="px-6 py-3 bg-red-50 border-b border-red-200">
+          <p className="text-sm text-red-600">{error}</p>
+        </div>
+      )}
+
+      <div className="flex">
+        {/* Main Content */}
+        <div className="flex-1 p-6 overflow-auto">
+          {/* Quotation Details */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Quotation Details
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Quotation Name
+                </label>
+                <input
+                  type="text"
+                  value={quotationName}
+                  onChange={(e) => setQuotationName(e.target.value)}
+                  placeholder="e.g., Villa Interior - Phase 1"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Valid Until
+                </label>
+                <input
+                  type="date"
+                  value={validUntil}
+                  onChange={(e) => setValidUntil(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notes
+                </label>
+                <input
+                  type="text"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Internal notes..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Spaces Section */}
+          <div className="space-y-4">
+            {spaces.map((space) => (
+              <div
+                key={space.id}
+                className="bg-white rounded-xl border border-gray-200"
+              >
+                {/* Space Header */}
+                <div
+                  className="flex items-center justify-between px-4 py-3 bg-blue-50 border-b border-blue-100 cursor-pointer rounded-t-xl"
+                  onClick={() => toggleSpaceExpand(space.id)}
+                >
+                  <div className="flex items-center gap-3">
+                    <button className="text-blue-600">
+                      <svg
+                        className={`w-5 h-5 transition-transform ${
+                          expandState.spaces[space.id] ? "rotate-90" : ""
+                        }`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 5l7 7-7 7"
+                        />
+                      </svg>
+                    </button>
+                    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                      <svg
+                        className="w-4 h-4 text-white"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                        />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">
+                        {space.space_name}
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        {space.components.length} components •{" "}
+                        {space.space_type}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-lg font-bold text-blue-600">
+                      {formatCurrency(
+                        space.components.reduce(
+                          (sum, comp) =>
+                            sum +
+                            comp.line_items.reduce(
+                              (s, item) => s + calculateAmount(item),
+                              0
+                            ),
+                          0
+                        )
+                      )}
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteSpace(space.id);
+                      }}
+                      className="text-gray-400 hover:text-red-600"
+                    >
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Space Content (Components) */}
+                {expandState.spaces[space.id] && (
+                  <div className="p-4 space-y-3">
+                    {space.components.map((component) => (
+                      <div
+                        key={component.id}
+                        className="border border-gray-200 rounded-lg"
+                      >
+                        {/* Component Header */}
+                        <div
+                          className="flex items-center justify-between px-4 py-3 bg-gray-50 cursor-pointer rounded-t-lg"
+                          onClick={() => toggleComponentExpand(component.id)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <button className="text-gray-600">
+                              <svg
+                                className={`w-4 h-4 transition-transform ${
+                                  expandState.components[component.id]
+                                    ? "rotate-90"
+                                    : ""
+                                }`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M9 5l7 7-7 7"
+                                />
+                              </svg>
+                            </button>
+                            <div className="w-6 h-6 bg-purple-600 rounded flex items-center justify-center">
+                              <svg
+                                className="w-3 h-3 text-white"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                                />
+                              </svg>
+                            </div>
+                            <div>
+                              <h4 className="font-medium text-gray-900">
+                                {component.custom_name}
+                              </h4>
+                              <p className="text-xs text-gray-500">
+                                {component.component_variant?.variant_name && (
+                                  <span className="mr-2">
+                                    {component.component_variant.variant_name}
+                                  </span>
+                                )}
+                                {component.line_items.length} items
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <span className="font-semibold text-purple-600">
+                              {formatCurrency(
+                                component.line_items.reduce(
+                                  (sum, item) => sum + calculateAmount(item),
+                                  0
+                                )
+                              )}
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteComponent(space.id, component.id);
+                              }}
+                              className="text-gray-400 hover:text-red-600"
+                            >
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Component Content (Line Items) */}
+                        {expandState.components[component.id] && (
+                          <div className="p-3 space-y-2">
+                            {/* Component Description/Notes */}
+                            <div className="mb-3">
+                              <label className="block text-xs font-medium text-gray-500 mb-1">
+                                Component Notes / Description
+                              </label>
+                              <textarea
+                                value={component.description || ""}
+                                onChange={(e) =>
+                                  updateComponentDescription(
+                                    space.id,
+                                    component.id,
+                                    e.target.value
+                                  )
+                                }
+                                placeholder="e.g., 8ft x 7ft sliding wardrobe with mirror, soft-close hinges..."
+                                rows={2}
+                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-purple-500 focus:border-purple-500 resize-none"
+                              />
+                            </div>
+
+                            {component.line_items.map((item) => {
+                              const costItem =
+                                item.cost_item ||
+                                costItems.find(
+                                  (c) => c.id === item.cost_item_id
+                                );
+                              const calculationType =
+                                costItem?.calculation_type || "quantity";
+
+                              return (
+                                <div
+                                  key={item.id}
+                                  className="border border-gray-100 rounded-lg bg-white p-3"
+                                >
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <div
+                                        className="w-3 h-3 rounded-full"
+                                        style={{
+                                          backgroundColor: getCategoryColor(
+                                            costItem?.category_id || ""
+                                          ),
+                                        }}
+                                      />
+                                      <div>
+                                        <span className="text-sm font-medium text-gray-900">
+                                          {costItem?.name || "Unknown Item"}
+                                        </span>
+                                        <span className="text-xs text-gray-500 ml-2">
+                                          (
+                                          {getCategoryName(
+                                            costItem?.category_id || ""
+                                          )}
+                                          )
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() =>
+                                        deleteLineItem(
+                                          space.id,
+                                          component.id,
+                                          item.id
+                                        )
+                                      }
+                                      className="text-gray-400 hover:text-red-600"
+                                    >
+                                      <svg
+                                        className="w-4 h-4"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M6 18L18 6M6 6l12 12"
+                                        />
+                                      </svg>
+                                    </button>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                                    {/* Dimension inputs based on calculation type */}
+                                    {(calculationType === "area" ||
+                                      calculationType === "length") && (
+                                      <div>
+                                        <label className="block text-xs text-gray-500 mb-1">
+                                          Length ({item.unit?.symbol || "ft"})
+                                        </label>
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          value={item.length || ""}
+                                          onChange={(e) =>
+                                            updateLineItem(
+                                              space.id,
+                                              component.id,
+                                              item.id,
+                                              {
+                                                length:
+                                                  parseFloat(e.target.value) ||
+                                                  null,
+                                              }
+                                            )
+                                          }
+                                          className="w-full px-2 py-1 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                        />
+                                      </div>
+                                    )}
+
+                                    {calculationType === "area" && (
+                                      <div>
+                                        <label className="block text-xs text-gray-500 mb-1">
+                                          Width ({item.unit?.symbol || "ft"})
+                                        </label>
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          value={item.width || ""}
+                                          onChange={(e) =>
+                                            updateLineItem(
+                                              space.id,
+                                              component.id,
+                                              item.id,
+                                              {
+                                                width:
+                                                  parseFloat(e.target.value) ||
+                                                  null,
+                                              }
+                                            )
+                                          }
+                                          className="w-full px-2 py-1 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                        />
+                                      </div>
+                                    )}
+
+                                    {calculationType === "quantity" && (
+                                      <div>
+                                        <label className="block text-xs text-gray-500 mb-1">
+                                          Quantity
+                                        </label>
+                                        <input
+                                          type="number"
+                                          value={item.quantity || ""}
+                                          onChange={(e) =>
+                                            updateLineItem(
+                                              space.id,
+                                              component.id,
+                                              item.id,
+                                              {
+                                                quantity:
+                                                  parseFloat(e.target.value) ||
+                                                  0,
+                                              }
+                                            )
+                                          }
+                                          className="w-full px-2 py-1 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                        />
+                                      </div>
+                                    )}
+
+                                    <div>
+                                      <label className="block text-xs text-gray-500 mb-1">
+                                        Rate (₹/{item.unit?.symbol || "unit"})
+                                      </label>
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        value={item.rate || ""}
+                                        onChange={(e) =>
+                                          updateLineItem(
+                                            space.id,
+                                            component.id,
+                                            item.id,
+                                            {
+                                              rate:
+                                                parseFloat(e.target.value) || 0,
+                                            }
+                                          )
+                                        }
+                                        className="w-full px-2 py-1 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                      />
+                                    </div>
+
+                                    <div>
+                                      <label className="block text-xs text-gray-500 mb-1">
+                                        Amount
+                                      </label>
+                                      <div className="px-2 py-1 text-sm font-medium bg-gray-50 rounded text-gray-900">
+                                        {formatCurrency(calculateAmount(item))}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Calculation type hint */}
+                                  <div className="mt-2 text-xs text-gray-400">
+                                    {calculationType === "area" &&
+                                      "Area = Length × Width × Rate"}
+                                    {calculationType === "length" &&
+                                      "Total = Length × Rate"}
+                                    {calculationType === "quantity" &&
+                                      "Total = Quantity × Rate"}
+                                    {calculationType === "fixed" &&
+                                      "Fixed / Lump Sum"}
+                                  </div>
+                                </div>
+                              );
+                            })}
+
+                            {/* Add Cost Item Button */}
+                            <button
+                              onClick={() =>
+                                setShowAddCostItemModal({
+                                  spaceId: space.id,
+                                  componentId: component.id,
+                                })
+                              }
+                              className="w-full py-2 text-sm text-green-600 hover:text-green-700 hover:bg-green-50 rounded-lg border border-dashed border-green-300 flex items-center justify-center gap-1"
+                            >
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 4v16m8-8H4"
+                                />
+                              </svg>
+                              Add Cost Item
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Add Component Button */}
+                    <button
+                      onClick={() => setShowAddComponentModal(space.id)}
+                      className="w-full py-3 text-sm text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded-lg border border-dashed border-purple-300 flex items-center justify-center gap-1"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 4v16m8-8H4"
+                        />
+                      </svg>
+                      Add Component
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Add Space Button */}
+            <button
+              onClick={() => setShowAddSpaceModal(true)}
+              className="w-full py-4 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-xl border-2 border-dashed border-blue-300 flex items-center justify-center gap-2"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              Add Space
+            </button>
+          </div>
+        </div>
+
+        {/* Right Sidebar - Summary */}
+        <div className="w-80 bg-white border-l border-gray-200 p-6 sticky top-[65px] h-[calc(100vh-65px)] overflow-auto">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            Cost Summary
+          </h2>
+
+          <div className="space-y-3 mb-6">
+            {spaces.map((space) => (
+              <div
+                key={space.id}
+                className="flex items-center justify-between py-2 border-b border-gray-100"
+              >
+                <span className="text-sm text-gray-600">
+                  {space.space_name}
+                </span>
+                <span className="text-sm font-medium text-gray-900">
+                  {formatCurrency(
+                    space.components.reduce(
+                      (sum, comp) =>
+                        sum +
+                        comp.line_items.reduce(
+                          (s, item) => s + calculateAmount(item),
+                          0
+                        ),
+                      0
+                    )
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {spaces.length > 0 && (
+            <>
+              <div className="border-t border-gray-200 pt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-gray-600">Subtotal</span>
+                  <span className="font-medium text-gray-900">
+                    {formatCurrency(totals.subtotal)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-gray-600">GST (18%)</span>
+                  <span className="font-medium text-gray-900">
+                    {formatCurrency(totals.taxAmount)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+                  <span className="text-lg font-semibold text-gray-900">
+                    Grand Total
+                  </span>
+                  <span className="text-xl font-bold text-blue-600">
+                    {formatCurrency(totals.totalAmount)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                <h3 className="text-sm font-medium text-blue-900 mb-2">
+                  Quick Stats
+                </h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-blue-700">Total Spaces</span>
+                    <span className="font-medium text-blue-900">
+                      {spaces.length}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-blue-700">Total Components</span>
+                    <span className="font-medium text-blue-900">
+                      {spaces.reduce((sum, s) => sum + s.components.length, 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-blue-700">Total Line Items</span>
+                    <span className="font-medium text-blue-900">
+                      {spaces.reduce(
+                        (sum, s) =>
+                          sum +
+                          s.components.reduce(
+                            (cSum, c) => cSum + c.line_items.length,
+                            0
+                          ),
+                        0
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Add Space Modal */}
+      {showAddSpaceModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl w-full max-w-md p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Add Space
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Space Name
+                </label>
+                <input
+                  type="text"
+                  value={newSpaceName}
+                  onChange={(e) => setNewSpaceName(e.target.value)}
+                  placeholder="e.g., Master Bedroom"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Space Type
+                </label>
+                <select
+                  value={newSpaceType}
+                  onChange={(e) => setNewSpaceType(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="room">Room</option>
+                  <option value="bedroom">Bedroom</option>
+                  <option value="kitchen">Kitchen</option>
+                  <option value="living_room">Living Room</option>
+                  <option value="bathroom">Bathroom</option>
+                  <option value="study">Study</option>
+                  <option value="balcony">Balcony</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowAddSpaceModal(false);
+                  setNewSpaceName("");
+                }}
+                className="flex-1 py-2 text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addSpace}
+                disabled={!newSpaceName.trim()}
+                className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                Add Space
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Component Modal */}
+      {showAddComponentModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl w-full max-w-md p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Add Component
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Component Name
+                </label>
+                <input
+                  type="text"
+                  value={newComponentName}
+                  onChange={(e) => setNewComponentName(e.target.value)}
+                  placeholder="e.g., Wardrobe, TV Unit"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Variant Type (Optional)
+                </label>
+                <select
+                  value={selectedVariant}
+                  onChange={(e) => setSelectedVariant(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">No variant</option>
+                  {componentVariants.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.component_type} - {v.variant_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowAddComponentModal(null);
+                  setNewComponentName("");
+                  setSelectedVariant("");
+                }}
+                className="flex-1 py-2 text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => addComponent(showAddComponentModal)}
+                disabled={!newComponentName.trim()}
+                className="flex-1 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+              >
+                Add Component
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Cost Item Modal */}
+      {showAddCostItemModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl w-full max-w-lg p-6 max-h-[80vh] overflow-auto">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Add Cost Item
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Select a cost item to add
+            </p>
+
+            <div className="space-y-4">
+              {Object.entries(costItemsByCategory).map(([catId, items]) => (
+                <div key={catId}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: getCategoryColor(catId) }}
+                    />
+                    <h3 className="text-sm font-medium text-gray-700">
+                      {getCategoryName(catId)}
+                    </h3>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2">
+                    {items.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() =>
+                          addCostItem(
+                            showAddCostItemModal.spaceId,
+                            showAddCostItemModal.componentId,
+                            item
+                          )
+                        }
+                        className="w-full p-3 text-left border border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="font-medium text-gray-900">
+                              {item.name}
+                            </div>
+                            {item.description && (
+                              <div className="text-sm text-gray-500">
+                                {item.description}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-medium text-gray-900">
+                              {formatCurrency(item.base_rate)}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {item.calculation_type === "area" && "per sqft"}
+                              {item.calculation_type === "length" && "per ft"}
+                              {item.calculation_type === "quantity" &&
+                                "per unit"}
+                              {item.calculation_type === "fixed" && "fixed"}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setShowAddCostItemModal(null)}
+              className="w-full mt-4 py-2 text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* New Version Modal */}
+      {showNewVersionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl w-full max-w-md p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Create New Version
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              This will save the current changes as a new version (v
+              {(quotation?.version || 1) + 1}) while keeping the original
+              version intact.
+            </p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Version Notes (Optional)
+              </label>
+              <textarea
+                value={versionNotes}
+                onChange={(e) => setVersionNotes(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                rows={3}
+                placeholder="Describe what changed in this version..."
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowNewVersionModal(false);
+                  setVersionNotes("");
+                }}
+                className="flex-1 py-2 text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowNewVersionModal(false);
+                  saveQuotation(true);
+                }}
+                disabled={saving}
+                className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? "Creating..." : "Create Version"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Template Selection Modal */}
+      {showTemplateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl w-full max-w-2xl p-6 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Use Template
+                </h2>
+                <p className="text-sm text-gray-500">
+                  Select a template to load. This will replace the current
+                  quotation content.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowTemplateModal(false);
+                  setTemplateSearchTerm("");
+                  setSelectedTemplateId(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            {/* Search Box */}
+            <div className="relative mb-4">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search templates by name..."
+                value={templateSearchTerm}
+                onChange={(e) => setTemplateSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                autoFocus
+              />
+            </div>
+
+            {/* Warning */}
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+              <svg
+                className="w-5 h-5 text-amber-600 shrink-0 mt-0.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+              <div className="text-sm text-amber-800">
+                <span className="font-medium">Note:</span> Loading a template
+                will replace all existing spaces, components, and cost items in
+                this quotation.
+              </div>
+            </div>
+
+            {/* Template List */}
+            <div className="flex-1 overflow-y-auto space-y-2">
+              {loadingTemplates ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              ) : templates.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <svg
+                      className="w-6 h-6 text-gray-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                      />
+                    </svg>
+                  </div>
+                  <p className="text-gray-500">
+                    {templateSearchTerm
+                      ? "No templates found matching your search"
+                      : "No templates available"}
+                  </p>
+                </div>
+              ) : (
+                templates.map((template) => (
+                  <button
+                    key={template.id}
+                    onClick={() => setSelectedTemplateId(template.id)}
+                    className={`w-full p-4 text-left border rounded-lg transition-all ${
+                      selectedTemplateId === template.id
+                        ? "border-purple-500 bg-purple-50 ring-2 ring-purple-500"
+                        : "border-gray-200 hover:border-purple-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-medium text-gray-900 truncate">
+                            {template.name}
+                          </h3>
+                          <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded">
+                            {template.property_type}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 text-xs font-medium rounded ${
+                              template.quality_tier === "luxury"
+                                ? "bg-purple-100 text-purple-700"
+                                : template.quality_tier === "premium"
+                                ? "bg-blue-100 text-blue-700"
+                                : "bg-green-100 text-green-700"
+                            }`}
+                          >
+                            {template.quality_tier}
+                          </span>
+                        </div>
+                        {template.description && (
+                          <p className="text-sm text-gray-500 mt-1 line-clamp-2">
+                            {template.description}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                          <span>{template.spaces?.length || 0} spaces</span>
+                          <span>
+                            {template.line_items?.length || 0} line items
+                          </span>
+                        </div>
+                      </div>
+                      {selectedTemplateId === template.id && (
+                        <div className="ml-3 shrink-0">
+                          <svg
+                            className="w-6 h-6 text-purple-600"
+                            fill="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 mt-4 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowTemplateModal(false);
+                  setTemplateSearchTerm("");
+                  setSelectedTemplateId(null);
+                }}
+                className="flex-1 py-2.5 text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() =>
+                  selectedTemplateId && loadTemplate(selectedTemplateId)
+                }
+                disabled={!selectedTemplateId || loadingTemplate}
+                className="flex-1 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center justify-center gap-2"
+              >
+                {loadingTemplate ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                      />
+                    </svg>
+                    Load Template
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,958 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+
+interface MaterialAttribute {
+  name: string;
+  value: number;
+  unit: string;
+}
+
+interface Material {
+  id: string;
+  name: string;
+  material_type: string;
+  brand?: string;
+  specification?: string;
+  quantity?: number;
+  unit?: string;
+  unit_price?: number;
+  total_price?: number;
+  attributes?: MaterialAttribute[];
+}
+
+interface Component {
+  id: string;
+  name: string;
+  component_type: string;
+  description?: string;
+  width?: number;
+  height?: number;
+  depth?: number;
+  area_sqft?: number;
+  unit_cost?: number;
+  total_cost?: number;
+  materials: Material[];
+}
+
+interface Space {
+  id: string;
+  name: string;
+  space_type: string;
+  area_sqft?: number;
+  total_cost?: number;
+  components: Component[];
+}
+
+interface QuotationVersion {
+  id: string;
+  version: number;
+  status: string;
+  grand_total: number;
+  created_at: string;
+}
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  avatar_url?: string;
+}
+
+interface Quotation {
+  id: string;
+  quotation_number: string;
+  title?: string;
+  description?: string;
+  client_name?: string;
+  property_name?: string;
+  property_address?: string;
+  property_city?: string;
+  carpet_area_sqft?: number;
+  status: string;
+  valid_from?: string;
+  valid_until?: string;
+  created_at: string;
+  version: number;
+  subtotal?: number;
+  discount_amount?: number;
+  tax_amount?: number;
+  grand_total?: number;
+  lead_id?: string;
+  created_user?: User;
+  updated_user?: User;
+}
+
+export default function QuotationDetailPage() {
+  const params = useParams();
+  const [quotation, setQuotation] = useState<Quotation | null>(null);
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [versions, setVersions] = useState<QuotationVersion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [expandedSpaces, setExpandedSpaces] = useState<string[]>([]);
+  const [expandedComponents, setExpandedComponents] = useState<string[]>([]);
+
+  useEffect(() => {
+    const fetchQuotation = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`/api/quotations/${params.id}`);
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to fetch quotation");
+        }
+
+        const data = await response.json();
+        setQuotation(data.quotation);
+        setSpaces(data.spaces || []);
+        setVersions(data.versions || []);
+
+        // Expand all spaces by default if there are any
+        if (data.spaces && data.spaces.length > 0) {
+          setExpandedSpaces(data.spaces.map((s: Space) => s.id));
+        }
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to fetch quotation"
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (params.id) {
+      fetchQuotation();
+    }
+  }, [params.id]);
+
+  const toggleSpace = (spaceId: string) => {
+    setExpandedSpaces((prev) =>
+      prev.includes(spaceId)
+        ? prev.filter((id) => id !== spaceId)
+        : [...prev, spaceId]
+    );
+  };
+
+  const toggleComponent = (componentId: string) => {
+    setExpandedComponents((prev) =>
+      prev.includes(componentId)
+        ? prev.filter((id) => id !== componentId)
+        : [...prev, componentId]
+    );
+  };
+
+  const formatCurrency = (amount: number | undefined | null) => {
+    if (amount === undefined || amount === null) return "₹0";
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const formatDate = (dateString: string | undefined | null) => {
+    if (!dateString) return "-";
+    return new Date(dateString).toLocaleDateString("en-IN", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case "approved":
+        return "bg-green-100 text-green-800";
+      case "pending":
+        return "bg-yellow-100 text-yellow-800";
+      case "sent":
+        return "bg-blue-100 text-blue-800";
+      case "rejected":
+        return "bg-red-100 text-red-800";
+      case "draft":
+        return "bg-gray-100 text-gray-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading quotation...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg
+              className="w-8 h-8 text-red-600"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            Error Loading Quotation
+          </h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <Link
+            href="/dashboard/quotations"
+            className="text-blue-600 hover:text-blue-700"
+          >
+            ← Back to Quotations
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!quotation) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            Quotation Not Found
+          </h2>
+          <Link
+            href="/dashboard/quotations"
+            className="text-blue-600 hover:text-blue-700"
+          >
+            ← Back to Quotations
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const subtotal = spaces.reduce((sum, s) => sum + (s.total_cost || 0), 0);
+  const gstAmount = quotation.tax_amount || 0;
+  const total = quotation.grand_total || subtotal + gstAmount;
+
+  const statusColors: Record<
+    string,
+    { bg: string; text: string; dot: string }
+  > = {
+    draft: { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-500" },
+    pending: {
+      bg: "bg-yellow-100",
+      text: "text-yellow-700",
+      dot: "bg-yellow-500",
+    },
+    sent: { bg: "bg-blue-100", text: "text-blue-700", dot: "bg-blue-500" },
+    approved: {
+      bg: "bg-green-100",
+      text: "text-green-700",
+      dot: "bg-green-500",
+    },
+    rejected: { bg: "bg-red-100", text: "text-red-700", dot: "bg-red-500" },
+  };
+
+  const currentStatusColors =
+    statusColors[quotation.status?.toLowerCase()] || statusColors.draft;
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="bg-white rounded-lg border border-slate-200 px-5 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4 min-w-0">
+            {/* Breadcrumb */}
+            <div className="flex items-center gap-2 text-sm text-slate-500 shrink-0">
+              <Link
+                href="/dashboard/quotations"
+                className="hover:text-blue-600"
+              >
+                Quotations
+              </Link>
+              <span>/</span>
+              <span className="text-slate-700 font-medium">
+                {quotation.quotation_number}
+              </span>
+            </div>
+
+            {/* Separator */}
+            <div className="h-5 w-px bg-slate-200 shrink-0" />
+
+            {/* Client Name */}
+            <h1 className="text-xl font-bold text-slate-900 truncate">
+              {quotation.client_name || quotation.title || "Untitled Quotation"}
+            </h1>
+
+            {/* Status Badge */}
+            <span
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full shrink-0 ${currentStatusColors.bg} ${currentStatusColors.text}`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${currentStatusColors.dot}`}
+              ></span>
+              {quotation.status?.charAt(0).toUpperCase() +
+                quotation.status?.slice(1)}
+            </span>
+
+            {/* Version Badge */}
+            <span className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-lg shrink-0">
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
+                />
+              </svg>
+              v{quotation.version}
+            </span>
+
+            {/* Property Info */}
+            {quotation.property_name && (
+              <span className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-lg shrink-0">
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                  />
+                </svg>
+                <span className="max-w-[180px] truncate">
+                  {quotation.property_name}
+                </span>
+              </span>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            {quotation.lead_id && (
+              <Link
+                href={`/dashboard/sales/leads/${quotation.lead_id}`}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                  />
+                </svg>
+                View Lead
+              </Link>
+            )}
+            <button className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium">
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              Revise
+            </button>
+            <Link
+              href={`/dashboard/quotations/${params.id}/edit`}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                />
+              </svg>
+              Edit
+            </Link>
+            <button className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                />
+              </svg>
+              Send to Client
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-4">
+        {/* Main Content */}
+        <div className="flex-1 space-y-4">
+          {/* Quotation Info Card */}
+          <div className="bg-white rounded-lg border border-slate-200 p-5">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">
+              Quotation Details
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">
+                  Client
+                </label>
+                <p className="text-sm text-slate-900 font-medium">
+                  {quotation.client_name || "—"}
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">
+                  Property
+                </label>
+                <p className="text-sm text-slate-900">
+                  {quotation.property_name || "—"}
+                  {quotation.property_city && `, ${quotation.property_city}`}
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">
+                  Created
+                </label>
+                <p className="text-sm text-slate-900">
+                  {formatDate(quotation.created_at)}
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">
+                  Valid Until
+                </label>
+                <p className="text-sm text-slate-900">
+                  {formatDate(quotation.valid_until)}
+                </p>
+              </div>
+            </div>
+            {(quotation.property_address || quotation.carpet_area_sqft) && (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mt-4 pt-4 border-t border-slate-100">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">
+                    Property Address
+                  </label>
+                  <p className="text-sm text-slate-900">
+                    {quotation.property_address || "—"}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">
+                    Carpet Area
+                  </label>
+                  <p className="text-sm text-slate-900">
+                    {quotation.carpet_area_sqft
+                      ? `${quotation.carpet_area_sqft} sqft`
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Hierarchical Cost Breakdown */}
+          <div className="bg-white rounded-lg border border-slate-200 p-5">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">
+              Cost Breakdown
+            </h3>
+
+            {spaces.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <svg
+                    className="w-6 h-6 text-slate-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                    />
+                  </svg>
+                </div>
+                <h4 className="text-sm font-medium text-slate-900 mb-1">
+                  No Spaces Added Yet
+                </h4>
+                <p className="text-sm text-slate-500 mb-4">
+                  This quotation doesn&apos;t have any spaces or cost breakdown
+                  yet.
+                </p>
+                <Link
+                  href={`/dashboard/quotations/${params.id}/edit`}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                    />
+                  </svg>
+                  Add Spaces & Components
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {spaces.map((space) => (
+                  <div
+                    key={space.id}
+                    className="border border-slate-200 rounded-lg overflow-hidden"
+                  >
+                    {/* Space Header */}
+                    <div
+                      className="flex items-center justify-between px-4 py-3 bg-slate-50 cursor-pointer"
+                      onClick={() => toggleSpace(space.id)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <button className="text-slate-600">
+                          <svg
+                            className={`w-5 h-5 transition-transform ${
+                              expandedSpaces.includes(space.id)
+                                ? "rotate-90"
+                                : ""
+                            }`}
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 5l7 7-7 7"
+                            />
+                          </svg>
+                        </button>
+                        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                          <svg
+                            className="w-4 h-4 text-white"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                            />
+                          </svg>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-900">
+                            {space.name}
+                          </h4>
+                          <p className="text-xs text-slate-500">
+                            {space.components?.length || 0} components
+                            {space.area_sqft
+                              ? ` • ${space.area_sqft} sqft`
+                              : ""}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-sm font-bold text-blue-600">
+                        {formatCurrency(space.total_cost)}
+                      </span>
+                    </div>
+
+                    {/* Space Content */}
+                    {expandedSpaces.includes(space.id) && (
+                      <div className="p-4 space-y-3 border-t border-slate-100">
+                        {!space.components || space.components.length === 0 ? (
+                          <p className="text-sm text-slate-500 text-center py-4">
+                            No components added to this space yet.
+                          </p>
+                        ) : (
+                          space.components.map((component) => (
+                            <div
+                              key={component.id}
+                              className="border border-slate-200 rounded-lg overflow-hidden"
+                            >
+                              {/* Component Header */}
+                              <div
+                                className="flex items-center justify-between px-4 py-2.5 bg-slate-50 cursor-pointer"
+                                onClick={() => toggleComponent(component.id)}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <button className="text-slate-500">
+                                    <svg
+                                      className={`w-4 h-4 transition-transform ${
+                                        expandedComponents.includes(
+                                          component.id
+                                        )
+                                          ? "rotate-90"
+                                          : ""
+                                      }`}
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      stroke="currentColor"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M9 5l7 7-7 7"
+                                      />
+                                    </svg>
+                                  </button>
+                                  <div className="w-6 h-6 bg-purple-600 rounded flex items-center justify-center">
+                                    <svg
+                                      className="w-3 h-3 text-white"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      stroke="currentColor"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                                      />
+                                    </svg>
+                                  </div>
+                                  <div>
+                                    <h5 className="text-sm font-medium text-slate-900">
+                                      {component.name}
+                                    </h5>
+                                    <p className="text-xs text-slate-500">
+                                      {component.description ||
+                                        component.component_type}
+                                    </p>
+                                  </div>
+                                </div>
+                                <span className="text-sm font-semibold text-purple-600">
+                                  {formatCurrency(component.total_cost)}
+                                </span>
+                              </div>
+
+                              {/* Component Content (Materials) */}
+                              {expandedComponents.includes(component.id) && (
+                                <div className="p-3 border-t border-slate-100">
+                                  {!component.materials ||
+                                  component.materials.length === 0 ? (
+                                    <p className="text-sm text-slate-500 text-center py-2">
+                                      No materials added to this component yet.
+                                    </p>
+                                  ) : (
+                                    <table className="w-full text-sm">
+                                      <thead className="bg-slate-50">
+                                        <tr>
+                                          <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">
+                                            Material
+                                          </th>
+                                          <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">
+                                            Specification
+                                          </th>
+                                          <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">
+                                            Details
+                                          </th>
+                                          <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase">
+                                            Cost
+                                          </th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100">
+                                        {component.materials.map((material) => (
+                                          <tr
+                                            key={material.id}
+                                            className="hover:bg-slate-50"
+                                          >
+                                            <td className="px-3 py-2">
+                                              <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 bg-green-500 rounded flex items-center justify-center">
+                                                  <svg
+                                                    className="w-2 h-2 text-white"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                  >
+                                                    <path
+                                                      strokeLinecap="round"
+                                                      strokeLinejoin="round"
+                                                      strokeWidth={2}
+                                                      d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"
+                                                    />
+                                                  </svg>
+                                                </div>
+                                                <span className="font-medium text-slate-900">
+                                                  {material.name}
+                                                </span>
+                                              </div>
+                                            </td>
+                                            <td className="px-3 py-2 text-slate-600">
+                                              {material.specification ||
+                                                material.brand ||
+                                                "—"}
+                                            </td>
+                                            <td className="px-3 py-2 text-slate-600">
+                                              {material.quantity &&
+                                              material.unit ? (
+                                                <span className="mr-3">
+                                                  Qty: {material.quantity}{" "}
+                                                  {material.unit}
+                                                </span>
+                                              ) : null}
+                                              {material.unit_price ? (
+                                                <span className="mr-3">
+                                                  Rate:{" "}
+                                                  {formatCurrency(
+                                                    material.unit_price
+                                                  )}
+                                                </span>
+                                              ) : null}
+                                              {material.attributes?.map(
+                                                (attr) => (
+                                                  <span
+                                                    key={attr.name}
+                                                    className="mr-3"
+                                                  >
+                                                    {attr.name}: {attr.value}{" "}
+                                                    {attr.unit}
+                                                  </span>
+                                                )
+                                              )}
+                                              {!material.quantity &&
+                                                !material.unit_price &&
+                                                !material.attributes?.length &&
+                                                "—"}
+                                            </td>
+                                            <td className="px-3 py-2 text-right font-medium text-green-600">
+                                              {formatCurrency(
+                                                material.total_price
+                                              )}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Sidebar - Summary */}
+        <div className="w-80 shrink-0 space-y-4">
+          {/* Quote Summary Card */}
+          <div className="bg-white rounded-lg border border-slate-200 p-5">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">
+              Quote Summary
+            </h3>
+
+            {spaces.length > 0 ? (
+              <div className="space-y-2 mb-4">
+                {spaces.map((space) => (
+                  <div
+                    key={space.id}
+                    className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0"
+                  >
+                    <span className="text-sm text-slate-600">{space.name}</span>
+                    <span className="text-sm font-medium text-slate-900">
+                      {formatCurrency(space.total_cost)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 mb-4">
+                No spaces added yet.
+              </p>
+            )}
+
+            <div className="border-t border-slate-200 pt-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-600">Subtotal</span>
+                <span className="text-sm font-medium text-slate-900">
+                  {formatCurrency(quotation.subtotal || subtotal)}
+                </span>
+              </div>
+              {quotation.discount_amount ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-600">Discount</span>
+                  <span className="text-sm font-medium text-red-600">
+                    -{formatCurrency(quotation.discount_amount)}
+                  </span>
+                </div>
+              ) : null}
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-600">GST (18%)</span>
+                <span className="text-sm font-medium text-slate-900">
+                  {formatCurrency(gstAmount)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between pt-3 border-t border-slate-200">
+                <span className="text-sm font-semibold text-slate-900">
+                  Grand Total
+                </span>
+                <span className="text-lg font-bold text-blue-600">
+                  {formatCurrency(total)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Statistics Card */}
+          <div className="bg-white rounded-lg border border-slate-200 p-5">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">
+              Statistics
+            </h3>
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600">Total Spaces</span>
+                <span className="font-medium text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
+                  {spaces.length}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600">Total Components</span>
+                <span className="font-medium text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
+                  {spaces.reduce(
+                    (sum, s) => sum + (s.components?.length || 0),
+                    0
+                  )}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600">Total Materials</span>
+                <span className="font-medium text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
+                  {spaces.reduce(
+                    (sum, s) =>
+                      sum +
+                      (s.components?.reduce(
+                        (cSum, c) => cSum + (c.materials?.length || 0),
+                        0
+                      ) || 0),
+                    0
+                  )}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Version History Card */}
+          <div className="bg-white rounded-lg border border-slate-200 p-5">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">
+              Version History
+            </h3>
+            {versions.length > 0 ? (
+              <div className="space-y-3">
+                {versions.map((version) => (
+                  <div
+                    key={version.id}
+                    className="flex items-center gap-3 text-sm"
+                  >
+                    <span
+                      className={`w-6 h-6 ${
+                        version.id === quotation.id
+                          ? "bg-blue-600"
+                          : "bg-slate-300"
+                      } text-white rounded-full flex items-center justify-center text-xs font-medium`}
+                    >
+                      {version.version}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-slate-700">
+                        {version.id === quotation.id
+                          ? "Current version"
+                          : `Version ${version.version}`}
+                      </span>
+                    </div>
+                    <span className="text-xs text-slate-400">
+                      {formatDate(version.created_at)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">
+                No version history available.
+              </p>
+            )}
+          </div>
+
+          {/* Activity Log Card */}
+          <div className="bg-white rounded-lg border border-slate-200 p-5">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">
+              Activity
+            </h3>
+            <div className="space-y-3">
+              <div className="flex gap-3 text-sm">
+                <div className="w-2 h-2 bg-blue-600 rounded-full mt-1.5 shrink-0"></div>
+                <div>
+                  <p className="text-slate-700">Quotation created</p>
+                  <p className="text-xs text-slate-500">
+                    {formatDate(quotation.created_at)}
+                    {quotation.created_user?.name &&
+                      ` by ${quotation.created_user.name}`}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
