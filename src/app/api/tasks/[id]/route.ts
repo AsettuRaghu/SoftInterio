@@ -259,6 +259,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       "estimated_hours",
       "actual_hours",
       "assigned_to",
+      "related_type",
+      "related_id",
     ];
 
     for (const field of allowedFields) {

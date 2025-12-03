@@ -484,9 +484,9 @@ export default function TaskDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-5 gap-6">
         {/* Main Content */}
-        <div className="col-span-2 space-y-6">
+        <div className="col-span-3 space-y-6">
           {/* Description */}
           <div className="bg-white rounded-lg border border-slate-200 p-4">
             <h3 className="text-sm font-medium text-slate-700 mb-3">
@@ -511,7 +511,7 @@ export default function TaskDetailPage() {
             ) : (
               <div
                 onClick={() => setEditingField("description")}
-                className="text-sm text-slate-600 cursor-pointer hover:bg-slate-50 rounded-lg p-2 -m-2 min-h-[80px]"
+                className="text-sm text-slate-600 cursor-pointer hover:bg-slate-50 rounded-lg p-2 -m-2 min-h-20"
               >
                 {task.description || (
                   <span className="text-slate-400 italic">
@@ -524,11 +524,11 @@ export default function TaskDetailPage() {
 
           {/* Subtasks Section */}
           <div className="bg-white rounded-lg border border-slate-200">
-            <button
-              onClick={() => setIsSubtasksExpanded(!isSubtasksExpanded)}
-              className="w-full px-4 py-3 flex items-center justify-between border-b border-slate-200 hover:bg-slate-50 transition-colors"
-            >
-              <div className="flex items-center gap-2">
+            <div className="w-full px-4 py-3 flex items-center justify-between border-b border-slate-200">
+              <button
+                onClick={() => setIsSubtasksExpanded(!isSubtasksExpanded)}
+                className="flex items-center gap-2 hover:text-blue-600 transition-colors"
+              >
                 <h3 className="text-sm font-medium text-slate-700">Subtasks</h3>
                 {subtasks.length > 0 && (
                   <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-full">
@@ -536,24 +536,19 @@ export default function TaskDetailPage() {
                     {subtasks.length}
                   </span>
                 )}
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsCreateSubtaskModalOpen(true);
-                  }}
-                  className="px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                >
-                  <PlusIcon className="w-4 h-4" />
-                </button>
                 {isSubtasksExpanded ? (
                   <ChevronUpIcon className="w-4 h-4 text-slate-500" />
                 ) : (
                   <ChevronDownIcon className="w-4 h-4 text-slate-500" />
                 )}
-              </div>
-            </button>
+              </button>
+              <button
+                onClick={() => setIsCreateSubtaskModalOpen(true)}
+                className="px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors"
+              >
+                <PlusIcon className="w-4 h-4" />
+              </button>
+            </div>
 
             {isSubtasksExpanded && (
               <div className="divide-y divide-slate-100">
@@ -622,7 +617,7 @@ export default function TaskDetailPage() {
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-4">
+        <div className="col-span-2 space-y-4">
           {/* Details Card */}
           <div className="bg-white rounded-lg border border-slate-200 p-4 space-y-4">
             <h3 className="text-sm font-medium text-slate-700">Details</h3>

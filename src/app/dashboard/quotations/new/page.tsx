@@ -1,8 +1,15 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  Suspense,
+} from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 // ============================================================================
 // V2 Types - Using Cost Items with Dimensions for Calculation
@@ -173,7 +180,7 @@ function getCategoryColor(categorySlug?: string): string {
 // Main Component
 // ============================================================================
 
-export default function NewQuotationPage() {
+function NewQuotationContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const templateId = searchParams.get("template");
@@ -1574,5 +1581,22 @@ export default function NewQuotationPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function NewQuotationPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+          <div className="text-center">
+            <LoadingSpinner />
+            <p className="text-slate-600 mt-4">Loading...</p>
+          </div>
+        </div>
+      }
+    >
+      <NewQuotationContent />
+    </Suspense>
   );
 }

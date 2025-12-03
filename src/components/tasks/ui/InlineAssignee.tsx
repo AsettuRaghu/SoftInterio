@@ -126,7 +126,7 @@ export function InlineAssignee({
   const dropdownContent = isOpen ? (
     <div
       ref={dropdownRef}
-      className="fixed z-[9999] w-56 bg-white rounded-lg shadow-lg border border-slate-200 py-1 max-h-64 overflow-auto"
+      className="fixed z-9999 w-56 bg-white rounded-lg shadow-lg border border-slate-200 py-1 max-h-64 overflow-auto"
       style={{ top: position.top, left: position.left }}
     >
       {showUnassigned && (

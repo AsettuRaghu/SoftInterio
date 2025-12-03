@@ -17,6 +17,7 @@ import type {
   LeadSource,
   DisqualificationReason,
   LostReason,
+  PropertyType,
 } from "@/types/leads";
 import {
   LeadStageLabels,
@@ -2073,7 +2074,7 @@ function StageTransitionModal({
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          property_type: e.target.value,
+                          property_type: e.target.value as PropertyType,
                         })
                       }
                       className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"

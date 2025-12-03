@@ -119,24 +119,76 @@ export async function GET(request: NextRequest) {
       completed_subtask_count: 0,
       comment_count: 0,
       attachment_count: 0,
+      subtasks: [] as any[],
     }));
 
-    // Get subtask counts for parent tasks
+    // Get subtasks for parent tasks (prefetch for instant expansion)
     if (tasks.length > 0) {
       const taskIds = tasks.map((t) => t.id);
 
-      // Fetch subtask counts
-      const { data: subtaskCounts } = await supabase
+      // Fetch full subtask data for instant expansion
+      const { data: allSubtasks } = await supabase
         .from("tasks")
-        .select("parent_task_id, status")
-        .in("parent_task_id", taskIds);
+        .select(
+          `
+          *,
+          assigned_user:users!tasks_assigned_to_fkey(id, name, email, avatar_url)
+        `
+        )
+        .in("parent_task_id", taskIds)
+        .order("created_at", { ascending: true });
 
-      if (subtaskCounts) {
+      if (allSubtasks) {
+        // Collect all lead IDs from subtasks to fetch names
+        const subtaskLeadIds = allSubtasks
+          .filter((st) => st.related_type === "lead" && st.related_id)
+          .map((st) => st.related_id);
+
+        // Fetch lead names for subtasks
+        let subtaskLeadMap = new Map<string, string>();
+        if (subtaskLeadIds.length > 0) {
+          const { data: subtaskLeads } = await supabase
+            .from("leads")
+            .select("id, client_name")
+            .in("id", subtaskLeadIds);
+
+          if (subtaskLeads) {
+            subtaskLeads.forEach((lead: any) => {
+              const name = lead.client_name || "Unnamed Lead";
+              subtaskLeadMap.set(lead.id, name);
+            });
+          }
+        }
+
+        const subtaskMap = new Map<string, any[]>();
         const countMap = new Map<
           string,
           { total: number; completed: number }
         >();
-        subtaskCounts.forEach((st) => {
+
+        allSubtasks.forEach((st) => {
+          // Group subtasks by parent
+          if (!subtaskMap.has(st.parent_task_id)) {
+            subtaskMap.set(st.parent_task_id, []);
+          }
+
+          // Get related_name for subtask
+          let relatedName = "";
+          if (st.related_type === "lead" && st.related_id) {
+            relatedName = subtaskLeadMap.get(st.related_id) || "";
+          }
+
+          subtaskMap.get(st.parent_task_id)!.push({
+            ...st,
+            assigned_to_name: st.assigned_user?.name || null,
+            assigned_to_email: st.assigned_user?.email || null,
+            assigned_to_avatar: st.assigned_user?.avatar_url || null,
+            related_name: relatedName,
+            subtask_count: 0,
+            completed_subtask_count: 0,
+          });
+
+          // Count for parent
           if (!countMap.has(st.parent_task_id)) {
             countMap.set(st.parent_task_id, { total: 0, completed: 0 });
           }
@@ -153,6 +205,7 @@ export async function GET(request: NextRequest) {
             task.subtask_count = counts.total;
             task.completed_subtask_count = counts.completed;
           }
+          task.subtasks = subtaskMap.get(task.id) || [];
         });
       }
     }
@@ -184,6 +237,65 @@ export async function GET(request: NextRequest) {
         tasks.forEach((task) => {
           (task as any).tags = tagMap.get(task.id) || [];
         });
+      }
+    }
+
+    // Fetch related entity names (leads/projects)
+    if (tasks.length > 0) {
+      const leadIds = tasks
+        .filter((t) => t.related_type === "lead" && t.related_id)
+        .map((t) => t.related_id);
+
+      if (leadIds.length > 0) {
+        const { data: leads } = await supabase
+          .from("leads")
+          .select("id, client_name")
+          .in("id", leadIds);
+
+        if (leads) {
+          const leadMap = new Map<string, string>();
+          leads.forEach((lead: any) => {
+            const name = lead.client_name || "Unnamed Lead";
+            leadMap.set(lead.id, name);
+          });
+
+          tasks.forEach((task) => {
+            if (task.related_type === "lead" && task.related_id) {
+              (task as any).related_name = leadMap.get(task.related_id) || "";
+            }
+          });
+        }
+      }
+
+      // Fetch project names if any tasks are linked to projects
+      const projectIds = tasks
+        .filter((t) => t.related_type === "project" && t.related_id)
+        .map((t) => t.related_id);
+
+      if (projectIds.length > 0) {
+        try {
+          const { data: projects } = await supabase
+            .from("projects")
+            .select("id, name, title")
+            .in("id", projectIds);
+
+          if (projects) {
+            const projectMap = new Map<string, string>();
+            projects.forEach((project: any) => {
+              const name = project.name || project.title || "Unnamed Project";
+              projectMap.set(project.id, name);
+            });
+
+            tasks.forEach((task) => {
+              if (task.related_type === "project" && task.related_id) {
+                (task as any).related_name =
+                  projectMap.get(task.related_id) || "";
+              }
+            });
+          }
+        } catch {
+          // Projects table might not exist yet
+        }
       }
     }
 
@@ -248,8 +360,8 @@ export async function POST(request: NextRequest) {
         tenant_id: userData.tenant_id,
         title: body.title.trim(),
         description: body.description?.trim() || null,
-        priority: body.priority || "medium",
-        status: "todo",
+        priority: body.priority || null,
+        status: body.status || "todo",
         parent_task_id: body.parent_task_id || null,
         start_date: body.start_date || null,
         due_date: body.due_date || null,
@@ -279,6 +391,37 @@ export async function POST(request: NextRequest) {
       }));
 
       await supabase.from("task_tag_assignments").insert(tagAssignments);
+    }
+
+    // Create subtasks if provided
+    if (body.subtasks && body.subtasks.length > 0) {
+      const subtasksToInsert = body.subtasks
+        .filter((st) => st.title?.trim())
+        .map((subtask) => ({
+          tenant_id: userData.tenant_id,
+          title: subtask.title.trim(),
+          description: subtask.description?.trim() || null,
+          priority: subtask.priority || null,
+          status: subtask.status || "todo",
+          parent_task_id: task.id,
+          start_date: subtask.start_date || null,
+          due_date: subtask.due_date || null,
+          estimated_hours: subtask.estimated_hours || null,
+          assigned_to: subtask.assigned_to || null,
+          created_by: user.id,
+          updated_by: user.id,
+        }));
+
+      if (subtasksToInsert.length > 0) {
+        const { error: subtaskError } = await supabase
+          .from("tasks")
+          .insert(subtasksToInsert);
+
+        if (subtaskError) {
+          console.error("Error creating subtasks:", subtaskError);
+          // Don't fail the entire request, just log the error
+        }
+      }
     }
 
     // Log activity
@@ -311,7 +454,8 @@ export async function POST(request: NextRequest) {
           assigned_to_avatar: fullTask.assigned_user?.avatar_url || null,
           created_by_name: fullTask.created_by_user?.name || null,
           created_by_email: fullTask.created_by_user?.email || null,
-          subtask_count: 0,
+          subtask_count:
+            body.subtasks?.filter((st) => st.title?.trim()).length || 0,
           completed_subtask_count: 0,
         }
       : null;

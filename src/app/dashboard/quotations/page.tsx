@@ -13,6 +13,14 @@ import {
 } from "@/types/quotations";
 import { SortIcon as SortIconBase } from "@/components/ui/DataTable";
 
+// Active statuses constant
+const ACTIVE_STATUSES: QuotationStatus[] = [
+  "draft",
+  "sent",
+  "viewed",
+  "negotiating",
+];
+
 // SortIcon component for table headers
 function SortIcon({
   field,
@@ -159,12 +167,6 @@ export default function QuotationsListPage() {
 
   // Calculate stats
   const stats = React.useMemo(() => {
-    const ACTIVE_STATUSES: QuotationStatus[] = [
-      "draft",
-      "sent",
-      "viewed",
-      "negotiating",
-    ];
     const total = allQuotations.length;
     const active = allQuotations.filter((q) =>
       ACTIVE_STATUSES.includes(q.status)
@@ -428,11 +430,11 @@ export default function QuotationsListPage() {
             <p className="text-sm text-slate-400">
               {searchQuery
                 ? "Try adjusting your search"
-                : statusFilter !== "active" && statusFilter !== "all"
+                : leadStatusFilter === "inactive"
                 ? "No quotations in this status"
                 : "Quotations are created when leads move to Proposal Discussion stage"}
             </p>
-            {statusFilter === "active" &&
+            {leadStatusFilter === "active" &&
               !searchQuery &&
               allQuotations.length === 0 && (
                 <Link

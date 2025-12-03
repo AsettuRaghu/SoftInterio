@@ -276,10 +276,22 @@ export interface TaskActivity {
 // API Input Types
 // ============================================================================
 
+export interface CreateSubtaskInput {
+  title: string;
+  description?: string;
+  priority?: TaskPriority | null;
+  status?: TaskStatus;
+  start_date?: string;
+  due_date?: string;
+  estimated_hours?: number;
+  assigned_to?: string;
+}
+
 export interface CreateTaskInput {
   title: string;
   description?: string;
-  priority?: TaskPriority;
+  priority?: TaskPriority | null;
+  status?: TaskStatus;
   parent_task_id?: string;
   start_date?: string;
   due_date?: string;
@@ -288,6 +300,7 @@ export interface CreateTaskInput {
   related_type?: TaskRelatedType;
   related_id?: string;
   tag_ids?: string[];
+  subtasks?: CreateSubtaskInput[];
 }
 
 export interface UpdateTaskInput {
@@ -300,6 +313,8 @@ export interface UpdateTaskInput {
   estimated_hours?: number;
   actual_hours?: number;
   assigned_to?: string;
+  related_type?: string | null;
+  related_id?: string | null;
 }
 
 export interface CreateTaskTemplateInput {

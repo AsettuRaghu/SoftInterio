@@ -104,7 +104,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body: UpdateTaskTemplateInput = await request.json();
+    const body = await request.json();
 
     // Check template exists
     const { data: existingTemplate, error: fetchError } = await supabase
@@ -162,6 +162,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Handle items update if provided
+    if (body.items !== undefined) {
+      // Delete all existing items for this template
+      await supabase.from("task_template_items").delete().eq("template_id", id);
+
+      // Create new items if provided
+      if (body.items && body.items.length > 0) {
+        await createTemplateItems(supabase, id, body.items, null);
+      }
+    }
+
     return NextResponse.json({ template });
   } catch (error) {
     console.error("Update template API error:", error);
@@ -169,6 +180,46 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       { error: "Internal server error" },
       { status: 500 }
     );
+  }
+}
+
+// Helper to recursively create template items
+async function createTemplateItems(
+  supabase: any,
+  templateId: string,
+  items: any[],
+  parentItemId: string | null,
+  sortOrderStart: number = 0
+) {
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const { data: createdItem } = await supabase
+      .from("task_template_items")
+      .insert({
+        template_id: templateId,
+        parent_item_id: parentItemId,
+        title: item.title,
+        description: item.description || null,
+        priority: item.priority || "medium",
+        relative_due_days: item.relative_due_days || null,
+        estimated_hours: item.estimated_hours || null,
+        assign_to_role: item.assign_to_role || null,
+        assign_to_user_id: item.assign_to_user_id || null,
+        sort_order: sortOrderStart + i,
+      })
+      .select()
+      .single();
+
+    // Recursively create children
+    if (item.children && item.children.length > 0 && createdItem) {
+      await createTemplateItems(
+        supabase,
+        templateId,
+        item.children,
+        createdItem.id,
+        0
+      );
+    }
   }
 }
 

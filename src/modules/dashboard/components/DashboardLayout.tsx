@@ -13,7 +13,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="min-h-screen bg-white">
       {/* Header */}
       <Header />
 
@@ -32,7 +32,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             isSidebarExpanded ? "ml-60" : "ml-14"
           )}
         >
-          <div className="p-8">{children}</div>
+          <div className="p-3">{children}</div>
         </main>
       </div>
     </div>

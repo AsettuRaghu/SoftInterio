@@ -103,7 +103,7 @@ export function InlineDropdown<T extends string>({
   const dropdownContent = isOpen ? (
     <div
       ref={dropdownRef}
-      className="fixed z-[9999] w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1"
+      className="fixed z-9999 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1"
       style={{ top: position.top, left: position.left }}
     >
       {options.map((option) => {

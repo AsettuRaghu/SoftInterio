@@ -1,6 +1,16 @@
+"use client";
+
 import React, { useState } from "react";
 
-const sampleData = [
+interface DataRow {
+  startDate: string;
+  clientName: string;
+  income: number;
+  expense: number;
+  status: string;
+}
+
+const sampleData: DataRow[] = [
   {
     startDate: "2025-11-01",
     clientName: "Acme Corp",
@@ -31,7 +41,7 @@ const sampleData = [
   },
 ];
 
-const columns = [
+const columns: { key: keyof DataRow; label: string }[] = [
   { key: "startDate", label: "Start Date" },
   { key: "clientName", label: "Client Name" },
   { key: "income", label: "Income Received" },

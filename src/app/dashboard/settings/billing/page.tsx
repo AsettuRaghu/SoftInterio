@@ -531,7 +531,8 @@ export default function BillingSettingsPage() {
                   </p>
                   <p className="text-sm font-semibold text-slate-900">
                     {formatDate(
-                      subscriptionData?.subscription?.subscriptionStartDate
+                      subscriptionData?.subscription?.subscriptionStartDate ??
+                        null
                     )}
                   </p>
                 </div>
@@ -549,7 +550,8 @@ export default function BillingSettingsPage() {
                     }`}
                   >
                     {formatDate(
-                      subscriptionData?.subscription?.subscriptionEndDate
+                      subscriptionData?.subscription?.subscriptionEndDate ??
+                        null
                     )}
                     {daysInfo && (
                       <span
@@ -1064,7 +1066,9 @@ export default function BillingSettingsPage() {
                                 {formatDate(
                                   subscriptionData?.subscription
                                     ?.subscriptionEndDate ||
-                                    subscriptionData?.subscription?.trialEndDate
+                                    subscriptionData?.subscription
+                                      ?.trialEndDate ||
+                                    null
                                 )}
                               </span>
                             </div>

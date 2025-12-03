@@ -11,6 +11,30 @@ import {
   TaskPriority,
 } from "./ui";
 
+interface Task {
+  id: string;
+  task_number: string;
+  title: string;
+  description?: string;
+  priority: TaskPriority;
+  status: TaskStatus;
+  start_date?: string;
+  due_date?: string;
+  assigned_to?: string;
+  assigned_to_name?: string;
+  assigned_to_email?: string;
+  assigned_to_avatar?: string;
+  created_by?: string;
+  created_by_name?: string;
+  related_type?: string;
+  related_id?: string;
+  related_name?: string;
+  subtask_count?: number;
+  completed_subtask_count?: number;
+  subtasks?: SubTask[];
+  created_at?: string;
+}
+
 interface TeamMember {
   id: string;
   full_name: string;
@@ -22,55 +46,76 @@ interface SubTask {
   id?: string;
   title: string;
   priority: TaskPriority;
-  assigned_to: string | null;
-  start_date: string;
-  due_date: string;
+  assigned_to?: string | null;
+  start_date?: string;
+  due_date?: string;
   status: TaskStatus;
 }
 
-interface CreateTaskModalProps {
+interface EditTaskModalProps {
+  task: Task | null;
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
-  parentTaskId?: string;
-  parentTaskTitle?: string;
+  onUpdate: () => void;
 }
 
-export function CreateTaskModal({
+export function EditTaskModal({
+  task,
   isOpen,
   onClose,
-  onSuccess,
-  parentTaskId,
-  parentTaskTitle,
-}: CreateTaskModalProps) {
+  onUpdate,
+}: EditTaskModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   // Form state
   const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState<TaskPriority>("medium");
   const [status, setStatus] = useState<TaskStatus>("todo");
-  const [priority, setPriority] = useState<TaskPriority>(null);
-  const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [linkedEntities, setLinkedEntities] = useState<
-    {
-      type: string;
-      id: string;
-      name: string;
-    }[]
-  >([]);
-  const [description, setDescription] = useState("");
+  const [assignedTo, setAssignedTo] = useState<string | null>(null);
+  const [projectLead, setProjectLead] = useState<{
+    type: string;
+    id: string;
+    name: string;
+  } | null>(null);
   const [subtasks, setSubtasks] = useState<SubTask[]>([]);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const [showSubtaskForm, setShowSubtaskForm] = useState(false);
 
-  // Fetch data when modal opens
+  // Load task data
+  useEffect(() => {
+    if (task && isOpen) {
+      setTitle(task.title);
+      setDescription(task.description || "");
+      setPriority(task.priority);
+      setStatus(task.status);
+      setStartDate(task.start_date || "");
+      setDueDate(task.due_date || "");
+      // Handle assigned_to as string
+      setAssignedTo(task.assigned_to || null);
+      setProjectLead(
+        task.related_type && task.related_id && task.related_name
+          ? {
+              type: task.related_type,
+              id: task.related_id,
+              name: task.related_name,
+            }
+          : null
+      );
+      setSubtasks(task.subtasks || []);
+      setError(null);
+    }
+  }, [task, isOpen]);
+
+  // Fetch team members
   useEffect(() => {
     if (isOpen) {
       fetchTeamMembers();
-      resetForm();
     }
   }, [isOpen]);
 
@@ -93,21 +138,6 @@ export function CreateTaskModal({
     }
   };
 
-  const resetForm = () => {
-    setTitle("");
-    setStatus("todo");
-    setPriority(null);
-    setAssignedTo(null);
-    setStartDate("");
-    setDueDate("");
-    setLinkedEntities([]);
-    setDescription("");
-    setSubtasks([]);
-    setNewSubtaskTitle("");
-    setShowSubtaskForm(false);
-    setError(null);
-  };
-
   const addSubtask = useCallback(() => {
     if (!newSubtaskTitle.trim()) return;
 
@@ -115,7 +145,7 @@ export function CreateTaskModal({
       ...prev,
       {
         title: newSubtaskTitle.trim(),
-        priority: null,
+        priority: "medium",
         assigned_to: null,
         start_date: "",
         due_date: "",
@@ -137,6 +167,7 @@ export function CreateTaskModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!task) return;
 
     if (!title.trim()) {
       setError("Task name is required");
@@ -147,43 +178,65 @@ export function CreateTaskModal({
     setError(null);
 
     try {
-      const response = await fetch("/api/tasks", {
-        method: "POST",
+      const response = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title,
-          status: status || "todo",
-          priority: priority || null,
-          assigned_to: assignedTo || null,
+          description: description || null,
+          priority,
+          status,
           start_date: startDate || null,
           due_date: dueDate || null,
-          linked_entities: linkedEntities.length > 0 ? linkedEntities : null,
-          description: description || null,
-          parent_task_id: parentTaskId || null,
-          subtasks: subtasks
-            .filter((st) => st.title.trim())
-            .map((st) => ({
-              title: st.title,
-              priority: st.priority || null,
-              assigned_to: st.assigned_to || null,
-              start_date: st.start_date || null,
-              due_date: st.due_date || null,
-              status: st.status || "todo",
-            })),
+          assigned_to: assignedTo,
+          related_type: projectLead?.type || null,
+          related_id: projectLead?.id || null,
+          subtasks: subtasks.filter((st) => st.title?.trim()),
         }),
       });
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || "Failed to create task");
+        throw new Error(data.error || "Failed to update task");
       }
 
-      onSuccess();
-      resetForm();
+      onUpdate();
+      onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create task");
+      setError(err instanceof Error ? err.message : "Failed to update task");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!task) return;
+    if (
+      !confirm(
+        "Are you sure you want to delete this task? This action cannot be undone."
+      )
+    )
+      return;
+
+    setIsDeleting(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/tasks/${task.id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to delete task");
+      }
+
+      onUpdate();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete task");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -193,7 +246,7 @@ export function CreateTaskModal({
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !task) return null;
 
   return (
     <div
@@ -211,9 +264,9 @@ export function CreateTaskModal({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
               <svg
-                className="w-4 h-4 text-blue-600"
+                className="w-4 h-4 text-slate-600"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -222,15 +275,16 @@ export function CreateTaskModal({
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M12 4v16m8-8H4"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
                 />
               </svg>
             </div>
-            <h2 className="text-lg font-semibold text-slate-900">
-              {parentTaskTitle
-                ? `Add subtask to "${parentTaskTitle}"`
-                : "Create Task"}
-            </h2>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Edit Task
+              </h2>
+              <p className="text-xs text-slate-400">{task.task_number}</p>
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -267,9 +321,8 @@ export function CreateTaskModal({
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="What needs to be done?"
+                placeholder="Task name"
                 className="w-full text-xl font-semibold text-slate-900 placeholder:text-slate-300 border-none outline-none p-0 bg-transparent"
-                autoFocus
                 required
               />
             </div>
@@ -295,11 +348,10 @@ export function CreateTaskModal({
                 minDate={startDate}
               />
               <LinkedEntity
-                value={linkedEntities}
+                value={projectLead}
                 onChange={(val) =>
-                  setLinkedEntities(Array.isArray(val) ? val : val ? [val] : [])
+                  setProjectLead(Array.isArray(val) ? val[0] || null : val)
                 }
-                multiple
               />
             </div>
 
@@ -334,11 +386,11 @@ export function CreateTaskModal({
 
               {/* Subtask List */}
               {subtasks.length > 0 && (
-                <div className="space-y-2 mb-3">
+                <div className="space-y-1 mb-3">
                   {subtasks.map((subtask, index) => (
                     <div
-                      key={index}
-                      className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl group"
+                      key={subtask.id || index}
+                      className="flex items-center gap-3 py-2 px-1 group hover:bg-slate-50 rounded transition-colors"
                     >
                       <div className="flex-1 min-w-0">
                         <input
@@ -347,28 +399,35 @@ export function CreateTaskModal({
                           onChange={(e) =>
                             updateSubtask(index, { title: e.target.value })
                           }
-                          className="w-full text-sm font-medium text-slate-900 bg-transparent border-none outline-none p-0"
+                          className="w-full text-sm font-medium text-slate-800 bg-transparent border-none outline-none p-0"
                           placeholder="Subtask name"
                         />
                       </div>
-                      <div className="flex items-center gap-1.5 opacity-70 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                        <StatusBadge
+                          value={subtask.status}
+                          onChange={(val) =>
+                            updateSubtask(index, { status: val })
+                          }
+                          size="sm"
+                        />
                         <PriorityBadge
                           value={subtask.priority}
                           onChange={(val) =>
                             updateSubtask(index, { priority: val })
                           }
                           showLabel={false}
-                          size="sm"
+                          size="md"
                         />
                         <AssigneeSelector
-                          selected={subtask.assigned_to}
+                          selected={subtask.assigned_to || null}
                           onChange={(val) =>
                             updateSubtask(index, { assigned_to: val })
                           }
                           teamMembers={teamMembers}
                         />
                         <DatePicker
-                          value={subtask.due_date}
+                          value={subtask.due_date || ""}
                           onChange={(val) =>
                             updateSubtask(index, { due_date: val })
                           }
@@ -469,19 +528,41 @@ export function CreateTaskModal({
         </form>
 
         {/* Footer */}
-        <div className="flex items-center justify-end px-6 py-4 border-t border-slate-100 bg-slate-50/50">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/50">
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={isSubmitting || isDeleting}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+          >
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+            {isDeleting ? "Deleting..." : "Delete"}
+          </button>
+
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}
-              disabled={isSubmitting}
+              disabled={isSubmitting || isDeleting}
               className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-white rounded-lg transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={handleSubmit}
-              disabled={isSubmitting || !title.trim()}
+              disabled={isSubmitting || isDeleting || !title.trim()}
               className="px-5 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow"
             >
               {isSubmitting ? (
@@ -505,10 +586,10 @@ export function CreateTaskModal({
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     />
                   </svg>
-                  Creating...
+                  Saving...
                 </span>
               ) : (
-                "Create Task"
+                "Save Changes"
               )}
             </button>
           </div>

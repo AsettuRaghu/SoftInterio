@@ -23,6 +23,14 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
     try {
       const response = await fetch("/api/notifications?limit=10");
       if (!response.ok) {
+        // If unauthorized, silently fail (user might not be logged in yet)
+        if (response.status === 401) {
+          setNotifications([]);
+          setUnreadCount(0);
+          setError(null);
+          setIsLoading(false);
+          return;
+        }
         throw new Error("Failed to fetch notifications");
       }
 
@@ -31,8 +39,16 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
       setUnreadCount(data.unread_count);
       setError(null);
     } catch (err) {
-      console.error("Error fetching notifications:", err);
-      setError(err instanceof Error ? err.message : "Unknown error");
+      // Silently handle network errors to avoid console spam
+      // These can happen during page transitions or auth refresh
+      if (err instanceof TypeError && err.message.includes("fetch")) {
+        setNotifications([]);
+        setUnreadCount(0);
+        setError(null);
+      } else {
+        console.error("Error fetching notifications:", err);
+        setError(err instanceof Error ? err.message : "Unknown error");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -90,17 +106,39 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
     }
   }, []);
 
-  // Initial fetch
+  // Initial fetch with small delay to allow auth to initialize
   useEffect(() => {
-    fetchNotifications();
+    const timer = setTimeout(() => {
+      fetchNotifications();
+    }, 100); // 100ms delay to let auth initialize
+
+    return () => clearTimeout(timer);
   }, [fetchNotifications]);
 
-  // Auto-refresh
+  // Auto-refresh with visibility awareness
   useEffect(() => {
     if (!autoRefresh) return;
 
-    const interval = setInterval(fetchNotifications, refreshInterval);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      // Only fetch if page is visible
+      if (document.visibilityState === "visible") {
+        fetchNotifications();
+      }
+    }, refreshInterval);
+
+    // Refetch when page becomes visible again
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        fetchNotifications();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [autoRefresh, refreshInterval, fetchNotifications]);
 
   return {

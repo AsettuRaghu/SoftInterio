@@ -1,8 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import type {
   TaskTemplate,
   TaskTemplateCategory,
@@ -14,7 +12,8 @@ import {
   TaskPriorityLabels,
   TaskPriorityColors,
 } from "@/types/tasks";
-import { CreateTemplateModal } from "@/components/tasks";
+import { CreateTemplateModal, EditTemplateModal } from "@/components/tasks";
+import { SearchBox } from "@/components/ui/SearchBox";
 
 // Icons
 const PlusIcon = ({ className }: { className?: string }) => (
@@ -97,28 +96,6 @@ const TrashIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-const PlayIcon = ({ className }: { className?: string }) => (
-  <svg
-    className={className}
-    fill="none"
-    viewBox="0 0 24 24"
-    stroke="currentColor"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-    />
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-    />
-  </svg>
-);
-
 const ChevronDownIcon = ({ className }: { className?: string }) => (
   <svg
     className={className}
@@ -174,10 +151,10 @@ interface TemplateItem {
   priority: TaskPriority;
   estimated_hours?: number;
   order_index: number;
+  isSubtask?: boolean;
 }
 
 export default function TaskTemplatesPage() {
-  const router = useRouter();
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -190,6 +167,24 @@ export default function TaskTemplatesPage() {
 
   // Modal state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<TaskTemplate | null>(
+    null
+  );
+  const [confirmModal, setConfirmModal] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    confirmStyle: "danger" | "primary";
+    onConfirm: () => void;
+  }>({
+    show: false,
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    confirmStyle: "danger",
+    onConfirm: () => {},
+  });
 
   // Filters
   const [categoryFilter, setCategoryFilter] = useState<
@@ -197,21 +192,17 @@ export default function TaskTemplatesPage() {
   >("all");
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
   // Fetch templates from API
   const fetchTemplates = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
 
-      const params = new URLSearchParams();
-      if (categoryFilter !== "all") {
-        params.append("category", categoryFilter);
-      }
-      if (searchQuery) {
-        params.append("search", searchQuery);
-      }
-
-      const response = await fetch(`/api/tasks/templates?${params.toString()}`);
+      const response = await fetch("/api/tasks/templates");
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || "Failed to fetch templates");
@@ -225,7 +216,7 @@ export default function TaskTemplatesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [categoryFilter, searchQuery]);
+  }, []);
 
   useEffect(() => {
     fetchTemplates();
@@ -244,14 +235,44 @@ export default function TaskTemplatesPage() {
       if (!templateItems[templateId]) {
         setLoadingItems((prev) => new Set(prev).add(templateId));
         try {
-          const response = await fetch(
-            `/api/tasks/templates/${templateId}/items`
-          );
+          const response = await fetch(`/api/tasks/templates/${templateId}`);
           if (response.ok) {
             const data = await response.json();
+            // Items are nested in template.items, flatten them for display
+            const flattenItems = (
+              items: any[],
+              result: TemplateItem[] = []
+            ): TemplateItem[] => {
+              for (const item of items) {
+                result.push({
+                  id: item.id,
+                  title: item.title,
+                  description: item.description,
+                  priority: item.priority,
+                  estimated_hours: item.estimated_hours,
+                  order_index: item.sort_order || 0,
+                  isSubtask: false,
+                });
+                if (item.children && item.children.length > 0) {
+                  // Add children as subtasks with flag
+                  for (const child of item.children) {
+                    result.push({
+                      id: child.id,
+                      title: child.title,
+                      description: child.description,
+                      priority: child.priority,
+                      estimated_hours: child.estimated_hours,
+                      order_index: child.sort_order || 0,
+                      isSubtask: true,
+                    });
+                  }
+                }
+              }
+              return result;
+            };
             setTemplateItems((prev) => ({
               ...prev,
-              [templateId]: data.items || [],
+              [templateId]: flattenItems(data.template?.items || []),
             }));
           }
         } catch (err) {
@@ -270,41 +291,49 @@ export default function TaskTemplatesPage() {
   };
 
   // Delete template
-  const handleDelete = async (templateId: string, e: React.MouseEvent) => {
+  const handleDelete = (templateId: string, templateName: string, e: React.MouseEvent) => {
     e.stopPropagation();
 
-    if (
-      !confirm(
-        "Are you sure you want to delete this template? This action cannot be undone."
-      )
-    ) {
-      return;
-    }
+    setConfirmModal({
+      show: true,
+      title: "Delete Template",
+      message: `Are you sure you want to delete "${templateName}"? This action cannot be undone.`,
+      confirmText: "Delete",
+      confirmStyle: "danger",
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, show: false }));
+        try {
+          setDeletingId(templateId);
+          const response = await fetch(`/api/tasks/templates/${templateId}`, {
+            method: "DELETE",
+          });
 
-    try {
-      setDeletingId(templateId);
-      const response = await fetch(`/api/tasks/templates/${templateId}`, {
-        method: "DELETE",
-      });
+          if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || "Failed to delete template");
+          }
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to delete template");
-      }
-
-      setTemplates((prev) => prev.filter((t) => t.id !== templateId));
-    } catch (err) {
-      console.error("Error deleting template:", err);
-      alert(err instanceof Error ? err.message : "Failed to delete template");
-    } finally {
-      setDeletingId(null);
-    }
+          setTemplates((prev) => prev.filter((t) => t.id !== templateId));
+        } catch (err) {
+          console.error("Error deleting template:", err);
+          // Show error in a non-blocking way
+        } finally {
+          setDeletingId(null);
+        }
+      },
+    });
   };
 
-  // Process templates (filter locally for search)
-  const processedTemplates = useMemo(() => {
+  // Filter templates
+  const filteredTemplates = useMemo(() => {
     let result = [...templates];
 
+    // Category filter
+    if (categoryFilter !== "all") {
+      result = result.filter((t) => t.category === categoryFilter);
+    }
+
+    // Search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(
@@ -315,7 +344,19 @@ export default function TaskTemplatesPage() {
     }
 
     return result;
-  }, [templates, searchQuery]);
+  }, [templates, categoryFilter, searchQuery]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredTemplates.length / pageSize);
+  const paginatedTemplates = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredTemplates.slice(startIndex, startIndex + pageSize);
+  }, [filteredTemplates, currentPage, pageSize]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [categoryFilter, searchQuery]);
 
   // Get category badge
   const getCategoryBadge = (category: TaskTemplateCategory) => {
@@ -343,399 +384,483 @@ export default function TaskTemplatesPage() {
   };
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between bg-white rounded-lg border border-slate-200 px-4 py-3">
-        <div className="flex items-center gap-6">
-          <div>
-            <div className="flex items-center gap-2 text-xs text-slate-500 mb-0.5">
-              <Link href="/dashboard" className="hover:text-blue-600">
+    <div className="h-full bg-slate-50/50">
+      <div className="h-full flex flex-col px-4 py-4">
+        {/* Main Card - Full Height with integrated header */}
+        <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-0">
+          {/* Elegant Header inside the card */}
+          <div className="px-4 py-2.5 border-b border-slate-100 bg-linear-to-r from-slate-50 to-white">
+            {/* Breadcrumb */}
+            <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-1.5">
+              <span className="hover:text-slate-700 cursor-pointer">
                 Dashboard
-              </Link>
-              <span>/</span>
-              <Link href="/dashboard/tasks" className="hover:text-blue-600">
-                Tasks
-              </Link>
-              <span>/</span>
-              <span className="text-slate-700">Templates</span>
-            </div>
-            <h1 className="text-lg font-semibold text-slate-900">
-              Task Templates
-            </h1>
-          </div>
-
-          {/* Stats pills */}
-          {templates.length > 0 && (
-            <div className="hidden md:flex items-center gap-2 pl-6 border-l border-slate-200">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded-full">
-                <span className="font-medium">{templates.length}</span>{" "}
-                Templates
               </span>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded-full">
-                <span className="font-medium">
-                  {templates.filter((t) => t.is_protected).length}
-                </span>{" "}
-                Protected
-              </span>
+              <svg
+                className="w-3 h-3 text-slate-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 5l7 7-7 7"
+                />
+              </svg>
+              <span className="hover:text-slate-700 cursor-pointer">Tasks</span>
+              <svg
+                className="w-3 h-3 text-slate-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 5l7 7-7 7"
+                />
+              </svg>
+              <span className="text-slate-700 font-medium">Templates</span>
             </div>
-          )}
-        </div>
-
-        <button
-          onClick={() => setIsCreateModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-        >
-          <PlusIcon className="w-4 h-4" />
-          New Template
-        </button>
-      </div>
-
-      {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex gap-1.5">
-          <button
-            onClick={() => setCategoryFilter("all")}
-            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-              categoryFilter === "all"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-            }`}
-          >
-            All
-          </button>
-          {(
-            Object.keys(TaskTemplateCategoryLabels) as TaskTemplateCategory[]
-          ).map((category) => (
-            <button
-              key={category}
-              onClick={() => setCategoryFilter(category)}
-              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                categoryFilter === category
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-              }`}
-            >
-              {TaskTemplateCategoryLabels[category]}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex-1 max-w-sm ml-auto">
-          <div className="relative">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-            <input
-              type="text"
-              placeholder="Search templates..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-slate-400"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Templates Table */}
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-sm text-slate-500">Loading templates...</p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-linear-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm">
+                  <TemplateIcon className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-base font-semibold text-slate-800 leading-tight">
+                    Task Templates
+                  </h1>
+                  <p className="text-[11px] text-slate-500">
+                    Reusable task workflows
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsCreateModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-linear-to-r from-blue-600 to-blue-500 text-white text-sm font-medium rounded-lg hover:from-blue-700 hover:to-blue-600 transition-all shadow-sm hover:shadow-md"
+              >
+                <PlusIcon className="w-4 h-4" />
+                New Template
+              </button>
             </div>
           </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <svg
-              className="w-12 h-12 mb-3 text-red-300"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-              />
-            </svg>
-            <p className="text-sm font-medium text-red-600 mb-1">{error}</p>
-            <button
-              onClick={fetchTemplates}
-              className="px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors"
-            >
-              Try Again
-            </button>
-          </div>
-        ) : processedTemplates.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-slate-500">
-            <TemplateIcon className="w-16 h-16 mb-4 text-slate-300" />
-            <p className="text-base font-medium mb-1">No templates found</p>
-            <p className="text-sm text-slate-400 mb-4">
-              {searchQuery
-                ? "Try adjusting your search"
-                : "Create your first template to standardize task workflows"}
-            </p>
-            <button
-              onClick={() => setIsCreateModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <PlusIcon className="w-4 h-4" />
-              Create Template
-            </button>
-          </div>
-        ) : (
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="w-10 px-4 py-3"></th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Template Name
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Category
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Default Priority
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Tasks
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {processedTemplates.map((template) => {
-                const isExpanded = expandedRows.has(template.id);
-                const items = templateItems[template.id] || [];
-                const isLoadingItemsForTemplate = loadingItems.has(template.id);
 
+          {/* Filters Bar */}
+          <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between gap-4 shrink-0">
+            {/* Category Pills */}
+            <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-lg overflow-x-auto">
+              <button
+                onClick={() => setCategoryFilter("all")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap ${
+                  categoryFilter === "all"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+                }`}
+              >
+                All
+                <span
+                  className={`ml-1 text-[10px] ${
+                    categoryFilter === "all"
+                      ? "text-blue-200"
+                      : "text-slate-400"
+                  }`}
+                >
+                  {templates.length}
+                </span>
+              </button>
+              {(
+                Object.keys(
+                  TaskTemplateCategoryLabels
+                ) as TaskTemplateCategory[]
+              ).map((category) => {
+                const count = templates.filter(
+                  (t) => t.category === category
+                ).length;
                 return (
-                  <React.Fragment key={template.id}>
-                    {/* Main Row */}
-                    <tr
-                      className="hover:bg-slate-50 cursor-pointer transition-colors"
-                      onClick={() =>
-                        router.push(`/dashboard/tasks/templates/${template.id}`)
-                      }
-                    >
-                      {/* Expand Toggle */}
-                      <td className="px-4 py-3">
-                        {(template.item_count || 0) > 0 && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleExpand(template.id);
-                            }}
-                            className="p-1 rounded hover:bg-slate-200 transition-colors"
-                          >
-                            {isExpanded ? (
-                              <ChevronDownIcon className="w-4 h-4 text-slate-500" />
-                            ) : (
-                              <ChevronRightIcon className="w-4 h-4 text-slate-500" />
-                            )}
-                          </button>
-                        )}
-                      </td>
-
-                      {/* Template Name */}
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <TemplateIcon className="w-4 h-4 text-slate-400" />
-                          <div>
-                            <p className="text-sm font-medium text-slate-900 hover:text-blue-600 transition-colors">
-                              {template.name}
-                            </p>
-                            {template.description && (
-                              <p className="text-xs text-slate-500 line-clamp-1 max-w-xs">
-                                {template.description}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Category */}
-                      <td className="px-4 py-3">
-                        {getCategoryBadge(template.category)}
-                      </td>
-
-                      {/* Default Priority */}
-                      <td className="px-4 py-3">
-                        {getPriorityBadge(template.default_priority)}
-                      </td>
-
-                      {/* Task Count */}
-                      <td className="px-4 py-3 text-center">
-                        <span className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 bg-slate-100 text-slate-600 text-xs font-medium rounded-full">
-                          {template.item_count || 0}
-                        </span>
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          {template.is_protected && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
-                              <ShieldIcon className="w-3 h-3" />
-                              Protected
-                            </span>
-                          )}
-                          {!template.is_active && (
-                            <span className="px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-500 rounded-full">
-                              Inactive
-                            </span>
-                          )}
-                          {template.is_active && !template.is_protected && (
-                            <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full">
-                              Active
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              router.push(
-                                `/dashboard/tasks/new?template=${template.id}`
-                              );
-                            }}
-                            className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                            title="Apply template"
-                          >
-                            <PlayIcon className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              router.push(
-                                `/dashboard/tasks/templates/${template.id}`
-                              );
-                            }}
-                            className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
-                            title="View & Edit template"
-                          >
-                            <EditIcon className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={(e) => handleDelete(template.id, e)}
-                            disabled={deletingId === template.id}
-                            className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                            title="Delete template"
-                          >
-                            {deletingId === template.id ? (
-                              <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></div>
-                            ) : (
-                              <TrashIcon className="w-4 h-4" />
-                            )}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-
-                    {/* Expanded Items Row */}
-                    {isExpanded && (
-                      <tr className="bg-slate-50">
-                        <td colSpan={7} className="px-4 py-3">
-                          <div className="ml-8 border-l-2 border-blue-200 pl-4">
-                            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
-                              Template Tasks ({template.item_count || 0})
-                            </p>
-                            {isLoadingItemsForTemplate ? (
-                              <div className="flex items-center gap-2 py-2 text-sm text-slate-500">
-                                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                                Loading tasks...
-                              </div>
-                            ) : items.length === 0 ? (
-                              <p className="text-sm text-slate-500 py-2">
-                                No tasks in this template yet
-                              </p>
-                            ) : (
-                              <div className="space-y-1">
-                                {items.map((item, index) => (
-                                  <div
-                                    key={item.id}
-                                    className="flex items-center gap-3 py-2 px-3 bg-white rounded-lg border border-slate-200"
-                                  >
-                                    <span className="text-xs text-slate-400 font-mono w-6">
-                                      #{index + 1}
-                                    </span>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm text-slate-700 truncate">
-                                        {item.title}
-                                      </p>
-                                      {item.description && (
-                                        <p className="text-xs text-slate-500 truncate">
-                                          {item.description}
-                                        </p>
-                                      )}
-                                    </div>
-                                    {getPriorityBadge(item.priority)}
-                                    {item.estimated_hours && (
-                                      <span className="flex items-center gap-1 text-xs text-slate-500">
-                                        <ClockIcon className="w-3 h-3" />
-                                        {item.estimated_hours}h
-                                      </span>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
+                  <button
+                    key={category}
+                    onClick={() => setCategoryFilter(category)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap ${
+                      categoryFilter === category
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+                    }`}
+                  >
+                    {TaskTemplateCategoryLabels[category]}
+                    {count > 0 && (
+                      <span
+                        className={`ml-1 text-[10px] ${
+                          categoryFilter === category
+                            ? "text-blue-200"
+                            : "text-slate-400"
+                        }`}
+                      >
+                        {count}
+                      </span>
                     )}
-                  </React.Fragment>
+                  </button>
                 );
               })}
-            </tbody>
-          </table>
-        )}
-      </div>
+            </div>
 
-      {/* Info Box */}
-      <div className="flex items-start gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg">
-        <svg
-          className="w-5 h-5 text-blue-600 shrink-0 mt-0.5"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
-        <div className="text-sm text-blue-700">
-          <p className="font-medium mb-1">About Protected Templates</p>
-          <p className="text-xs text-blue-600">
-            Protected templates are locked after tasks are created from them.
-            Tasks created from protected templates can only have their status
-            updated by the assignee, ensuring workflow consistency. Only users
-            with Project Manager access can modify these templates.
-          </p>
+            {/* Search */}
+            <SearchBox
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search templates..."
+              className="w-52"
+            />
+          </div>
+
+          {/* Templates Table */}
+          {isLoading ? (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-xs text-slate-500">Loading templates...</p>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="flex-1 flex flex-col items-center justify-center">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mb-2">
+                <svg
+                  className="w-5 h-5 text-red-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+              </div>
+              <p className="text-sm font-medium text-red-600 mb-1">{error}</p>
+              <button
+                onClick={fetchTemplates}
+                className="px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded-lg"
+              >
+                Try Again
+              </button>
+            </div>
+          ) : paginatedTemplates.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center">
+              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
+                <TemplateIcon className="w-6 h-6 text-slate-400" />
+              </div>
+              <p className="text-sm font-medium text-slate-700 mb-1">
+                No templates found
+              </p>
+              <p className="text-xs text-slate-500 mb-3">
+                {searchQuery
+                  ? "Try adjusting your search or filters"
+                  : "Create your first template to standardize workflows"}
+              </p>
+              <button
+                onClick={() => setIsCreateModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700"
+              >
+                <PlusIcon className="w-3.5 h-3.5" />
+                Create Template
+              </button>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-auto min-h-0">
+              <table className="w-full table-auto">
+                <thead className="sticky top-0 bg-slate-50 z-10">
+                  <tr className="border-b border-slate-200">
+                    <th className="w-10 px-2 py-2"></th>
+                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                      Template
+                    </th>
+                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                      Category
+                    </th>
+                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                      Priority
+                    </th>
+                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                      Tasks
+                    </th>
+                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                      Status
+                    </th>
+                    <th className="px-2 py-2 text-right text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedTemplates.map((template) => {
+                    const isExpanded = expandedRows.has(template.id);
+                    const items = templateItems[template.id] || [];
+                    const isLoadingItemsForTemplate = loadingItems.has(
+                      template.id
+                    );
+
+                    return (
+                      <React.Fragment key={template.id}>
+                        {/* Main Row */}
+                        <tr className="group border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+                          {/* Expand Toggle */}
+                          <td className="px-2 py-1.5">
+                            {(template.item_count || 0) > 0 && (
+                              <button
+                                onClick={() => toggleExpand(template.id)}
+                                className="w-5 h-5 flex items-center justify-center rounded hover:bg-slate-200 transition-colors"
+                              >
+                                {isExpanded ? (
+                                  <ChevronDownIcon className="w-3.5 h-3.5 text-slate-500" />
+                                ) : (
+                                  <ChevronRightIcon className="w-3.5 h-3.5 text-slate-500" />
+                                )}
+                              </button>
+                            )}
+                          </td>
+
+                          {/* Template Name */}
+                          <td className="px-2 py-1.5">
+                            <div className="flex items-center gap-2">
+                              <TemplateIcon className="w-4 h-4 text-slate-400 shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-slate-800 truncate">
+                                  {template.name}
+                                </p>
+                                {template.description && (
+                                  <p className="text-xs text-slate-500 truncate max-w-xs">
+                                    {template.description}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Category */}
+                          <td className="px-2 py-1.5">
+                            {getCategoryBadge(template.category)}
+                          </td>
+
+                          {/* Default Priority */}
+                          <td className="px-2 py-1.5">
+                            {getPriorityBadge(template.default_priority)}
+                          </td>
+
+                          {/* Task Count */}
+                          <td className="px-2 py-1.5 text-center">
+                            <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 bg-slate-100 text-slate-600 text-[10px] font-medium rounded-full">
+                              {template.item_count || 0}
+                            </span>
+                          </td>
+
+                          {/* Status */}
+                          <td className="px-2 py-1.5 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              {template.is_protected && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-amber-100 text-amber-700">
+                                  <ShieldIcon className="w-2.5 h-2.5" />
+                                  Protected
+                                </span>
+                              )}
+                              {!template.is_active && (
+                                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-500 rounded-full">
+                                  Inactive
+                                </span>
+                              )}
+                              {template.is_active && !template.is_protected && (
+                                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-green-100 text-green-700 rounded-full">
+                                  Active
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Actions */}
+                          <td className="px-2 py-1.5">
+                            <div className="flex items-center justify-end gap-0.5">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingTemplate(template);
+                                }}
+                                className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                title="Edit template"
+                              >
+                                <EditIcon className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={(e) => handleDelete(template.id, template.name, e)}
+                                disabled={deletingId === template.id}
+                                className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                                title="Delete template"
+                              >
+                                {deletingId === template.id ? (
+                                  <div className="w-3.5 h-3.5 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></div>
+                                ) : (
+                                  <TrashIcon className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* Expanded Items Row */}
+                        {isExpanded && (
+                          <tr className="bg-slate-50/50">
+                            <td colSpan={7} className="px-2 py-2">
+                              <div className="ml-7 border-l-2 border-blue-200 pl-3">
+                                <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wide mb-1.5">
+                                  Template Tasks ({template.item_count || 0})
+                                </p>
+                                {isLoadingItemsForTemplate ? (
+                                  <div className="flex items-center gap-2 py-2 text-xs text-slate-500">
+                                    <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                    Loading tasks...
+                                  </div>
+                                ) : items.length === 0 ? (
+                                  <p className="text-xs text-slate-500 py-1">
+                                    No tasks in this template yet
+                                  </p>
+                                ) : (
+                                  <div className="space-y-1">
+                                    {(() => {
+                                      let taskIndex = 0;
+                                      return items.map((item) => {
+                                        if (!item.isSubtask) taskIndex++;
+                                        return (
+                                          <div
+                                            key={item.id}
+                                            className={`flex items-center gap-2 py-1.5 px-2 bg-white rounded border border-slate-200 ${item.isSubtask ? 'ml-6' : ''}`}
+                                          >
+                                            {item.isSubtask ? (
+                                              <span className="text-xs text-blue-400 shrink-0">↳</span>
+                                            ) : (
+                                              <span className="text-xs text-slate-400 font-mono w-4 shrink-0">
+                                                {taskIndex}.
+                                              </span>
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                              <p className="text-sm text-slate-700 truncate">
+                                                {item.title}
+                                              </p>
+                                            </div>
+                                            {getPriorityBadge(item.priority)}
+                                            {item.estimated_hours && (
+                                              <span className="flex items-center gap-0.5 text-xs text-slate-500">
+                                                <ClockIcon className="w-3 h-3" />
+                                                {item.estimated_hours}h
+                                              </span>
+                                            )}
+                                          </div>
+                                        );
+                                      });
+                                    })()}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {filteredTemplates.length > 0 && (
+            <div className="px-3 py-2 border-t border-slate-100 bg-slate-50/50 shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-600">
+                    <span className="font-medium">
+                      {Math.min(
+                        (currentPage - 1) * pageSize + 1,
+                        filteredTemplates.length
+                      )}
+                    </span>
+                    {"-"}
+                    <span className="font-medium">
+                      {Math.min(
+                        currentPage * pageSize,
+                        filteredTemplates.length
+                      )}
+                    </span>
+                    {" of "}
+                    <span className="font-medium">
+                      {filteredTemplates.length}
+                    </span>
+                  </span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="px-1.5 py-0.5 text-[10px] border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-0.5">
+                  <button
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.max(1, prev - 1))
+                    }
+                    disabled={currentPage === 1}
+                    className="px-2 py-1 text-[10px] font-medium text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Prev
+                  </button>
+
+                  <div className="flex items-center gap-0.5 mx-1">
+                    {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                      let pageNum = i + 1;
+                      if (totalPages > 5) {
+                        if (currentPage <= 3) pageNum = i + 1;
+                        else if (currentPage >= totalPages - 2)
+                          pageNum = totalPages - 4 + i;
+                        else pageNum = currentPage - 2 + i;
+                      }
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`w-6 h-6 text-[10px] font-medium rounded transition-colors ${
+                            currentPage === pageNum
+                              ? "bg-blue-600 text-white"
+                              : "text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                    }
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className="px-2 py-1 text-[10px] font-medium text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -745,6 +870,53 @@ export default function TaskTemplatesPage() {
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={fetchTemplates}
       />
+
+      {/* Edit Template Modal */}
+      <EditTemplateModal
+        template={editingTemplate}
+        isOpen={!!editingTemplate}
+        onClose={() => setEditingTemplate(null)}
+        onSuccess={() => {
+          fetchTemplates();
+          setEditingTemplate(null);
+        }}
+      />
+
+      {/* Confirmation Modal */}
+      {confirmModal.show && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md shadow-xl">
+            <div className="px-5 py-4 border-b border-slate-200">
+              <h2 className="text-lg font-semibold text-slate-900">
+                {confirmModal.title}
+              </h2>
+            </div>
+            <div className="p-5">
+              <p className="text-sm text-slate-600">{confirmModal.message}</p>
+            </div>
+            <div className="px-5 py-4 border-t border-slate-100 flex justify-end gap-3">
+              <button
+                onClick={() =>
+                  setConfirmModal((prev) => ({ ...prev, show: false }))
+                }
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmModal.onConfirm}
+                className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${
+                  confirmModal.confirmStyle === "danger"
+                    ? "bg-red-600 hover:bg-red-700"
+                    : "bg-blue-600 hover:bg-blue-700"
+                }`}
+              >
+                {confirmModal.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -315,7 +315,7 @@ export function AddCostItemModal({
                               {item.name}
                             </div>
                             <svg
-                              className="w-4 h-4 text-slate-300 group-hover:text-amber-500 flex-shrink-0 ml-2"
+                              className="w-4 h-4 text-slate-300 group-hover:text-amber-500 shrink-0 ml-2"
                               fill="none"
                               viewBox="0 0 24 24"
                               stroke="currentColor"

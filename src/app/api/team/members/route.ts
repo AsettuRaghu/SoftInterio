@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
         // Continue without roles rather than failing
       } else if (userRoles && userRoles.length > 0) {
         // Get all role IDs
-        const roleIds = [...new Set(userRoles.map((ur) => ur.role_id))];
+        const roleIds = Array.from(new Set(userRoles.map((ur) => ur.role_id)));
 
         // Fetch roles separately
         const { data: roles, error: rolesError } = await adminClient

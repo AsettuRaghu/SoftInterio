@@ -1,6 +1,16 @@
+"use client";
+
 import React, { useState } from "react";
 
-const sampleData = [
+interface DataRow {
+  startDate: string;
+  clientName: string;
+  income: number;
+  expense: number;
+  status: string;
+}
+
+const sampleData: DataRow[] = [
   {
     startDate: "2025-11-01",
     clientName: "Acme Corp",
@@ -31,7 +41,7 @@ const sampleData = [
   },
 ];
 
-const columns = [
+const columns: { key: keyof DataRow; label: string }[] = [
   { key: "startDate", label: "Start Date" },
   { key: "clientName", label: "Client Name" },
   { key: "income", label: "Income Received" },
@@ -65,7 +75,12 @@ export default function SampleFinanceTablePage() {
           <thead>
             <tr>
               {columns.map((col) => (
-                <th key={col.key} className="px-4 py-2 border-b text-left bg-gray-50">{col.label}</th>
+                <th
+                  key={col.key}
+                  className="px-4 py-2 border-b text-left bg-gray-50"
+                >
+                  {col.label}
+                </th>
               ))}
             </tr>
           </thead>
@@ -73,15 +88,21 @@ export default function SampleFinanceTablePage() {
             {filtered.map((row, idx) => (
               <tr key={idx} className="hover:bg-gray-100">
                 {columns.map((col) => (
-                  <td key={col.key} className="px-4 py-2 border-b">{row[col.key]}</td>
+                  <td key={col.key} className="px-4 py-2 border-b">
+                    {row[col.key]}
+                  </td>
                 ))}
               </tr>
             ))}
             <tr className="font-semibold bg-blue-50">
               <td className="px-4 py-2 border-b">Total</td>
               <td className="px-4 py-2 border-b"></td>
-              <td className="px-4 py-2 border-b">₹{totalIncome.toLocaleString()}</td>
-              <td className="px-4 py-2 border-b">₹{totalExpense.toLocaleString()}</td>
+              <td className="px-4 py-2 border-b">
+                ₹{totalIncome.toLocaleString()}
+              </td>
+              <td className="px-4 py-2 border-b">
+                ₹{totalExpense.toLocaleString()}
+              </td>
               <td className="px-4 py-2 border-b"></td>
             </tr>
           </tbody>
