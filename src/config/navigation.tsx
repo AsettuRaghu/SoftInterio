@@ -381,6 +381,11 @@ export const navigationConfig: NavigationItem[] = [
         permission: "settings.team.view",
       },
       {
+        name: "Quotations Config",
+        href: "/dashboard/settings/quotations-config",
+        permission: "quotations.view",
+      },
+      {
         name: "Subscription",
         href: "/dashboard/settings/billing",
         permission: "settings.billing",
