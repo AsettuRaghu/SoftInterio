@@ -293,16 +293,30 @@ export const navigationConfig: NavigationItem[] = [
     icon: Icons.stock,
     permission: "stock.view",
     subItems: [
-      { name: "Inventory", href: "/dashboard/stock/inventory" },
+      {
+        name: "Overview",
+        href: "/dashboard/stock",
+        permission: "stock.overview",
+      },
+      {
+        name: "Materials",
+        href: "/dashboard/stock/inventory",
+        permission: "materials.view",
+      },
       {
         name: "Purchase Orders",
-        href: "/dashboard/stock/orders",
-        permission: "procurement.view",
+        href: "/dashboard/stock/purchase-orders",
+        permission: "po.view",
       },
       {
         name: "Vendors",
         href: "/dashboard/stock/vendors",
         permission: "vendors.view",
+      },
+      {
+        name: "Brands",
+        href: "/dashboard/stock/brands",
+        permission: "brands.view",
       },
     ],
   },

@@ -2,29 +2,28 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { CreateVendorModal, EditVendorModal } from "@/components/stock";
+import { CreateBrandModal, EditBrandModal } from "@/components/stock";
 import type {
-  Vendor,
-  CreateVendorInput,
-  UpdateVendorInput,
+  Brand,
+  CreateBrandInput,
+  UpdateBrandInput,
+  BrandQualityTier,
+  BrandQualityTierLabels,
+  BrandQualityTierColors,
 } from "@/types/stock";
 import {
   MagnifyingGlassIcon,
   PlusIcon,
-  PhoneIcon,
-  EnvelopeIcon,
+  GlobeAltIcon,
   PencilSquareIcon,
   ChevronUpDownIcon,
-  BuildingStorefrontIcon,
+  TagIcon,
   FunnelIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
-import {
-  StarIcon as StarIconSolid,
-  HeartIcon as HeartIconSolid,
-} from "@heroicons/react/24/solid";
+import { HeartIcon as HeartIconSolid } from "@heroicons/react/24/solid";
 
-type SortField = "name" | "city" | "rating" | "credit_days" | "created_at";
+type SortField = "name" | "quality_tier" | "country" | "created_at";
 type SortOrder = "asc" | "desc";
 
 interface Pagination {
@@ -34,8 +33,25 @@ interface Pagination {
   totalPages: number;
 }
 
-export default function VendorsPage() {
-  const [vendors, setVendors] = useState<Vendor[]>([]);
+const qualityTierLabels: Record<BrandQualityTier, string> = {
+  budget: "Budget",
+  standard: "Standard",
+  premium: "Premium",
+  luxury: "Luxury",
+};
+
+const qualityTierColors: Record<
+  BrandQualityTier,
+  { bg: string; text: string }
+> = {
+  budget: { bg: "bg-slate-100", text: "text-slate-700" },
+  standard: { bg: "bg-blue-100", text: "text-blue-700" },
+  premium: { bg: "bg-purple-100", text: "text-purple-700" },
+  luxury: { bg: "bg-amber-100", text: "text-amber-700" },
+};
+
+export default function BrandsPage() {
+  const [brands, setBrands] = useState<Brand[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -43,11 +59,11 @@ export default function VendorsPage() {
     "all" | "active" | "inactive"
   >("all");
   const [filterPreferred, setFilterPreferred] = useState<boolean | null>(null);
-  const [filterCity, setFilterCity] = useState<string>("");
+  const [filterQualityTier, setFilterQualityTier] = useState<string>("");
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+  const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [pagination, setPagination] = useState<Pagination>({
     page: 1,
@@ -56,8 +72,8 @@ export default function VendorsPage() {
     totalPages: 0,
   });
 
-  // Fetch vendors
-  const fetchVendors = useCallback(async () => {
+  // Fetch brands
+  const fetchBrands = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -68,7 +84,7 @@ export default function VendorsPage() {
         params.set("is_active", filterStatus === "active" ? "true" : "false");
       if (filterPreferred !== null)
         params.set("is_preferred", filterPreferred ? "true" : "false");
-      if (filterCity) params.set("city", filterCity);
+      if (filterQualityTier) params.set("quality_tier", filterQualityTier);
       params.set("sort_by", sortField);
       params.set("sort_order", sortOrder);
       params.set("limit", pagination.limit.toString());
@@ -77,20 +93,20 @@ export default function VendorsPage() {
         ((pagination.page - 1) * pagination.limit).toString()
       );
 
-      const response = await fetch(`/api/stock/vendors?${params.toString()}`);
+      const response = await fetch(`/api/stock/brands?${params.toString()}`);
       if (!response.ok) {
-        throw new Error("Failed to load vendors");
+        throw new Error("Failed to load brands");
       }
 
       const data = await response.json();
-      setVendors(data.vendors || []);
+      setBrands(data.brands || []);
       setPagination((prev) => ({
         ...prev,
         total: data.total || 0,
         totalPages: Math.ceil((data.total || 0) / prev.limit),
       }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load vendors");
+      setError(err instanceof Error ? err.message : "Failed to load brands");
     } finally {
       setIsLoading(false);
     }
@@ -98,7 +114,7 @@ export default function VendorsPage() {
     searchQuery,
     filterStatus,
     filterPreferred,
-    filterCity,
+    filterQualityTier,
     sortField,
     sortOrder,
     pagination.page,
@@ -106,42 +122,42 @@ export default function VendorsPage() {
   ]);
 
   useEffect(() => {
-    fetchVendors();
-  }, [fetchVendors]);
+    fetchBrands();
+  }, [fetchBrands]);
 
-  // Create vendor
-  const handleCreateVendor = async (vendorData: CreateVendorInput) => {
-    const response = await fetch("/api/stock/vendors", {
+  // Create brand
+  const handleCreateBrand = async (input: CreateBrandInput) => {
+    const response = await fetch("/api/stock/brands", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(vendorData),
+      body: JSON.stringify(input),
     });
 
     if (!response.ok) {
       const data = await response.json();
-      throw new Error(data.error || "Failed to create vendor");
+      throw new Error(data.error || "Failed to create brand");
     }
 
-    fetchVendors();
+    fetchBrands();
   };
 
-  // Update vendor
-  const handleUpdateVendor = async (
-    vendorId: string,
-    updates: UpdateVendorInput
+  // Update brand
+  const handleUpdateBrand = async (
+    brandId: string,
+    updates: UpdateBrandInput
   ) => {
-    const response = await fetch(`/api/stock/vendors/${vendorId}`, {
-      method: "PATCH",
+    const response = await fetch(`/api/stock/brands?id=${brandId}`, {
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates),
     });
 
     if (!response.ok) {
       const data = await response.json();
-      throw new Error(data.error || "Failed to update vendor");
+      throw new Error(data.error || "Failed to update brand");
     }
 
-    fetchVendors();
+    fetchBrands();
   };
 
   // Handle sort
@@ -168,39 +184,16 @@ export default function VendorsPage() {
     );
   };
 
-  // Render rating stars
-  const renderRating = (rating: number | undefined) => {
-    const r = rating || 0;
-    return (
-      <div className="flex items-center gap-1">
-        {[1, 2, 3, 4, 5].map((i) => (
-          <StarIconSolid
-            key={i}
-            className={`h-3.5 w-3.5 ${
-              i <= r ? "text-amber-400" : "text-slate-200"
-            }`}
-          />
-        ))}
-        {r > 0 && <span className="text-xs text-slate-600 ml-1">{r}</span>}
-      </div>
-    );
-  };
-
-  // Get unique cities for filter
-  const uniqueCities = Array.from(
-    new Set(vendors.map((v) => v.city).filter(Boolean))
-  );
-
   // Stats
-  const activeVendors = vendors.filter((v) => v.is_active).length;
-  const preferredVendors = vendors.filter((v) => v.is_preferred).length;
+  const activeBrands = brands.filter((b) => b.is_active).length;
+  const preferredBrands = brands.filter((b) => b.is_preferred).length;
 
   // Clear all filters
   const clearFilters = () => {
     setSearchQuery("");
     setFilterStatus("all");
     setFilterPreferred(null);
-    setFilterCity("");
+    setFilterQualityTier("");
     setPagination((prev) => ({ ...prev, page: 1 }));
   };
 
@@ -216,17 +209,11 @@ export default function VendorsPage() {
     setPagination((prev) => ({ ...prev, page: 1 }));
   };
 
-  // Reset to page 1 when city filter changes
-  const handleFilterCityChange = (value: string) => {
-    setFilterCity(value);
-    setPagination((prev) => ({ ...prev, page: 1 }));
-  };
-
   const hasActiveFilters =
     searchQuery ||
     filterStatus !== "all" ||
     filterPreferred !== null ||
-    filterCity;
+    filterQualityTier;
 
   return (
     <div className="space-y-4">
@@ -243,21 +230,21 @@ export default function VendorsPage() {
                 Stock
               </Link>
               <span>/</span>
-              <span className="text-slate-700">Vendors</span>
+              <span className="text-slate-700">Brands</span>
             </div>
             <div className="flex items-center gap-3">
-              <h1 className="text-lg font-semibold text-slate-900">Vendors</h1>
+              <h1 className="text-lg font-semibold text-slate-900">Brands</h1>
               <div className="hidden md:flex items-center gap-2">
                 <span className="px-2 py-0.5 text-xs rounded-full bg-slate-100 text-slate-700">
                   {pagination.total} Total
                 </span>
                 <span className="px-2 py-0.5 text-xs rounded-full bg-green-50 text-green-700">
-                  {activeVendors} Active
+                  {activeBrands} Active
                 </span>
-                {preferredVendors > 0 && (
+                {preferredBrands > 0 && (
                   <span className="px-2 py-0.5 text-xs rounded-full bg-amber-50 text-amber-700 flex items-center gap-1">
                     <HeartIconSolid className="h-3 w-3" />
-                    {preferredVendors} Preferred
+                    {preferredBrands} Preferred
                   </span>
                 )}
               </div>
@@ -268,7 +255,7 @@ export default function VendorsPage() {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700"
           >
             <PlusIcon className="h-3.5 w-3.5" />
-            Add Vendor
+            Add Brand
           </button>
         </div>
       </div>
@@ -279,38 +266,37 @@ export default function VendorsPage() {
           {/* Search */}
           <div className="flex-1">
             <div className="relative">
-              <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search by name, code, contact, email, phone..."
                 value={searchQuery}
                 onChange={(e) => handleSearchChange(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Search brands by name, code..."
+                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-inset focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           </div>
 
-          {/* Filter Toggle & Quick Filters */}
+          {/* Filter Toggle */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md border transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border rounded-lg transition-colors ${
                 showFilters || hasActiveFilters
-                  ? "border-blue-300 bg-blue-50 text-blue-700"
-                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  ? "bg-blue-50 border-blue-200 text-blue-700"
+                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
               }`}
             >
               <FunnelIcon className="w-4 h-4" />
               Filters
               {hasActiveFilters && (
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                <span className="w-2 h-2 rounded-full bg-blue-600"></span>
               )}
             </button>
-
             {hasActiveFilters && (
               <button
                 onClick={clearFilters}
-                className="inline-flex items-center gap-1 px-2 py-2 text-xs text-slate-500 hover:text-slate-700"
+                className="inline-flex items-center gap-1 px-2 py-2 text-sm text-slate-600 hover:text-slate-900"
               >
                 <XMarkIcon className="w-4 h-4" />
                 Clear
@@ -389,24 +375,24 @@ export default function VendorsPage() {
               </div>
             </div>
 
-            {/* City Filter */}
-            {uniqueCities.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">City:</span>
-                <select
-                  value={filterCity}
-                  onChange={(e) => handleFilterCityChange(e.target.value)}
-                  className="px-2 py-1 text-xs border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All Cities</option>
-                  {uniqueCities.map((city) => (
-                    <option key={city} value={city}>
-                      {city}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            {/* Quality Tier Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">Quality:</span>
+              <select
+                value={filterQualityTier}
+                onChange={(e) => {
+                  setFilterQualityTier(e.target.value);
+                  setPagination((prev) => ({ ...prev, page: 1 }));
+                }}
+                className="px-2 py-1 text-xs border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Tiers</option>
+                <option value="budget">Budget</option>
+                <option value="standard">Standard</option>
+                <option value="premium">Premium</option>
+                <option value="luxury">Luxury</option>
+              </select>
+            </div>
           </div>
         )}
       </div>
@@ -422,7 +408,6 @@ export default function VendorsPage() {
                   <div className="w-8 h-8 bg-slate-200 rounded-lg" />
                   <div className="flex-1 h-4 bg-slate-200 rounded" />
                   <div className="w-24 h-4 bg-slate-200 rounded" />
-                  <div className="w-32 h-4 bg-slate-200 rounded" />
                   <div className="w-20 h-4 bg-slate-200 rounded" />
                 </div>
               ))}
@@ -431,30 +416,12 @@ export default function VendorsPage() {
         )}
 
         {/* Error State */}
-        {error && !isLoading && (
+        {!isLoading && error && (
           <div className="p-8 text-center">
-            <div className="text-red-500 mb-2">
-              <svg
-                className="w-12 h-12 mx-auto"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
-            </div>
-            <p className="text-sm font-medium text-slate-900">
-              Error loading vendors
-            </p>
-            <p className="text-xs text-slate-500 mt-1">{error}</p>
+            <p className="text-red-600 text-sm">{error}</p>
             <button
-              onClick={fetchVendors}
-              className="mt-3 px-3 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
+              onClick={fetchBrands}
+              className="mt-2 text-sm text-blue-600 hover:text-blue-700"
             >
               Try again
             </button>
@@ -462,33 +429,33 @@ export default function VendorsPage() {
         )}
 
         {/* Empty State */}
-        {!isLoading && !error && vendors.length === 0 && (
-          <div className="p-12 text-center">
-            <BuildingStorefrontIcon className="h-12 w-12 mx-auto text-slate-300 mb-3" />
-            <h3 className="text-sm font-semibold text-slate-900 mb-1">
+        {!isLoading && !error && brands.length === 0 && (
+          <div className="p-8 text-center">
+            <TagIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-600 font-medium">
               {hasActiveFilters
-                ? "No vendors match your filters"
-                : "No vendors yet"}
-            </h3>
-            <p className="text-xs text-slate-500 mb-4">
+                ? "No brands match your filters"
+                : "No brands yet"}
+            </p>
+            <p className="text-slate-500 text-sm mt-1">
               {hasActiveFilters
-                ? "Try adjusting your search or filters."
-                : "Get started by adding your first vendor."}
+                ? "Try adjusting your search or filters"
+                : "Add your first brand to get started"}
             </p>
             {!hasActiveFilters && (
               <button
                 onClick={() => setIsCreateModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
-                <PlusIcon className="h-3.5 w-3.5" />
-                Add Vendor
+                <PlusIcon className="h-4 w-4" />
+                Add Brand
               </button>
             )}
           </div>
         )}
 
         {/* Table Content */}
-        {!isLoading && !error && vendors.length > 0 && (
+        {!isLoading && !error && brands.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -498,36 +465,31 @@ export default function VendorsPage() {
                       onClick={() => handleSort("name")}
                       className="flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900"
                     >
-                      Vendor
+                      Brand
                       {renderSortIcon("name")}
                     </button>
                   </th>
                   <th className="text-left px-4 py-3">
                     <span className="text-xs font-semibold text-slate-600">
-                      Contact
+                      Categories
                     </span>
                   </th>
                   <th className="text-left px-4 py-3">
                     <button
-                      onClick={() => handleSort("city")}
+                      onClick={() => handleSort("quality_tier")}
                       className="flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900"
                     >
-                      Location
-                      {renderSortIcon("city")}
+                      Quality
+                      {renderSortIcon("quality_tier")}
                     </button>
                   </th>
                   <th className="text-left px-4 py-3">
-                    <span className="text-xs font-semibold text-slate-600">
-                      GST / Terms
-                    </span>
-                  </th>
-                  <th className="text-center px-4 py-3">
                     <button
-                      onClick={() => handleSort("rating")}
-                      className="flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900 mx-auto"
+                      onClick={() => handleSort("country")}
+                      className="flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900"
                     >
-                      Rating
-                      {renderSortIcon("rating")}
+                      Country
+                      {renderSortIcon("country")}
                     </button>
                   </th>
                   <th className="text-center px-4 py-3">
@@ -543,93 +505,63 @@ export default function VendorsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {vendors.map((vendor) => (
+                {brands.map((brand) => (
                   <tr
-                    key={vendor.id}
+                    key={brand.id}
                     className="hover:bg-slate-50 transition-colors"
                   >
-                    {/* Vendor Name & Code */}
+                    {/* Brand Name & Code */}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div
                           className={`w-9 h-9 ${
-                            vendor.is_preferred
+                            brand.is_preferred
                               ? "bg-linear-to-br from-amber-500 to-orange-500"
-                              : "bg-linear-to-br from-blue-500 to-purple-500"
+                              : "bg-linear-to-br from-indigo-500 to-purple-500"
                           } rounded-lg flex items-center justify-center text-white font-semibold text-xs shrink-0 relative`}
                         >
-                          {vendor.name
+                          {brand.name
                             .split(" ")
                             .map((n) => n[0])
                             .slice(0, 2)
                             .join("")
                             .toUpperCase()}
-                          {vendor.is_preferred && (
+                          {brand.is_preferred && (
                             <HeartIconSolid className="absolute -top-1 -right-1 h-4 w-4 text-red-500 drop-shadow" />
                           )}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-medium text-slate-900 truncate">
-                              {vendor.display_name || vendor.name}
+                              {brand.display_name || brand.name}
                             </p>
-                            {vendor.is_preferred && (
+                            {brand.is_preferred && (
                               <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 rounded">
                                 Preferred
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-slate-500">
-                            {vendor.code}
-                          </p>
+                          <p className="text-xs text-slate-500">{brand.code}</p>
                         </div>
                       </div>
                     </td>
 
-                    {/* Contact Info */}
+                    {/* Categories */}
                     <td className="px-4 py-3">
-                      <div className="space-y-1">
-                        {vendor.contact_person && (
-                          <p className="text-sm text-slate-900">
-                            {vendor.contact_person}
-                          </p>
-                        )}
-                        {vendor.phone && (
-                          <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                            <PhoneIcon className="w-3 h-3 text-slate-400" />
-                            <a
-                              href={`tel:${vendor.phone}`}
-                              className="hover:text-blue-600"
+                      {brand.categories && brand.categories.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {brand.categories.slice(0, 3).map((cat) => (
+                            <span
+                              key={cat}
+                              className="px-2 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-600 rounded"
                             >
-                              {vendor.phone}
-                            </a>
-                          </div>
-                        )}
-                        {vendor.email && (
-                          <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                            <EnvelopeIcon className="w-3 h-3 text-slate-400" />
-                            <a
-                              href={`mailto:${vendor.email}`}
-                              className="hover:text-blue-600 truncate max-w-[180px]"
-                            >
-                              {vendor.email}
-                            </a>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Location */}
-                    <td className="px-4 py-3">
-                      {vendor.city ? (
-                        <div>
-                          <p className="text-sm text-slate-900">
-                            {vendor.city}
-                          </p>
-                          {vendor.state && (
-                            <p className="text-xs text-slate-500">
-                              {vendor.state}
-                            </p>
+                              {cat}
+                            </span>
+                          ))}
+                          {brand.categories.length > 3 && (
+                            <span className="px-2 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-600 rounded">
+                              +{brand.categories.length - 3}
+                            </span>
                           )}
                         </div>
                       ) : (
@@ -637,53 +569,64 @@ export default function VendorsPage() {
                       )}
                     </td>
 
-                    {/* GST & Payment Terms */}
+                    {/* Quality Tier */}
                     <td className="px-4 py-3">
-                      <div className="space-y-1">
-                        {vendor.gst_number && (
-                          <p className="text-xs font-mono text-slate-700">
-                            {vendor.gst_number}
-                          </p>
-                        )}
-                        {vendor.payment_terms && (
-                          <p className="text-xs text-slate-500">
-                            {vendor.payment_terms}
-                          </p>
-                        )}
-                        {vendor.credit_days && vendor.credit_days > 0 && (
-                          <p className="text-xs text-slate-500">
-                            {vendor.credit_days} days credit
-                          </p>
-                        )}
-                        {!vendor.gst_number && !vendor.payment_terms && (
-                          <span className="text-xs text-slate-400">—</span>
-                        )}
-                      </div>
+                      <span
+                        className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
+                          qualityTierColors[brand.quality_tier]?.bg ||
+                          "bg-slate-100"
+                        } ${
+                          qualityTierColors[brand.quality_tier]?.text ||
+                          "text-slate-700"
+                        }`}
+                      >
+                        {qualityTierLabels[brand.quality_tier] ||
+                          brand.quality_tier}
+                      </span>
                     </td>
 
-                    {/* Rating */}
-                    <td className="px-4 py-3 text-center">
-                      {renderRating(vendor.rating)}
+                    {/* Country */}
+                    <td className="px-4 py-3">
+                      {brand.country ? (
+                        <div className="flex items-center gap-1.5">
+                          <GlobeAltIcon className="w-3.5 h-3.5 text-slate-400" />
+                          <span className="text-sm text-slate-700">
+                            {brand.country}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
                     </td>
 
                     {/* Status */}
                     <td className="px-4 py-3 text-center">
                       <span
                         className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
-                          vendor.is_active
+                          brand.is_active
                             ? "bg-green-100 text-green-700"
                             : "bg-slate-100 text-slate-600"
                         }`}
                       >
-                        {vendor.is_active ? "Active" : "Inactive"}
+                        {brand.is_active ? "Active" : "Inactive"}
                       </span>
                     </td>
 
                     {/* Actions */}
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {brand.website && (
+                          <a
+                            href={brand.website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-600 hover:text-slate-700 hover:bg-slate-50 rounded"
+                          >
+                            <GlobeAltIcon className="w-3.5 h-3.5" />
+                          </a>
+                        )}
                         <button
-                          onClick={() => setEditingVendor(vendor)}
+                          onClick={() => setEditingBrand(brand)}
                           className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded"
                         >
                           <PencilSquareIcon className="w-3.5 h-3.5" />
@@ -700,7 +643,7 @@ export default function VendorsPage() {
       </div>
 
       {/* Pagination */}
-      {!isLoading && !error && vendors.length > 0 && (
+      {!isLoading && !error && brands.length > 0 && (
         <div className="bg-white rounded-lg border border-slate-200 px-4 py-3">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             {/* Results info */}
@@ -713,7 +656,7 @@ export default function VendorsPage() {
               <span className="font-medium">
                 {Math.min(pagination.page * pagination.limit, pagination.total)}
               </span>{" "}
-              of <span className="font-medium">{pagination.total}</span> vendors
+              of <span className="font-medium">{pagination.total}</span> brands
               {hasActiveFilters && " (filtered)"}
             </div>
 
@@ -844,17 +787,17 @@ export default function VendorsPage() {
       )}
 
       {/* Modals */}
-      <CreateVendorModal
+      <CreateBrandModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        onSubmit={handleCreateVendor}
+        onSubmit={handleCreateBrand}
       />
 
-      <EditVendorModal
-        isOpen={!!editingVendor}
-        vendor={editingVendor}
-        onClose={() => setEditingVendor(null)}
-        onSubmit={handleUpdateVendor}
+      <EditBrandModal
+        isOpen={!!editingBrand}
+        brand={editingBrand}
+        onClose={() => setEditingBrand(null)}
+        onSubmit={handleUpdateBrand}
       />
     </div>
   );
