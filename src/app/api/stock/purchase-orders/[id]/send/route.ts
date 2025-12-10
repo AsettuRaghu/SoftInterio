@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 // POST /api/stock/purchase-orders/[id]/send - Mark PO as sent to vendor
 export async function POST(
@@ -7,15 +8,15 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     // Get current PO
     const { data: currentPO } = await supabase

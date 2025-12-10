@@ -3,9 +3,12 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { uiLogger } from "@/lib/logger";
+import { getUserFriendlyMessage } from "@/lib/errors";
 
 export function UserProfileDropdown() {
   const [isOpen, setIsOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const pathname = usePathname();
@@ -36,28 +39,51 @@ export function UserProfileDropdown() {
   }, []);
 
   const handleSignOut = async () => {
-    try {
-      console.log("[LOGOUT] Signing out...");
+    // Prevent double-clicks
+    if (isSigningOut) return;
 
+    setIsSigningOut(true);
+    setIsOpen(false); // Close dropdown immediately
+    uiLogger.info("User initiated sign out", { action: "SIGNOUT" });
+
+    try {
       const response = await fetch("/api/auth/signout", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include", // Ensure cookies are sent
       });
 
-      if (response.ok) {
-        console.log("[LOGOUT] Sign out successful, redirecting to signin...");
-        router.push("/auth/signin");
-        router.refresh();
+      const data = await response.json();
+
+      if (data.success) {
+        uiLogger.info("Sign out successful, redirecting to signin", {
+          action: "SIGNOUT",
+        });
       } else {
-        console.error("[LOGOUT] Sign out failed:", response.status);
-        router.push("/auth/signin");
+        // Even on soft error, proceed with logout if server says to clear local state
+        uiLogger.warn("Sign out had issues but proceeding with redirect", {
+          action: "SIGNOUT",
+          shouldClearLocalState: data.shouldClearLocalState,
+        });
       }
+
+      // Keep isSigningOut true - don't reset it
+      // The component will unmount during redirect anyway
+      router.push("/auth/signin");
+      router.refresh(); // Clear any cached data
     } catch (error) {
-      console.error("[LOGOUT] Sign out error:", error);
+      // Network error or other issue
+      uiLogger.error("Sign out failed with error", error, {
+        action: "SIGNOUT",
+      });
+
+      // Still redirect to signin - it's better UX than being stuck
+      // The server-side session will eventually expire anyway
       router.push("/auth/signin");
     }
+    // NOTE: Don't reset isSigningOut - the redirect will unmount this component
   };
 
   const handleProfileClick = () => {
@@ -145,22 +171,49 @@ export function UserProfileDropdown() {
           <div className="border-t border-gray-200 py-2">
             <button
               onClick={handleSignOut}
-              className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+              disabled={isSigningOut}
+              className={`flex items-center w-full px-4 py-2 text-sm transition-colors cursor-pointer ${
+                isSigningOut
+                  ? "text-gray-400 cursor-not-allowed"
+                  : "text-red-600 hover:bg-red-50"
+              }`}
             >
-              <svg
-                className="w-4 h-4 mr-3"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                />
-              </svg>
-              Sign Out
+              {isSigningOut ? (
+                <svg
+                  className="w-4 h-4 mr-3 animate-spin"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+              ) : (
+                <svg
+                  className="w-4 h-4 mr-3"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                  />
+                </svg>
+              )}
+              {isSigningOut ? "Signing out..." : "Sign Out"}
             </button>
           </div>
         </div>

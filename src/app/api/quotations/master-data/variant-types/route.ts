@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 // GET /api/quotations/master-data/variant-types - Get variant types, optionally filtered by component
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createAdminClient();
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
+    const supabase = await createClient();
 
     const { searchParams } = new URL(request.url);
     const componentTypeId = searchParams.get("component_type_id");
@@ -17,6 +25,7 @@ export async function GET(request: NextRequest) {
         component_type:component_types(id, name, slug)
       `
       )
+      .eq("tenant_id", user!.tenantId)
       .eq("is_active", true);
 
     // Filter by component type if provided
@@ -49,7 +58,14 @@ export async function GET(request: NextRequest) {
 // POST /api/quotations/master-data/variant-types - Create a new variant type
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createAdminClient();
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
+    const supabase = await createClient();
     const body = await request.json();
 
     const {
@@ -72,28 +88,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get current user's tenant_id
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { data: userProfile, error: profileError } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (profileError || !userProfile?.tenant_id) {
-      return NextResponse.json(
-        { error: "User profile not found" },
-        { status: 404 }
-      );
-    }
-
     // Generate slug if not provided
     const generatedSlug =
       slug ||
@@ -105,7 +99,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from("component_variant_types")
       .insert({
-        tenant_id: userProfile.tenant_id,
+        tenant_id: user!.tenantId,
         component_type_id,
         name,
         slug: generatedSlug,

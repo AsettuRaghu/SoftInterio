@@ -1,0 +1,67 @@
+# API Security Audit Workflow
+# This workflow runs on every PR and push to ensure all API routes are properly protected
+# It enforces the use of protectApiRoute() for authentication and prevents security regressions
+
+name: API Security Audit
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "src/app/api/**/*.ts"
+      - "scripts/audit-api-security.js"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "src/app/api/**/*.ts"
+      - "scripts/audit-api-security.js"
+
+jobs:
+  security-audit:
+    name: Check API Route Security
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run Security Audit
+        id: audit
+        run: |
+          echo "🔐 Running API Route Security Audit..."
+          node scripts/audit-api-security.js
+        continue-on-error: true
+
+      - name: Check Audit Result
+        if: steps.audit.outcome == 'failure'
+        run: |
+          echo "❌ Security audit failed!"
+          echo ""
+          echo "One or more API routes are missing proper authentication."
+          echo ""
+          echo "To fix this, add protectApiRoute() to all API route handlers:"
+          echo ""
+          echo '  import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";'
+          echo ""
+          echo '  export async function GET(request: NextRequest) {'
+          echo '    const guard = await protectApiRoute(request);'
+          echo '    if (!guard.success) {'
+          echo '      return createErrorResponse(guard.error!, guard.statusCode!);'
+          echo '    }'
+          echo '    const { user } = guard;'
+          echo '    // ... rest of your handler'
+          echo '  }'
+          echo ""
+          echo "If this is a public endpoint (like auth/signin), add it to EXCLUDED_ROUTES"
+          echo "in scripts/audit-api-security.js"
+          exit 1
+
+      - name: Security Check Passed
+        if: steps.audit.outcome == 'success'
+        run: |
+          echo "✅ All API routes are properly secured!"

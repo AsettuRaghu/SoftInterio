@@ -524,20 +524,29 @@ export async function signInWithEmail(email: string, password: string) {
 
 /**
  * Sign out current user
+ *
+ * Best Practices:
+ * - Invalidates Supabase session
+ * - Uses centralized logging
+ * - Properly propagates errors for upstream handling
  */
 export async function signOut() {
-  console.log("[AUTH SERVICE] signOut called");
+  const { authLogger } = await import("@/lib/logger");
+
+  authLogger.debug("Sign out initiated", { action: "SIGNOUT" });
+
   const supabase = await createClient();
 
-  console.log("[AUTH SERVICE] Calling Supabase signOut...");
+  authLogger.debug("Calling Supabase signOut", { action: "SIGNOUT" });
+
   const { error } = await supabase.auth.signOut();
 
   if (error) {
-    console.error("[AUTH SERVICE] Error signing out:", error);
+    authLogger.error("Supabase signOut failed", error, { action: "SIGNOUT" });
     throw new Error(error.message);
   }
 
-  console.log("[AUTH SERVICE] signOut completed successfully");
+  authLogger.info("Sign out completed successfully", { action: "SIGNOUT" });
 }
 
 /**

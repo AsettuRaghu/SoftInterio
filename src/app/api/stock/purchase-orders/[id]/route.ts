@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 // GET /api/stock/purchase-orders/[id] - Get a single purchase order with items
 export async function GET(
@@ -7,15 +8,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     // Get user's tenant_id
     const { data: userData } = await supabase
@@ -76,15 +77,15 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     // Get user's tenant_id
     const { data: userData } = await supabase

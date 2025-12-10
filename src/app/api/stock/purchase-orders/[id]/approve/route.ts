@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 // POST /api/stock/purchase-orders/[id]/approve - DEPRECATED
 // This endpoint is no longer used in the simplified status workflow
@@ -8,6 +9,12 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Protect API route (even deprecated routes should be authenticated)
+  const guard = await protectApiRoute(request);
+  if (!guard.success) {
+    return createErrorResponse(guard.error!, guard.statusCode!);
+  }
+
   return NextResponse.json(
     {
       error:

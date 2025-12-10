@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 // GET /api/stock/overview - Get stock overview stats
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
     }
+
+    const { user } = guard;
+    const supabase = await createClient();
 
     // Get total stockable items count
     const { count: totalItems } = await supabase

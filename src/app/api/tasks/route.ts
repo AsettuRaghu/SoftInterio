@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import type { TaskFilters, CreateTaskInput } from "@/types/tasks";
 
 // GET /api/tasks - List tasks with filters
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Protect API route with user status check
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
     }
+
+    const { user } = guard;
+    const supabase = await createClient();
 
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams;
@@ -62,7 +63,7 @@ export async function GET(request: NextRequest) {
       if (assignedTo === "unassigned") {
         query = query.is("assigned_to", null);
       } else if (assignedTo === "me") {
-        query = query.eq("assigned_to", user.id);
+        query = query.eq("assigned_to", user!.id);
       } else {
         query = query.eq("assigned_to", assignedTo);
       }
@@ -320,14 +321,17 @@ export async function GET(request: NextRequest) {
 // POST /api/tasks - Create a new task
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Protect API route with user status check
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["tasks.create"],
+      requireAllPermissions: false, // Super admin also gets access
+    });
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
     }
+
+    const { user } = guard;
+    const supabase = await createClient();
 
     const body: CreateTaskInput = await request.json();
 
@@ -339,25 +343,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get user's tenant
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.tenant_id) {
-      return NextResponse.json(
-        { error: "User tenant not found" },
-        { status: 404 }
-      );
-    }
-
-    // Create task
+    // Create task using the user's tenant from guard
     const { data: task, error: createError } = await supabase
       .from("tasks")
       .insert({
-        tenant_id: userData.tenant_id,
+        tenant_id: user!.tenantId,
         title: body.title.trim(),
         description: body.description?.trim() || null,
         priority: body.priority || null,
@@ -369,8 +359,8 @@ export async function POST(request: NextRequest) {
         assigned_to: body.assigned_to || null,
         related_type: body.related_type || null,
         related_id: body.related_id || null,
-        created_by: user.id,
-        updated_by: user.id,
+        created_by: user!.id,
+        updated_by: user!.id,
       })
       .select()
       .single();
@@ -398,7 +388,7 @@ export async function POST(request: NextRequest) {
       const subtasksToInsert = body.subtasks
         .filter((st) => st.title?.trim())
         .map((subtask) => ({
-          tenant_id: userData.tenant_id,
+          tenant_id: user!.tenantId,
           title: subtask.title.trim(),
           description: subtask.description?.trim() || null,
           priority: subtask.priority || null,
@@ -408,8 +398,8 @@ export async function POST(request: NextRequest) {
           due_date: subtask.due_date || null,
           estimated_hours: subtask.estimated_hours || null,
           assigned_to: subtask.assigned_to || null,
-          created_by: user.id,
-          updated_by: user.id,
+          created_by: user!.id,
+          updated_by: user!.id,
         }));
 
       if (subtasksToInsert.length > 0) {
@@ -429,7 +419,7 @@ export async function POST(request: NextRequest) {
       task_id: task.id,
       activity_type: "created",
       description: "Task created",
-      created_by: user.id,
+      created_by: user!.id,
     });
 
     // Fetch full task with details

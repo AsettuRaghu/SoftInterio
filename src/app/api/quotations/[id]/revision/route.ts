@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -8,15 +9,15 @@ interface RouteParams {
 // POST /api/quotations/[id]/revision - Create a new revision of a quotation
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     // Call the database function to create revision
     const { data, error } = await supabase.rpc("create_quotation_revision", {

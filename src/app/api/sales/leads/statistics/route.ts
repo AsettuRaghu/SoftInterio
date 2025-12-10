@@ -1,20 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 // GET /api/sales/leads/statistics - Get lead statistics
 export async function GET(request: NextRequest) {
   console.log("[GET /api/sales/leads/statistics] Starting request");
 
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      console.log("[GET /api/sales/leads/statistics] Unauthorized - no user");
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
     }
+
+    const { user } = guard;
+    const supabase = await createClient();
     console.log(
       "[GET /api/sales/leads/statistics] User authenticated:",
       user.id

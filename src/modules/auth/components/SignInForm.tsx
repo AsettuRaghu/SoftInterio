@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { authLogger } from "@/lib/logger";
 
 export function SignInForm() {
   const [email, setEmail] = useState("");
@@ -34,6 +35,9 @@ export function SignInForm() {
     e.preventDefault();
     setIsLoading(true);
     setError("");
+
+    authLogger.info("Sign in attempt", { action: "SIGNIN", email });
+
     try {
       // Call signin API
       const response = await fetch("/api/auth/signin", {
@@ -53,15 +57,20 @@ export function SignInForm() {
         throw new Error(data.error || "Failed to sign in");
       }
 
+      authLogger.info("Sign in successful, redirecting to dashboard", {
+        action: "SIGNIN",
+      });
+
       // Success! Redirect to dashboard
+      // Keep isLoading true - the component will unmount during redirect
       router.push("/dashboard");
       router.refresh(); // Refresh to update auth state
     } catch (error: any) {
-      console.error("Sign in error:", error);
+      authLogger.error("Sign in failed", error, { action: "SIGNIN", email });
       setError(
         error.message || "Failed to sign in. Please check your credentials."
       );
-    } finally {
+      // Only reset loading on error - not on success (redirect will unmount)
       setIsLoading(false);
     }
   };

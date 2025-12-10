@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -8,15 +9,15 @@ interface RouteParams {
 // GET /api/sales/leads/[id]/notes - Get lead notes
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     const { data: notes, error } = await supabase
       .from("lead_notes")
@@ -51,15 +52,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 // POST /api/sales/leads/[id]/notes - Add a note
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     const { content, is_pinned } = await request.json();
 

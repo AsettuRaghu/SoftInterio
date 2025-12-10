@@ -6,28 +6,22 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 export async function GET(request: NextRequest) {
   console.log("[ROLES API] GET /api/team/roles - Request received");
 
   try {
-    const supabase = await createClient();
-
-    // Get current user
-    const {
-      data: { user: authUser },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !authUser) {
-      console.error("[ROLES API] Not authenticated:", authError);
-      return NextResponse.json(
-        { success: false, error: "Not authenticated" },
-        { status: 401 }
-      );
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
-    console.log("[ROLES API] Auth user ID:", authUser.id);
+    const { user: authUser } = guard;
+    const supabase = await createClient();
+
+    console.log("[ROLES API] Auth user ID:", authUser!.id);
 
     // Get user's tenant - simple query
     const { data: currentUser, error: userError } = await supabase

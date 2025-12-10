@@ -7,29 +7,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 export async function GET(request: NextRequest) {
   console.log("[TEAM API] GET /api/team/members - Request received");
 
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user: authUser } = guard;
     const supabase = await createClient();
     const adminClient = createAdminClient();
 
-    // Get current user
-    const {
-      data: { user: authUser },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !authUser) {
-      console.error("[TEAM API] Not authenticated:", authError);
-      return NextResponse.json(
-        { success: false, error: "Not authenticated" },
-        { status: 401 }
-      );
-    }
-
-    console.log("[TEAM API] Auth user ID:", authUser.id);
+    console.log("[TEAM API] Auth user ID:", authUser!.id);
 
     // Get user's tenant - use admin client to bypass RLS
     const { data: currentUser, error: userError } = await adminClient
@@ -210,6 +204,13 @@ export async function DELETE(request: NextRequest) {
   console.log("[TEAM API] DELETE /api/team/members - Request received");
 
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user: authUser } = guard;
     const supabase = await createClient();
     const adminClient = createAdminClient();
 
@@ -224,22 +225,8 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Get current user
-    const {
-      data: { user: authUser },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !authUser) {
-      console.error("[TEAM API] Not authenticated:", authError);
-      return NextResponse.json(
-        { success: false, error: "Not authenticated" },
-        { status: 401 }
-      );
-    }
-
     // Prevent self-deletion
-    if (authUser.id === memberId) {
+    if (authUser!.id === memberId) {
       return NextResponse.json(
         { success: false, error: "You cannot remove yourself from the team" },
         { status: 403 }

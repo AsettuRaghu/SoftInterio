@@ -10,6 +10,7 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
   const token_hash = requestUrl.searchParams.get("token_hash");
+  const token = requestUrl.searchParams.get("token"); // Also handle plain token
   const type = requestUrl.searchParams.get("type");
   const next = requestUrl.searchParams.get("next") ?? "/dashboard";
   const error = requestUrl.searchParams.get("error");
@@ -18,6 +19,7 @@ export async function GET(request: Request) {
   console.log("[Auth Callback] Received:", {
     code: code ? "present" : "missing",
     token_hash: token_hash ? "present" : "missing",
+    token: token ? "present" : "missing",
     type,
     next,
     error,
@@ -56,10 +58,20 @@ export async function GET(request: Request) {
     console.log("[Auth Callback] Session established for:", data.user?.email);
     console.log("[Auth Callback] User metadata:", data.user?.user_metadata);
 
-    // For invite type, redirect to password setup
-    if (type === "invite" || type === "signup") {
+    // Check if this is an invited user who needs to set password
+    // The invitation_id in metadata indicates this user came from an invite
+    const isInvitedUser = !!data.user?.user_metadata?.invitation_id;
+    const needsPasswordSetup = !data.user?.user_metadata?.password_set;
+
+    // For invite type OR users with invitation_id in metadata, redirect to password setup
+    if (
+      type === "invite" ||
+      type === "signup" ||
+      (isInvitedUser && needsPasswordSetup)
+    ) {
       console.log(
-        "[Auth Callback] Redirecting to setup-password for invite/signup"
+        "[Auth Callback] Redirecting to setup-password for invite/signup. isInvitedUser:",
+        isInvitedUser
       );
       return NextResponse.redirect(
         new URL("/auth/setup-password", requestUrl.origin)
@@ -77,13 +89,14 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL(next, requestUrl.origin));
   }
 
-  // Handle token hash (older flow)
-  if (token_hash) {
-    console.log("[Auth Callback] Verifying token hash...");
+  // Handle token hash (older flow) or plain token
+  if (token_hash || token) {
+    const tokenToUse = token_hash || token;
+    console.log("[Auth Callback] Verifying token...");
     const { data: verifyData, error: verifyError } =
       await supabase.auth.verifyOtp({
-        token_hash,
-        type: (type as any) || "email",
+        token_hash: tokenToUse!,
+        type: (type as any) || "invite",
       });
 
     if (verifyError) {

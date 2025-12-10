@@ -267,6 +267,18 @@ export const navigationConfig: NavigationItem[] = [
     href: "/dashboard/projects",
     icon: Icons.projects,
     permission: "projects.view",
+    subItems: [
+      {
+        name: "All Projects",
+        href: "/dashboard/projects",
+        permission: "projects.view",
+      },
+      {
+        name: "Reports",
+        href: "/dashboard/projects/reports",
+        permission: "projects.reports.view",
+      },
+    ],
   },
   {
     name: "Quotations",

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import type { UpdateTaskInput } from "@/types/tasks";
 
 interface RouteParams {
@@ -9,15 +10,15 @@ interface RouteParams {
 // GET /api/tasks/[id] - Get single task with all related data
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     // Get task with user joins
     const { data: rawTask, error: taskError } = await supabase
@@ -219,15 +220,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 // PATCH /api/tasks/[id] - Update task
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     const body: UpdateTaskInput = await request.json();
 
@@ -323,15 +324,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 // DELETE /api/tasks/[id] - Delete task
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     // Check task exists
     const { data: existingTask, error: fetchError } = await supabase

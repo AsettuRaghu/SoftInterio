@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 export async function PUT(
   request: NextRequest,
@@ -16,22 +17,15 @@ export async function PUT(
   console.log("[MEMBER ROLES API] PUT - Updating roles for member:", memberId);
 
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user: authUser } = guard;
     const supabase = await createClient();
     const adminSupabase = createAdminClient();
-
-    // Get current user
-    const {
-      data: { user: authUser },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !authUser) {
-      console.error("[MEMBER ROLES API] Not authenticated:", authError);
-      return NextResponse.json(
-        { success: false, error: "Not authenticated" },
-        { status: 401 }
-      );
-    }
 
     // Get current user's details (use admin client to bypass RLS)
     const { data: currentUser, error: currentUserError } = await adminSupabase

@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import type { VendorFilters, CreateVendorInput } from "@/types/stock";
 
 // GET /api/stock/vendors - List vendors with filters
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
     }
+
+    const { user } = guard;
+    const supabase = await createClient();
 
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams;
@@ -94,14 +95,14 @@ export async function GET(request: NextRequest) {
 // POST /api/stock/vendors - Create a new vendor
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
     }
+
+    const { user } = guard;
+    const supabase = await createClient();
 
     const body: CreateVendorInput = await request.json();
 

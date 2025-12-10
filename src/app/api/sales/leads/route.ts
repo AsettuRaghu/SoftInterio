@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import type { CreateLeadInput, LeadStage } from "@/types/leads";
 
 // GET /api/sales/leads - List leads with filters
@@ -8,16 +9,15 @@ export async function GET(request: NextRequest) {
   console.log("[GET /api/sales/leads] Starting request");
 
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      console.log("[GET /api/sales/leads] Unauthorized - no user");
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
     }
-    console.log("[GET /api/sales/leads] User authenticated:", user.id);
+
+    const { user } = guard;
+    const supabase = await createClient();
+    console.log("[GET /api/sales/leads] User authenticated:", user!.id);
 
     // Get user's tenant
     const { data: userData, error: userError } = await supabase
@@ -195,16 +195,16 @@ export async function POST(request: NextRequest) {
   console.log("[POST /api/sales/leads] Starting request");
 
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      console.log("[POST /api/sales/leads] Unauthorized - no user");
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
     }
-    console.log("[POST /api/sales/leads] User authenticated:", user.id);
+
+    const { user } = guard;
+    console.log("[POST /api/sales/leads] User authenticated:", user!.id);
+
+    const supabase = await createClient();
 
     // Get user's tenant
     const { data: userData, error: userError } = await supabase

@@ -399,6 +399,8 @@ export interface StageTransitionInput {
   won_amount?: number;
   contract_signed_date?: string;
   expected_project_start?: string;
+  won_notes?: string;
+  skip_project_creation?: boolean;
 
   // General
   change_reason?: string;

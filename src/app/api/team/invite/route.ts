@@ -1,6 +1,6 @@
 /**
  * Team Invite API Route
- * POST /api/team/invite - Send invitation to a new team member
+ * POST /api/team/invite - Create a new team member with password (direct creation)
  * GET /api/team/invite - Get all invitations for the current tenant
  * PATCH /api/team/invite - Resend an invitation
  * DELETE /api/team/invite - Cancel an invitation
@@ -9,26 +9,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
   console.log("[INVITE API] POST /api/team/invite");
 
   try {
-    const supabase = await createClient();
-
-    const {
-      data: { user: authUser },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !authUser) {
-      return NextResponse.json(
-        { success: false, error: "Not authenticated" },
-        { status: 401 }
-      );
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
+    const { user: authUser } = guard;
+    const supabase = await createClient();
+
+    // Get current user's details
     const { data: currentUser, error: userError } = await supabase
       .from("users")
       .select("id, tenant_id, is_super_admin")
@@ -42,6 +39,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check permissions - must be super admin or have hierarchy_level <= 1
     if (!currentUser.is_super_admin) {
       const { data: userRoles } = await supabase
         .from("user_roles")
@@ -63,65 +61,93 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Parse request body
     const body = await request.json();
-    const roleIds = body.roleIds || (body.roleId ? [body.roleId] : []);
+    const { email, firstName, lastName, roleIds, designation, password } = body;
 
-    if (
-      !body.email ||
-      !body.firstName ||
-      !body.lastName ||
-      roleIds.length === 0
-    ) {
+    console.log("[INVITE API] Request data:", {
+      email,
+      firstName,
+      lastName,
+      roleIds,
+      designation,
+      hasPassword: !!password,
+    });
+
+    // Validate required fields
+    if (!email || !firstName || !lastName) {
       return NextResponse.json(
-        { success: false, error: "Missing required fields" },
+        {
+          success: false,
+          error: "Email, first name, and last name are required",
+        },
         { status: 400 }
       );
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(body.email)) {
+    if (!roleIds || roleIds.length === 0) {
       return NextResponse.json(
-        { success: false, error: "Invalid email format" },
+        { success: false, error: "At least one role is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!password || password.length < 8) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Password is required (minimum 8 characters)",
+        },
         { status: 400 }
       );
     }
 
     const adminClient = createAdminClient();
-    const email = body.email.toLowerCase();
 
-    const { data: existingUser } = await adminClient
-      .from("users")
-      .select("id, email, status")
-      .eq("tenant_id", currentUser.tenant_id)
-      .ilike("email", email)
-      .single();
-
-    if (existingUser) {
-      const msg =
-        existingUser.status === "invited"
-          ? "This user has already been invited and is pending"
-          : "A user with this email already exists in your organization";
-      return NextResponse.json({ success: false, error: msg }, { status: 409 });
-    }
-
+    // Check for existing invitation or user
     const { data: existingInvite } = await adminClient
       .from("user_invitations")
-      .select("id")
+      .select("id, status")
+      .eq("email", email.toLowerCase())
       .eq("tenant_id", currentUser.tenant_id)
-      .ilike("email", email)
-      .eq("status", "pending")
-      .single();
+      .in("status", ["pending", "accepted"])
+      .maybeSingle();
 
     if (existingInvite) {
+      if (existingInvite.status === "accepted") {
+        return NextResponse.json(
+          { success: false, error: "This user is already a team member" },
+          { status: 400 }
+        );
+      }
       return NextResponse.json(
         {
           success: false,
-          error: "An invitation has already been sent to this email",
+          error: "An invitation is already pending for this email",
         },
-        { status: 409 }
+        { status: 400 }
       );
     }
 
+    // Check if user already exists in users table for this tenant
+    const { data: existingUser } = await adminClient
+      .from("users")
+      .select("id, email")
+      .eq("email", email.toLowerCase())
+      .eq("tenant_id", currentUser.tenant_id)
+      .maybeSingle();
+
+    if (existingUser) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "This email is already registered in your organization",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Create invitation record first
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
@@ -129,17 +155,17 @@ export async function POST(request: NextRequest) {
     const { data: invitation, error: inviteError } = await adminClient
       .from("user_invitations")
       .insert({
+        email: email.toLowerCase(),
         tenant_id: currentUser.tenant_id,
-        email: email,
-        invited_by_user_id: authUser.id,
         role_id: roleIds[0],
-        token: token,
+        token,
         status: "pending",
         expires_at: expiresAt.toISOString(),
+        invited_by_user_id: authUser.id,
         metadata: {
-          first_name: body.firstName,
-          last_name: body.lastName,
-          designation: body.designation || null,
+          first_name: firstName,
+          last_name: lastName,
+          designation: designation || null,
           role_ids: roleIds,
         },
       })
@@ -149,144 +175,284 @@ export async function POST(request: NextRequest) {
     if (inviteError) {
       console.error("[INVITE API] Failed to create invitation:", inviteError);
       return NextResponse.json(
-        { success: false, error: "Failed to create invitation" },
+        { success: false, error: "Failed to create invitation record" },
         { status: 500 }
       );
     }
 
-    const { data: rolesData } = await adminClient
-      .from("roles")
-      .select("id, name")
-      .in("id", roleIds);
-    const roleNames = rolesData?.map((r) => r.name) || [];
+    console.log("[INVITE API] Created invitation:", invitation.id);
 
+    // Check if user exists in Supabase Auth
     const { data: authUsers } = await adminClient.auth.admin.listUsers();
-    const existingAuthUser = authUsers?.users?.find(
-      (u) => u.email?.toLowerCase() === email
+    let existingAuthUser = authUsers?.users?.find(
+      (u) => u.email?.toLowerCase() === email.toLowerCase()
     );
 
-    if (existingAuthUser && !existingAuthUser.email_confirmed_at) {
-      console.log("[INVITE API] Deleting unconfirmed auth user to re-invite");
-      await adminClient.auth.admin.deleteUser(existingAuthUser.id);
-      await adminClient
-        .from("user_roles")
-        .delete()
-        .eq("user_id", existingAuthUser.id);
-      await adminClient.from("users").delete().eq("id", existingAuthUser.id);
-    }
+    let userId: string;
 
-    if (existingAuthUser?.email_confirmed_at) {
-      console.log("[INVITE API] User has existing account, sending magic link");
+    if (existingAuthUser) {
+      // User exists in auth - update their password
+      console.log(
+        "[INVITE API] Updating existing auth user:",
+        existingAuthUser.id
+      );
 
-      const acceptUrl =
-        process.env.NEXT_PUBLIC_APP_URL +
-        "/auth/accept-invite?token=" +
-        token +
-        "&email=" +
-        encodeURIComponent(email);
+      const { data: updatedUser, error: updateError } =
+        await adminClient.auth.admin.updateUserById(existingAuthUser.id, {
+          password: password,
+          email_confirm: true,
+          user_metadata: {
+            first_name: firstName,
+            last_name: lastName,
+            full_name: `${firstName} ${lastName}`.trim(),
+            designation: designation || null,
+            tenant_id: currentUser.tenant_id,
+            invitation_id: invitation.id,
+            role_ids: roleIds,
+          },
+        });
 
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        email: email,
-        options: {
-          emailRedirectTo: acceptUrl,
-          shouldCreateUser: false,
-        },
-      });
-
-      if (otpError) {
-        console.error("[INVITE API] Magic link error:", otpError);
+      if (updateError) {
+        console.error("[INVITE API] Failed to update auth user:", updateError);
+        // Rollback invitation
+        await adminClient
+          .from("user_invitations")
+          .delete()
+          .eq("id", invitation.id);
         return NextResponse.json(
-          { success: false, error: "Failed to send invitation email" },
+          {
+            success: false,
+            error: `Failed to update user: ${updateError.message}`,
+          },
           { status: 500 }
         );
       }
 
-      return NextResponse.json({
-        success: true,
-        message:
-          "Invitation sent! They'll receive an email to join your organization.",
-        data: {
-          invitation: { id: invitation.id, email, roles: roleNames },
-          isExistingUser: true,
-        },
-      });
-    }
+      userId = existingAuthUser.id;
+    } else {
+      // Create new auth user with password
+      console.log("[INVITE API] Creating new auth user with password");
 
-    const redirectUrl =
-      process.env.NEXT_PUBLIC_APP_URL +
-      "/auth/callback?type=invite&next=/auth/setup-password";
-
-    const { data: authInvite, error: authError2 } =
-      await adminClient.auth.admin.inviteUserByEmail(email, {
-        redirectTo: redirectUrl,
-        data: {
-          first_name: body.firstName,
-          last_name: body.lastName,
-          full_name: body.firstName + " " + body.lastName,
-          designation: body.designation || null,
-          tenant_id: currentUser.tenant_id,
-          invitation_id: invitation.id,
-          role_ids: roleIds,
-        },
-      });
-
-    if (authError2) {
-      console.error("[INVITE API] Auth invite error:", authError2);
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Failed to send invitation email: " + authError2.message,
-        },
-        { status: 500 }
-      );
-    }
-
-    if (authInvite?.user?.id) {
-      const userId = authInvite.user.id;
-
-      await adminClient.from("users").insert({
-        id: userId,
-        email: email,
-        name: (body.firstName + " " + body.lastName).trim(),
-        tenant_id: currentUser.tenant_id,
-        status: "invited",
-      });
-
-      // Insert tenant_users record (ignore errors if it already exists)
-      try {
-        await adminClient.from("tenant_users").insert({
-          user_id: userId,
-          tenant_id: currentUser.tenant_id,
-          role_id: roleIds[0],
-          is_active: true,
-          is_primary_tenant: true,
-          invited_by: authUser.id,
+      const { data: newAuthUser, error: createAuthError } =
+        await adminClient.auth.admin.createUser({
+          email: email.toLowerCase(),
+          password: password,
+          email_confirm: true, // Skip email verification
+          user_metadata: {
+            first_name: firstName,
+            last_name: lastName,
+            full_name: `${firstName} ${lastName}`.trim(),
+            designation: designation || null,
+            tenant_id: currentUser.tenant_id,
+            invitation_id: invitation.id,
+            role_ids: roleIds,
+          },
         });
-      } catch {
-        // Ignore - might already exist
+
+      if (createAuthError || !newAuthUser?.user) {
+        console.error(
+          "[INVITE API] Failed to create auth user:",
+          createAuthError
+        );
+        // Rollback invitation
+        await adminClient
+          .from("user_invitations")
+          .delete()
+          .eq("id", invitation.id);
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Failed to create user: ${
+              createAuthError?.message || "Unknown error"
+            }`,
+          },
+          { status: 500 }
+        );
       }
 
-      const roleInserts = roleIds.map((roleId: string) => ({
-        user_id: userId,
-        role_id: roleId,
-      }));
-      await adminClient.from("user_roles").insert(roleInserts);
+      userId = newAuthUser.user.id;
+      console.log("[INVITE API] Created auth user:", userId);
     }
 
-    console.log("[INVITE API] Invitation sent successfully to:", email);
+    // Create or update user record in users table
+    const { data: userRecord, error: userRecordError } = await adminClient
+      .from("users")
+      .upsert(
+        {
+          id: userId,
+          email: email.toLowerCase(),
+          name: `${firstName} ${lastName}`.trim(),
+          tenant_id: currentUser.tenant_id,
+          status: "active",
+          is_super_admin: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" }
+      )
+      .select()
+      .single();
+
+    if (userRecordError) {
+      console.error(
+        "[INVITE API] Failed to create user record:",
+        userRecordError
+      );
+      // This is critical - if user record fails, the user won't be able to login
+      // Try a direct insert as fallback
+      const { error: insertError } = await adminClient.from("users").insert({
+        id: userId,
+        email: email.toLowerCase(),
+        name: `${firstName} ${lastName}`.trim(),
+        tenant_id: currentUser.tenant_id,
+        status: "active",
+        is_super_admin: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+      if (insertError) {
+        console.error(
+          "[INVITE API] Failed to insert user record:",
+          insertError
+        );
+        // Rollback: delete auth user and invitation
+        await adminClient.auth.admin.deleteUser(userId);
+        await adminClient
+          .from("user_invitations")
+          .delete()
+          .eq("id", invitation.id);
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Failed to create user profile: ${insertError.message}`,
+          },
+          { status: 500 }
+        );
+      }
+    }
+
+    console.log(
+      "[INVITE API] User record created/updated:",
+      userRecord || "via fallback insert"
+    );
+
+    // Create tenant_users record
+    const { data: tenantUserRecord, error: tenantUserError } = await adminClient
+      .from("tenant_users")
+      .upsert(
+        {
+          tenant_id: currentUser.tenant_id,
+          user_id: userId,
+          is_active: true,
+          joined_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,tenant_id" }
+      )
+      .select()
+      .single();
+
+    if (tenantUserError) {
+      console.error(
+        "[INVITE API] Failed to create tenant_users record:",
+        tenantUserError
+      );
+      // Try direct insert as fallback
+      const { error: insertTenantError } = await adminClient
+        .from("tenant_users")
+        .insert({
+          tenant_id: currentUser.tenant_id,
+          user_id: userId,
+          is_active: true,
+          joined_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+      if (insertTenantError) {
+        console.error(
+          "[INVITE API] Failed to insert tenant_users record:",
+          insertTenantError
+        );
+      }
+    }
+
+    console.log(
+      "[INVITE API] tenant_users record created:",
+      tenantUserRecord || "via fallback"
+    );
+
+    // Create user_roles records
+    for (const roleId of roleIds) {
+      const { error: roleError } = await adminClient.from("user_roles").upsert(
+        {
+          user_id: userId,
+          role_id: roleId,
+          assigned_at: new Date().toISOString(),
+          assigned_by_user_id: authUser.id,
+        },
+        { onConflict: "user_id,role_id" }
+      );
+
+      if (roleError) {
+        console.error("[INVITE API] Failed to assign role:", roleId, roleError);
+        // Try direct insert
+        await adminClient.from("user_roles").insert({
+          user_id: userId,
+          role_id: roleId,
+          assigned_at: new Date().toISOString(),
+          assigned_by_user_id: authUser.id,
+        });
+      } else {
+        console.log("[INVITE API] Role assigned:", roleId);
+      }
+    }
+
+    // Update invitation to accepted
+    await adminClient
+      .from("user_invitations")
+      .update({
+        status: "accepted",
+        accepted_at: new Date().toISOString(),
+      })
+      .eq("id", invitation.id);
+
+    console.log("[INVITE API] User created successfully:", userId);
+
+    // Return success with credentials
+    const loginUrl = `${
+      process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+    }/auth/signin`;
+
+    // Create share message for easy sharing
+    const shareMessage = `Welcome to the team!\n\nYour login credentials:\nEmail: ${email.toLowerCase()}\nPassword: ${password}\n\nLogin here: ${loginUrl}\n\nPlease change your password after first login.`;
 
     return NextResponse.json({
       success: true,
-      message:
-        "Invitation sent! They'll receive an email to set up their password.",
+      message: "Team member created successfully",
       data: {
-        invitation: { id: invitation.id, email, roles: roleNames },
+        id: invitation.id,
+        userId,
+        email: email.toLowerCase(),
+        name: `${firstName} ${lastName}`.trim(),
+        isExistingUser: !!existingAuthUser,
+        credentials: {
+          email: email.toLowerCase(),
+          password: password,
+          loginUrl,
+        },
+        shareMessage,
       },
     });
   } catch (error: any) {
-    console.error("[INVITE API] Error:", error);
+    console.error("[INVITE API] Unexpected error:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to send invitation" },
+      {
+        success: false,
+        error: error.message || "An unexpected error occurred",
+      },
       { status: 500 }
     );
   }
@@ -294,18 +460,14 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-
-    const {
-      data: { user: authUser },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !authUser) {
-      return NextResponse.json(
-        { success: false, error: "Not authenticated" },
-        { status: 401 }
-      );
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
     }
+
+    const { user: authUser } = guard;
+    const supabase = await createClient();
 
     const { data: currentUser } = await supabase
       .from("users")
@@ -346,18 +508,14 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = await createClient();
-
-    const {
-      data: { user: authUser },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !authUser) {
-      return NextResponse.json(
-        { success: false, error: "Not authenticated" },
-        { status: 401 }
-      );
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
     }
+
+    const { user: authUser } = guard;
+    const supabase = await createClient();
 
     const { data: currentUser } = await supabase
       .from("users")
@@ -462,18 +620,14 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient();
-
-    const {
-      data: { user: authUser },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !authUser) {
-      return NextResponse.json(
-        { success: false, error: "Not authenticated" },
-        { status: 401 }
-      );
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
     }
+
+    const { user: authUser } = guard;
+    const supabase = await createClient();
 
     const { data: currentUser } = await supabase
       .from("users")

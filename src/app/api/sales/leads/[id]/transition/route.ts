@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import type { StageTransitionInput, LeadStage } from "@/types/leads";
 import {
   isValidStageTransition,
@@ -13,15 +14,15 @@ interface RouteParams {
 // POST /api/sales/leads/[id]/transition - Change lead stage
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     const body: StageTransitionInput = await request.json();
     const { to_stage } = body;
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Check permission for Won transition
     if (to_stage === "won") {
       const { data: permissionData, error: permissionError } =
-        await supabase.rpc("can_move_lead_to_won", { user_uuid: user.id });
+        await supabase.rpc("can_move_lead_to_won", { p_user_id: user.id });
 
       if (permissionError) {
         console.error("Error checking won permission:", permissionError);
@@ -258,7 +259,82 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       created_by: user.id,
     });
 
-    return NextResponse.json({ lead: updatedLead });
+    // Auto-create project when lead is marked as Won
+    let projectId: string | null = null;
+    if (to_stage === "won") {
+      try {
+        // Check tenant setting for auto-project creation
+        // Default to true if setting doesn't exist
+        let shouldCreateProject = true;
+
+        try {
+          const { data: tenantSetting } = await supabase
+            .from("tenant_settings")
+            .select("auto_create_project_on_won")
+            .eq("tenant_id", lead.tenant_id)
+            .single();
+
+          if (
+            tenantSetting &&
+            tenantSetting.auto_create_project_on_won === false
+          ) {
+            shouldCreateProject = false;
+          }
+        } catch (settingErr) {
+          // If column doesn't exist or query fails, default to creating project
+          console.log(
+            "Tenant settings query failed, defaulting to create project:",
+            settingErr
+          );
+        }
+
+        console.log(
+          "Should create project:",
+          shouldCreateProject,
+          "Skip flag:",
+          body.skip_project_creation
+        );
+
+        if (shouldCreateProject && !body.skip_project_creation) {
+          // Determine project category from service_type
+          const projectCategory =
+            lead.service_type === "modular" ? "modular" : "turnkey";
+
+          console.log(
+            "Creating project with category:",
+            projectCategory,
+            "for lead:",
+            id
+          );
+
+          // Call the function to create project from lead
+          const { data: createdProjectId, error: projectError } =
+            await supabase.rpc("create_project_from_lead", {
+              p_lead_id: id,
+              p_created_by: user.id,
+              p_project_category: projectCategory,
+              p_initialize_phases: true,
+            });
+
+          if (projectError) {
+            console.error("Error creating project from lead:", projectError);
+            // Don't fail the transition, just log the error
+          } else {
+            console.log("Project created successfully:", createdProjectId);
+            projectId = createdProjectId;
+          }
+        }
+      } catch (projectErr) {
+        console.error("Error in project creation flow:", projectErr);
+        // Don't fail the transition
+      }
+    }
+
+    return NextResponse.json({
+      lead: updatedLead,
+      project_id: projectId,
+      project_created: projectId !== null,
+    });
   } catch (error) {
     console.error("Stage transition API error:", error);
     return NextResponse.json(

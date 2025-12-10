@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import type { CreateBrandInput, UpdateBrandInput } from "@/types/stock";
 
 // GET /api/stock/brands - List brands with filters
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
     }
+
+    const { user } = guard;
+    const supabase = await createClient();
 
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams;
@@ -94,14 +95,14 @@ export async function GET(request: NextRequest) {
 // POST /api/stock/brands - Create a new brand
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
     }
+
+    const { user } = guard;
+    const supabase = await createClient();
 
     // Get user's tenant
     const { data: userData } = await supabase
@@ -194,14 +195,14 @@ export async function POST(request: NextRequest) {
 // PUT /api/stock/brands - Update a brand
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
     }
+
+    const { user } = guard;
+    const supabase = await createClient();
 
     const searchParams = request.nextUrl.searchParams;
     const brandId = searchParams.get("id");
@@ -263,14 +264,14 @@ export async function PUT(request: NextRequest) {
 // DELETE /api/stock/brands - Delete a brand
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
     }
+
+    const { user } = guard;
+    const supabase = await createClient();
 
     const searchParams = request.nextUrl.searchParams;
     const brandId = searchParams.get("id");

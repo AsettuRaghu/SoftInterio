@@ -2,14 +2,46 @@
  * Sign In API Route
  * POST /api/auth/signin
  * Authenticates user with email and password
+ *
+ * Security features:
+ * - Rate limiting (10 attempts per 15 minutes)
+ * - Deactivation check in signInWithEmail
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { signInWithEmail } from "@/lib/auth/service";
+import { isAuthRateLimited, getRateLimitInfo } from "@/lib/auth/api-guard";
 import type { SignInData } from "@/types/database.types";
 
 export async function POST(request: NextRequest) {
   try {
+    // Get client IP for rate limiting
+    const clientIp =
+      request.headers.get("x-forwarded-for")?.split(",")[0] ||
+      request.headers.get("x-real-ip") ||
+      "unknown";
+
+    // Check rate limit
+    if (isAuthRateLimited(clientIp)) {
+      const rateLimitInfo = getRateLimitInfo(`auth:${clientIp}`, 10);
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Too many login attempts. Please try again later.",
+          retryAfter: Math.ceil((rateLimitInfo.resetAt - Date.now()) / 1000),
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(
+              Math.ceil((rateLimitInfo.resetAt - Date.now()) / 1000)
+            ),
+            "X-RateLimit-Remaining": String(rateLimitInfo.remaining),
+          },
+        }
+      );
+    }
+
     const body: SignInData = await request.json();
 
     // Validate required fields
@@ -20,7 +52,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Authenticate user
+    // Authenticate user (includes deactivation check)
     const { user, session } = await signInWithEmail(body.email, body.password);
 
     if (!user || !session) {

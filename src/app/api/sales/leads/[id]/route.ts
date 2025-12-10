@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import type { UpdateLeadInput } from "@/types/leads";
 
 interface RouteParams {
@@ -10,15 +11,15 @@ interface RouteParams {
 // GET /api/sales/leads/[id] - Get single lead with all related data
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     // Use admin client for fetching leads with user data (bypasses RLS for foreign key joins)
     const supabaseAdmin = createAdminClient();
@@ -157,15 +158,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 // PATCH /api/sales/leads/[id] - Update lead
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     const body: UpdateLeadInput = await request.json();
 
@@ -331,15 +332,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 // DELETE /api/sales/leads/[id] - Delete lead (soft delete or hard delete based on business rules)
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     // TODO: Check user has delete permission
 

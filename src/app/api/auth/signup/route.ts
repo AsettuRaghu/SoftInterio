@@ -2,6 +2,10 @@
  * Sign Up API Route
  * POST /api/auth/signup
  * Creates new tenant and user account
+ *
+ * Security features:
+ * - Rate limiting (10 attempts per 15 minutes)
+ * - Password strength validation
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -12,12 +16,37 @@ import {
   checkExistingUser,
   registerExistingUserToNewTenant,
 } from "@/lib/auth/service";
+import { isAuthRateLimited, getRateLimitInfo } from "@/lib/auth/api-guard";
+import {
+  validatePassword,
+  DEFAULT_PASSWORD_POLICY,
+  getPasswordRequirements,
+} from "@/lib/auth/password-validation";
 import type { SignUpData } from "@/types/database.types";
 
 export async function POST(request: NextRequest) {
   console.log("[SIGNUP API] POST /api/auth/signup - Request received");
 
   try {
+    // Get client IP for rate limiting
+    const clientIp =
+      request.headers.get("x-forwarded-for")?.split(",")[0] ||
+      request.headers.get("x-real-ip") ||
+      "unknown";
+
+    // Check rate limit
+    if (isAuthRateLimited(clientIp)) {
+      const rateLimitInfo = getRateLimitInfo(`auth:${clientIp}`, 10);
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Too many signup attempts. Please try again later.",
+          retryAfter: Math.ceil((rateLimitInfo.resetAt - Date.now()) / 1000),
+        },
+        { status: 429 }
+      );
+    }
+
     const body: SignUpData = await request.json();
     console.log("[SIGNUP API] Request body parsed:", {
       email: body.email,
@@ -52,12 +81,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate password strength (min 8 characters)
-    if (body.password.length < 8) {
+    // Validate password strength using new password validation
+    const passwordValidation = validatePassword(
+      body.password,
+      DEFAULT_PASSWORD_POLICY,
+      { email: body.email, name: body.name }
+    );
+
+    if (!passwordValidation.isValid) {
       return NextResponse.json(
         {
           success: false,
-          error: "Password must be at least 8 characters long",
+          error:
+            passwordValidation.errors[0]?.message ||
+            "Password does not meet requirements",
+          passwordErrors: passwordValidation.errors,
+          passwordRequirements: getPasswordRequirements(
+            DEFAULT_PASSWORD_POLICY
+          ),
         },
         { status: 400 }
       );
@@ -73,19 +114,24 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            error: "An account with this email already exists and is active. Please sign in to your existing account first.",
+            error:
+              "An account with this email already exists and is active. Please sign in to your existing account first.",
           },
           { status: 409 }
         );
       }
 
       // Disabled user - allow them to create a new company
-      console.log("[SIGNUP API] Existing disabled user, creating new company...");
-      
+      console.log(
+        "[SIGNUP API] Existing disabled user, creating new company..."
+      );
+
       // Create tenant with company email (not user email to avoid unique constraint)
       // Use company name-based email or generate unique one
-      const tenantEmail = `${body.company_name.toLowerCase().replace(/[^a-z0-9]/g, '')}-${Date.now()}@company.internal`;
-      
+      const tenantEmail = `${body.company_name
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "")}-${Date.now()}@company.internal`;
+
       const tenant = await createTenant({
         tenant_type: body.tenant_type,
         company_name: body.company_name,
@@ -106,7 +152,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: true,
-          message: "Your new company has been created! We've sent you an email to set up your password. Please check your inbox and click the link to complete the setup.",
+          message:
+            "Your new company has been created! We've sent you an email to set up your password. Please check your inbox and click the link to complete the setup.",
           data: {
             tenant: {
               id: tenant.id,
@@ -149,7 +196,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        message: "Account created successfully. Please check your email to verify your account.",
+        message:
+          "Account created successfully. Please check your email to verify your account.",
         data: {
           tenant: {
             id: tenant.id,

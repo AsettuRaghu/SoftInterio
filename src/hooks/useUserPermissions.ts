@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { authLogger } from "@/lib/logger";
+import type { PermissionKey, RoleSlug } from "@/types/roles-permissions";
 
 interface UserPermissionsState {
   permissions: string[];
@@ -12,244 +14,286 @@ interface UserPermissionsState {
 }
 
 interface UseUserPermissionsReturn extends UserPermissionsState {
-  hasPermission: (permission: string) => boolean;
-  hasAnyPermission: (permissions: string[]) => boolean;
-  hasAllPermissions: (permissions: string[]) => boolean;
+  hasPermission: (permission: PermissionKey | string) => boolean;
+  hasAnyPermission: (permissions: (PermissionKey | string)[]) => boolean;
+  hasAllPermissions: (permissions: (PermissionKey | string)[]) => boolean;
+  hasRole: (role: RoleSlug | string) => boolean;
+  hasAnyRole: (roles: (RoleSlug | string)[]) => boolean;
   isOwner: boolean;
   isAdmin: boolean;
   isAdminOrHigher: boolean;
+  isManager: boolean;
   refetch: () => Promise<void>;
 }
 
+// Global state to share across all hook instances - prevents duplicate fetches
+let globalState: UserPermissionsState = {
+  permissions: [],
+  roles: [],
+  hierarchyLevel: 999,
+  isLoading: true,
+  error: null,
+};
+let globalFetchPromise: Promise<void> | null = null;
+let hasFetched = false;
+let subscribers: Set<() => void> = new Set();
+
+function notifySubscribers() {
+  subscribers.forEach((callback) => callback());
+}
+
 export function useUserPermissions(): UseUserPermissionsReturn {
-  const [state, setState] = useState<UserPermissionsState>({
-    permissions: [],
-    roles: [],
-    hierarchyLevel: 999,
-    isLoading: true,
-    error: null,
-  });
+  const [, forceUpdate] = useState({});
+
+  // Subscribe to global state changes
+  useEffect(() => {
+    const callback = () => forceUpdate({});
+    subscribers.add(callback);
+    return () => {
+      subscribers.delete(callback);
+    };
+  }, []);
 
   const supabase = createClient();
 
   const fetchPermissions = useCallback(async () => {
-    console.log("[useUserPermissions] Starting to fetch permissions...");
+    // Return existing promise if already fetching
+    if (globalFetchPromise) {
+      return globalFetchPromise;
+    }
 
-    try {
-      setState((prev) => ({ ...prev, isLoading: true, error: null }));
+    globalFetchPromise = (async () => {
+      try {
+        globalState = { ...globalState, isLoading: true, error: null };
+        notifySubscribers();
 
-      // Get current user
-      console.log("[useUserPermissions] Getting current user...");
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+        authLogger.info("Fetching user permissions", { action: "FETCH_PERMISSIONS" });
 
-      if (userError) {
-        console.error("[useUserPermissions] Auth error:", userError);
-      }
+        // Get current user
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
 
-      if (!user) {
-        console.log("[useUserPermissions] No user found - not authenticated");
-        setState({
-          permissions: [],
-          roles: [],
-          hierarchyLevel: 999,
-          isLoading: false,
-          error: userError?.message || "Not authenticated",
-        });
-        return;
-      }
-
-      console.log("[useUserPermissions] Current user ID:", user.id);
-      console.log("[useUserPermissions] Current user email:", user.email);
-
-      // Fetch user's roles with hierarchy
-      console.log("[useUserPermissions] Fetching user roles...");
-      const { data: userRolesData, error: rolesError } = await supabase
-        .from("user_roles")
-        .select(
-          `
-          role_id,
-          roles (
-            id,
-            slug,
-            name,
-            hierarchy_level
-          )
-        `
-        )
-        .eq("user_id", user.id);
-
-      console.log("[useUserPermissions] User roles query result:", {
-        data: userRolesData,
-        error: rolesError,
-      });
-
-      if (rolesError) {
-        console.error(
-          "[useUserPermissions] Roles query error:",
-          JSON.stringify(rolesError, null, 2)
-        );
-        throw rolesError;
-      }
-
-      // Extract role slugs and find minimum hierarchy level
-      const roles: string[] = [];
-      let minHierarchy = 999;
-
-      userRolesData?.forEach((ur: any) => {
-        if (ur.roles) {
-          console.log(
-            "[useUserPermissions] Found role:",
-            ur.roles.name,
-            ur.roles.slug
-          );
-          roles.push(ur.roles.slug);
-          if (ur.roles.hierarchy_level < minHierarchy) {
-            minHierarchy = ur.roles.hierarchy_level;
-          }
+        if (!user) {
+          authLogger.debug("No user found for permissions", { action: "FETCH_PERMISSIONS" });
+          globalState = {
+            permissions: [],
+            roles: [],
+            hierarchyLevel: 999,
+            isLoading: false,
+            error: userError?.message || "Not authenticated",
+          };
+          hasFetched = true;
+          notifySubscribers();
+          return;
         }
-      });
 
-      console.log("[useUserPermissions] Extracted roles:", roles);
-      console.log("[useUserPermissions] Min hierarchy level:", minHierarchy);
+        // Fetch user's roles with hierarchy
+        const { data: userRolesData, error: rolesError } = await supabase
+          .from("user_roles")
+          .select(`
+            role_id,
+            roles (
+              id,
+              slug,
+              name,
+              hierarchy_level
+            )
+          `)
+          .eq("user_id", user.id);
 
-      // Fetch permissions for user's roles
-      const roleIds = userRolesData?.map((ur: any) => ur.role_id) || [];
-      console.log(
-        "[useUserPermissions] Role IDs for permission lookup:",
-        roleIds
-      );
+        if (rolesError) {
+          throw rolesError;
+        }
 
-      if (roleIds.length === 0) {
-        console.log(
-          "[useUserPermissions] No roles found for user - returning empty permissions"
+        // Extract role slugs and find minimum hierarchy level
+        const roles: string[] = [];
+        let minHierarchy = 999;
+
+        userRolesData?.forEach((ur: any) => {
+          if (ur.roles) {
+            roles.push(ur.roles.slug);
+            if (ur.roles.hierarchy_level < minHierarchy) {
+              minHierarchy = ur.roles.hierarchy_level;
+            }
+          }
+        });
+
+        // Fetch permissions for user's roles
+        const roleIds = userRolesData?.map((ur: any) => ur.role_id) || [];
+
+        if (roleIds.length === 0) {
+          globalState = {
+            permissions: [],
+            roles: [],
+            hierarchyLevel: 999,
+            isLoading: false,
+            error: null,
+          };
+          hasFetched = true;
+          notifySubscribers();
+          return;
+        }
+
+        const { data: permissionsData, error: permissionsError } = await supabase
+          .from("role_permissions")
+          .select(`
+            granted,
+            permissions (
+              key
+            )
+          `)
+          .in("role_id", roleIds)
+          .eq("granted", true);
+
+        if (permissionsError) {
+          throw permissionsError;
+        }
+
+        // Extract unique permission keys
+        const permissionSet = new Set(
+          permissionsData
+            ?.filter((rp: any) => rp.granted && rp.permissions)
+            .map((rp: any) => rp.permissions.key) || []
         );
-        setState({
+        const permissions = Array.from(permissionSet) as string[];
+
+        globalState = {
+          permissions,
+          roles,
+          hierarchyLevel: minHierarchy,
+          isLoading: false,
+          error: null,
+        };
+        hasFetched = true;
+
+        authLogger.info("Permissions loaded successfully", {
+          action: "FETCH_PERMISSIONS",
+          permissionCount: permissions.length,
+          roles: roles.join(", "),
+        });
+        notifySubscribers();
+      } catch (error: any) {
+        authLogger.error("Failed to fetch permissions", error, { action: "FETCH_PERMISSIONS" });
+        globalState = {
+          ...globalState,
+          isLoading: false,
+          error: error?.message || "Failed to fetch permissions",
+        };
+        hasFetched = true;
+        notifySubscribers();
+      } finally {
+        globalFetchPromise = null;
+      }
+    })();
+
+    return globalFetchPromise;
+  }, [supabase]);
+
+  useEffect(() => {
+    // Only fetch if we haven't successfully loaded yet
+    if (!hasFetched && !globalFetchPromise) {
+      fetchPermissions();
+    }
+
+    // Listen for auth state changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        // Only refetch if we already had data (actual re-auth, not initial load)
+        if (hasFetched) {
+          authLogger.debug("Auth state changed, refetching permissions", {
+            action: "AUTH_STATE",
+            event,
+          });
+          // Reset and refetch
+          globalState = {
+            permissions: [],
+            roles: [],
+            hierarchyLevel: 999,
+            isLoading: true,
+            error: null,
+          };
+          hasFetched = false;
+          globalFetchPromise = null;
+          fetchPermissions();
+        }
+        // If !hasFetched, the initial useEffect fetch is already handling it
+      } else if (event === "SIGNED_OUT") {
+        authLogger.debug("User signed out, clearing permissions", { action: "AUTH_STATE" });
+        globalState = {
           permissions: [],
           roles: [],
           hierarchyLevel: 999,
           isLoading: false,
           error: null,
-        });
-        return;
+        };
+        hasFetched = false;
+        notifySubscribers();
       }
+    });
 
-      console.log("[useUserPermissions] Fetching permissions for roles...");
-      const { data: permissionsData, error: permissionsError } = await supabase
-        .from("role_permissions")
-        .select(
-          `
-          granted,
-          permissions (
-            key
-          )
-        `
-        )
-        .in("role_id", roleIds)
-        .eq("granted", true);
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [fetchPermissions, supabase.auth]);
 
-      console.log("[useUserPermissions] Permissions query result:", {
-        data: permissionsData,
-        error: permissionsError,
-        count: permissionsData?.length,
-      });
-
-      if (permissionsError) {
-        console.error(
-          "[useUserPermissions] Permissions query error:",
-          JSON.stringify(permissionsError, null, 2)
-        );
-        throw permissionsError;
-      }
-
-      // Extract unique permission keys
-      const permissionSet = new Set(
-        permissionsData
-          ?.filter((rp: any) => rp.granted && rp.permissions)
-          .map((rp: any) => rp.permissions.key) || []
-      );
-      const permissions = Array.from(permissionSet) as string[];
-
-      console.log(
-        "[useUserPermissions] Final permissions count:",
-        permissions.length
-      );
-      console.log(
-        "[useUserPermissions] Sample permissions:",
-        permissions.slice(0, 5)
-      );
-
-      setState({
-        permissions,
-        roles,
-        hierarchyLevel: minHierarchy,
-        isLoading: false,
-        error: null,
-      });
-
-      console.log("[useUserPermissions] Successfully loaded permissions");
-    } catch (error: any) {
-      console.error("[useUserPermissions] Error fetching permissions:", error);
-      console.error(
-        "[useUserPermissions] Error details:",
-        JSON.stringify(error, null, 2)
-      );
-      console.error("[useUserPermissions] Error message:", error?.message);
-      console.error("[useUserPermissions] Error code:", error?.code);
-      setState((prev) => ({
-        ...prev,
-        isLoading: false,
-        error: error?.message || "Failed to fetch permissions",
-      }));
-    }
-  }, [supabase]);
-
-  useEffect(() => {
-    fetchPermissions();
-  }, [fetchPermissions]);
-
-  // Permission check functions
+  // Permission check functions - use current globalState
   const hasPermission = useCallback(
     (permission: string): boolean => {
-      return state.permissions.includes(permission);
+      return globalState.permissions.includes(permission);
     },
-    [state.permissions]
+    []
   );
 
   const hasAnyPermission = useCallback(
     (permissions: string[]): boolean => {
-      return permissions.some((p) => state.permissions.includes(p));
+      return permissions.some((p) => globalState.permissions.includes(p));
     },
-    [state.permissions]
+    []
   );
 
   const hasAllPermissions = useCallback(
     (permissions: string[]): boolean => {
-      return permissions.every((p) => state.permissions.includes(p));
+      return permissions.every((p) => globalState.permissions.includes(p));
     },
-    [state.permissions]
+    []
   );
 
-  // Role-based checks
-  const isOwner = useMemo(() => state.roles.includes("owner"), [state.roles]);
-
-  const isAdmin = useMemo(() => state.roles.includes("admin"), [state.roles]);
-
-  const isAdminOrHigher = useMemo(
-    () => state.hierarchyLevel <= 1,
-    [state.hierarchyLevel]
+  // Role check functions
+  const hasRole = useCallback(
+    (role: string): boolean => {
+      return globalState.roles.includes(role);
+    },
+    []
   );
+
+  const hasAnyRole = useCallback(
+    (roles: string[]): boolean => {
+      return roles.some((r) => globalState.roles.includes(r));
+    },
+    []
+  );
+
+  // Role-based checks - these need to update when globalState changes
+  const isOwner = globalState.roles.includes("owner");
+  const isAdmin = globalState.roles.includes("admin");
+  const isAdminOrHigher = globalState.hierarchyLevel <= 1;
+  const isManager = globalState.hierarchyLevel <= 2;
 
   return {
-    ...state,
+    ...globalState,
     hasPermission,
     hasAnyPermission,
     hasAllPermissions,
+    hasRole,
+    hasAnyRole,
     isOwner,
     isAdmin,
     isAdminOrHigher,
+    isManager,
     refetch: fetchPermissions,
   };
 }

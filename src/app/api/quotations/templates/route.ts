@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 // GET /api/quotations/templates - List all templates
+// Security: Requires authentication and filters by user's tenant
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createAdminClient();
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
+    const supabase = await createClient();
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") || "all";
@@ -16,9 +24,11 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get("offset") || "0");
     const includeDetails = searchParams.get("include_details") === "true";
 
+    // Filter by tenant_id for security
     let query = supabase
       .from("quotation_templates")
-      .select("*", { count: "exact" });
+      .select("*", { count: "exact" })
+      .eq("tenant_id", user!.tenantId);
 
     // Filter by status (is_active)
     if (status !== "all") {
@@ -129,10 +139,17 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /api/quotations/templates - Create a new template
+// Security: Requires authentication
 export async function POST(request: NextRequest) {
   try {
-    const adminSupabase = createAdminClient();
-    const userSupabase = await createClient();
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
+    const supabase = await createClient();
 
     const body = await request.json();
     const {
@@ -154,34 +171,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get current user for created_by (use server client which has cookies)
-    const {
-      data: { user },
-      error: authError,
-    } = await userSupabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Get user's tenant_id
-    const { data: userProfile, error: profileError } = await adminSupabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (profileError || !userProfile?.tenant_id) {
-      return NextResponse.json(
-        { error: "User profile not found" },
-        { status: 404 }
-      );
-    }
-
-    // Create the template
-    const { data: template, error } = await adminSupabase
+    // Create the template using the user's tenant from guard
+    const { data: template, error } = await supabase
       .from("quotation_templates")
       .insert({
-        tenant_id: userProfile.tenant_id,
+        tenant_id: user!.tenantId,
         name,
         description,
         property_type,
@@ -190,7 +184,7 @@ export async function POST(request: NextRequest) {
         template_data: template_data || {}, // Legacy field, can be empty
         is_active: true,
         is_featured: is_featured || false,
-        created_by: user.id,
+        created_by: user!.id,
       })
       .select()
       .single();
@@ -212,7 +206,7 @@ export async function POST(request: NextRequest) {
         display_order: space.display_order ?? index,
       }));
 
-      const { error: spacesError } = await adminSupabase
+      const { error: spacesError } = await supabase
         .from("template_spaces")
         .insert(templateSpaces);
 
@@ -237,7 +231,7 @@ export async function POST(request: NextRequest) {
         metadata: item.metadata || null,
       }));
 
-      const { error: itemsError } = await adminSupabase
+      const { error: itemsError } = await supabase
         .from("template_line_items")
         .insert(templateLineItems);
 
@@ -248,7 +242,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch the created template with all details
-    const { data: createdTemplate } = await adminSupabase
+    const { data: createdTemplate } = await supabase
       .from("quotation_templates")
       .select("*")
       .eq("id", template.id)
@@ -256,12 +250,12 @@ export async function POST(request: NextRequest) {
 
     // Fetch spaces and line items
     const [spacesResult, lineItemsResult] = await Promise.all([
-      adminSupabase
+      supabase
         .from("template_spaces")
         .select("*, space_type:space_types(id, name, slug, icon)")
         .eq("template_id", template.id)
         .order("display_order", { ascending: true }),
-      adminSupabase
+      supabase
         .from("template_line_items")
         .select(
           `

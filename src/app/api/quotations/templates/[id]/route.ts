@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -8,14 +9,22 @@ interface RouteParams {
 // GET /api/quotations/templates/[id] - Get a single template with all details
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const supabase = createAdminClient();
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
+    const supabase = await createClient();
     const { id } = await params;
 
-    // Fetch template
+    // Fetch template - filter by tenant for security
     const { data: template, error } = await supabase
       .from("quotation_templates")
       .select("*")
       .eq("id", id)
+      .eq("tenant_id", user!.tenantId)
       .single();
 
     if (error) {
@@ -102,7 +111,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 // PUT /api/quotations/templates/[id] - Update a template
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
-    const supabase = createAdminClient();
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
+    const supabase = await createClient();
     const { id } = await params;
     const body = await request.json();
 
@@ -133,10 +149,12 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (is_active !== undefined) updateData.is_active = is_active;
     if (is_featured !== undefined) updateData.is_featured = is_featured;
 
+    // Update template - filter by tenant for security
     const { data: template, error } = await supabase
       .from("quotation_templates")
       .update(updateData)
       .eq("id", id)
+      .eq("tenant_id", user!.tenantId)
       .select()
       .single();
 
@@ -238,10 +256,17 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 // DELETE /api/quotations/templates/[id] - Delete (archive) a template
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const supabase = createAdminClient();
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
+    const supabase = await createClient();
     const { id } = await params;
 
-    // Soft delete by setting is_active to false
+    // Soft delete by setting is_active to false - filter by tenant for security
     const { data: template, error } = await supabase
       .from("quotation_templates")
       .update({
@@ -249,6 +274,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
+      .eq("tenant_id", user!.tenantId)
       .select()
       .single();
 

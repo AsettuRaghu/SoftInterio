@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 // GET /api/quotations/master-data - Get all master data for quotation module V2
+// Security: Requires authentication and filters by user's tenant
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createAdminClient();
+    // Protect API route - requires authentication and checks user status
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
+    const supabase = await createClient();
 
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type"); // units, space_types, component_types, component_variants, cost_item_categories, cost_items
@@ -53,9 +62,11 @@ export async function GET(request: NextRequest) {
           );
       }
 
+      // Filter by tenant_id for security (RLS backup)
       const { data, error } = await supabase
         .from(tableName)
         .select(selectQuery)
+        .eq("tenant_id", user!.tenantId)
         .eq("is_active", true)
         .order("display_order", { ascending: true });
 
@@ -71,6 +82,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch all master data in parallel (V2 schema)
+    // Use regular client (with RLS) and filter by tenant_id for extra security
+    const tenantId = user!.tenantId;
+
     const [
       units,
       spaceTypes,
@@ -82,31 +96,37 @@ export async function GET(request: NextRequest) {
       supabase
         .from("units")
         .select("*")
+        .eq("tenant_id", tenantId)
         .eq("is_active", true)
         .order("display_order", { ascending: true }),
       supabase
         .from("space_types")
         .select("*")
+        .eq("tenant_id", tenantId)
         .eq("is_active", true)
         .order("display_order", { ascending: true }),
       supabase
         .from("component_types")
         .select("*")
+        .eq("tenant_id", tenantId)
         .eq("is_active", true)
         .order("display_order", { ascending: true }),
       supabase
         .from("component_variants")
         .select("*, component_type:component_types(id, name, slug)")
+        .eq("tenant_id", tenantId)
         .eq("is_active", true)
         .order("display_order", { ascending: true }),
       supabase
         .from("cost_item_categories")
         .select("*")
+        .eq("tenant_id", tenantId)
         .eq("is_active", true)
         .order("display_order", { ascending: true }),
       supabase
         .from("cost_items")
         .select("*, category:cost_item_categories(id, name, slug, color)")
+        .eq("tenant_id", tenantId)
         .eq("is_active", true)
         .order("display_order", { ascending: true }),
     ]);

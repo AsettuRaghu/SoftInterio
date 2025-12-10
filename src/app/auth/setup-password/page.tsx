@@ -199,13 +199,20 @@ export default function SetupPasswordPage() {
 
     try {
       // Update the user's password
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: password,
-      });
+      const { data: updateData, error: updateError } =
+        await supabase.auth.updateUser({
+          password: password,
+          data: {
+            password_set: true, // Mark that password has been set
+          },
+        });
 
       if (updateError) {
+        console.error("[SetupPassword] Password update error:", updateError);
         throw updateError;
       }
+
+      console.log("[SetupPassword] Password updated successfully");
 
       // Get the current user with metadata
       const {

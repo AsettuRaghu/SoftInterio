@@ -702,6 +702,8 @@ export interface PurchaseOrder {
   order_date: string;
   expected_delivery?: string;
   status: POStatus;
+  payment_status?: POPaymentStatus;
+  amount_paid?: number;
   subtotal: number;
   tax_amount: number;
   discount_amount: number;
