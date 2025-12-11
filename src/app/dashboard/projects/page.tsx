@@ -117,6 +117,26 @@ const categoryColors: Record<
     text: "text-violet-700",
     dot: "bg-violet-500",
   },
+  renovation: {
+    bg: "bg-amber-100",
+    text: "text-amber-700",
+    dot: "bg-amber-500",
+  },
+  consultation: {
+    bg: "bg-cyan-100",
+    text: "text-cyan-700",
+    dot: "bg-cyan-500",
+  },
+  commercial_fitout: {
+    bg: "bg-purple-100",
+    text: "text-purple-700",
+    dot: "bg-purple-500",
+  },
+  other: {
+    bg: "bg-gray-100",
+    text: "text-gray-700",
+    dot: "bg-gray-500",
+  },
 };
 
 // Status workflow for visual stepper

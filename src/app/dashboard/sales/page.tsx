@@ -2,8 +2,23 @@
 
 import React from "react";
 import Link from "next/link";
+import {
+  PageLayout,
+  PageHeader,
+  PageContent,
+} from "@/components/ui/PageLayout";
+import {
+  PresentationChartLineIcon,
+  PlusIcon,
+} from "@heroicons/react/24/outline";
+import { uiLogger } from "@/lib/logger";
 
 export default function SalesPage() {
+  // Log page mount
+  React.useEffect(() => {
+    uiLogger.info("Sales Dashboard page mounted", { module: "SalesPage" });
+  }, []);
+
   const salesStats = {
     totalLeads: 48,
     qualifiedLeads: 32,
@@ -80,29 +95,28 @@ export default function SalesPage() {
   ];
 
   return (
-    <div className="space-y-8">
+    <PageLayout>
       {/* Header */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">
-            Sales Dashboard
-          </h1>
-          <p className="text-slate-600 text-base">
-            Track leads, manage pipeline, and close deals
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <Link
-            href="/dashboard/sales/leads"
-            className="bg-white text-blue-600 px-4 py-2 rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors font-medium"
-          >
-            View Leads
-          </Link>
-          <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-            + Add Lead
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Sales Dashboard"
+        subtitle="Track leads, manage pipeline, and close deals"
+        icon={<PresentationChartLineIcon className="w-5 h-5 text-white" />}
+        iconBgClass="from-blue-500 to-blue-600"
+        actions={
+          <div className="flex gap-3">
+            <Link
+              href="/dashboard/sales/leads"
+              className="bg-white text-blue-600 px-4 py-2 rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors font-medium text-sm"
+            >
+              View Leads
+            </Link>
+            <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2">
+              <PlusIcon className="w-4 h-4" />
+              Add Lead
+            </button>
+          </div>
+        }
+      />
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -517,6 +531,6 @@ export default function SalesPage() {
           </div>
         </Link>
       </div>
-    </div>
+    </PageLayout>
   );
 }

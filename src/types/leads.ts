@@ -37,13 +37,13 @@ export type LeadSource =
   | "other";
 
 export type BudgetRange =
-  | "below_5l"
-  | "5l_10l"
-  | "10l_20l"
-  | "20l_35l"
-  | "35l_50l"
-  | "50l_1cr"
-  | "above_1cr"
+  | "below_10l"
+  | "around_10l"
+  | "around_20l"
+  | "around_30l"
+  | "around_40l"
+  | "around_50l"
+  | "above_50l"
   | "not_disclosed";
 
 export type LeadStage =
@@ -63,6 +63,8 @@ export type LeadActivityType =
   | "email_received"
   | "meeting_scheduled"
   | "meeting_completed"
+  | "client_meeting"
+  | "internal_meeting"
   | "site_visit"
   | "quotation_sent"
   | "quotation_revised"
@@ -71,6 +73,15 @@ export type LeadActivityType =
   | "assignment_changed"
   | "document_uploaded"
   | "other";
+
+export type MeetingType = "client_meeting" | "internal_meeting" | "site_visit" | "other";
+
+export interface MeetingAttendee {
+  type: "team" | "external";
+  id?: string; // For team members
+  email?: string; // For external attendees
+  name: string;
+}
 
 export type DisqualificationReason =
   | "budget_mismatch"
@@ -92,6 +103,9 @@ export type LostReason =
   | "no_response"
   | "budget_reduced"
   | "other";
+
+// Lead Score (replaces priority)
+export type LeadScore = "cold" | "warm" | "hot" | "on_hold";
 
 // Display labels for enums
 export const PropertyTypeLabels: Record<PropertyType, string> = {
@@ -131,13 +145,13 @@ export const LeadSourceLabels: Record<LeadSource, string> = {
 };
 
 export const BudgetRangeLabels: Record<BudgetRange, string> = {
-  below_5l: "Below ₹5 Lakhs",
-  "5l_10l": "₹5-10 Lakhs",
-  "10l_20l": "₹10-20 Lakhs",
-  "20l_35l": "₹20-35 Lakhs",
-  "35l_50l": "₹35-50 Lakhs",
-  "50l_1cr": "₹50 Lakhs - 1 Crore",
-  above_1cr: "Above 1 Crore",
+  below_10l: "Below ₹10 Lakhs",
+  around_10l: "~₹10 Lakhs",
+  around_20l: "~₹20 Lakhs",
+  around_30l: "~₹30 Lakhs",
+  around_40l: "~₹40 Lakhs",
+  around_50l: "~₹50 Lakhs",
+  above_50l: "₹50+ Lakhs",
   not_disclosed: "Not Disclosed",
 };
 
@@ -202,6 +216,23 @@ export const LostReasonLabels: Record<LostReason, string> = {
   other: "Other",
 };
 
+export const LeadScoreLabels: Record<LeadScore, string> = {
+  cold: "Cold",
+  warm: "Warm",
+  hot: "Hot",
+  on_hold: "On Hold",
+};
+
+export const LeadScoreColors: Record<
+  LeadScore,
+  { bg: string; text: string; dot: string }
+> = {
+  cold: { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-500" },
+  warm: { bg: "bg-amber-100", text: "text-amber-700", dot: "bg-amber-500" },
+  hot: { bg: "bg-red-100", text: "text-red-700", dot: "bg-red-500" },
+  on_hold: { bg: "bg-gray-100", text: "text-gray-600", dot: "bg-gray-400" },
+};
+
 export const LeadActivityTypeLabels: Record<LeadActivityType, string> = {
   call_made: "Outgoing Call",
   call_received: "Incoming Call",
@@ -210,6 +241,8 @@ export const LeadActivityTypeLabels: Record<LeadActivityType, string> = {
   email_received: "Email Received",
   meeting_scheduled: "Meeting Scheduled",
   meeting_completed: "Meeting Completed",
+  client_meeting: "Client Meeting",
+  internal_meeting: "Internal Meeting",
   site_visit: "Site Visit",
   quotation_sent: "Quotation Sent",
   quotation_revised: "Quotation Revised",
@@ -217,6 +250,13 @@ export const LeadActivityTypeLabels: Record<LeadActivityType, string> = {
   stage_changed: "Stage Changed",
   assignment_changed: "Assignment Changed",
   document_uploaded: "Document Uploaded",
+  other: "Other",
+};
+
+export const MeetingTypeLabels: Record<MeetingType, string> = {
+  client_meeting: "Client Meeting",
+  internal_meeting: "Internal Meeting",
+  site_visit: "Site Visit",
   other: "Other",
 };
 
@@ -297,8 +337,10 @@ export interface Lead {
   approved_by: string | null;
   approval_notes: string | null;
 
-  // Priority
-  priority: "low" | "medium" | "high" | "urgent";
+  // Lead Score (formerly priority)
+  lead_score: LeadScore;
+  // Keep priority for backward compatibility during migration
+  priority?: "low" | "medium" | "high" | "urgent";
 
   // Activity Tracking
   last_activity_at: string;
@@ -346,7 +388,7 @@ export interface CreateLeadInput {
   estimated_value?: number;
   project_scope?: string;
   special_requirements?: string;
-  priority?: "low" | "medium" | "high" | "urgent";
+  lead_score?: LeadScore;
   notes?: string;
 }
 
@@ -442,6 +484,7 @@ export interface LeadStageHistory {
 export interface LeadActivity {
   id: string;
   lead_id: string;
+  tenant_id?: string;
   activity_type: LeadActivityType;
   title: string;
   description: string | null;
@@ -451,10 +494,13 @@ export interface LeadActivity {
   call_outcome: string | null;
 
   // Meeting details
+  meeting_type: MeetingType | null;
   meeting_scheduled_at: string | null;
   meeting_location: string | null;
   meeting_completed: boolean;
   meeting_notes: string | null;
+  attendees: MeetingAttendee[];
+  linked_note_id: string | null;
 
   // Email details
   email_subject: string | null;

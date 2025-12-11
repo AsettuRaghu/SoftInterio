@@ -511,6 +511,60 @@ export async function signInWithEmail(email: string, password: string) {
         "Your access to this organization has been revoked. Please contact your administrator."
       );
     }
+
+    // Check subscription status - ensure tenant has active subscription or valid trial
+    const { data: subscription, error: subscriptionError } = await adminClient
+      .from("tenant_subscriptions")
+      .select("id, status, is_trial, trial_end_date, current_period_end, grace_period_end")
+      .eq("tenant_id", userData.tenant_id)
+      .single();
+
+    if (subscriptionError) {
+      console.log(
+        "[AUTH SERVICE] No subscription found for tenant:",
+        userData.tenant_id,
+        subscriptionError.message
+      );
+      // If no subscription record exists, allow login (legacy accounts or setup in progress)
+    } else if (subscription) {
+      const now = new Date();
+      const isTrialExpired = subscription.is_trial && subscription.trial_end_date && new Date(subscription.trial_end_date) < now;
+      const isSubscriptionExpired = subscription.current_period_end && new Date(subscription.current_period_end) < now;
+      const isGracePeriodExpired = subscription.grace_period_end && new Date(subscription.grace_period_end) < now;
+      
+      // Check if subscription is cancelled, expired, or suspended
+      const inactiveStatuses = ['cancelled', 'expired', 'suspended'];
+      const isInactiveStatus = inactiveStatuses.includes(subscription.status);
+
+      // Deny login if:
+      // 1. On trial and trial has expired, OR
+      // 2. Subscription status is inactive (cancelled/expired/suspended) AND grace period has passed
+      if (subscription.is_trial && isTrialExpired) {
+        console.log(
+          "[AUTH SERVICE] Trial period expired for tenant:",
+          userData.tenant_id,
+          "Trial ended:",
+          subscription.trial_end_date
+        );
+        await supabase.auth.signOut();
+        throw new Error(
+          "Your trial period has expired. Please upgrade to a paid plan to continue using SoftInterio."
+        );
+      }
+
+      if (isInactiveStatus && (isGracePeriodExpired || (!subscription.grace_period_end && isSubscriptionExpired))) {
+        console.log(
+          "[AUTH SERVICE] Subscription inactive for tenant:",
+          userData.tenant_id,
+          "Status:",
+          subscription.status
+        );
+        await supabase.auth.signOut();
+        throw new Error(
+          "Your subscription has expired. Please renew your subscription to continue using SoftInterio."
+        );
+      }
+    }
   }
 
   // Update last login timestamp

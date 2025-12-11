@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
 import type { LeadStatistics, LeadStage } from "@/types/leads";
 import { LeadStageLabels, LeadStageColors } from "@/types/leads";
+import { PageLayout, PageHeader, StatBadge } from "@/components/ui/PageLayout";
+import { ChartBarIcon } from "@heroicons/react/24/outline";
+import { uiLogger } from "@/lib/logger";
 
 export default function SalesReportsPage() {
   const [statistics, setStatistics] = useState<LeadStatistics | null>(null);
@@ -16,13 +18,23 @@ export default function SalesReportsPage() {
   const fetchStatistics = useCallback(async () => {
     try {
       setIsLoading(true);
+      uiLogger.info("Fetching sales statistics...", {
+        module: "SalesReportsPage",
+        action: "fetch_statistics",
+      });
       const response = await fetch("/api/sales/leads/statistics");
       if (!response.ok) throw new Error("Failed to fetch statistics");
 
       const data = await response.json();
       setStatistics(data.statistics);
+      uiLogger.info("Statistics loaded successfully", {
+        module: "SalesReportsPage",
+        action: "statistics_loaded",
+      });
     } catch (err) {
-      console.error("Failed to fetch statistics:", err);
+      uiLogger.error("Failed to fetch statistics", err as Error, {
+        module: "SalesReportsPage",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -100,64 +112,52 @@ export default function SalesReportsPage() {
     : [];
 
   return (
-    <div className="space-y-4">
-      {/* Compact Header */}
-      <div className="flex items-center justify-between bg-white rounded-lg border border-slate-200 px-4 py-3">
-        <div className="flex items-center gap-6">
-          <div>
-            <div className="flex items-center gap-2 text-xs text-slate-500 mb-0.5">
-              <Link href="/dashboard/sales" className="hover:text-blue-600">
-                Sales
-              </Link>
-              <span>/</span>
-              <span className="text-slate-700">Reports</span>
-            </div>
-            <h1 className="text-lg font-semibold text-slate-900">
-              Sales Reports
-            </h1>
+    <PageLayout isLoading={isLoading} loadingText="Loading reports...">
+      {/* Header */}
+      <PageHeader
+        title="Sales Reports"
+        subtitle="Analytics and insights for your sales pipeline"
+        breadcrumbs={[{ label: "Reports" }]}
+        basePath={{ label: "Sales", href: "/dashboard/sales" }}
+        icon={<ChartBarIcon className="w-5 h-5 text-white" />}
+        iconBgClass="from-purple-500 to-purple-600"
+        stats={
+          statistics ? (
+            <>
+              <StatBadge label="Leads" value={statistics.total} color="slate" />
+              <StatBadge
+                label="Conv."
+                value={`${conversionRate}%`}
+                color="green"
+              />
+              <StatBadge
+                label="Pipeline"
+                value={formatCurrency(statistics.pipeline_value)}
+                color="blue"
+              />
+            </>
+          ) : undefined
+        }
+        actions={
+          <div className="flex items-center gap-1.5">
+            {(["week", "month", "quarter", "year"] as const).map((range) => (
+              <button
+                key={range}
+                onClick={() => setDateRange(range)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  dateRange === range
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                {range.charAt(0).toUpperCase() + range.slice(1)}
+              </button>
+            ))}
           </div>
+        }
+      />
 
-          {/* Quick stats in header */}
-          {statistics && (
-            <div className="hidden md:flex items-center gap-2 pl-6 border-l border-slate-200">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded-full">
-                <span className="font-medium">{statistics.total}</span> Leads
-              </span>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full">
-                <span className="font-medium">{conversionRate}%</span> Conv.
-              </span>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 text-purple-700 text-xs rounded-full">
-                <span className="font-medium">
-                  {formatCurrency(statistics.pipeline_value)}
-                </span>
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Date Range Filter */}
-        <div className="flex items-center gap-1.5">
-          {(["week", "month", "quarter", "year"] as const).map((range) => (
-            <button
-              key={range}
-              onClick={() => setDateRange(range)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                dateRange === range
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-              }`}
-            >
-              {range.charAt(0).toUpperCase() + range.slice(1)}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {isLoading ? (
-        <div className="flex items-center justify-center py-8">
-          <div className="w-6 h-6 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-        </div>
-      ) : (
+      {statistics && (
         <>
           {/* Key Metrics - More compact */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -573,6 +573,6 @@ export default function SalesReportsPage() {
           </div>
         </>
       )}
-    </div>
+    </PageLayout>
   );
 }

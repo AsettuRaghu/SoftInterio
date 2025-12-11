@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import Link from "next/link";
 
 // =====================================================
 // BREADCRUMB COMPONENT
@@ -22,16 +21,14 @@ export const Breadcrumbs: React.FC<BreadcrumbsProps> = ({ items }) => {
       {items.map((item, index) => (
         <React.Fragment key={index}>
           {index > 0 && <span>/</span>}
-          {item.href ? (
-            <Link
-              href={item.href}
-              className="hover:text-blue-600 transition-colors"
-            >
-              {item.label}
-            </Link>
-          ) : (
-            <span className="text-slate-700">{item.label}</span>
-          )}
+          {/* All breadcrumb items are now displayed as plain text without links */}
+          <span
+            className={
+              index === items.length - 1 ? "text-slate-700" : "text-slate-500"
+            }
+          >
+            {item.label}
+          </span>
         </React.Fragment>
       ))}
     </div>

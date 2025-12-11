@@ -34,6 +34,12 @@ interface CreateTaskModalProps {
   onSuccess: () => void;
   parentTaskId?: string;
   parentTaskTitle?: string;
+  /** Pre-set linked entity (e.g., when creating from lead/project detail page) */
+  defaultLinkedEntity?: {
+    type: string;
+    id: string;
+    name: string;
+  };
 }
 
 export function CreateTaskModal({
@@ -42,6 +48,7 @@ export function CreateTaskModal({
   onSuccess,
   parentTaskId,
   parentTaskTitle,
+  defaultLinkedEntity,
 }: CreateTaskModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,9 +77,22 @@ export function CreateTaskModal({
   useEffect(() => {
     if (isOpen) {
       fetchTeamMembers();
-      resetForm();
+      // Reset form with default linked entity
+      setTitle("");
+      setStatus("todo");
+      setPriority(null);
+      setAssignedTo(null);
+      setStartDate("");
+      setDueDate("");
+      // Use default linked entity if provided
+      setLinkedEntities(defaultLinkedEntity ? [defaultLinkedEntity] : []);
+      setDescription("");
+      setSubtasks([]);
+      setNewSubtaskTitle("");
+      setShowSubtaskForm(false);
+      setError(null);
     }
-  }, [isOpen]);
+  }, [isOpen, defaultLinkedEntity]);
 
   const fetchTeamMembers = async () => {
     try {
@@ -93,20 +113,21 @@ export function CreateTaskModal({
     }
   };
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setTitle("");
     setStatus("todo");
     setPriority(null);
     setAssignedTo(null);
     setStartDate("");
     setDueDate("");
-    setLinkedEntities([]);
+    // Use default linked entity if provided
+    setLinkedEntities(defaultLinkedEntity ? [defaultLinkedEntity] : []);
     setDescription("");
     setSubtasks([]);
     setNewSubtaskTitle("");
     setShowSubtaskForm(false);
     setError(null);
-  };
+  }, [defaultLinkedEntity]);
 
   const addSubtask = useCallback(() => {
     if (!newSubtaskTitle.trim()) return;
@@ -147,6 +168,9 @@ export function CreateTaskModal({
     setError(null);
 
     try {
+      // Extract related_type and related_id from linkedEntities (use first one)
+      const primaryLink = linkedEntities.length > 0 ? linkedEntities[0] : null;
+
       const response = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -157,7 +181,8 @@ export function CreateTaskModal({
           assigned_to: assignedTo || null,
           start_date: startDate || null,
           due_date: dueDate || null,
-          linked_entities: linkedEntities.length > 0 ? linkedEntities : null,
+          related_type: primaryLink?.type || null,
+          related_id: primaryLink?.id || null,
           description: description || null,
           parent_task_id: parentTaskId || null,
           subtasks: subtasks

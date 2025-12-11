@@ -230,9 +230,9 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
   // Check if user is Finance team (for Payments tab visibility)
   const isFinanceUser =
-    user?.role === "finance" ||
-    user?.role === "admin" ||
-    user?.role === "owner";
+    user?.roles.includes("finance") ||
+    user?.roles.includes("admin") ||
+    user?.roles.includes("owner");
 
   // Handler for sub-phase click
   const handleSubPhaseClick = (phaseId: string, subPhaseId: string) => {
@@ -619,7 +619,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 className={`px-2.5 py-1 text-xs font-medium rounded-full ${
                   project.status === "completed"
                     ? "bg-green-100 text-green-700"
-                    : project.status === "in_progress"
+                    : project.status === "execution"
                     ? "bg-blue-100 text-blue-700"
                     : project.status === "on_hold"
                     ? "bg-amber-100 text-amber-700"
@@ -628,7 +628,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                     : "bg-slate-100 text-slate-700"
                 }`}
               >
-                {project.status === "in_progress"
+                {project.status === "execution"
                   ? "In Progress"
                   : project.status === "on_hold"
                   ? "On Hold"
@@ -1071,8 +1071,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
           {activeTab === "tasks" && (
             <ProjectTasksTab
               projectId={id}
-              projectNumber={project.project_number}
               phases={(project.phases || []).filter((p) => p.is_enabled)}
+              onCreateTask={() => {}}
             />
           )}
 

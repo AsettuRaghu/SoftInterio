@@ -64,8 +64,12 @@ export function useUserPermissions(): UseUserPermissionsReturn {
 
     globalFetchPromise = (async () => {
       try {
-        globalState = { ...globalState, isLoading: true, error: null };
-        notifySubscribers();
+        // Only show loading if we don't have any cached data
+        // This prevents UI flash on background token refresh
+        if (globalState.permissions.length === 0 && globalState.roles.length === 0) {
+          globalState = { ...globalState, isLoading: true, error: null };
+          notifySubscribers();
+        }
 
         authLogger.info("Fetching user permissions", { action: "FETCH_PERMISSIONS" });
 
@@ -201,10 +205,10 @@ export function useUserPermissions(): UseUserPermissionsReturn {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-        // Only refetch if we already had data (actual re-auth, not initial load)
+      if (event === "SIGNED_IN") {
+        // Only refetch on actual sign-in (not token refresh)
         if (hasFetched) {
-          authLogger.debug("Auth state changed, refetching permissions", {
+          authLogger.debug("User signed in, refetching permissions", {
             action: "AUTH_STATE",
             event,
           });
@@ -221,6 +225,20 @@ export function useUserPermissions(): UseUserPermissionsReturn {
           fetchPermissions();
         }
         // If !hasFetched, the initial useEffect fetch is already handling it
+      } else if (event === "TOKEN_REFRESHED") {
+        // On token refresh, silently refetch without showing loading state
+        // This prevents the sidebar flash when switching browser tabs
+        if (hasFetched) {
+          authLogger.debug("Token refreshed, silently refetching permissions", {
+            action: "AUTH_STATE",
+            event,
+          });
+          // Keep existing data visible while refetching in background
+          hasFetched = false;
+          globalFetchPromise = null;
+          // Don't reset globalState - keep showing current data
+          fetchPermissions();
+        }
       } else if (event === "SIGNED_OUT") {
         authLogger.debug("User signed out, clearing permissions", { action: "AUTH_STATE" });
         globalState = {

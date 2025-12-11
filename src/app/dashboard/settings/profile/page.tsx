@@ -119,7 +119,7 @@ function ProfileAvatar({
 
   return (
     <div
-      className={`${sizeClasses[size]} shrink-0 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold shadow-lg shadow-blue-500/20`}
+      className={`${sizeClasses[size]} shrink-0 bg-linear-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold shadow-lg shadow-blue-500/20`}
     >
       {getInitials(name || "U")}
     </div>
@@ -215,7 +215,7 @@ function PasswordChangeModal({ isOpen, onClose }: PasswordModalProps) {
           <button
             onClick={handleSubmit}
             disabled={isChanging}
-            className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 text-white px-3 py-1.5 rounded-lg hover:from-blue-700 hover:to-blue-600 text-xs font-medium disabled:opacity-50"
+            className="flex-1 bg-linear-to-r from-blue-600 to-blue-500 text-white px-3 py-1.5 rounded-lg hover:from-blue-700 hover:to-blue-600 text-xs font-medium disabled:opacity-50"
           >
             {isChanging ? "Changing..." : "Change Password"}
           </button>
@@ -584,7 +584,7 @@ export default function ProfileSettingsPage() {
       <button
         onClick={handleSave}
         disabled={isSaving || !hasChanges}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-xs font-medium rounded-lg hover:from-blue-700 hover:to-blue-600 transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-linear-to-r from-blue-600 to-blue-500 text-white text-xs font-medium rounded-lg hover:from-blue-700 hover:to-blue-600 transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {hasChanges && (
           <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
@@ -595,7 +595,7 @@ export default function ProfileSettingsPage() {
   ) : (
     <button
       onClick={() => setIsEditing(true)}
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-xs font-medium rounded-lg hover:from-blue-700 hover:to-blue-600 transition-all shadow-sm hover:shadow-md"
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-linear-to-r from-blue-600 to-blue-500 text-white text-xs font-medium rounded-lg hover:from-blue-700 hover:to-blue-600 transition-all shadow-sm hover:shadow-md"
     >
       <PencilIcon className="w-3.5 h-3.5" />
       Edit Profile

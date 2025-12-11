@@ -113,6 +113,7 @@ export default function TasksPage() {
     "review",
   ]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSource, setSelectedSource] = useState<string>("all"); // all, lead, project, unlinked
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -246,6 +247,17 @@ export default function TasksPage() {
         );
       }
 
+      // Source filter (Lead/Project/Unlinked)
+      if (selectedSource !== "all") {
+        if (selectedSource === "unlinked") {
+          result = result.filter((task) => !task.related_type);
+        } else {
+          result = result.filter(
+            (task) => task.related_type === selectedSource
+          );
+        }
+      }
+
       // Search filter - search across ALL visible fields
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
@@ -255,8 +267,6 @@ export default function TasksPage() {
             ? teamMembers.find((m) => m.id === task.assigned_to)
             : null;
           const assigneeName = assigneeMember?.full_name?.toLowerCase() || "";
-
-          // Format dates for search
           const startDateStr = task.start_date
             ? new Date(task.start_date).toLocaleDateString("en-US", {
                 month: "short",
@@ -352,7 +362,14 @@ export default function TasksPage() {
 
       return result;
     },
-    [selectedStatuses, searchQuery, teamMembers, sortField, sortDirection]
+    [
+      selectedStatuses,
+      selectedSource,
+      searchQuery,
+      teamMembers,
+      sortField,
+      sortDirection,
+    ]
   );
 
   const filteredMyTasks = useMemo(
@@ -1160,6 +1177,19 @@ export default function TasksPage() {
                   {expandedTasks.size > 0 ? "Collapse" : "Expand"}
                 </button>
               )}
+
+              {/* Source Filter (Lead/Project) */}
+              <select
+                value={selectedSource}
+                onChange={(e) => setSelectedSource(e.target.value)}
+                className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Sources</option>
+                <option value="lead">Leads Only</option>
+                <option value="project">Projects Only</option>
+                <option value="unlinked">Unlinked</option>
+              </select>
+
               <StatusFilterDropdown
                 selected={selectedStatuses}
                 onChange={setSelectedStatuses}

@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
-import Link from "next/link";
+import React, { useState, useEffect } from "react";
+import { PageLayout, PageHeader, StatBadge } from "@/components/ui/PageLayout";
+import { FunnelIcon, PlusIcon } from "@heroicons/react/24/outline";
+import { uiLogger } from "@/lib/logger";
 
 interface Deal {
   id: number;
@@ -18,6 +20,11 @@ interface Deal {
 
 export default function PipelinePage() {
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
+
+  // Log page mount
+  useEffect(() => {
+    uiLogger.info("Pipeline page mounted", { module: "PipelinePage" });
+  }, []);
 
   const stages = [
     {
@@ -212,55 +219,68 @@ export default function PipelinePage() {
     .reduce((sum, d) => sum + (d.value * d.probability) / 100, 0);
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       {/* Header */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-        <div>
-          <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
-            <Link href="/dashboard/sales" className="hover:text-blue-600">
-              Sales
-            </Link>
-            <span>/</span>
-            <span className="text-slate-900">Pipeline</span>
-          </div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">
-            Sales Pipeline
-          </h1>
-          <p className="text-slate-600">
-            Visualize and manage your deal pipeline
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex bg-slate-100 rounded-lg p-1">
-            <button
-              onClick={() => setViewMode("kanban")}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                viewMode === "kanban"
-                  ? "bg-white shadow-sm text-slate-900"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              Board
+      <PageHeader
+        title="Sales Pipeline"
+        subtitle="Visualize and manage your deal pipeline"
+        breadcrumbs={[{ label: "Pipeline" }]}
+        basePath={{ label: "Sales", href: "/dashboard/sales" }}
+        icon={<FunnelIcon className="w-5 h-5 text-white" />}
+        iconBgClass="from-indigo-500 to-indigo-600"
+        stats={
+          <>
+            <StatBadge
+              label="Pipeline"
+              value={`$${(totalPipelineValue / 1000000).toFixed(2)}M`}
+              color="slate"
+            />
+            <StatBadge
+              label="Weighted"
+              value={`$${(weightedValue / 1000).toFixed(0)}K`}
+              color="green"
+            />
+            <StatBadge
+              label="Won"
+              value={`$${(getStageValue("closed-won") / 1000).toFixed(0)}K`}
+              color="blue"
+            />
+          </>
+        }
+        actions={
+          <div className="flex items-center gap-3">
+            <div className="flex bg-slate-100 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode("kanban")}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                  viewMode === "kanban"
+                    ? "bg-white shadow-sm text-slate-900"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Board
+              </button>
+              <button
+                onClick={() => setViewMode("list")}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                  viewMode === "list"
+                    ? "bg-white shadow-sm text-slate-900"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                List
+              </button>
+            </div>
+            <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2">
+              <PlusIcon className="w-4 h-4" />
+              Add Deal
             </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                viewMode === "list"
-                  ? "bg-white shadow-sm text-slate-900"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              List
-            </button>
           </div>
-          <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-            + Add Deal
-          </button>
-        </div>
-      </div>
+        }
+      />
 
-      {/* Pipeline Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      {/* Pipeline Stats - 4 column grid */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <p className="text-sm text-slate-600">Total Pipeline</p>
           <p className="text-2xl font-bold text-slate-900">
@@ -487,6 +507,6 @@ export default function PipelinePage() {
           </div>
         </div>
       )}
-    </div>
+    </PageLayout>
   );
 }

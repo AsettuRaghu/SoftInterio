@@ -283,7 +283,7 @@ export async function POST(request: NextRequest) {
         estimated_value: body.estimated_value || null,
         project_scope: body.project_scope || null,
         special_requirements: body.special_requirements || null,
-        priority: body.priority || "medium",
+        lead_score: body.lead_score || "warm",
         stage: "new",
         created_by: user.id,
         assigned_to: user.id, // Auto-assign to creator

@@ -2,11 +2,17 @@
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Tenant, TenantSettings } from "@/types/database.types";
 import { FieldDisplay } from "@/components/ui/FieldDisplay";
 import { FieldInput } from "@/components/ui/FieldInput";
+import {
+  SettingsPageLayout,
+  SettingsPageHeader,
+  SettingsPageContent,
+  StatusBadge,
+} from "@/components/ui/SettingsPageLayout";
+import { uiLogger } from "@/lib/logger";
 import {
   BuildingOfficeIcon,
   PencilIcon,
@@ -185,7 +191,7 @@ function FieldSelect({
       ? createPortal(
           <div
             ref={dropdownRef}
-            className="fixed z-[9999] bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150"
+            className="fixed z-9999 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150"
             style={{
               top: position.top,
               left: position.left,
@@ -331,6 +337,7 @@ export default function CompanySettingsPage() {
 
   const fetchCompanyDetails = async () => {
     try {
+      uiLogger.debug("Fetching company details", { action: "fetch_company" });
       setIsLoading(true);
       setError(null);
 
@@ -339,6 +346,9 @@ export default function CompanySettingsPage() {
         error: authError,
       } = await supabase.auth.getUser();
       if (authError || !authUser) {
+        uiLogger.error("Unable to get authenticated user", authError, {
+          action: "fetch_company",
+        });
         setError("Unable to get authenticated user");
         return;
       }
@@ -350,6 +360,9 @@ export default function CompanySettingsPage() {
         .single();
 
       if (userError || !userData) {
+        uiLogger.error("Failed to get user tenant", userError, {
+          action: "fetch_company",
+        });
         setError("Failed to get user tenant");
         return;
       }
@@ -366,12 +379,18 @@ export default function CompanySettingsPage() {
       ]);
 
       if (tenantResult.error) {
+        uiLogger.error("Failed to load company details", tenantResult.error, {
+          action: "fetch_company",
+        });
         setError("Failed to load company details");
         return;
       }
 
       const tenantData = tenantResult.data;
       setCompany(tenantData);
+      uiLogger.debug("Company details loaded", {
+        companyName: tenantData.company_name,
+      });
 
       if (!settingsResult.error && settingsResult.data) {
         setTenantSettings(settingsResult.data);
@@ -392,8 +411,10 @@ export default function CompanySettingsPage() {
       setFormData(formValues);
       setOriginalFormData(formValues);
     } catch (err) {
+      uiLogger.error("Unexpected error loading company", err, {
+        action: "fetch_company",
+      });
       setError("An unexpected error occurred");
-      console.error(err);
     } finally {
       setIsLoading(false);
     }
@@ -406,6 +427,7 @@ export default function CompanySettingsPage() {
     }
 
     try {
+      uiLogger.info("Saving company details", { action: "save_company" });
       setIsSaving(true);
       setError(null);
       setSuccess(null);
@@ -421,6 +443,10 @@ export default function CompanySettingsPage() {
         validationErrors.push("Company type is required");
 
       if (validationErrors.length > 0) {
+        uiLogger.warn("Company validation failed", {
+          errors: validationErrors,
+          action: "save_company",
+        });
         setError(validationErrors.join(", "));
         setIsSaving(false);
         return;
@@ -442,22 +468,26 @@ export default function CompanySettingsPage() {
         .eq("id", company.id);
 
       if (updateError) {
+        uiLogger.error("Failed to update company", updateError, {
+          action: "save_company",
+        });
         setError("Failed to update company: " + updateError.message);
         return;
       }
 
-      await supabase
-        .from("tenant_settings")
-        .upsert(
-          {
-            tenant_id: company.id,
-            timezone: formData.timezone,
-            currency: formData.currency,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "tenant_id" }
-        );
+      await supabase.from("tenant_settings").upsert(
+        {
+          tenant_id: company.id,
+          timezone: formData.timezone,
+          currency: formData.currency,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "tenant_id" }
+      );
 
+      uiLogger.info("Company details saved successfully", {
+        action: "save_company",
+      });
       const updatedAt = new Date().toISOString();
       setCompany({
         ...company,
@@ -539,383 +569,294 @@ export default function CompanySettingsPage() {
     return STATUS_LABELS[status || "suspended"] || STATUS_LABELS.suspended;
   };
 
-  if (isLoading) {
-    return (
-      <div className="h-full bg-slate-50/50">
-        <div className="h-full flex flex-col px-4 py-4">
-          <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-0">
-            <div className="flex-1 flex items-center justify-center">
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-xs text-slate-500">
-                  Loading company details...
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const statusInfo = getStatusInfo(company?.status);
+  // Map company status to StatusBadge format
+  const getStatusForBadge = (status: string | undefined): string => {
+    const statusMap: Record<string, string> = {
+      trial: "pending",
+      active: "active",
+      suspended: "inactive",
+      expired: "inactive",
+      closed: "disabled",
+    };
+    return statusMap[status || "suspended"] || "inactive";
+  };
 
   return (
-    <div className="h-full bg-slate-50/50">
-      {isSaving && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 shadow-xl flex items-center gap-4">
-            <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-            <span className="text-sm font-medium text-slate-700">
-              Saving changes...
-            </span>
-          </div>
-        </div>
-      )}
-
-      <div className="h-full flex flex-col px-4 py-4">
-        <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-0">
-          {/* Header */}
-          <div className="px-4 py-2.5 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white shrink-0">
-            <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-1.5">
-              <Link href="/dashboard" className="hover:text-slate-700">
-                Dashboard
-              </Link>
-              <svg
-                className="w-3 h-3 text-slate-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+    <SettingsPageLayout
+      isLoading={isLoading}
+      loadingText="Loading company details..."
+      isSaving={isSaving}
+      savingText="Saving changes..."
+    >
+      <SettingsPageHeader
+        title="Company Settings"
+        subtitle="Manage your organization details"
+        breadcrumbs={[{ label: "Company" }]}
+        icon={<BuildingOfficeIcon className="w-4 h-4 text-white" />}
+        iconBgClass="from-slate-600 to-slate-700"
+        status={getStatusForBadge(company?.status)}
+        actions={
+          isEditing ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCancel}
+                disabled={isSaving}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 text-slate-700 text-xs font-medium rounded-lg hover:bg-slate-50 transition-all disabled:opacity-50"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 5l7 7-7 7"
-                />
-              </svg>
-              <Link href="/dashboard/settings" className="hover:text-slate-700">
-                Settings
-              </Link>
-              <svg
-                className="w-3 h-3 text-slate-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+                <XMarkIcon className="w-3.5 h-3.5" />
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={isSaving || !hasChanges}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-linear-to-r from-blue-600 to-blue-500 text-white text-xs font-medium rounded-lg hover:from-blue-700 hover:to-blue-600 transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 5l7 7-7 7"
-                />
-              </svg>
-              <span className="text-slate-700 font-medium">Company</span>
+                {hasChanges && (
+                  <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span>
+                )}
+                Save Changes
+              </button>
             </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center shadow-sm">
-                  <BuildingOfficeIcon className="w-4 h-4 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-base font-semibold text-slate-800 leading-tight">
-                    Company Settings
-                  </h1>
-                  <p className="text-[11px] text-slate-500">
-                    Manage your organization details
-                  </p>
-                </div>
-                <span
-                  className={`ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full ${statusInfo.bgColor} ${statusInfo.color}`}
-                >
-                  <span className="w-1 h-1 rounded-full bg-current"></span>
-                  {statusInfo.label}
+          ) : (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-linear-to-r from-blue-600 to-blue-500 text-white text-xs font-medium rounded-lg hover:from-blue-700 hover:to-blue-600 transition-all shadow-sm hover:shadow-md"
+            >
+              <PencilIcon className="w-3.5 h-3.5" />
+              Edit Company
+            </button>
+          )
+        }
+      />
+      <SettingsPageContent>
+        {/* Alerts */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-xs flex items-center gap-2">
+            <svg
+              className="w-4 h-4 shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded-lg text-xs flex items-center gap-2">
+            <svg
+              className="w-4 h-4 shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            {success}
+          </div>
+        )}
+
+        {/* Company Card - FULL WIDTH */}
+        <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+          <div className="px-4 py-3 bg-slate-100/50 border-b border-slate-200">
+            <h2 className="text-sm font-semibold text-slate-900">
+              Company Card
+            </h2>
+          </div>
+          <div className="p-4">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 shrink-0 bg-linear-to-br from-slate-600 to-slate-800 rounded-xl flex items-center justify-center text-white text-base font-bold shadow-lg">
+                {company ? getInitials(company.company_name) : "?"}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-semibold text-slate-900 truncate">
+                  {company?.company_name || "Company"}
+                </h3>
+                <p className="text-xs text-slate-500 truncate">
+                  {company?.email}
+                </p>
+                <span className="inline-flex mt-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-slate-100 text-slate-700">
+                  {getTenantTypeLabel(company?.tenant_type || "")}
                 </span>
               </div>
-              {isEditing ? (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleCancel}
-                    disabled={isSaving}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 text-slate-700 text-xs font-medium rounded-lg hover:bg-slate-50 transition-all disabled:opacity-50"
-                  >
-                    <XMarkIcon className="w-3.5 h-3.5" />
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    disabled={isSaving || !hasChanges}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-xs font-medium rounded-lg hover:from-blue-700 hover:to-blue-600 transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {hasChanges && (
-                      <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span>
-                    )}
-                    Save Changes
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-xs font-medium rounded-lg hover:from-blue-700 hover:to-blue-600 transition-all shadow-sm hover:shadow-md"
-                >
-                  <PencilIcon className="w-3.5 h-3.5" />
-                  Edit Company
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Alerts */}
-          {(error || success) && (
-            <div className="px-4 pt-3 shrink-0">
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-xs flex items-center gap-2">
-                  <svg
-                    className="w-4 h-4 shrink-0"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  {error}
-                </div>
-              )}
-              {success && (
-                <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded-lg text-xs flex items-center gap-2">
-                  <svg
-                    className="w-4 h-4 shrink-0"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  {success}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Content Area */}
-          <div className="flex-1 overflow-auto p-4">
-            <div className="space-y-4">
-              {/* Company Card - FULL WIDTH */}
-              <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
-                <div className="px-4 py-3 bg-slate-100/50 border-b border-slate-200">
-                  <h2 className="text-sm font-semibold text-slate-900">
-                    Company Card
-                  </h2>
-                </div>
-                <div className="p-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 shrink-0 bg-gradient-to-br from-slate-600 to-slate-800 rounded-xl flex items-center justify-center text-white text-base font-bold shadow-lg">
-                      {company ? getInitials(company.company_name) : "?"}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-semibold text-slate-900 truncate">
-                        {company?.company_name || "Company"}
-                      </h3>
-                      <p className="text-xs text-slate-500 truncate">
-                        {company?.email}
-                      </p>
-                      <span className="inline-flex mt-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-slate-100 text-slate-700">
-                        {getTenantTypeLabel(company?.tenant_type || "")}
-                      </span>
-                    </div>
-                    <div className="hidden md:flex items-center gap-8 pl-6 border-l border-slate-200">
-                      <FieldDisplay
-                        label="Account Created"
-                        value={formatDateTime(company?.created_at)}
-                      />
-                      <FieldDisplay
-                        label="Last Updated"
-                        value={formatDateTime(company?.updated_at)}
-                      />
-                    </div>
-                  </div>
-                  <div className="md:hidden pt-3 mt-3 border-t border-slate-200 grid grid-cols-2 gap-x-4 gap-y-2">
-                    <FieldDisplay
-                      label="Account Created"
-                      value={formatDateTime(company?.created_at)}
-                    />
-                    <FieldDisplay
-                      label="Last Updated"
-                      value={formatDateTime(company?.updated_at)}
-                    />
-                  </div>
-                </div>
+              <div className="hidden md:flex items-center gap-8 pl-6 border-l border-slate-200">
+                <FieldDisplay
+                  label="Account Created"
+                  value={formatDateTime(company?.created_at)}
+                />
+                <FieldDisplay
+                  label="Last Updated"
+                  value={formatDateTime(company?.updated_at)}
+                />
               </div>
-
-              {/* Company Information - FULL WIDTH */}
-              <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
-                <div className="px-4 py-3 bg-slate-100/50 border-b border-slate-200">
-                  <h2 className="text-sm font-semibold text-slate-900">
-                    Company Information
-                  </h2>
-                  <p className="text-[10px] text-slate-500">
-                    Basic information about your organization
-                  </p>
-                </div>
-                <div className="p-4">
-                  {isEditing ? (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <FieldInput
-                        label="Registered Company Name"
-                        value={formData.company_name}
-                        onChange={(v) =>
-                          setFormData({ ...formData, company_name: v })
-                        }
-                        placeholder="Enter registered company name"
-                        required
-                      />
-                      <FieldInput
-                        label="Registration Number"
-                        value={formData.company_registration_number}
-                        onChange={(v) =>
-                          setFormData({
-                            ...formData,
-                            company_registration_number: v,
-                          })
-                        }
-                        placeholder="CIN / Company Registration No."
-                      />
-                      <FieldInput
-                        label="Company Phone Number"
-                        value={formData.phone}
-                        onChange={(v) => setFormData({ ...formData, phone: v })}
-                        placeholder="+91 98765 43210"
-                        type="tel"
-                        required
-                      />
-                      <FieldInput
-                        label="GST Number"
-                        value={formData.gst_number}
-                        onChange={(v) =>
-                          setFormData({
-                            ...formData,
-                            gst_number: v.toUpperCase(),
-                          })
-                        }
-                        placeholder="22AAAAA0000A1Z5"
-                      />
-                      <FieldInput
-                        label="Company Address"
-                        value={formData.address_line1}
-                        onChange={(v) =>
-                          setFormData({ ...formData, address_line1: v })
-                        }
-                        placeholder="Street address, building, etc."
-                      />
-                      <FieldInput
-                        label="Company Pin Code"
-                        value={formData.postal_code}
-                        onChange={(v) =>
-                          setFormData({ ...formData, postal_code: v })
-                        }
-                        placeholder="560001"
-                        required
-                      />
-                      <FieldSelect
-                        label="Company Type"
-                        value={formData.tenant_type}
-                        onChange={(v) =>
-                          setFormData({ ...formData, tenant_type: v })
-                        }
-                        options={TENANT_TYPE_OPTIONS}
-                        placeholder="Select company type"
-                        required
-                      />
-                      <FieldSelect
-                        label="Time Zone"
-                        value={formData.timezone}
-                        onChange={(v) =>
-                          setFormData({ ...formData, timezone: v })
-                        }
-                        options={TIMEZONE_OPTIONS}
-                        required
-                      />
-                      <FieldSelect
-                        label="Currency"
-                        value={formData.currency}
-                        onChange={(v) =>
-                          setFormData({ ...formData, currency: v })
-                        }
-                        options={CURRENCY_OPTIONS}
-                        required
-                      />
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <FieldDisplay
-                        label="Registered Company Name"
-                        value={company?.company_name}
-                        required
-                      />
-                      <FieldDisplay
-                        label="Registration Number"
-                        value={company?.company_registration_number}
-                      />
-                      <FieldDisplay
-                        label="Company Email Address"
-                        value={company?.email}
-                        required
-                      />
-                      <FieldDisplay
-                        label="Company Phone Number"
-                        value={company?.phone}
-                        required
-                      />
-                      <FieldDisplay
-                        label="GST Number"
-                        value={company?.gst_number}
-                      />
-                      <FieldDisplay
-                        label="Company Address"
-                        value={company?.address_line1}
-                      />
-                      <FieldDisplay
-                        label="Company Pin Code"
-                        value={company?.postal_code}
-                        required
-                      />
-                      <FieldDisplay
-                        label="Company Type"
-                        value={getTenantTypeLabel(company?.tenant_type || "")}
-                        required
-                      />
-                      <FieldDisplay
-                        label="Time Zone"
-                        value={getTimezoneLabel(
-                          tenantSettings?.timezone || "Asia/Kolkata"
-                        )}
-                        required
-                      />
-                      <FieldDisplay
-                        label="Currency"
-                        value={getCurrencyLabel(
-                          tenantSettings?.currency || "INR"
-                        )}
-                        required
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
+            </div>
+            <div className="md:hidden pt-3 mt-3 border-t border-slate-200 grid grid-cols-2 gap-x-4 gap-y-2">
+              <FieldDisplay
+                label="Account Created"
+                value={formatDateTime(company?.created_at)}
+              />
+              <FieldDisplay
+                label="Last Updated"
+                value={formatDateTime(company?.updated_at)}
+              />
             </div>
           </div>
         </div>
-      </div>
-    </div>
+
+        {/* Company Information - FULL WIDTH */}
+        <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+          <div className="px-4 py-3 bg-slate-100/50 border-b border-slate-200">
+            <h2 className="text-sm font-semibold text-slate-900">
+              Company Information
+            </h2>
+            <p className="text-[10px] text-slate-500">
+              Basic information about your organization
+            </p>
+          </div>
+          <div className="p-4">
+            {isEditing ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FieldInput
+                  label="Registered Company Name"
+                  value={formData.company_name}
+                  onChange={(v) =>
+                    setFormData({ ...formData, company_name: v })
+                  }
+                  placeholder="Enter registered company name"
+                  required
+                />
+                <FieldInput
+                  label="Registration Number"
+                  value={formData.company_registration_number}
+                  onChange={(v) =>
+                    setFormData({
+                      ...formData,
+                      company_registration_number: v,
+                    })
+                  }
+                  placeholder="CIN / Company Registration No."
+                />
+                <FieldInput
+                  label="Company Phone Number"
+                  value={formData.phone}
+                  onChange={(v) => setFormData({ ...formData, phone: v })}
+                  placeholder="+91 98765 43210"
+                  type="tel"
+                  required
+                />
+                <FieldInput
+                  label="GST Number"
+                  value={formData.gst_number}
+                  onChange={(v) =>
+                    setFormData({
+                      ...formData,
+                      gst_number: v.toUpperCase(),
+                    })
+                  }
+                  placeholder="22AAAAA0000A1Z5"
+                />
+                <FieldInput
+                  label="Company Address"
+                  value={formData.address_line1}
+                  onChange={(v) =>
+                    setFormData({ ...formData, address_line1: v })
+                  }
+                  placeholder="Street address, building, etc."
+                />
+                <FieldInput
+                  label="Company Pin Code"
+                  value={formData.postal_code}
+                  onChange={(v) => setFormData({ ...formData, postal_code: v })}
+                  placeholder="560001"
+                  required
+                />
+                <FieldSelect
+                  label="Company Type"
+                  value={formData.tenant_type}
+                  onChange={(v) => setFormData({ ...formData, tenant_type: v })}
+                  options={TENANT_TYPE_OPTIONS}
+                  placeholder="Select company type"
+                  required
+                />
+                <FieldSelect
+                  label="Time Zone"
+                  value={formData.timezone}
+                  onChange={(v) => setFormData({ ...formData, timezone: v })}
+                  options={TIMEZONE_OPTIONS}
+                  required
+                />
+                <FieldSelect
+                  label="Currency"
+                  value={formData.currency}
+                  onChange={(v) => setFormData({ ...formData, currency: v })}
+                  options={CURRENCY_OPTIONS}
+                  required
+                />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <FieldDisplay
+                  label="Registered Company Name"
+                  value={company?.company_name}
+                  required
+                />
+                <FieldDisplay
+                  label="Registration Number"
+                  value={company?.company_registration_number}
+                />
+                <FieldDisplay
+                  label="Company Email Address"
+                  value={company?.email}
+                  required
+                />
+                <FieldDisplay
+                  label="Company Phone Number"
+                  value={company?.phone}
+                  required
+                />
+                <FieldDisplay label="GST Number" value={company?.gst_number} />
+                <FieldDisplay
+                  label="Company Address"
+                  value={company?.address_line1}
+                />
+                <FieldDisplay
+                  label="Company Pin Code"
+                  value={company?.postal_code}
+                  required
+                />
+                <FieldDisplay
+                  label="Company Type"
+                  value={getTenantTypeLabel(company?.tenant_type || "")}
+                  required
+                />
+                <FieldDisplay
+                  label="Time Zone"
+                  value={getTimezoneLabel(
+                    tenantSettings?.timezone || "Asia/Kolkata"
+                  )}
+                  required
+                />
+                <FieldDisplay
+                  label="Currency"
+                  value={getCurrencyLabel(tenantSettings?.currency || "INR")}
+                  required
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </SettingsPageContent>
+    </SettingsPageLayout>
   );
 }

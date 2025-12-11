@@ -7,9 +7,9 @@ import type {
   Lead,
   LeadStage,
   LeadActivity,
+  LeadActivityType,
   LeadNote,
   LeadStageHistory,
-  LeadTask,
   LeadDocument,
   LeadFamilyMember,
   BudgetRange,
@@ -18,7 +18,16 @@ import type {
   DisqualificationReason,
   LostReason,
   PropertyType,
+  LeadScore,
 } from "@/types/leads";
+import type { Task, TaskPriority, TaskStatus } from "@/types/tasks";
+import {
+  TaskPriorityColors,
+  TaskStatusColors,
+  TaskStatusLabels,
+  TaskPriorityLabels,
+} from "@/types/tasks";
+import { CreateTaskModal, EditTaskModal } from "@/components/tasks";
 import {
   LeadStageLabels,
   LeadStageColors,
@@ -31,11 +40,37 @@ import {
   LostReasonLabels,
   ValidStageTransitions,
   getRequiredFieldsForTransition,
+  LeadScoreLabels,
+  LeadScoreColors,
 } from "@/types/leads";
+import {
+  PageLayout,
+  PageHeader,
+  PageContent,
+  StatusBadge,
+} from "@/components/ui/PageLayout";
+import { UserGroupIcon } from "@heroicons/react/24/outline";
+
+// Extended Task type with joined user data
+interface TaskWithUser extends Task {
+  assigned_user?: {
+    id: string;
+    name: string;
+    avatar_url: string | null;
+    email: string;
+  };
+  created_user?: {
+    id: string;
+    name: string;
+    avatar_url: string | null;
+    email: string;
+  };
+}
 
 type TabType =
   | "overview"
   | "timeline"
+  | "calendar"
   | "tasks"
   | "documents"
   | "notes"
@@ -51,11 +86,14 @@ export default function LeadDetailPage() {
   const [activities, setActivities] = useState<LeadActivity[]>([]);
   const [notes, setNotes] = useState<LeadNote[]>([]);
   const [stageHistory, setStageHistory] = useState<LeadStageHistory[]>([]);
-  const [tasks, setTasks] = useState<LeadTask[]>([]);
+  const [tasks, setTasks] = useState<TaskWithUser[]>([]);
   const [documents, setDocuments] = useState<LeadDocument[]>([]);
   const [familyMembers, setFamilyMembers] = useState<LeadFamilyMember[]>([]);
   const [quotations, setQuotations] = useState<any[]>([]);
   const [revisingId, setRevisingId] = useState<string | null>(null);
+  const [teamMembers, setTeamMembers] = useState<
+    { id: string; name: string; email: string; avatar_url?: string }[]
+  >([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +103,12 @@ export default function LeadDetailPage() {
   const [showStageModal, setShowStageModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showActivityModal, setShowActivityModal] = useState(false);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<TaskWithUser | null>(null);
+  const [showMeetingModal, setShowMeetingModal] = useState(false);
+  const [editingMeeting, setEditingMeeting] = useState<LeadActivity | null>(
+    null
+  );
   const [showEditModal, setShowEditModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -226,9 +270,30 @@ export default function LeadDetailPage() {
     }
   }, [leadId]);
 
+  // Fetch team members for attendees dropdown
+  const fetchTeamMembers = useCallback(async () => {
+    try {
+      const response = await fetch("/api/team/members");
+      const data = await response.json();
+      if (response.ok && data.success && data.data) {
+        setTeamMembers(
+          data.data.map((m: any) => ({
+            id: m.id,
+            name: m.name,
+            email: m.email,
+            avatar_url: m.avatar_url,
+          }))
+        );
+      }
+    } catch (err) {
+      console.error("Failed to fetch team members:", err);
+    }
+  }, []);
+
   useEffect(() => {
     fetchLead();
-  }, [fetchLead]);
+    fetchTeamMembers();
+  }, [fetchLead, fetchTeamMembers]);
 
   // Open stage modal if query param is present
   useEffect(() => {
@@ -278,40 +343,54 @@ export default function LeadDetailPage() {
       .slice(0, 2);
   };
 
+  // Loading state
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-      </div>
+      <PageLayout isLoading loadingText="Loading lead details...">
+        <></>
+      </PageLayout>
     );
   }
 
+  // Error state
   if (error || !lead) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
-        <svg
-          className="w-16 h-16 text-slate-300 mb-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.5}
-            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-          />
-        </svg>
-        <p className="text-lg font-medium text-slate-900 mb-2">
-          {error || "Lead not found"}
-        </p>
-        <Link
-          href="/dashboard/sales/leads"
-          className="text-blue-600 hover:underline"
-        >
-          ← Back to Leads
-        </Link>
-      </div>
+      <PageLayout>
+        <PageHeader
+          title="Lead Not Found"
+          subtitle={error || "The requested lead could not be found"}
+          breadcrumbs={[{ label: "Leads" }]}
+          basePath={{ label: "Sales", href: "/dashboard/sales" }}
+          icon={<UserGroupIcon className="w-5 h-5 text-white" />}
+          iconBgClass="from-slate-400 to-slate-500"
+        />
+        <PageContent>
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <svg
+              className="w-16 h-16 text-slate-300 mb-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <p className="text-lg font-medium text-slate-900 mb-2">
+              {error || "Lead not found"}
+            </p>
+            <Link
+              href="/dashboard/sales/leads"
+              className="text-blue-600 hover:underline"
+            >
+              ← Back to Leads
+            </Link>
+          </div>
+        </PageContent>
+      </PageLayout>
     );
   }
 
@@ -320,93 +399,84 @@ export default function LeadDetailPage() {
   const isTerminalStage = possibleTransitions.length === 0;
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="bg-white rounded-lg border border-slate-200 px-5 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4 min-w-0">
-            {/* Breadcrumb */}
-            <div className="flex items-center gap-2 text-sm text-slate-500 shrink-0">
-              <Link href="/dashboard/sales" className="hover:text-blue-600">
-                Sales
-              </Link>
-              <span>/</span>
-              <Link
-                href="/dashboard/sales/leads"
-                className="hover:text-blue-600"
-              >
-                Leads
-              </Link>
-              <span>/</span>
-              <span className="text-slate-700 font-medium">
-                {lead.lead_number}
-              </span>
+    <PageLayout>
+      <PageHeader
+        title={lead.client_name}
+        subtitle={`${lead.lead_number} • ${lead.phone}${
+          lead.email ? ` • ${lead.email}` : ""
+        }`}
+        breadcrumbs={[
+          { label: "Leads", href: "/dashboard/sales/leads" },
+          { label: lead.lead_number },
+        ]}
+        basePath={{ label: "Sales", href: "/dashboard/sales" }}
+        icon={<UserGroupIcon className="w-5 h-5 text-white" />}
+        iconBgClass="from-blue-500 to-blue-600"
+        stats={
+          <div className="flex items-center gap-4">
+            {/* Stage Progress Indicator */}
+            <div className="flex items-center gap-1">
+              {(
+                [
+                  "new",
+                  "qualified",
+                  "requirement_discussion",
+                  "proposal_discussion",
+                  "won",
+                ] as LeadStage[]
+              ).map((stage, index, arr) => {
+                const isActive = stage === lead.stage;
+                const isPast = arr.indexOf(lead.stage) > index;
+                const isLostOrDisqualified =
+                  lead.stage === "lost" || lead.stage === "disqualified";
+
+                return (
+                  <React.Fragment key={stage}>
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        isLostOrDisqualified
+                          ? "bg-red-400"
+                          : isActive
+                          ? "bg-blue-600"
+                          : isPast
+                          ? "bg-green-500"
+                          : "bg-slate-300"
+                      }`}
+                      title={LeadStageLabels[stage]}
+                    />
+                    {index < arr.length - 1 && (
+                      <div
+                        className={`w-4 h-0.5 ${
+                          isPast ? "bg-green-500" : "bg-slate-200"
+                        }`}
+                      />
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </div>
-
-            {/* Separator */}
-            <div className="h-5 w-px bg-slate-200 shrink-0" />
-
-            {/* Client Name */}
-            <h1 className="text-xl font-bold text-slate-900 truncate">
-              {lead.client_name}
-            </h1>
-
-            {/* Stage Badge */}
-            <span
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full shrink-0 ${stageColors.bg} ${stageColors.text}`}
-            >
+            <StatusBadge status={lead.stage} />
+            {/* Lead Score Badge */}
+            {lead.lead_score && (
               <span
-                className={`w-2 h-2 rounded-full ${stageColors.dot}`}
-              ></span>
-              {LeadStageLabels[lead.stage]}
-            </span>
-
-            {/* Contact Pills - Only email, no call */}
-            <div className="hidden md:flex items-center gap-2 shrink-0">
-              {lead.phone && (
-                <span className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-lg">
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                    />
-                  </svg>
-                  {lead.phone}
-                </span>
-              )}
-              {lead.email && (
-                <a
-                  href={`mailto:${lead.email}`}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                    />
-                  </svg>
-                  <span className="max-w-[180px] truncate">{lead.email}</span>
-                </a>
-              )}
-            </div>
+                className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded ${
+                  LeadScoreColors[lead.lead_score]?.bg || "bg-slate-100"
+                } ${
+                  LeadScoreColors[lead.lead_score]?.text || "text-slate-700"
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    LeadScoreColors[lead.lead_score]?.dot || "bg-slate-500"
+                  }`}
+                />
+                {LeadScoreLabels[lead.lead_score] || lead.lead_score}
+              </span>
+            )}
           </div>
-
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2 shrink-0">
+        }
+        actions={
+          <div className="flex items-center gap-2">
             {!isTerminalStage && (
               <>
                 <button
@@ -428,7 +498,10 @@ export default function LeadDetailPage() {
                   </svg>
                   Note
                 </button>
-                <button className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium">
+                <button
+                  onClick={() => setShowEditModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+                >
                   <svg
                     className="w-4 h-4"
                     fill="none"
@@ -439,278 +512,927 @@ export default function LeadDetailPage() {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={2}
-                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
                     />
                   </svg>
-                  Task
+                  Edit
+                </button>
+                <button
+                  onClick={() => setShowStageModal(true)}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                  Change Stage
                 </button>
               </>
             )}
-            {!isTerminalStage && (
-              <button
-                onClick={() => setShowEditModal(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                  />
-                </svg>
-                Edit
-              </button>
-            )}
-            {!isTerminalStage && (
-              <button
-                onClick={() => setShowStageModal(true)}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-              >
-                Change Stage
-              </button>
-            )}
           </div>
-        </div>
-      </div>
+        }
+      />
 
-      {/* Stage Progress Bar */}
-      <div className="bg-white rounded-lg border border-slate-200 px-5 py-4">
-        <div className="flex items-center justify-between">
-          {(
-            [
-              "new",
-              "qualified",
-              "requirement_discussion",
-              "proposal_discussion",
-              "won",
-            ] as LeadStage[]
-          ).map((stage, index, arr) => {
-            const isActive = stage === lead.stage;
-            const isPast = arr.indexOf(lead.stage) > index;
+      <PageContent noPadding>
+        <div className="space-y-4 p-4">
+          {/* Lost/Disqualified Notice */}
+          {(lead.stage === "lost" || lead.stage === "disqualified") && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-700">
+                <strong>
+                  {lead.stage === "lost" ? "Lost" : "Disqualified"}:
+                </strong>{" "}
+                {lead.stage === "lost"
+                  ? LostReasonLabels[lead.lost_reason!]
+                  : DisqualificationReasonLabels[lead.disqualification_reason!]}
+                {(lead.lost_notes || lead.disqualification_notes) &&
+                  ` - ${lead.lost_notes || lead.disqualification_notes}`}
+              </p>
+            </div>
+          )}
 
-            return (
-              <React.Fragment key={stage}>
-                <div
-                  className={`flex flex-col items-center ${
-                    isActive
-                      ? "text-blue-600"
-                      : isPast
-                      ? "text-green-600"
-                      : "text-slate-400"
-                  }`}
-                >
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
-                      isActive
-                        ? "bg-blue-600 text-white"
-                        : isPast
-                        ? "bg-green-600 text-white"
-                        : "bg-slate-200 text-slate-500"
+          {/* Tabs */}
+          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+            <div className="border-b border-slate-200">
+              <nav className="flex">
+                {(
+                  [
+                    { id: "overview", label: "Overview" },
+                    { id: "timeline", label: "Timeline" },
+                    {
+                      id: "calendar",
+                      label: `Calendar (${
+                        activities.filter(
+                          (a) =>
+                            a.activity_type === "meeting_scheduled" ||
+                            a.activity_type === "meeting_completed" ||
+                            a.activity_type === "site_visit" ||
+                            a.activity_type === "client_meeting" ||
+                            a.activity_type === "internal_meeting"
+                        ).length
+                      })`,
+                    },
+                    { id: "tasks", label: `Tasks (${tasks.length})` },
+                    {
+                      id: "documents",
+                      label: `Documents (${documents.length})`,
+                    },
+                    { id: "notes", label: `Notes (${notes.length})` },
+                    {
+                      id: "quotations",
+                      label: `Quotations (${quotations.length})`,
+                    },
+                  ] as { id: TabType; label: string }[]
+                ).map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`px-5 py-3 text-sm font-medium transition-colors ${
+                      activeTab === tab.id
+                        ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
                     }`}
                   >
-                    {isPast ? (
+                    {tab.label}
+                  </button>
+                ))}
+              </nav>
+            </div>
+
+            <div className="p-5">
+              {/* Overview Tab */}
+              {activeTab === "overview" && (
+                <div className="space-y-6">
+                  {/* Main Content Grid */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Left Column - Client & Contact Info */}
+                    <div className="space-y-5">
+                      {/* Client Information Card */}
+                      <div className="bg-linear-to-br from-slate-50 to-white border border-slate-200 rounded-xl p-5">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                            <span className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                                />
+                              </svg>
+                            </span>
+                            Client Details
+                          </h3>
+                          <button
+                            onClick={() => setShowEditModal(true)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Edit"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-100">
+                            <div className="w-12 h-12 rounded-full bg-linear-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center text-lg font-bold">
+                              {getInitials(lead.client_name)}
+                            </div>
+                            <div>
+                              <p className="text-base font-semibold text-slate-900">
+                                {lead.client_name}
+                              </p>
+                              <p className="text-sm text-slate-500">
+                                Lead #{lead.lead_number}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="grid gap-2">
+                            <div className="flex items-center gap-3 p-2.5 bg-white rounded-lg border border-slate-100">
+                              <svg
+                                className="w-5 h-5 text-slate-400"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                                />
+                              </svg>
+                              <span className="text-sm font-medium text-slate-700">
+                                {lead.phone || "—"}
+                              </span>
+                            </div>
+                            <a
+                              href={
+                                lead.email ? `mailto:${lead.email}` : undefined
+                              }
+                              className={`flex items-center gap-3 p-2.5 bg-white rounded-lg border border-slate-100 ${
+                                lead.email
+                                  ? "hover:bg-blue-50 hover:border-blue-200"
+                                  : ""
+                              }`}
+                            >
+                              <svg
+                                className="w-5 h-5 text-slate-400"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                                />
+                              </svg>
+                              <span className="text-sm font-medium text-slate-700 truncate">
+                                {lead.email || "—"}
+                              </span>
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Lead Attributes Card */}
+                      <div className="bg-linear-to-br from-slate-50 to-white border border-slate-200 rounded-xl p-5">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                            <span className="w-8 h-8 rounded-lg bg-green-100 text-green-700 flex items-center justify-center">
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
+                                />
+                              </svg>
+                            </span>
+                            Lead Attributes
+                          </h3>
+                          <button
+                            onClick={() => setShowEditModal(true)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Edit"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                        <dl className="space-y-3">
+                          <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                            <dt className="text-sm text-slate-500">
+                              Property Type
+                            </dt>
+                            <dd className="text-sm font-semibold text-slate-900">
+                              {PropertyTypeLabels[lead.property_type]}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                            <dt className="text-sm text-slate-500">
+                              Service Type
+                            </dt>
+                            <dd className="text-sm font-semibold text-slate-900">
+                              {lead.service_type
+                                ? ServiceTypeLabels[lead.service_type]
+                                : "—"}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                            <dt className="text-sm text-slate-500">
+                              Lead Source
+                            </dt>
+                            <dd className="text-sm font-semibold text-slate-900">
+                              {lead.lead_source
+                                ? LeadSourceLabels[lead.lead_source]
+                                : "—"}
+                            </dd>
+                          </div>
+                          {lead.lead_source_detail && (
+                            <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                              <dt className="text-sm text-slate-500">
+                                Source Detail
+                              </dt>
+                              <dd className="text-sm font-semibold text-slate-900">
+                                {lead.lead_source_detail}
+                              </dd>
+                            </div>
+                          )}
+                          <div className="flex justify-between items-center py-2">
+                            <dt className="text-sm text-slate-500">
+                              Lead Score
+                            </dt>
+                            <dd>
+                              <span
+                                className={`px-2.5 py-1 text-xs font-semibold rounded-full ${
+                                  LeadScoreColors[lead.lead_score]?.bg ||
+                                  "bg-slate-100"
+                                } ${
+                                  LeadScoreColors[lead.lead_score]?.text ||
+                                  "text-slate-700"
+                                }`}
+                              >
+                                {LeadScoreLabels[lead.lead_score] ||
+                                  lead.lead_score ||
+                                  "Warm"}
+                              </span>
+                            </dd>
+                          </div>
+                        </dl>
+                      </div>
+                    </div>
+
+                    {/* Middle Column - Property & Assignment */}
+                    <div className="space-y-5">
+                      {/* Property Information Card */}
+                      <div className="bg-linear-to-br from-slate-50 to-white border border-slate-200 rounded-xl p-5">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                            <span className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                                />
+                              </svg>
+                            </span>
+                            Property Details
+                          </h3>
+                          <button
+                            onClick={() => setShowEditModal(true)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Edit"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                        <dl className="space-y-3">
+                          <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                            <dt className="text-sm text-slate-500">
+                              Property Name
+                            </dt>
+                            <dd className="text-sm font-semibold text-slate-900">
+                              {lead.property_name || "—"}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                            <dt className="text-sm text-slate-500">
+                              Flat/Unit
+                            </dt>
+                            <dd className="text-sm font-semibold text-slate-900">
+                              {lead.flat_number || "—"}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                            <dt className="text-sm text-slate-500">
+                              Carpet Area
+                            </dt>
+                            <dd className="text-sm font-semibold text-slate-900">
+                              {lead.carpet_area_sqft
+                                ? `${lead.carpet_area_sqft} sq.ft`
+                                : "—"}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                            <dt className="text-sm text-slate-500">City</dt>
+                            <dd className="text-sm font-semibold text-slate-900">
+                              {lead.property_city || "—"}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                            <dt className="text-sm text-slate-500">Pincode</dt>
+                            <dd className="text-sm font-semibold text-slate-900">
+                              {lead.property_pincode || "—"}
+                            </dd>
+                          </div>
+                          {lead.property_address && (
+                            <div className="pt-2">
+                              <dt className="text-sm text-slate-500 mb-1">
+                                Full Address
+                              </dt>
+                              <dd className="text-sm font-medium text-slate-700 bg-slate-50 rounded-lg p-2">
+                                {lead.property_address}
+                              </dd>
+                            </div>
+                          )}
+                        </dl>
+                      </div>
+
+                      {/* Assignment Card */}
+                      <div className="bg-linear-to-br from-slate-50 to-white border border-slate-200 rounded-xl p-5">
+                        <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
+                          <span className="w-8 h-8 rounded-lg bg-cyan-100 text-cyan-700 flex items-center justify-center">
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                              />
+                            </svg>
+                          </span>
+                          Assignment
+                        </h3>
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                            <div className="w-10 h-10 rounded-full bg-linear-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center text-sm font-bold">
+                              {lead.assigned_user
+                                ? getInitials(lead.assigned_user.name)
+                                : "?"}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">
+                                {lead.assigned_user?.name || "Unassigned"}
+                              </p>
+                              <p className="text-xs text-blue-600">
+                                Assigned To
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                            <div className="w-10 h-10 rounded-full bg-linear-to-br from-slate-400 to-slate-600 text-white flex items-center justify-center text-sm font-bold">
+                              {lead.created_user
+                                ? getInitials(lead.created_user.name)
+                                : "?"}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">
+                                {lead.created_user?.name || "Unknown"}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                Created By
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Column - Budget & Timeline */}
+                    <div className="space-y-5">
+                      {/* Budget & Value Card */}
+                      <div className="bg-linear-to-br from-emerald-50 to-green-50 border border-emerald-200 rounded-xl p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                              <svg
+                                className="w-3.5 h-3.5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                              </svg>
+                            </span>
+                            Budget & Value
+                          </h3>
+                          <button
+                            onClick={() => setShowEditModal(true)}
+                            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Edit"
+                          >
+                            <svg
+                              className="w-3.5 h-3.5"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-white rounded-lg p-3 border border-emerald-100">
+                            <p className="text-xs text-slate-500 mb-0.5">
+                              Est. Value
+                            </p>
+                            <p className="text-lg font-bold text-emerald-700">
+                              {formatCurrency(lead.estimated_value)}
+                            </p>
+                          </div>
+                          <div className="bg-white rounded-lg p-3 border border-emerald-100">
+                            <p className="text-xs text-slate-500 mb-0.5">
+                              Budget
+                            </p>
+                            <p className="text-sm font-semibold text-slate-900">
+                              {lead.budget_range
+                                ? BudgetRangeLabels[lead.budget_range]
+                                : "—"}
+                            </p>
+                          </div>
+                          {lead.won_amount && (
+                            <div className="col-span-2 bg-green-100 rounded-lg p-3 border border-green-200">
+                              <p className="text-xs text-green-700 mb-0.5">
+                                Won Amount
+                              </p>
+                              <p className="text-lg font-bold text-green-800">
+                                {formatCurrency(lead.won_amount)}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Timeline Card */}
+                      <div className="bg-linear-to-br from-slate-50 to-white border border-slate-200 rounded-xl p-5">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                            <span className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                />
+                              </svg>
+                            </span>
+                            Timeline
+                          </h3>
+                          <button
+                            onClick={() => setShowEditModal(true)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Edit"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                        <dl className="space-y-3">
+                          <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                            <dt className="text-sm text-slate-500">Created</dt>
+                            <dd className="text-sm font-semibold text-slate-900">
+                              {formatDateTime(lead.created_at)}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                            <dt className="text-sm text-slate-500">
+                              Last Updated
+                            </dt>
+                            <dd className="text-sm font-semibold text-slate-900">
+                              {formatDateTime(lead.updated_at)}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                            <dt className="text-sm text-slate-500">
+                              Last Activity
+                            </dt>
+                            <dd className="text-sm font-semibold text-slate-900">
+                              {formatDateTime(lead.last_activity_at)}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                            <dt className="text-sm text-slate-500">
+                              Stage Changed
+                            </dt>
+                            <dd className="text-sm font-semibold text-slate-900">
+                              {formatDateTime(lead.stage_changed_at)}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                            <dt className="text-sm text-slate-500">
+                              Target Start
+                            </dt>
+                            <dd className="text-sm font-semibold text-slate-900">
+                              {formatDate(lead.target_start_date)}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                            <dt className="text-sm text-slate-500">
+                              Target End
+                            </dt>
+                            <dd className="text-sm font-semibold text-slate-900">
+                              {formatDate(lead.target_end_date)}
+                            </dd>
+                          </div>
+                          {lead.next_followup_date && (
+                            <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 mt-2">
+                              <p className="text-xs text-amber-600 font-medium">
+                                Next Follow-up
+                              </p>
+                              <p className="text-sm font-bold text-amber-800">
+                                {formatDate(lead.next_followup_date)}
+                              </p>
+                              {lead.next_followup_notes && (
+                                <p className="text-xs text-amber-700 mt-1">
+                                  {lead.next_followup_notes}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Project Scope & Special Requirements - Full Width */}
+                  {(lead.project_scope || lead.special_requirements) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      {lead.project_scope && (
+                        <div className="bg-linear-to-br from-slate-50 to-white border border-slate-200 rounded-xl p-5">
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                              <span className="w-8 h-8 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center">
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                                  />
+                                </svg>
+                              </span>
+                              Project Scope
+                            </h3>
+                            <button
+                              onClick={() => setShowEditModal(true)}
+                              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Edit"
+                            >
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-lg p-3">
+                            {lead.project_scope}
+                          </p>
+                        </div>
+                      )}
+                      {lead.special_requirements && (
+                        <div className="bg-linear-to-br from-slate-50 to-white border border-slate-200 rounded-xl p-5">
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                              <span className="w-8 h-8 rounded-lg bg-pink-100 text-pink-700 flex items-center justify-center">
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+                                  />
+                                </svg>
+                              </span>
+                              Special Requirements
+                            </h3>
+                            <button
+                              onClick={() => setShowEditModal(true)}
+                              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Edit"
+                            >
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-lg p-3">
+                            {lead.special_requirements}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Timeline Tab */}
+              {activeTab === "timeline" && (
+                <div className="space-y-3">
+                  {activities.length === 0 && stageHistory.length === 0 ? (
+                    <div className="text-center py-8 text-sm text-slate-500">
+                      No activity recorded yet
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {[
+                        ...activities.map((a) => ({
+                          ...a,
+                          type: "activity" as const,
+                        })),
+                        ...stageHistory.map((s) => ({
+                          ...s,
+                          type: "stage" as const,
+                        })),
+                      ]
+                        .sort(
+                          (a, b) =>
+                            new Date(b.created_at).getTime() -
+                            new Date(a.created_at).getTime()
+                        )
+                        .map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex gap-4 p-4 bg-slate-50 rounded-lg"
+                          >
+                            <div
+                              className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+                                item.type === "stage"
+                                  ? "bg-purple-100 text-purple-600"
+                                  : "bg-blue-100 text-blue-600"
+                              }`}
+                            >
+                              {item.type === "stage" ? (
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                                  />
+                                </svg>
+                              ) : (
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                  />
+                                </svg>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-slate-900">
+                                {item.type === "stage"
+                                  ? `Stage changed to ${
+                                      LeadStageLabels[
+                                        (item as LeadStageHistory).to_stage
+                                      ]
+                                    }`
+                                  : (item as LeadActivity).title}
+                              </p>
+                              {item.type === "activity" &&
+                                (item as LeadActivity).description && (
+                                  <p className="text-xs text-slate-600 mt-1">
+                                    {(item as LeadActivity).description}
+                                  </p>
+                                )}
+                              <p className="text-xs text-slate-400 mt-1.5">
+                                {formatDateTime(item.created_at)}
+                                {item.type === "stage" &&
+                                  (item as LeadStageHistory).changed_user && (
+                                    <>
+                                      {" "}
+                                      by{" "}
+                                      {
+                                        (item as LeadStageHistory).changed_user
+                                          ?.name
+                                      }
+                                    </>
+                                  )}
+                                {item.type === "activity" &&
+                                  (item as LeadActivity).created_user && (
+                                    <>
+                                      {" "}
+                                      by{" "}
+                                      {
+                                        (item as LeadActivity).created_user
+                                          ?.name
+                                      }
+                                    </>
+                                  )}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Calendar Tab */}
+              {activeTab === "calendar" && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-base font-bold text-slate-900">
+                      Meetings & Site Visits
+                    </h3>
+                    <button
+                      onClick={() => {
+                        setEditingMeeting(null);
+                        setShowMeetingModal(true);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
                       <svg
                         className="w-4 h-4"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
                       >
                         <path
-                          fillRule="evenodd"
-                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                          clipRule="evenodd"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 4v16m8-8H4"
                         />
                       </svg>
-                    ) : (
-                      index + 1
-                    )}
-                  </div>
-                  <span className="text-xs mt-1 font-medium whitespace-nowrap">
-                    {LeadStageLabels[stage]}
-                  </span>
-                </div>
-                {index < arr.length - 1 && (
-                  <div
-                    className={`flex-1 h-0.5 mx-2 rounded ${
-                      isPast ? "bg-green-600" : "bg-slate-200"
-                    }`}
-                  />
-                )}
-              </React.Fragment>
-            );
-          })}
-        </div>
-        {(lead.stage === "lost" || lead.stage === "disqualified") && (
-          <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-sm text-red-700">
-              <strong>
-                {lead.stage === "lost" ? "Lost" : "Disqualified"}:
-              </strong>{" "}
-              {lead.stage === "lost"
-                ? LostReasonLabels[lead.lost_reason!]
-                : DisqualificationReasonLabels[lead.disqualification_reason!]}
-              {(lead.lost_notes || lead.disqualification_notes) &&
-                ` - ${lead.lost_notes || lead.disqualification_notes}`}
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Tabs */}
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        <div className="border-b border-slate-200">
-          <nav className="flex">
-            {(
-              [
-                { id: "overview", label: "Overview" },
-                { id: "timeline", label: "Timeline" },
-                { id: "tasks", label: `Tasks (${tasks.length})` },
-                { id: "documents", label: `Documents (${documents.length})` },
-                { id: "notes", label: `Notes (${notes.length})` },
-                {
-                  id: "quotations",
-                  label: `Quotations (${quotations.length})`,
-                },
-              ] as { id: TabType; label: string }[]
-            ).map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-5 py-3 text-sm font-medium transition-colors ${
-                  activeTab === tab.id
-                    ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-        </div>
-
-        <div className="p-5">
-          {/* Overview Tab */}
-          {activeTab === "overview" && (
-            <div className="space-y-6">
-              {/* Main Content Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left Column - Client & Contact Info */}
-                <div className="space-y-5">
-                  {/* Client Information Card */}
-                  <div className="bg-linear-to-br from-slate-50 to-white border border-slate-200 rounded-xl p-5">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                        <span className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                            />
-                          </svg>
-                        </span>
-                        Client Details
-                      </h3>
-                      <button
-                        onClick={() => setShowEditModal(true)}
-                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Edit"
-                      >
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-100">
-                        <div className="w-12 h-12 rounded-full bg-linear-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center text-lg font-bold">
-                          {getInitials(lead.client_name)}
-                        </div>
-                        <div>
-                          <p className="text-base font-semibold text-slate-900">
-                            {lead.client_name}
-                          </p>
-                          <p className="text-sm text-slate-500">
-                            Lead #{lead.lead_number}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="grid gap-2">
-                        <div className="flex items-center gap-3 p-2.5 bg-white rounded-lg border border-slate-100">
-                          <svg
-                            className="w-5 h-5 text-slate-400"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                            />
-                          </svg>
-                          <span className="text-sm font-medium text-slate-700">
-                            {lead.phone || "—"}
-                          </span>
-                        </div>
-                        <a
-                          href={lead.email ? `mailto:${lead.email}` : undefined}
-                          className={`flex items-center gap-3 p-2.5 bg-white rounded-lg border border-slate-100 ${
-                            lead.email
-                              ? "hover:bg-blue-50 hover:border-blue-200"
-                              : ""
-                          }`}
-                        >
-                          <svg
-                            className="w-5 h-5 text-slate-400"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                            />
-                          </svg>
-                          <span className="text-sm font-medium text-slate-700 truncate">
-                            {lead.email || "—"}
-                          </span>
-                        </a>
-                      </div>
-                    </div>
+                      Schedule Meeting
+                    </button>
                   </div>
 
-                  {/* Lead Attributes Card */}
-                  <div className="bg-linear-to-br from-slate-50 to-white border border-slate-200 rounded-xl p-5">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                        <span className="w-8 h-8 rounded-lg bg-green-100 text-green-700 flex items-center justify-center">
+                  {(() => {
+                    const meetings = activities.filter(
+                      (a) =>
+                        a.activity_type === "meeting_scheduled" ||
+                        a.activity_type === "meeting_completed" ||
+                        a.activity_type === "site_visit" ||
+                        a.activity_type === "client_meeting" ||
+                        a.activity_type === "internal_meeting"
+                    );
+
+                    // Separate into upcoming and past
+                    const now = new Date();
+                    const upcoming = meetings
+                      .filter(
+                        (m) =>
+                          m.meeting_scheduled_at &&
+                          new Date(m.meeting_scheduled_at) >= now &&
+                          !m.meeting_completed
+                      )
+                      .sort(
+                        (a, b) =>
+                          new Date(a.meeting_scheduled_at!).getTime() -
+                          new Date(b.meeting_scheduled_at!).getTime()
+                      );
+                    const past = meetings
+                      .filter(
+                        (m) =>
+                          !m.meeting_scheduled_at ||
+                          new Date(m.meeting_scheduled_at) < now ||
+                          m.meeting_completed
+                      )
+                      .sort(
+                        (a, b) =>
+                          new Date(b.created_at).getTime() -
+                          new Date(a.created_at).getTime()
+                      );
+
+                    if (meetings.length === 0) {
+                      return (
+                        <div className="text-center py-12">
                           <svg
-                            className="w-4 h-4"
+                            className="w-16 h-16 text-slate-300 mx-auto mb-4"
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"
@@ -718,1059 +1440,736 @@ export default function LeadDetailPage() {
                             <path
                               strokeLinecap="round"
                               strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
-                            />
-                          </svg>
-                        </span>
-                        Lead Attributes
-                      </h3>
-                      <button
-                        onClick={() => setShowEditModal(true)}
-                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Edit"
-                      >
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                    <dl className="space-y-3">
-                      <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                        <dt className="text-sm text-slate-500">
-                          Property Type
-                        </dt>
-                        <dd className="text-sm font-semibold text-slate-900">
-                          {PropertyTypeLabels[lead.property_type]}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                        <dt className="text-sm text-slate-500">Service Type</dt>
-                        <dd className="text-sm font-semibold text-slate-900">
-                          {lead.service_type
-                            ? ServiceTypeLabels[lead.service_type]
-                            : "—"}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                        <dt className="text-sm text-slate-500">Lead Source</dt>
-                        <dd className="text-sm font-semibold text-slate-900">
-                          {lead.lead_source
-                            ? LeadSourceLabels[lead.lead_source]
-                            : "—"}
-                        </dd>
-                      </div>
-                      {lead.lead_source_detail && (
-                        <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                          <dt className="text-sm text-slate-500">
-                            Source Detail
-                          </dt>
-                          <dd className="text-sm font-semibold text-slate-900">
-                            {lead.lead_source_detail}
-                          </dd>
-                        </div>
-                      )}
-                      <div className="flex justify-between items-center py-2">
-                        <dt className="text-sm text-slate-500">Priority</dt>
-                        <dd>
-                          <span
-                            className={`px-2.5 py-1 text-xs font-semibold rounded-full ${
-                              lead.priority === "urgent"
-                                ? "bg-red-100 text-red-700"
-                                : lead.priority === "high"
-                                ? "bg-orange-100 text-orange-700"
-                                : lead.priority === "medium"
-                                ? "bg-blue-100 text-blue-700"
-                                : "bg-slate-100 text-slate-700"
-                            }`}
-                          >
-                            {lead.priority.charAt(0).toUpperCase() +
-                              lead.priority.slice(1)}
-                          </span>
-                        </dd>
-                      </div>
-                    </dl>
-                  </div>
-                </div>
-
-                {/* Middle Column - Property & Assignment */}
-                <div className="space-y-5">
-                  {/* Property Information Card */}
-                  <div className="bg-linear-to-br from-slate-50 to-white border border-slate-200 rounded-xl p-5">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                        <span className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                            />
-                          </svg>
-                        </span>
-                        Property Details
-                      </h3>
-                      <button
-                        onClick={() => setShowEditModal(true)}
-                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Edit"
-                      >
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                    <dl className="space-y-3">
-                      <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                        <dt className="text-sm text-slate-500">
-                          Property Name
-                        </dt>
-                        <dd className="text-sm font-semibold text-slate-900">
-                          {lead.property_name || "—"}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                        <dt className="text-sm text-slate-500">Flat/Unit</dt>
-                        <dd className="text-sm font-semibold text-slate-900">
-                          {lead.flat_number || "—"}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                        <dt className="text-sm text-slate-500">Carpet Area</dt>
-                        <dd className="text-sm font-semibold text-slate-900">
-                          {lead.carpet_area_sqft
-                            ? `${lead.carpet_area_sqft} sq.ft`
-                            : "—"}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                        <dt className="text-sm text-slate-500">City</dt>
-                        <dd className="text-sm font-semibold text-slate-900">
-                          {lead.property_city || "—"}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                        <dt className="text-sm text-slate-500">Pincode</dt>
-                        <dd className="text-sm font-semibold text-slate-900">
-                          {lead.property_pincode || "—"}
-                        </dd>
-                      </div>
-                      {lead.property_address && (
-                        <div className="pt-2">
-                          <dt className="text-sm text-slate-500 mb-1">
-                            Full Address
-                          </dt>
-                          <dd className="text-sm font-medium text-slate-700 bg-slate-50 rounded-lg p-2">
-                            {lead.property_address}
-                          </dd>
-                        </div>
-                      )}
-                    </dl>
-                  </div>
-
-                  {/* Assignment Card */}
-                  <div className="bg-linear-to-br from-slate-50 to-white border border-slate-200 rounded-xl p-5">
-                    <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
-                      <span className="w-8 h-8 rounded-lg bg-cyan-100 text-cyan-700 flex items-center justify-center">
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                          />
-                        </svg>
-                      </span>
-                      Assignment
-                    </h3>
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
-                        <div className="w-10 h-10 rounded-full bg-linear-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center text-sm font-bold">
-                          {lead.assigned_user
-                            ? getInitials(lead.assigned_user.name)
-                            : "?"}
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">
-                            {lead.assigned_user?.name || "Unassigned"}
-                          </p>
-                          <p className="text-xs text-blue-600">Assigned To</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
-                        <div className="w-10 h-10 rounded-full bg-linear-to-br from-slate-400 to-slate-600 text-white flex items-center justify-center text-sm font-bold">
-                          {lead.created_user
-                            ? getInitials(lead.created_user.name)
-                            : "?"}
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">
-                            {lead.created_user?.name || "Unknown"}
-                          </p>
-                          <p className="text-xs text-slate-500">Created By</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right Column - Budget & Timeline */}
-                <div className="space-y-5">
-                  {/* Budget & Value Card */}
-                  <div className="bg-linear-to-br from-emerald-50 to-green-50 border border-emerald-200 rounded-xl p-5">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                        <span className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                          </svg>
-                        </span>
-                        Budget & Value
-                      </h3>
-                      <button
-                        onClick={() => setShowEditModal(true)}
-                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Edit"
-                      >
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                    <div className="space-y-4">
-                      <div className="bg-white rounded-lg p-4 border border-emerald-100">
-                        <p className="text-sm text-slate-500 mb-1">
-                          Estimated Value
-                        </p>
-                        <p className="text-2xl font-bold text-emerald-700">
-                          {formatCurrency(lead.estimated_value)}
-                        </p>
-                      </div>
-                      <div className="flex justify-between items-center py-2">
-                        <dt className="text-sm text-slate-500">Budget Range</dt>
-                        <dd className="text-sm font-semibold text-slate-900">
-                          {lead.budget_range
-                            ? BudgetRangeLabels[lead.budget_range]
-                            : "—"}
-                        </dd>
-                      </div>
-                      {lead.won_amount && (
-                        <div className="bg-green-100 rounded-lg p-4 border border-green-200">
-                          <p className="text-sm text-green-700 mb-1">
-                            Won Amount
-                          </p>
-                          <p className="text-xl font-bold text-green-800">
-                            {formatCurrency(lead.won_amount)}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Timeline Card */}
-                  <div className="bg-linear-to-br from-slate-50 to-white border border-slate-200 rounded-xl p-5">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                        <span className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
+                              strokeWidth={1.5}
                               d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                             />
                           </svg>
-                        </span>
-                        Timeline
-                      </h3>
-                      <button
-                        onClick={() => setShowEditModal(true)}
-                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Edit"
-                      >
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                    <dl className="space-y-3">
-                      <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                        <dt className="text-sm text-slate-500">Created</dt>
-                        <dd className="text-sm font-semibold text-slate-900">
-                          {formatDateTime(lead.created_at)}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                        <dt className="text-sm text-slate-500">Last Updated</dt>
-                        <dd className="text-sm font-semibold text-slate-900">
-                          {formatDateTime(lead.updated_at)}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                        <dt className="text-sm text-slate-500">
-                          Last Activity
-                        </dt>
-                        <dd className="text-sm font-semibold text-slate-900">
-                          {formatDateTime(lead.last_activity_at)}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                        <dt className="text-sm text-slate-500">
-                          Stage Changed
-                        </dt>
-                        <dd className="text-sm font-semibold text-slate-900">
-                          {formatDateTime(lead.stage_changed_at)}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                        <dt className="text-sm text-slate-500">Target Start</dt>
-                        <dd className="text-sm font-semibold text-slate-900">
-                          {formatDate(lead.target_start_date)}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                        <dt className="text-sm text-slate-500">Target End</dt>
-                        <dd className="text-sm font-semibold text-slate-900">
-                          {formatDate(lead.target_end_date)}
-                        </dd>
-                      </div>
-                      {lead.next_followup_date && (
-                        <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 mt-2">
-                          <p className="text-xs text-amber-600 font-medium">
-                            Next Follow-up
+                          <p className="text-base font-medium text-slate-700 mb-2">
+                            No meetings scheduled yet
                           </p>
-                          <p className="text-sm font-bold text-amber-800">
-                            {formatDate(lead.next_followup_date)}
-                          </p>
-                          {lead.next_followup_notes && (
-                            <p className="text-xs text-amber-700 mt-1">
-                              {lead.next_followup_notes}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </dl>
-                  </div>
-                </div>
-              </div>
-
-              {/* Project Scope & Special Requirements - Full Width */}
-              {(lead.project_scope || lead.special_requirements) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  {lead.project_scope && (
-                    <div className="bg-linear-to-br from-slate-50 to-white border border-slate-200 rounded-xl p-5">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                          <span className="w-8 h-8 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center">
-                            <svg
-                              className="w-4 h-4"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                              />
-                            </svg>
-                          </span>
-                          Project Scope
-                        </h3>
-                        <button
-                          onClick={() => setShowEditModal(true)}
-                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Edit"
-                        >
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                            />
-                          </svg>
-                        </button>
-                      </div>
-                      <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-lg p-3">
-                        {lead.project_scope}
-                      </p>
-                    </div>
-                  )}
-                  {lead.special_requirements && (
-                    <div className="bg-linear-to-br from-slate-50 to-white border border-slate-200 rounded-xl p-5">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                          <span className="w-8 h-8 rounded-lg bg-pink-100 text-pink-700 flex items-center justify-center">
-                            <svg
-                              className="w-4 h-4"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
-                              />
-                            </svg>
-                          </span>
-                          Special Requirements
-                        </h3>
-                        <button
-                          onClick={() => setShowEditModal(true)}
-                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Edit"
-                        >
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                            />
-                          </svg>
-                        </button>
-                      </div>
-                      <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-lg p-3">
-                        {lead.special_requirements}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Timeline Tab */}
-          {activeTab === "timeline" && (
-            <div className="space-y-3">
-              {activities.length === 0 && stageHistory.length === 0 ? (
-                <div className="text-center py-8 text-sm text-slate-500">
-                  No activity recorded yet
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {[
-                    ...activities.map((a) => ({
-                      ...a,
-                      type: "activity" as const,
-                    })),
-                    ...stageHistory.map((s) => ({
-                      ...s,
-                      type: "stage" as const,
-                    })),
-                  ]
-                    .sort(
-                      (a, b) =>
-                        new Date(b.created_at).getTime() -
-                        new Date(a.created_at).getTime()
-                    )
-                    .map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex gap-4 p-4 bg-slate-50 rounded-lg"
-                      >
-                        <div
-                          className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
-                            item.type === "stage"
-                              ? "bg-purple-100 text-purple-600"
-                              : "bg-blue-100 text-blue-600"
-                          }`}
-                        >
-                          {item.type === "stage" ? (
-                            <svg
-                              className="w-4 h-4"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                              />
-                            </svg>
-                          ) : (
-                            <svg
-                              className="w-4 h-4"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                              />
-                            </svg>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-900">
-                            {item.type === "stage"
-                              ? `Stage changed to ${
-                                  LeadStageLabels[
-                                    (item as LeadStageHistory).to_stage
-                                  ]
-                                }`
-                              : (item as LeadActivity).title}
-                          </p>
-                          {item.type === "activity" &&
-                            (item as LeadActivity).description && (
-                              <p className="text-xs text-slate-600 mt-1">
-                                {(item as LeadActivity).description}
-                              </p>
-                            )}
-                          <p className="text-xs text-slate-400 mt-1.5">
-                            {formatDateTime(item.created_at)}
-                            {item.type === "stage" &&
-                              (item as LeadStageHistory).changed_user && (
-                                <>
-                                  {" "}
-                                  by{" "}
-                                  {
-                                    (item as LeadStageHistory).changed_user
-                                      ?.name
-                                  }
-                                </>
-                              )}
-                            {item.type === "activity" &&
-                              (item as LeadActivity).created_user && (
-                                <>
-                                  {" "}
-                                  by {(item as LeadActivity).created_user?.name}
-                                </>
-                              )}
+                          <p className="text-sm text-slate-500 max-w-sm mx-auto">
+                            Schedule a meeting or site visit with the customer
+                            to track your interactions.
                           </p>
                         </div>
-                      </div>
-                    ))}
-                </div>
-              )}
-            </div>
-          )}
+                      );
+                    }
 
-          {/* Notes Tab */}
-          {activeTab === "notes" && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-base font-bold text-slate-900">Notes</h3>
-                <button
-                  onClick={() => setShowNoteModal(true)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                >
-                  + Add Note
-                </button>
-              </div>
-              {notes.length === 0 ? (
-                <div className="text-center py-8 text-sm text-slate-500">
-                  No notes yet
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {notes.map((note) => (
-                    <div key={note.id} className="p-4 bg-slate-50 rounded-lg">
-                      {note.is_pinned && (
-                        <span className="inline-flex items-center gap-1 text-xs text-amber-600 mb-2">
-                          <svg
-                            className="w-3 h-3"
-                            fill="currentColor"
-                            viewBox="0 0 20 20"
-                          >
-                            <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 14a6 6 0 110-12 6 6 0 010 12z" />
-                          </svg>
-                          Pinned
-                        </span>
-                      )}
-                      <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                        {note.content}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-2">
-                        {formatDateTime(note.created_at)} by{" "}
-                        {note.created_user?.name}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                    return (
+                      <div className="space-y-6">
+                        {/* Upcoming Meetings */}
+                        {upcoming.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                              <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                              Upcoming ({upcoming.length})
+                            </h4>
+                            <div className="space-y-3">
+                              {upcoming.map((meeting) => (
+                                <MeetingCard
+                                  key={meeting.id}
+                                  meeting={meeting}
+                                  onEdit={() => {
+                                    setEditingMeeting(meeting);
+                                    setShowMeetingModal(true);
+                                  }}
+                                  onComplete={async () => {
+                                    try {
+                                      await fetch(
+                                        `/api/sales/leads/${leadId}/activities?activityId=${meeting.id}`,
+                                        {
+                                          method: "PATCH",
+                                          headers: {
+                                            "Content-Type": "application/json",
+                                          },
+                                          body: JSON.stringify({
+                                            meeting_completed: true,
+                                          }),
+                                        }
+                                      );
+                                      fetchLead();
+                                    } catch (err) {
+                                      console.error(
+                                        "Error completing meeting:",
+                                        err
+                                      );
+                                    }
+                                  }}
+                                  formatDateTime={formatDateTime}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
-          {/* Tasks Tab */}
-          {activeTab === "tasks" && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-base font-bold text-slate-900">Tasks</h3>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
-                  + Add Task
-                </button>
-              </div>
-              {tasks.length === 0 ? (
-                <div className="text-center py-8 text-sm text-slate-500">
-                  No tasks yet
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {tasks.map((task) => (
-                    <div
-                      key={task.id}
-                      className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={task.status === "completed"}
-                        className="w-5 h-5 rounded border-slate-300"
-                        readOnly
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p
-                          className={`text-sm font-medium ${
-                            task.status === "completed"
-                              ? "text-slate-400 line-through"
-                              : "text-slate-900"
-                          }`}
-                        >
-                          {task.title}
-                        </p>
-                        {task.due_date && (
-                          <p className="text-xs text-slate-500 mt-1">
-                            Due: {formatDate(task.due_date)}
-                          </p>
+                        {/* Past Meetings */}
+                        {past.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                              <span className="w-2 h-2 bg-slate-400 rounded-full"></span>
+                              Past ({past.length})
+                            </h4>
+                            <div className="space-y-3">
+                              {past.map((meeting) => (
+                                <MeetingCard
+                                  key={meeting.id}
+                                  meeting={meeting}
+                                  onEdit={() => {
+                                    setEditingMeeting(meeting);
+                                    setShowMeetingModal(true);
+                                  }}
+                                  isPast
+                                  formatDateTime={formatDateTime}
+                                />
+                              ))}
+                            </div>
+                          </div>
                         )}
                       </div>
-                      <span
-                        className={`px-2 py-1 text-xs font-medium rounded ${
-                          task.priority === "urgent"
-                            ? "bg-red-100 text-red-700"
-                            : task.priority === "high"
-                            ? "bg-orange-100 text-orange-700"
-                            : "bg-slate-100 text-slate-700"
-                        }`}
-                      >
-                        {task.priority}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })()}
                 </div>
               )}
-            </div>
-          )}
 
-          {/* Documents Tab */}
-          {activeTab === "documents" && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-base font-bold text-slate-900">
-                  Documents
-                </h3>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
-                  + Upload
-                </button>
-              </div>
-              {documents.length === 0 ? (
-                <div className="text-center py-8 text-sm text-slate-500">
-                  No documents uploaded yet
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {documents.map((doc) => (
-                    <div key={doc.id} className="p-4 bg-slate-50 rounded-lg">
-                      <div className="flex items-start gap-3">
-                        <svg
-                          className="w-8 h-8 text-slate-400 shrink-0"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
+              {/* Notes Tab */}
+              {activeTab === "notes" && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-base font-bold text-slate-900">
+                      Notes
+                    </h3>
+                    <button
+                      onClick={() => setShowNoteModal(true)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                    >
+                      + Add Note
+                    </button>
+                  </div>
+                  {notes.length === 0 ? (
+                    <div className="text-center py-8 text-sm text-slate-500">
+                      No notes yet
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {notes.map((note) => (
+                        <div
+                          key={note.id}
+                          className="p-4 bg-slate-50 rounded-lg"
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                          />
-                        </svg>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-900 truncate">
-                            {doc.file_name}
+                          {note.is_pinned && (
+                            <span className="inline-flex items-center gap-1 text-xs text-amber-600 mb-2">
+                              <svg
+                                className="w-3 h-3"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 14a6 6 0 110-12 6 6 0 010 12z" />
+                              </svg>
+                              Pinned
+                            </span>
+                          )}
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                            {note.content}
                           </p>
-                          <p className="text-xs text-slate-500">
-                            {doc.document_type || "Document"}
-                          </p>
-                          <p className="text-xs text-slate-400 mt-1">
-                            {formatDate(doc.created_at)}
+                          <p className="text-xs text-slate-400 mt-2">
+                            {formatDateTime(note.created_at)} by{" "}
+                            {note.created_user?.name}
                           </p>
                         </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tasks Tab */}
+              {activeTab === "tasks" && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-base font-bold text-slate-900">
+                      Tasks
+                    </h3>
+                    <button
+                      onClick={() => setShowTaskModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 4v16m8-8H4"
+                        />
+                      </svg>
+                      Add Task
+                    </button>
+                  </div>
+                  {tasks.length === 0 ? (
+                    <div className="text-center py-12">
+                      <svg
+                        className="w-16 h-16 text-slate-300 mx-auto mb-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={1.5}
+                          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                        />
+                      </svg>
+                      <p className="text-base font-medium text-slate-700 mb-2">
+                        No tasks yet
+                      </p>
+                      <p className="text-sm text-slate-500 mb-4">
+                        Create tasks to track work for this lead
+                      </p>
+                      <button
+                        onClick={() => setShowTaskModal(true)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                      >
+                        Create First Task
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {tasks.map((task) => {
+                        const priorityColor = task.priority
+                          ? TaskPriorityColors[task.priority as TaskPriority]
+                          : null;
+                        const statusColor =
+                          TaskStatusColors[task.status as TaskStatus];
+                        const isOverdue =
+                          task.due_date &&
+                          new Date(task.due_date) < new Date() &&
+                          task.status !== "completed" &&
+                          task.status !== "cancelled";
+
+                        return (
+                          <div
+                            key={task.id}
+                            onClick={() => setEditingTask(task)}
+                            className="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-lg hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer group"
+                          >
+                            {/* Status indicator */}
+                            <div
+                              className={`w-2 h-2 rounded-full ${
+                                statusColor?.dot || "bg-slate-400"
+                              }`}
+                            />
+
+                            {/* Task content */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p
+                                  className={`text-sm font-medium ${
+                                    task.status === "completed"
+                                      ? "text-slate-400 line-through"
+                                      : "text-slate-900"
+                                  }`}
+                                >
+                                  {task.title}
+                                </p>
+                                {task.task_number && (
+                                  <span className="text-xs text-slate-400">
+                                    #{task.task_number}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 mt-1">
+                                {/* Status badge */}
+                                <span
+                                  className={`px-2 py-0.5 text-xs font-medium rounded ${statusColor?.bg} ${statusColor?.text}`}
+                                >
+                                  {TaskStatusLabels[task.status as TaskStatus]}
+                                </span>
+
+                                {/* Due date */}
+                                {task.due_date && (
+                                  <span
+                                    className={`text-xs ${
+                                      isOverdue
+                                        ? "text-red-600 font-medium"
+                                        : "text-slate-500"
+                                    }`}
+                                  >
+                                    {isOverdue && "⚠️ "}Due:{" "}
+                                    {formatDate(task.due_date)}
+                                  </span>
+                                )}
+
+                                {/* Assignee */}
+                                {task.assigned_user && (
+                                  <span className="text-xs text-slate-500 flex items-center gap-1">
+                                    {task.assigned_user.avatar_url ? (
+                                      <img
+                                        src={task.assigned_user.avatar_url}
+                                        alt=""
+                                        className="w-4 h-4 rounded-full"
+                                      />
+                                    ) : (
+                                      <span className="w-4 h-4 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-medium text-slate-600">
+                                        {task.assigned_user.name?.charAt(0) ||
+                                          "?"}
+                                      </span>
+                                    )}
+                                    {task.assigned_user.name}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Priority badge */}
+                            {task.priority && priorityColor && (
+                              <span
+                                className={`px-2 py-1 text-xs font-medium rounded ${priorityColor.bg} ${priorityColor.text}`}
+                              >
+                                {
+                                  TaskPriorityLabels[
+                                    task.priority as TaskPriority
+                                  ]
+                                }
+                              </span>
+                            )}
+
+                            {/* Edit hint on hover */}
+                            <svg
+                              className="w-4 h-4 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 5l7 7-7 7"
+                              />
+                            </svg>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Documents Tab */}
+              {activeTab === "documents" && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-base font-bold text-slate-900">
+                      Documents
+                    </h3>
+                    <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
+                      + Upload
+                    </button>
+                  </div>
+                  {documents.length === 0 ? (
+                    <div className="text-center py-8 text-sm text-slate-500">
+                      No documents uploaded yet
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {documents.map((doc) => (
+                        <div
+                          key={doc.id}
+                          className="p-4 bg-slate-50 rounded-lg"
+                        >
+                          <div className="flex items-start gap-3">
+                            <svg
+                              className="w-8 h-8 text-slate-400 shrink-0"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                              />
+                            </svg>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-slate-900 truncate">
+                                {doc.file_name}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {doc.document_type || "Document"}
+                              </p>
+                              <p className="text-xs text-slate-400 mt-1">
+                                {formatDate(doc.created_at)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Quotations Tab */}
+              {activeTab === "quotations" && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-base font-bold text-slate-900">
+                      Quotations
+                    </h3>
+                  </div>
+
+                  {/* Info message - only show when no quotations exist */}
+                  {quotations.length === 0 && (
+                    <p className="text-sm text-slate-500 italic">
+                      Quotations are created automatically when this lead moves
+                      to the Proposal & Negotiation stage.
+                    </p>
+                  )}
+
+                  {quotations.length === 0 ? (
+                    <div className="text-center py-12">
+                      <svg
+                        className="w-16 h-16 text-slate-300 mx-auto mb-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={1.5}
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                        />
+                      </svg>
+                      <p className="text-base font-medium text-slate-700 mb-2">
+                        No quotations yet
+                      </p>
+                      <p className="text-sm text-slate-500 max-w-sm mx-auto">
+                        {lead.stage === "new" ||
+                        lead.stage === "qualified" ||
+                        lead.stage === "requirement_discussion"
+                          ? "Move this lead to Proposal & Negotiation stage to auto-create the first quotation."
+                          : "A quotation will be created when the lead moves to Proposal & Negotiation."}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-slate-200">
+                          <thead className="bg-slate-50">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
+                                Quote #
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
+                                Version
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
+                                Amount
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
+                                Status
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
+                                Valid Until
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
+                                Created
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
+                                Assigned To
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
+                                Actions
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {quotations.map((quote) => (
+                              <tr
+                                key={quote.id}
+                                className="hover:bg-blue-50/50 transition-colors cursor-pointer group"
+                                onClick={() =>
+                                  router.push(
+                                    `/dashboard/quotations/${quote.id}`
+                                  )
+                                }
+                              >
+                                <td className="px-4 py-3">
+                                  <p className="font-semibold text-sm text-slate-900 group-hover:text-blue-600 transition-colors">
+                                    {quote.quotation_number ||
+                                      `#${quote.id.slice(0, 8)}`}
+                                  </p>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-600 rounded">
+                                    v{quote.version || 1}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div>
+                                    <p className="font-semibold text-sm text-slate-900">
+                                      {formatCurrency(
+                                        quote.grand_total || quote.total_amount
+                                      )}
+                                    </p>
+                                    {quote.discount_amount &&
+                                      quote.discount_amount > 0 && (
+                                        <p className="text-xs text-green-600">
+                                          -
+                                          {formatCurrency(
+                                            quote.discount_amount
+                                          )}{" "}
+                                          off
+                                        </p>
+                                      )}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span
+                                    className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
+                                      quote.status === "approved"
+                                        ? "bg-green-100 text-green-700"
+                                        : quote.status === "sent"
+                                        ? "bg-blue-100 text-blue-700"
+                                        : quote.status === "rejected"
+                                        ? "bg-red-100 text-red-700"
+                                        : quote.status === "expired"
+                                        ? "bg-orange-100 text-orange-700"
+                                        : "bg-slate-100 text-slate-700"
+                                    }`}
+                                  >
+                                    {quote.status?.charAt(0).toUpperCase() +
+                                      quote.status?.slice(1) || "Draft"}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <p className="text-sm text-slate-600">
+                                    {formatDate(quote.valid_until)}
+                                  </p>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <p className="text-sm text-slate-600">
+                                    {formatDate(quote.created_at)}
+                                  </p>
+                                </td>
+                                <td className="px-4 py-3">
+                                  {quote.assigned_to_name ? (
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-medium shrink-0">
+                                        {quote.assigned_to_name?.[0]?.toUpperCase()}
+                                      </div>
+                                      <span className="text-sm text-slate-700 truncate">
+                                        {quote.assigned_to_name}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-sm text-slate-400 italic">
+                                      —
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-1">
+                                    <Link
+                                      href={`/dashboard/quotations/${quote.id}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                      title="View quotation"
+                                    >
+                                      <svg
+                                        className="w-3.5 h-3.5"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                        />
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                                        />
+                                      </svg>
+                                      View
+                                    </Link>
+                                    <Link
+                                      href={`/dashboard/quotations/${quote.id}/edit`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                      title="Edit quotation"
+                                    >
+                                      <svg
+                                        className="w-3.5 h-3.5"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                        />
+                                      </svg>
+                                      Edit
+                                    </Link>
+                                    <button
+                                      onClick={(e) => handleRevise(quote.id, e)}
+                                      disabled={revisingId === quote.id}
+                                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 rounded transition-colors disabled:opacity-50"
+                                      title="Create new revision"
+                                    >
+                                      {revisingId === quote.id ? (
+                                        <div className="w-3.5 h-3.5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
+                                      ) : (
+                                        <svg
+                                          className="w-3.5 h-3.5"
+                                          fill="none"
+                                          viewBox="0 0 24 24"
+                                          stroke="currentColor"
+                                        >
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                          />
+                                        </svg>
+                                      )}
+                                      Revise
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Stage Transition Modal */}
+          {showStageModal && (
+            <StageTransitionModal
+              lead={lead}
+              quotations={quotations}
+              onClose={() => setShowStageModal(false)}
+              onSuccess={() => {
+                setShowStageModal(false);
+                fetchLead();
+              }}
+            />
           )}
 
-          {/* Quotations Tab */}
-          {activeTab === "quotations" && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-base font-bold text-slate-900">
-                  Quotations
-                </h3>
-              </div>
+          {/* Add Note Modal */}
+          {showNoteModal && (
+            <AddNoteModal
+              leadId={lead.id}
+              onClose={() => setShowNoteModal(false)}
+              onSuccess={() => {
+                setShowNoteModal(false);
+                fetchLead();
+              }}
+            />
+          )}
 
-              {/* Info message - only show when no quotations exist */}
-              {quotations.length === 0 && (
-                <p className="text-sm text-slate-500 italic">
-                  Quotations are created automatically when this lead moves to
-                  the Proposal & Negotiation stage.
-                </p>
-              )}
+          {/* Edit Lead Modal */}
+          {showEditModal && (
+            <EditLeadModal
+              lead={lead}
+              editForm={editForm}
+              setEditForm={setEditForm}
+              onClose={() => setShowEditModal(false)}
+              onSave={handleSaveEdit}
+              isSaving={isSaving}
+              validationError={null}
+            />
+          )}
 
-              {quotations.length === 0 ? (
-                <div className="text-center py-12">
-                  <svg
-                    className="w-16 h-16 text-slate-300 mx-auto mb-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.5}
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
-                  <p className="text-base font-medium text-slate-700 mb-2">
-                    No quotations yet
-                  </p>
-                  <p className="text-sm text-slate-500 max-w-sm mx-auto">
-                    {lead.stage === "new" ||
-                    lead.stage === "qualified" ||
-                    lead.stage === "requirement_discussion"
-                      ? "Move this lead to Proposal & Negotiation stage to auto-create the first quotation."
-                      : "A quotation will be created when the lead moves to Proposal & Negotiation."}
-                  </p>
-                </div>
-              ) : (
-                <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-slate-200">
-                      <thead className="bg-slate-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
-                            Quote #
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
-                            Version
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
-                            Amount
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
-                            Status
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
-                            Valid Until
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
-                            Created
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
-                            Assigned To
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {quotations.map((quote) => (
-                          <tr
-                            key={quote.id}
-                            className="hover:bg-blue-50/50 transition-colors cursor-pointer group"
-                            onClick={() =>
-                              router.push(`/dashboard/quotations/${quote.id}`)
-                            }
-                          >
-                            <td className="px-4 py-3">
-                              <p className="font-semibold text-sm text-slate-900 group-hover:text-blue-600 transition-colors">
-                                {quote.quotation_number ||
-                                  `#${quote.id.slice(0, 8)}`}
-                              </p>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-600 rounded">
-                                v{quote.version || 1}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div>
-                                <p className="font-semibold text-sm text-slate-900">
-                                  {formatCurrency(
-                                    quote.grand_total || quote.total_amount
-                                  )}
-                                </p>
-                                {quote.discount_amount &&
-                                  quote.discount_amount > 0 && (
-                                    <p className="text-xs text-green-600">
-                                      -{formatCurrency(quote.discount_amount)}{" "}
-                                      off
-                                    </p>
-                                  )}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span
-                                className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
-                                  quote.status === "approved"
-                                    ? "bg-green-100 text-green-700"
-                                    : quote.status === "sent"
-                                    ? "bg-blue-100 text-blue-700"
-                                    : quote.status === "rejected"
-                                    ? "bg-red-100 text-red-700"
-                                    : quote.status === "expired"
-                                    ? "bg-orange-100 text-orange-700"
-                                    : "bg-slate-100 text-slate-700"
-                                }`}
-                              >
-                                {quote.status?.charAt(0).toUpperCase() +
-                                  quote.status?.slice(1) || "Draft"}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <p className="text-sm text-slate-600">
-                                {formatDate(quote.valid_until)}
-                              </p>
-                            </td>
-                            <td className="px-4 py-3">
-                              <p className="text-sm text-slate-600">
-                                {formatDate(quote.created_at)}
-                              </p>
-                            </td>
-                            <td className="px-4 py-3">
-                              {quote.assigned_to_name ? (
-                                <div className="flex items-center gap-2">
-                                  <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-medium shrink-0">
-                                    {quote.assigned_to_name?.[0]?.toUpperCase()}
-                                  </div>
-                                  <span className="text-sm text-slate-700 truncate">
-                                    {quote.assigned_to_name}
-                                  </span>
-                                </div>
-                              ) : (
-                                <span className="text-sm text-slate-400 italic">
-                                  —
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-1">
-                                <Link
-                                  href={`/dashboard/quotations/${quote.id}`}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                  title="View quotation"
-                                >
-                                  <svg
-                                    className="w-3.5 h-3.5"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                                    />
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                                    />
-                                  </svg>
-                                  View
-                                </Link>
-                                <Link
-                                  href={`/dashboard/quotations/${quote.id}/edit`}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                  title="Edit quotation"
-                                >
-                                  <svg
-                                    className="w-3.5 h-3.5"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                    />
-                                  </svg>
-                                  Edit
-                                </Link>
-                                <button
-                                  onClick={(e) => handleRevise(quote.id, e)}
-                                  disabled={revisingId === quote.id}
-                                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 rounded transition-colors disabled:opacity-50"
-                                  title="Create new revision"
-                                >
-                                  {revisingId === quote.id ? (
-                                    <div className="w-3.5 h-3.5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
-                                  ) : (
-                                    <svg
-                                      className="w-3.5 h-3.5"
-                                      fill="none"
-                                      viewBox="0 0 24 24"
-                                      stroke="currentColor"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                                      />
-                                    </svg>
-                                  )}
-                                  Revise
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
+          {/* Meeting Modal */}
+          {showMeetingModal && (
+            <MeetingModal
+              leadId={lead.id}
+              meeting={editingMeeting}
+              teamMembers={teamMembers}
+              clientEmail={lead.email}
+              onClose={() => {
+                setShowMeetingModal(false);
+                setEditingMeeting(null);
+              }}
+              onSuccess={() => {
+                setShowMeetingModal(false);
+                setEditingMeeting(null);
+                fetchLead();
+              }}
+            />
+          )}
+
+          {/* Create Task Modal */}
+          <CreateTaskModal
+            isOpen={showTaskModal}
+            onClose={() => setShowTaskModal(false)}
+            onSuccess={() => {
+              setShowTaskModal(false);
+              fetchLead();
+            }}
+            defaultLinkedEntity={{
+              type: "lead",
+              id: lead.id,
+              name: lead.client_name || "This Lead",
+            }}
+          />
+
+          {/* Edit Task Modal */}
+          {editingTask && (
+            <EditTaskModal
+              task={{
+                id: editingTask.id,
+                task_number: editingTask.task_number,
+                title: editingTask.title,
+                description: editingTask.description,
+                priority: editingTask.priority,
+                status: editingTask.status,
+                start_date: editingTask.start_date,
+                due_date: editingTask.due_date,
+                assigned_to: editingTask.assigned_to,
+                assigned_to_name: editingTask.assigned_user?.name,
+                assigned_to_email: editingTask.assigned_user?.email,
+                assigned_to_avatar:
+                  editingTask.assigned_user?.avatar_url || undefined,
+                created_by: editingTask.created_by,
+                created_by_name: editingTask.created_user?.name,
+                related_type: editingTask.related_type,
+                related_id: editingTask.related_id,
+                related_name: lead.client_name || "This Lead",
+              }}
+              isOpen={true}
+              onClose={() => setEditingTask(null)}
+              onUpdate={() => {
+                setEditingTask(null);
+                fetchLead();
+              }}
+            />
           )}
         </div>
-      </div>
-
-      {/* Stage Transition Modal */}
-      {showStageModal && (
-        <StageTransitionModal
-          lead={lead}
-          quotations={quotations}
-          onClose={() => setShowStageModal(false)}
-          onSuccess={() => {
-            setShowStageModal(false);
-            fetchLead();
-          }}
-        />
-      )}
-
-      {/* Add Note Modal */}
-      {showNoteModal && (
-        <AddNoteModal
-          leadId={lead.id}
-          onClose={() => setShowNoteModal(false)}
-          onSuccess={() => {
-            setShowNoteModal(false);
-            fetchLead();
-          }}
-        />
-      )}
-
-      {/* Edit Lead Modal */}
-      {showEditModal && (
-        <EditLeadModal
-          lead={lead}
-          editForm={editForm}
-          setEditForm={setEditForm}
-          onClose={() => setShowEditModal(false)}
-          onSave={handleSaveEdit}
-          isSaving={isSaving}
-          validationError={null}
-        />
-      )}
-    </div>
+      </PageContent>
+    </PageLayout>
   );
 }
 
@@ -3144,6 +3543,821 @@ function EditLeadModal({
                 </>
               ) : (
                 "Save Changes"
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Meeting Card Component
+function MeetingCard({
+  meeting,
+  onEdit,
+  onComplete,
+  isPast = false,
+  formatDateTime,
+}: {
+  meeting: LeadActivity;
+  onEdit: () => void;
+  onComplete?: () => void;
+  isPast?: boolean;
+  formatDateTime: (date: string) => string;
+}) {
+  const typeLabel =
+    meeting.activity_type === "site_visit"
+      ? "Site Visit"
+      : meeting.activity_type === "meeting_completed"
+      ? "Meeting Completed"
+      : "Meeting";
+
+  const typeIcon =
+    meeting.activity_type === "site_visit" ? (
+      <svg
+        className="w-4 h-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+        />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+        />
+      </svg>
+    ) : (
+      <svg
+        className="w-4 h-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+        />
+      </svg>
+    );
+
+  return (
+    <div
+      className={`p-4 rounded-lg border transition-all ${
+        isPast || meeting.meeting_completed
+          ? "bg-slate-50 border-slate-200"
+          : "bg-white border-blue-200 shadow-sm"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3 flex-1 min-w-0">
+          <div
+            className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+              isPast || meeting.meeting_completed
+                ? "bg-slate-100 text-slate-500"
+                : meeting.activity_type === "site_visit"
+                ? "bg-purple-100 text-purple-600"
+                : "bg-blue-100 text-blue-600"
+            }`}
+          >
+            {typeIcon}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <p className="text-sm font-semibold text-slate-900 truncate">
+                {meeting.title}
+              </p>
+              {meeting.meeting_completed && (
+                <span className="px-1.5 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded">
+                  Completed
+                </span>
+              )}
+              {meeting.meeting_type && (
+                <span className="px-1.5 py-0.5 text-xs font-medium bg-slate-100 text-slate-600 rounded">
+                  {meeting.meeting_type === "client_meeting"
+                    ? "Client"
+                    : meeting.meeting_type === "internal_meeting"
+                    ? "Internal"
+                    : meeting.meeting_type === "site_visit"
+                    ? "Site Visit"
+                    : "Other"}
+                </span>
+              )}
+            </div>
+            {/* Date, Time & Location on same line */}
+            <div className="flex items-center gap-3 text-sm text-slate-600 flex-wrap">
+              {meeting.meeting_scheduled_at && (
+                <span className="flex items-center gap-1">
+                  <svg
+                    className="w-3.5 h-3.5 text-slate-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  {formatDateTime(meeting.meeting_scheduled_at)}
+                </span>
+              )}
+              {meeting.meeting_location && (
+                <span className="flex items-center gap-1">
+                  <svg
+                    className="w-3.5 h-3.5 text-slate-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                  {meeting.meeting_location}
+                </span>
+              )}
+            </div>
+            {/* Attendees */}
+            {meeting.attendees && meeting.attendees.length > 0 && (
+              <div className="flex items-center gap-2 mt-2">
+                <svg
+                  className="w-3.5 h-3.5 text-slate-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
+                <div className="flex flex-wrap gap-1">
+                  {meeting.attendees.map((attendee: any, idx: number) => (
+                    <span
+                      key={idx}
+                      className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                        attendee.type === "team"
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-purple-100 text-purple-700"
+                      }`}
+                    >
+                      {attendee.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {meeting.description && (
+              <p className="text-xs text-slate-500 mt-2">
+                {meeting.description}
+              </p>
+            )}
+            {meeting.meeting_notes && (
+              <div className="mt-2 p-2 bg-slate-100 rounded text-xs text-slate-600">
+                <strong>Notes:</strong> {meeting.meeting_notes}
+              </div>
+            )}
+            <p className="text-xs text-slate-400 mt-2">
+              {typeLabel} • Created {formatDateTime(meeting.created_at)}
+              {meeting.created_user && ` by ${meeting.created_user.name}`}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {!isPast && !meeting.meeting_completed && onComplete && (
+            <button
+              onClick={onComplete}
+              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+              title="Mark as completed"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            </button>
+          )}
+          <button
+            onClick={onEdit}
+            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            title="Edit meeting"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Meeting Modal Component
+function MeetingModal({
+  leadId,
+  meeting,
+  onClose,
+  onSuccess,
+  teamMembers = [],
+  clientEmail,
+}: {
+  leadId: string;
+  meeting: LeadActivity | null;
+  onClose: () => void;
+  onSuccess: () => void;
+  teamMembers?: {
+    id: string;
+    name: string;
+    email: string;
+    avatar_url?: string;
+  }[];
+  clientEmail?: string;
+}) {
+  const isEditing = !!meeting;
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showAttendeeDropdown, setShowAttendeeDropdown] = useState(false);
+  const [externalEmail, setExternalEmail] = useState("");
+
+  const [formData, setFormData] = useState({
+    meeting_type: meeting?.meeting_type || "client_meeting",
+    title: meeting?.title || "",
+    description: meeting?.description || "",
+    meeting_scheduled_at: meeting?.meeting_scheduled_at
+      ? new Date(meeting.meeting_scheduled_at).toISOString().slice(0, 16)
+      : "",
+    meeting_location: meeting?.meeting_location || "",
+    meeting_completed: meeting?.meeting_completed || false,
+    meeting_notes: meeting?.meeting_notes || "",
+    attendees: meeting?.attendees || [],
+    save_notes_to_lead: false,
+  });
+
+  const addTeamAttendee = (member: {
+    id: string;
+    name: string;
+    email: string;
+  }) => {
+    const exists = formData.attendees.some(
+      (a) => a.type === "team" && a.id === member.id
+    );
+    if (!exists) {
+      setFormData({
+        ...formData,
+        attendees: [
+          ...formData.attendees,
+          { type: "team", id: member.id, name: member.name },
+        ],
+      });
+    }
+    setShowAttendeeDropdown(false);
+  };
+
+  const addExternalAttendee = () => {
+    if (!externalEmail.trim() || !externalEmail.includes("@")) return;
+    const exists = formData.attendees.some(
+      (a) => a.type === "external" && a.email === externalEmail
+    );
+    if (!exists) {
+      setFormData({
+        ...formData,
+        attendees: [
+          ...formData.attendees,
+          {
+            type: "external",
+            email: externalEmail.trim(),
+            name: externalEmail.trim(),
+          },
+        ],
+      });
+    }
+    setExternalEmail("");
+    setShowAttendeeDropdown(false);
+  };
+
+  const removeAttendee = (index: number) => {
+    setFormData({
+      ...formData,
+      attendees: formData.attendees.filter((_, i) => i !== index),
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!formData.title.trim()) {
+      setError("Title is required");
+      return;
+    }
+
+    if (!formData.meeting_scheduled_at) {
+      setError("Date and time are required");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      // Use meeting_type as activity_type directly for new meeting types
+      // client_meeting, internal_meeting, site_visit are valid activity types
+      // For "other", we use meeting_scheduled as the activity type
+      const activityType = [
+        "client_meeting",
+        "internal_meeting",
+        "site_visit",
+      ].includes(formData.meeting_type)
+        ? formData.meeting_type
+        : "meeting_scheduled";
+
+      const payload = {
+        activity_type: activityType,
+        meeting_type: formData.meeting_type,
+        title: formData.title.trim(),
+        description: formData.description.trim() || null,
+        meeting_scheduled_at: formData.meeting_scheduled_at
+          ? new Date(formData.meeting_scheduled_at).toISOString()
+          : null,
+        meeting_location: formData.meeting_location.trim() || null,
+        meeting_completed: formData.meeting_completed,
+        meeting_notes: formData.meeting_notes.trim() || null,
+        attendees: formData.attendees,
+        save_notes_to_lead: formData.save_notes_to_lead,
+      };
+
+      const url = isEditing
+        ? `/api/sales/leads/${leadId}/activities?activityId=${meeting.id}`
+        : `/api/sales/leads/${leadId}/activities`;
+
+      const response = await fetch(url, {
+        method: isEditing ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to save meeting");
+      }
+
+      onSuccess();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden">
+        <div className="border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-slate-900">
+            {isEditing ? "Edit Meeting" : "Schedule Meeting"}
+          </h2>
+          <button
+            onClick={onClose}
+            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <form
+          onSubmit={handleSubmit}
+          className="p-6 space-y-4 max-h-[70vh] overflow-y-auto"
+        >
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {/* Meeting Type */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Type <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={formData.meeting_type}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  meeting_type: e.target.value as any,
+                })
+              }
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+            >
+              <option value="client_meeting">Client Meeting</option>
+              <option value="internal_meeting">Internal Meeting</option>
+              <option value="site_visit">Site Visit</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          {/* Title */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Title <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={formData.title}
+              onChange={(e) =>
+                setFormData({ ...formData, title: e.target.value })
+              }
+              placeholder={
+                formData.meeting_type === "site_visit"
+                  ? "e.g., Initial site inspection"
+                  : formData.meeting_type === "internal_meeting"
+                  ? "e.g., Design team review"
+                  : "e.g., Design consultation"
+              }
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+          </div>
+
+          {/* Date & Time */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Date & Time <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="datetime-local"
+              value={formData.meeting_scheduled_at}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  meeting_scheduled_at: e.target.value,
+                })
+              }
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+          </div>
+
+          {/* Location */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Location
+            </label>
+            <input
+              type="text"
+              value={formData.meeting_location}
+              onChange={(e) =>
+                setFormData({ ...formData, meeting_location: e.target.value })
+              }
+              placeholder="e.g., Client's property, Office, or Video call link"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+          </div>
+
+          {/* Attendees */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Attendees
+            </label>
+
+            {/* Selected Attendees */}
+            {formData.attendees.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {formData.attendees.map((attendee, index) => (
+                  <span
+                    key={index}
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                      attendee.type === "team"
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-purple-100 text-purple-700"
+                    }`}
+                  >
+                    {attendee.type === "team" ? (
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                        />
+                      </svg>
+                    ) : (
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                        />
+                      </svg>
+                    )}
+                    {attendee.name}
+                    <button
+                      type="button"
+                      onClick={() => removeAttendee(index)}
+                      className="hover:bg-white/50 rounded-full p-0.5"
+                    >
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Add Attendee Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowAttendeeDropdown(!showAttendeeDropdown)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-left text-sm text-slate-500 hover:border-slate-300 focus:ring-2 focus:ring-blue-500"
+              >
+                + Add attendee
+              </button>
+
+              {showAttendeeDropdown && (
+                <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg">
+                  {/* Client Email Option */}
+                  {clientEmail && (
+                    <>
+                      <div className="px-3 py-1.5 text-xs font-medium text-slate-500 bg-slate-50">
+                        Client
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const exists = formData.attendees.some(
+                            (a) =>
+                              a.type === "external" && a.email === clientEmail
+                          );
+                          if (!exists) {
+                            setFormData({
+                              ...formData,
+                              attendees: [
+                                ...formData.attendees,
+                                {
+                                  type: "external",
+                                  email: clientEmail,
+                                  name: clientEmail,
+                                },
+                              ],
+                            });
+                          }
+                          setShowAttendeeDropdown(false);
+                        }}
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
+                      >
+                        <svg
+                          className="w-4 h-4 text-purple-500"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                          />
+                        </svg>
+                        {clientEmail}
+                      </button>
+                    </>
+                  )}
+
+                  {/* Team Members */}
+                  {teamMembers.length > 0 && (
+                    <>
+                      <div className="px-3 py-1.5 text-xs font-medium text-slate-500 bg-slate-50">
+                        Team Members
+                      </div>
+                      <div className="max-h-32 overflow-y-auto">
+                        {teamMembers.map((member) => (
+                          <button
+                            key={member.id}
+                            type="button"
+                            onClick={() => addTeamAttendee(member)}
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
+                          >
+                            <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-medium">
+                              {member.name
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")
+                                .slice(0, 2)}
+                            </div>
+                            {member.name}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {/* External Email */}
+                  <div className="px-3 py-1.5 text-xs font-medium text-slate-500 bg-slate-50 border-t">
+                    Add External Email
+                  </div>
+                  <div className="p-2 flex gap-2">
+                    <input
+                      type="email"
+                      value={externalEmail}
+                      onChange={(e) => setExternalEmail(e.target.value)}
+                      placeholder="email@example.com"
+                      className="flex-1 px-2 py-1 border border-slate-200 rounded text-sm"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addExternalAttendee();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={addExternalAttendee}
+                      className="px-2 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Description
+            </label>
+            <textarea
+              rows={2}
+              value={formData.description}
+              onChange={(e) =>
+                setFormData({ ...formData, description: e.target.value })
+              }
+              placeholder="Brief agenda or purpose of the meeting..."
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+          </div>
+
+          {/* Meeting Completed (only for editing) */}
+          {isEditing && (
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="meeting_completed"
+                checked={formData.meeting_completed}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    meeting_completed: e.target.checked,
+                  })
+                }
+                className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+              />
+              <label
+                htmlFor="meeting_completed"
+                className="text-sm text-slate-700"
+              >
+                Mark as completed
+              </label>
+            </div>
+          )}
+
+          {/* Meeting Notes (only when completed) */}
+          {(isEditing || formData.meeting_completed) && (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-slate-700">
+                Meeting Notes
+              </label>
+              <textarea
+                rows={3}
+                value={formData.meeting_notes}
+                onChange={(e) =>
+                  setFormData({ ...formData, meeting_notes: e.target.value })
+                }
+                placeholder="Summary of what was discussed..."
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+              {/* Option to save notes to lead notes tab */}
+              {formData.meeting_notes && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="save_notes_to_lead"
+                    checked={formData.save_notes_to_lead}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        save_notes_to_lead: e.target.checked,
+                      })
+                    }
+                    className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                  />
+                  <label
+                    htmlFor="save_notes_to_lead"
+                    className="text-sm text-slate-600"
+                  >
+                    Also save to Lead Notes
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-slate-700 hover:bg-slate-100 rounded-lg transition-colors text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm disabled:opacity-50 flex items-center gap-2"
+            >
+              {isSubmitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Saving...
+                </>
+              ) : isEditing ? (
+                "Update Meeting"
+              ) : (
+                "Schedule Meeting"
               )}
             </button>
           </div>

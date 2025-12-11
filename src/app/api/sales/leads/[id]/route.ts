@@ -117,17 +117,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         )
         .eq("lead_id", id)
         .order("created_at", { ascending: false }),
+      // Fetch tasks from main tasks table (linked via related_type/related_id)
       supabaseAdmin
-        .from("lead_tasks")
+        .from("tasks")
         .select(
           `
           *,
-          assigned_user:users!lead_tasks_assigned_to_fkey(id, name, avatar_url),
-          created_user:users!lead_tasks_created_by_fkey(id, name, avatar_url)
+          assigned_user:users!tasks_assigned_to_fkey(id, name, avatar_url, email),
+          created_user:users!tasks_created_by_fkey(id, name, avatar_url, email)
         `
         )
-        .eq("lead_id", id)
-        .order("due_date", { ascending: true }),
+        .eq("related_type", "lead")
+        .eq("related_id", id)
+        .is("parent_task_id", null)
+        .order("created_at", { ascending: false }),
       // Fetch quotations using the view (pulls client data from lead)
       supabaseAdmin
         .from("quotations_with_lead")
@@ -280,8 +283,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       "project_scope",
       "special_requirements",
       "priority",
+      "lead_score",
       "next_followup_date",
       "next_followup_notes",
+      "assigned_to",
     ];
 
     for (const field of allowedFields) {

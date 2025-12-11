@@ -1,7 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
-import Link from "next/link";
+import React, { useState, useEffect } from "react";
+import { PageLayout, PageHeader, StatBadge } from "@/components/ui/PageLayout";
+import {
+  UsersIcon,
+  PlusIcon,
+  ArrowDownTrayIcon,
+} from "@heroicons/react/24/outline";
+import { uiLogger } from "@/lib/logger";
 
 interface Contact {
   id: number;
@@ -21,6 +27,11 @@ interface Contact {
 export default function ContactsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<string>("All");
+
+  // Log page mount
+  useEffect(() => {
+    uiLogger.info("Contacts page mounted", { module: "ContactsPage" });
+  }, []);
 
   const contacts: Contact[] = [
     {
@@ -155,8 +166,9 @@ export default function ContactsPage() {
     },
   ];
 
-  const filteredContacts = contacts.filter(contact => {
-    const matchesSearch = searchQuery === "" ||
+  const filteredContacts = contacts.filter((contact) => {
+    const matchesSearch =
+      searchQuery === "" ||
       contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       contact.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
       contact.email.toLowerCase().includes(searchQuery.toLowerCase());
@@ -173,34 +185,43 @@ export default function ContactsPage() {
 
   const stats = {
     total: contacts.length,
-    clients: contacts.filter(c => c.type === "Client").length,
-    prospects: contacts.filter(c => c.type === "Prospect").length,
-    vendors: contacts.filter(c => c.type === "Vendor").length,
-    partners: contacts.filter(c => c.type === "Partner").length,
+    clients: contacts.filter((c) => c.type === "Client").length,
+    prospects: contacts.filter((c) => c.type === "Prospect").length,
+    vendors: contacts.filter((c) => c.type === "Vendor").length,
+    partners: contacts.filter((c) => c.type === "Partner").length,
   };
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       {/* Header */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-        <div>
-          <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
-            <Link href="/dashboard/sales" className="hover:text-blue-600">Sales</Link>
-            <span>/</span>
-            <span className="text-slate-900">Contacts</span>
+      <PageHeader
+        title="Contacts Directory"
+        subtitle="Manage clients, vendors, and business partners"
+        breadcrumbs={[{ label: "Contacts" }]}
+        basePath={{ label: "Sales", href: "/dashboard/sales" }}
+        icon={<UsersIcon className="w-5 h-5 text-white" />}
+        iconBgClass="from-emerald-500 to-emerald-600"
+        stats={
+          <>
+            <StatBadge label="Total" value={stats.total} color="slate" />
+            <StatBadge label="Clients" value={stats.clients} color="green" />
+            <StatBadge label="Prospects" value={stats.prospects} color="blue" />
+            <StatBadge label="Vendors" value={stats.vendors} color="amber" />
+          </>
+        }
+        actions={
+          <div className="flex gap-3">
+            <button className="bg-white text-slate-700 px-4 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-sm font-medium flex items-center gap-2">
+              <ArrowDownTrayIcon className="w-4 h-4" />
+              Import Contacts
+            </button>
+            <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2">
+              <PlusIcon className="w-4 h-4" />
+              Add Contact
+            </button>
           </div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Contacts Directory</h1>
-          <p className="text-slate-600">Manage clients, vendors, and business partners</p>
-        </div>
-        <div className="flex gap-3">
-          <button className="bg-white text-slate-700 px-4 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
-            Import Contacts
-          </button>
-          <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-            + Add Contact
-          </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -231,8 +252,18 @@ export default function ContactsPage() {
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1">
             <div className="relative">
-              <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              <svg
+                className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
               </svg>
               <input
                 type="text"
@@ -264,18 +295,30 @@ export default function ContactsPage() {
       {/* Contacts Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredContacts.map((contact) => (
-          <div key={contact.id} className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-shadow">
+          <div
+            key={contact.id}
+            className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-shadow"
+          >
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 bg-linear-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold text-lg">
-                {contact.name.split(" ").map(n => n[0]).join("")}
+                {contact.name
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="font-semibold text-slate-900">{contact.name}</h3>
+                    <h3 className="font-semibold text-slate-900">
+                      {contact.name}
+                    </h3>
                     <p className="text-sm text-slate-500">{contact.role}</p>
                   </div>
-                  <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${typeColors[contact.type]}`}>
+                  <span
+                    className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                      typeColors[contact.type]
+                    }`}
+                  >
                     {contact.type}
                   </span>
                 </div>
@@ -285,14 +328,34 @@ export default function ContactsPage() {
 
             <div className="mt-4 space-y-2">
               <div className="flex items-center gap-2 text-sm">
-                <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                <svg
+                  className="w-4 h-4 text-slate-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                  />
                 </svg>
                 <span className="text-slate-600 truncate">{contact.email}</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                <svg
+                  className="w-4 h-4 text-slate-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                  />
                 </svg>
                 <span className="text-slate-600">{contact.phone}</span>
               </div>
@@ -301,31 +364,60 @@ export default function ContactsPage() {
             {contact.projects > 0 && (
               <div className="mt-4 pt-4 border-t border-slate-100">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">{contact.projects} project(s)</span>
-                  <span className="font-semibold text-slate-900">${(contact.totalValue / 1000).toFixed(0)}K total</span>
+                  <span className="text-slate-500">
+                    {contact.projects} project(s)
+                  </span>
+                  <span className="font-semibold text-slate-900">
+                    ${(contact.totalValue / 1000).toFixed(0)}K total
+                  </span>
                 </div>
               </div>
             )}
 
             <div className="mt-4 flex flex-wrap gap-1">
               {contact.tags.map((tag) => (
-                <span key={tag} className="inline-flex px-2 py-0.5 text-xs bg-slate-100 text-slate-600 rounded">
+                <span
+                  key={tag}
+                  className="inline-flex px-2 py-0.5 text-xs bg-slate-100 text-slate-600 rounded"
+                >
                   {tag}
                 </span>
               ))}
             </div>
 
             <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
-              <span className="text-xs text-slate-400">Last contact: {contact.lastInteraction}</span>
+              <span className="text-xs text-slate-400">
+                Last contact: {contact.lastInteraction}
+              </span>
               <div className="flex gap-1">
                 <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                    />
                   </svg>
                 </button>
                 <button className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                    />
                   </svg>
                 </button>
               </div>
@@ -333,6 +425,6 @@ export default function ContactsPage() {
           </div>
         ))}
       </div>
-    </div>
+    </PageLayout>
   );
 }

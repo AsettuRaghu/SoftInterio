@@ -28,6 +28,14 @@ export function SignInForm() {
       setError(
         "Your access to this organization has been revoked. Please contact your administrator."
       );
+    } else if (errorParam === "trial_expired") {
+      setError(
+        "Your trial period has expired. Please upgrade to a paid plan to continue using SoftInterio."
+      );
+    } else if (errorParam === "subscription_expired") {
+      setError(
+        "Your subscription has expired. Please renew your subscription to continue using SoftInterio."
+      );
     }
   }, [searchParams]);
 
