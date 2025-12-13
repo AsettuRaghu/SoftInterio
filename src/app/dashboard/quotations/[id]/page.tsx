@@ -306,6 +306,10 @@ export default function QuotationDetailPage() {
   // Revision state
   const [isCreatingRevision, setIsCreatingRevision] = useState(false);
 
+  // PDF and Share state
+  const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
+  const [isGeneratingShareLink, setIsGeneratingShareLink] = useState(false);
+
   // Create a new revision and open it for editing
   const handleCreateRevision = async () => {
     if (!quotation) return;
@@ -329,6 +333,107 @@ export default function QuotationDetailPage() {
       alert(err instanceof Error ? err.message : "Failed to create revision");
     } finally {
       setIsCreatingRevision(false);
+    }
+  };
+
+  // Download PDF
+  const handleDownloadPDF = async () => {
+    if (!quotation) return;
+
+    try {
+      setIsDownloadingPDF(true);
+      const response = await fetch(`/api/quotations/${quotation.id}/pdf`);
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to generate PDF");
+      }
+
+      // Get the blob and create download link
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${quotation.quotation_number}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Error downloading PDF:", err);
+      alert(err instanceof Error ? err.message : "Failed to download PDF");
+    } finally {
+      setIsDownloadingPDF(false);
+    }
+  };
+
+  // Share quotation - generate link and copy to clipboard
+  const handleShareQuotation = async () => {
+    if (!quotation) return;
+
+    try {
+      setIsGeneratingShareLink(true);
+      const response = await fetch(`/api/quotations/${quotation.id}/share`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to generate share link");
+      }
+
+      const data = await response.json();
+
+      // Copy link to clipboard
+      await navigator.clipboard.writeText(data.share_url);
+      alert("Share link copied to clipboard!");
+    } catch (err) {
+      console.error("Error generating share link:", err);
+      alert(
+        err instanceof Error ? err.message : "Failed to generate share link"
+      );
+    } finally {
+      setIsGeneratingShareLink(false);
+    }
+  };
+
+  // Send to client - for now, generate share link and show it
+  const handleSendToClient = async () => {
+    if (!quotation) return;
+
+    try {
+      setIsGeneratingShareLink(true);
+      const response = await fetch(`/api/quotations/${quotation.id}/share`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to generate share link");
+      }
+
+      const data = await response.json();
+
+      // For now, show the link in an alert. Later we can add email sending.
+      const shareUrl = data.share_url;
+      const subject = encodeURIComponent(
+        `Quotation ${quotation.quotation_number} - ${
+          quotation.client_name || "Your Quotation"
+        }`
+      );
+      const body = encodeURIComponent(
+        `Dear ${
+          quotation.client_name || "Client"
+        },\n\nPlease find your quotation at the link below:\n\n${shareUrl}\n\nBest regards`
+      );
+
+      // Open email client
+      window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    } catch (err) {
+      console.error("Error sending to client:", err);
+      alert(err instanceof Error ? err.message : "Failed to send to client");
+    } finally {
+      setIsGeneratingShareLink(false);
     }
   };
 
@@ -400,7 +505,8 @@ export default function QuotationDetailPage() {
   const statusColors =
     STATUS_COLORS[quotation.status?.toLowerCase()] || STATUS_COLORS.draft;
   const subtotal = quotation.subtotal || calculatedTotals;
-  const gstAmount = quotation.tax_amount || subtotal * 0.18;
+  const taxPercent = quotation.tax_percent ?? 18;
+  const gstAmount = quotation.tax_amount || subtotal * (taxPercent / 100);
   const total = quotation.grand_total || subtotal + gstAmount;
 
   // Stats
@@ -551,7 +657,58 @@ export default function QuotationDetailPage() {
               )}
               {isCreatingRevision ? "Creating..." : "Revise"}
             </button>
-            <button className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+            <button
+              onClick={handleDownloadPDF}
+              disabled={isDownloadingPDF}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isDownloadingPDF ? (
+                <div className="w-4 h-4 border-2 border-slate-600 border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+              )}
+              {isDownloadingPDF ? "Generating..." : "PDF"}
+            </button>
+            <button
+              onClick={handleShareQuotation}
+              disabled={isGeneratingShareLink}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isGeneratingShareLink ? (
+                <div className="w-4 h-4 border-2 border-slate-600 border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                  />
+                </svg>
+              )}
+              {isGeneratingShareLink ? "Generating..." : "Share"}
+            </button>
+            <button
+              onClick={handleSendToClient}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            >
               <svg
                 className="w-4 h-4"
                 fill="none"

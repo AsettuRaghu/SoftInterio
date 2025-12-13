@@ -6,6 +6,8 @@ import {
   BuilderComponent,
   LineItem,
   ComponentType,
+  ComponentVariant,
+  MasterData,
   calculateSqft,
   convertToFeet,
 } from "./types";
@@ -24,6 +26,13 @@ interface SpaceCardProps {
     componentId: string,
     description: string
   ) => void;
+  onUpdateComponentName?: (componentId: string, name: string) => void;
+  onUpdateComponentVariant?: (
+    componentId: string,
+    variantId: string,
+    variantName: string
+  ) => void;
+  masterData?: MasterData;
   onAddCostItem: (componentId: string) => void;
   onUpdateLineItem: (
     componentId: string,
@@ -32,6 +41,24 @@ interface SpaceCardProps {
   ) => void;
   onDeleteLineItem: (componentId: string, lineItemId: string) => void;
   formatCurrency: (amount: number) => string;
+  // Duplicate operations
+  onDuplicateSpace?: () => void;
+  onDuplicateComponent?: (componentId: string) => void;
+  // Drag & drop
+  onDragStart?: () => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragLeave?: () => void;
+  onDrop?: () => void;
+  onDragEnd?: () => void;
+  isDragging?: boolean;
+  isDragOver?: boolean;
+  // Move up/down
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMoveComponentUp?: (componentId: string) => void;
+  onMoveComponentDown?: (componentId: string) => void;
 }
 
 export function SpaceCard({
@@ -44,10 +71,28 @@ export function SpaceCard({
   onToggleComponentExpand,
   onDeleteComponent,
   onUpdateComponentDescription,
+  onUpdateComponentName,
+  onUpdateComponentVariant,
+  masterData,
   onAddCostItem,
   onUpdateLineItem,
   onDeleteLineItem,
   formatCurrency,
+  onDuplicateSpace,
+  onDuplicateComponent,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
+  isDragging,
+  isDragOver,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp,
+  canMoveDown,
+  onMoveComponentUp,
+  onMoveComponentDown,
 }: SpaceCardProps) {
   // Calculate space total
   const calculateTotal = () => {
@@ -82,7 +127,27 @@ export function SpaceCard({
   const total = calculateTotal();
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200">
+    <div
+      className={`bg-white rounded-xl border transition-all ${
+        isDragging
+          ? "opacity-50 border-blue-400"
+          : isDragOver
+          ? "border-blue-500 border-2 shadow-lg"
+          : "border-slate-200"
+      }`}
+      draggable={!!onDragStart}
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = "move";
+        onDragStart?.();
+      }}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDrop?.();
+      }}
+      onDragEnd={onDragEnd}
+    >
       {/* Space Header */}
       <div
         className="flex items-center justify-between px-4 py-3 bg-blue-50 border-b border-blue-100 cursor-pointer rounded-t-xl"
@@ -146,6 +211,80 @@ export function SpaceCard({
               {space.components.length} components
             </span>
           )}
+          {/* Move up/down buttons */}
+          {onMoveUp && canMoveUp && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveUp();
+              }}
+              title="Move up"
+              className="text-slate-400 hover:text-slate-600"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 15l7-7 7 7"
+                />
+              </svg>
+            </button>
+          )}
+          {onMoveDown && canMoveDown && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveDown();
+              }}
+              title="Move down"
+              className="text-slate-400 hover:text-slate-600"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+          )}
+          {/* Copy/Duplicate buttons */}
+          {onDuplicateSpace && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDuplicateSpace();
+              }}
+              title="Duplicate space"
+              className="text-slate-400 hover:text-blue-600"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                />
+              </svg>
+            </button>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -173,7 +312,7 @@ export function SpaceCard({
       {/* Space Content */}
       {space.expanded && (
         <div className="p-4 space-y-3">
-          {space.components.map((component) => (
+          {space.components.map((component, index) => (
             <ComponentCard
               key={component.id}
               component={component}
@@ -185,6 +324,24 @@ export function SpaceCard({
                   ? (desc) => onUpdateComponentDescription(component.id, desc)
                   : undefined
               }
+              onUpdateName={
+                onUpdateComponentName
+                  ? (name) => onUpdateComponentName(component.id, name)
+                  : undefined
+              }
+              onUpdateVariant={
+                onUpdateComponentVariant
+                  ? (variantId, variantName) =>
+                      onUpdateComponentVariant(
+                        component.id,
+                        variantId,
+                        variantName
+                      )
+                  : undefined
+              }
+              availableVariants={
+                masterData?.variants_by_component?.[component.componentTypeId]
+              }
               onAddCostItem={() => onAddCostItem(component.id)}
               onUpdateLineItem={(lineItemId, updates) =>
                 onUpdateLineItem(component.id, lineItemId, updates)
@@ -193,29 +350,46 @@ export function SpaceCard({
                 onDeleteLineItem(component.id, lineItemId)
               }
               formatCurrency={formatCurrency}
+              onDuplicate={
+                onDuplicateComponent
+                  ? () => onDuplicateComponent(component.id)
+                  : undefined
+              }
+              onMoveUp={
+                onMoveComponentUp && index > 0
+                  ? () => onMoveComponentUp(component.id)
+                  : undefined
+              }
+              onMoveDown={
+                onMoveComponentDown && index < space.components.length - 1
+                  ? () => onMoveComponentDown(component.id)
+                  : undefined
+              }
             />
           ))}
 
-          {/* Add Component Button */}
-          <button
-            onClick={onAddComponent}
-            className="w-full py-3 text-sm text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded-lg border border-dashed border-purple-300 flex items-center justify-center gap-1"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
+          {/* Action Buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={onAddComponent}
+              className="flex-1 py-3 text-sm text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded-lg border border-dashed border-purple-300 flex items-center justify-center gap-1"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            Add Component
-          </button>
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              Add Component
+            </button>
+          </div>
         </div>
       )}
     </div>

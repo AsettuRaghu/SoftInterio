@@ -217,6 +217,288 @@ function organizeQuotationData(
   };
 }
 
+// Helper function to create a new version of a quotation
+async function createNewVersion(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  existingQuotation: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  body: any,
+  userId: string,
+  versionNotes?: string
+) {
+  try {
+    console.log("[createNewVersion] Starting...");
+
+    // Get the highest version number for this quotation_number
+    const { data: versions, error: versionError } = await supabase
+      .from("quotations")
+      .select("version")
+      .eq("quotation_number", existingQuotation.quotation_number)
+      .order("version", { ascending: false })
+      .limit(1);
+
+    if (versionError) {
+      console.error("[createNewVersion] Error fetching versions:", versionError);
+      return NextResponse.json(
+        { error: "Failed to fetch version history" },
+        { status: 500 }
+      );
+    }
+
+    const newVersion = (versions?.[0]?.version || 1) + 1;
+    console.log("[createNewVersion] New version number:", newVersion);
+
+    // Create the new quotation record (copy from existing + updates from body)
+    const { subtotal, tax_percent, tax_amount, grand_total } = body;
+
+    const newQuotationData = {
+      tenant_id: existingQuotation.tenant_id,
+      lead_id: existingQuotation.lead_id,
+      quotation_number: existingQuotation.quotation_number,
+      version: newVersion,
+      status: "draft" as const,
+      title: body.title || existingQuotation.title,
+      description: existingQuotation.description,
+      valid_from: existingQuotation.valid_from,
+      valid_until: body.valid_until || existingQuotation.valid_until,
+      subtotal: subtotal ?? existingQuotation.subtotal,
+      discount_type: existingQuotation.discount_type,
+      discount_value: existingQuotation.discount_value,
+      discount_amount: existingQuotation.discount_amount,
+      taxable_amount: existingQuotation.taxable_amount,
+      tax_percent: tax_percent ?? existingQuotation.tax_percent ?? 18,
+      tax_amount: tax_amount ?? existingQuotation.tax_amount,
+      overhead_percent: existingQuotation.overhead_percent,
+      overhead_amount: existingQuotation.overhead_amount,
+      grand_total: grand_total ?? existingQuotation.grand_total,
+      payment_terms: existingQuotation.payment_terms,
+      terms_and_conditions: existingQuotation.terms_and_conditions,
+      notes: versionNotes || body.notes || existingQuotation.notes,
+      presentation_level: existingQuotation.presentation_level,
+      hide_dimensions: existingQuotation.hide_dimensions,
+      assigned_to: body.assigned_to || existingQuotation.assigned_to,
+      created_by: userId,
+      updated_by: userId,
+    };
+
+    console.log("[createNewVersion] Creating new quotation with data:", {
+      quotation_number: newQuotationData.quotation_number,
+      version: newQuotationData.version,
+      tenant_id: newQuotationData.tenant_id,
+    });
+
+    const { data: newQuotation, error: createError } = await supabase
+      .from("quotations")
+      .insert(newQuotationData)
+      .select()
+      .single();
+
+    if (createError) {
+      console.error("[createNewVersion] Error creating quotation:", createError);
+      return NextResponse.json(
+        { error: `Failed to create new version: ${createError.message}` },
+        { status: 500 }
+      );
+    }
+
+    console.log("[createNewVersion] Created quotation:", newQuotation.id);
+
+    // Now copy spaces, components, and line items
+    const { spaces } = body;
+    if (spaces && Array.isArray(spaces) && spaces.length > 0) {
+      console.log("[createNewVersion] Copying spaces, components, line items...");
+
+      // Track ID mappings
+      const spaceIdMap = new Map<number, string>();
+      const componentIdMap = new Map<string, string>();
+
+      // Insert spaces
+      const spacesToInsert = spaces.map(
+        (space: Record<string, unknown>, index: number) => ({
+          quotation_id: newQuotation.id,
+          space_type_id: space.space_type_id,
+          name: space.name,
+          description: space.description || null,
+          subtotal: space.subtotal || 0,
+          display_order: space.sort_order ?? index,
+        })
+      );
+
+      const { error: spacesError, data: insertedSpaces } = await supabase
+        .from("quotation_spaces")
+        .insert(spacesToInsert)
+        .select("id");
+
+      if (spacesError) {
+        console.error("[createNewVersion] Error inserting spaces:", spacesError);
+        // Rollback: delete the quotation
+        await supabase.from("quotations").delete().eq("id", newQuotation.id);
+        return NextResponse.json(
+          { error: "Failed to create spaces for new version" },
+          { status: 500 }
+        );
+      }
+
+      // Map space indexes to new IDs
+      insertedSpaces?.forEach((s: { id: string }, idx: number) => {
+        spaceIdMap.set(idx, s.id);
+      });
+
+      console.log("[createNewVersion] Created spaces:", insertedSpaces?.length);
+
+      // Collect and insert components
+      const allComponents: Array<{
+        data: Record<string, unknown>;
+        spaceIndex: number;
+        compIndex: number;
+      }> = [];
+
+      spaces.forEach(
+        (
+          space: { components?: Record<string, unknown>[] },
+          spaceIndex: number
+        ) => {
+          if (space.components && insertedSpaces) {
+            space.components.forEach(
+              (comp: Record<string, unknown>, compIndex: number) => {
+                allComponents.push({
+                  data: {
+                    quotation_id: newQuotation.id,
+                    space_id: insertedSpaces[spaceIndex].id,
+                    component_type_id: comp.component_type_id,
+                    component_variant_id: comp.component_variant_id,
+                    name: comp.name,
+                    description: comp.description || null,
+                    subtotal: comp.subtotal || 0,
+                    display_order: comp.sort_order ?? compIndex,
+                  },
+                  spaceIndex,
+                  compIndex,
+                });
+              }
+            );
+          }
+        }
+      );
+
+      if (allComponents.length > 0) {
+        const componentsToInsert = allComponents.map((c) => c.data);
+        const { error: componentsError, data: insertedComponents } =
+          await supabase
+            .from("quotation_components")
+            .insert(componentsToInsert)
+            .select("id");
+
+        if (componentsError) {
+          console.error("[createNewVersion] Error inserting components:", componentsError);
+          // Rollback
+          await supabase.from("quotation_spaces").delete().eq("quotation_id", newQuotation.id);
+          await supabase.from("quotations").delete().eq("id", newQuotation.id);
+          return NextResponse.json(
+            { error: "Failed to create components for new version" },
+            { status: 500 }
+          );
+        }
+
+        // Map component positions to new IDs
+        insertedComponents?.forEach((c: { id: string }, idx: number) => {
+          componentIdMap.set(
+            `${allComponents[idx].spaceIndex}-${allComponents[idx].compIndex}`,
+            c.id
+          );
+        });
+
+        console.log("[createNewVersion] Created components:", insertedComponents?.length);
+      }
+
+      // Insert line items
+      const allLineItems: Record<string, unknown>[] = [];
+      let displayOrder = 0;
+
+      spaces.forEach(
+        (
+          space: {
+            components?: Array<{
+              lineItems?: Array<Record<string, unknown>>;
+            }>;
+          },
+          spaceIndex: number
+        ) => {
+          if (space.components) {
+            space.components.forEach((comp, compIndex: number) => {
+              if (comp.lineItems) {
+                comp.lineItems.forEach((item: Record<string, unknown>) => {
+                  const newSpaceId = spaceIdMap.get(spaceIndex);
+                  const newComponentId = componentIdMap.get(
+                    `${spaceIndex}-${compIndex}`
+                  );
+
+                  allLineItems.push({
+                    quotation_id: newQuotation.id,
+                    quotation_space_id: newSpaceId || null,
+                    quotation_component_id: newComponentId || null,
+                    cost_item_id: item.cost_item_id,
+                    name: item.name,
+                    group_name: item.group_name,
+                    length: item.length,
+                    width: item.width,
+                    quantity: item.quantity,
+                    unit_code: item.unit_code,
+                    rate: item.rate,
+                    amount: item.amount,
+                    measurement_unit: item.measurement_unit || "ft",
+                    display_order: displayOrder++,
+                    notes: item.notes,
+                    metadata: item.metadata,
+                  });
+                });
+              }
+            });
+          }
+        }
+      );
+
+      if (allLineItems.length > 0) {
+        const { error: lineItemsError } = await supabase
+          .from("quotation_line_items")
+          .insert(allLineItems);
+
+        if (lineItemsError) {
+          console.error("[createNewVersion] Error inserting line items:", lineItemsError);
+          // Rollback
+          await supabase.from("quotation_components").delete().eq("quotation_id", newQuotation.id);
+          await supabase.from("quotation_spaces").delete().eq("quotation_id", newQuotation.id);
+          await supabase.from("quotations").delete().eq("id", newQuotation.id);
+          return NextResponse.json(
+            { error: "Failed to create line items for new version" },
+            { status: 500 }
+          );
+        }
+
+        console.log("[createNewVersion] Created line items:", allLineItems.length);
+      }
+    }
+
+    console.log("[createNewVersion] Success! New quotation ID:", newQuotation.id);
+
+    // Return success with the new quotation ID so frontend can redirect
+    return NextResponse.json({
+      success: true,
+      quotation: newQuotation,
+      newVersionId: newQuotation.id,
+      message: `Created version ${newVersion} successfully`,
+    });
+  } catch (error) {
+    console.error("[createNewVersion] Unexpected error:", error);
+    return NextResponse.json(
+      { error: "Internal server error creating new version" },
+      { status: 500 }
+    );
+  }
+}
+
 // PATCH /api/quotations/[id] - Update quotation (only quotation-specific fields, not lead data)
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
@@ -231,28 +513,57 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const supabase = await createClient();
 
     const body = await request.json();
+    const { create_new_version, version_notes } = body;
 
-    // Check quotation exists and get current state
+    console.log("[Quotation PATCH] Request received:", {
+      quotationId: id,
+      createNewVersion: create_new_version,
+      versionNotes: version_notes,
+      hasSpaces: !!body.spaces,
+      spacesCount: body.spaces?.length,
+    });
+
+    // Check quotation exists and get current state (fetch more fields for versioning)
     const { data: existingQuotation, error: fetchError } = await supabase
       .from("quotations")
-      .select("id, status")
+      .select("*")
       .eq("id", id)
       .single();
 
     if (fetchError || !existingQuotation) {
+      console.error("[Quotation PATCH] Quotation not found:", fetchError);
       return NextResponse.json(
         { error: "Quotation not found" },
         { status: 404 }
       );
     }
 
-    // Prevent modification of approved/rejected quotations
-    if (["approved", "rejected"].includes(existingQuotation.status)) {
+    console.log("[Quotation PATCH] Existing quotation:", {
+      id: existingQuotation.id,
+      quotation_number: existingQuotation.quotation_number,
+      version: existingQuotation.version,
+      status: existingQuotation.status,
+    });
+
+    // Prevent modification of approved/rejected quotations (unless creating a new version)
+    if (["approved", "rejected"].includes(existingQuotation.status) && !create_new_version) {
       return NextResponse.json(
         {
           error: `Cannot modify a ${existingQuotation.status} quotation. Create a revision instead.`,
         },
         { status: 400 }
+      );
+    }
+
+    // Handle creating a new version
+    if (create_new_version) {
+      console.log("[Quotation PATCH] Creating new version...");
+      return await createNewVersion(
+        supabase,
+        existingQuotation,
+        body,
+        user!.id,
+        version_notes
       );
     }
 

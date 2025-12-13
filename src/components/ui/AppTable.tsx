@@ -890,17 +890,20 @@ export function AppTable<T>({
   containerClassName,
   stickyHeader = true,
 }: AppTableProps<T>) {
+  // Ensure data is always an array
+  const safeData = data ?? [];
+
   // Selection state
   const allSelected = useMemo(
     () =>
-      data.length > 0 &&
-      data.every((item) => selectedKeys.has(keyExtractor(item))),
-    [data, selectedKeys, keyExtractor]
+      safeData.length > 0 &&
+      safeData.every((item) => selectedKeys.has(keyExtractor(item))),
+    [safeData, selectedKeys, keyExtractor]
   );
 
   const someSelected = useMemo(
-    () => data.some((item) => selectedKeys.has(keyExtractor(item))),
-    [data, selectedKeys, keyExtractor]
+    () => safeData.some((item) => selectedKeys.has(keyExtractor(item))),
+    [safeData, selectedKeys, keyExtractor]
   );
 
   const handleSelectAll = useCallback(() => {
@@ -908,10 +911,10 @@ export function AppTable<T>({
     if (allSelected) {
       onSelectionChange(new Set());
     } else {
-      const newKeys = new Set(data.map((item) => keyExtractor(item)));
+      const newKeys = new Set(safeData.map((item) => keyExtractor(item)));
       onSelectionChange(newKeys);
     }
-  }, [allSelected, data, keyExtractor, onSelectionChange]);
+  }, [allSelected, safeData, keyExtractor, onSelectionChange]);
 
   const handleSelect = useCallback(
     (key: string | number) => {
@@ -942,7 +945,7 @@ export function AppTable<T>({
   }
 
   // Empty state
-  if (data.length === 0 && emptyState) {
+  if (safeData.length === 0 && emptyState) {
     return (
       <div className={cn("flex flex-col", containerClassName)}>
         {showToolbar && (onSearchChange || tabs) && (
@@ -997,7 +1000,7 @@ export function AppTable<T>({
             onSelectAll={handleSelectAll}
           />
           <tbody>
-            {data.map((item, index) => (
+            {safeData.map((item, index) => (
               <TableRow
                 key={keyExtractor(item)}
                 item={item}

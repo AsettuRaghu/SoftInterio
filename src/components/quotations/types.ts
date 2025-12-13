@@ -102,6 +102,7 @@ export interface BuilderComponent {
   componentTypeId: string;
   variantId?: string;
   name: string;
+  customName?: string; // User-editable name (like "TV Unit" instead of just "Wardrobe")
   variantName?: string;
   description?: string;
   lineItems: LineItem[];

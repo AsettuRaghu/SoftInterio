@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import {
@@ -25,6 +25,7 @@ import { SelectVariantModal } from "@/components/quotations/SelectVariantModal";
 import { AddCostItemModal } from "@/components/quotations/AddCostItemModal";
 import { SpaceCard } from "@/components/quotations/SpaceCard";
 import { BuilderSidebar } from "@/components/quotations/BuilderSidebar";
+import { PricingScenariosModal } from "@/components/quotations/PricingScenariosModal";
 
 export default function EditQuotationPage() {
   const router = useRouter();
@@ -39,12 +40,22 @@ export default function EditQuotationPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Auto-save state
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitialLoadRef = useRef(true);
+
   // Quotation data
   const [quotationNumber, setQuotationNumber] = useState("");
   const [quotationName, setQuotationName] = useState("");
   const [version, setVersion] = useState(1);
   const [validUntil, setValidUntil] = useState("");
   const [notes, setNotes] = useState("");
+  const [taxPercent, setTaxPercent] = useState(18); // Default 18% GST
   const [spaces, setSpaces] = useState<BuilderSpace[]>([]);
 
   // Master data
@@ -72,6 +83,8 @@ export default function EditQuotationPage() {
     componentId: string;
   } | null>(null);
   const [showNewVersionModal, setShowNewVersionModal] = useState(false);
+  const [showPricingScenariosModal, setShowPricingScenariosModal] =
+    useState(false);
   const [versionNotes, setVersionNotes] = useState("");
   const [isCreatingRevision, setIsCreatingRevision] = useState(false);
 
@@ -103,6 +116,10 @@ export default function EditQuotationPage() {
       roles?: Array<{ name: string }>;
     }>
   >([]);
+
+  // Drag & drop state
+  const [draggedSpaceId, setDraggedSpaceId] = useState<string | null>(null);
+  const [dragOverSpaceId, setDragOverSpaceId] = useState<string | null>(null);
 
   // Fetch master data
   useEffect(() => {
@@ -152,6 +169,7 @@ export default function EditQuotationPage() {
         setVersion(q.version || 1);
         setValidUntil(q.valid_until ? q.valid_until.split("T")[0] : "");
         setNotes(q.notes || "");
+        setTaxPercent(q.tax_percent ?? 18); // Load tax percent, default to 18%
         setAssignedTo(q.assigned_to || null);
 
         // Transform API spaces to builder format
@@ -265,10 +283,10 @@ export default function EditQuotationPage() {
         });
       });
     });
-    const taxAmount = subtotal * 0.18;
+    const taxAmount = subtotal * (taxPercent / 100);
     const total = subtotal + taxAmount;
     return { subtotal, taxAmount, total };
-  }, [spaces]);
+  }, [spaces, taxPercent]);
 
   // Calculate single item amount
   const calculateItemAmount = (item: LineItem): number => {
@@ -441,6 +459,230 @@ export default function EditQuotationPage() {
     );
   };
 
+  // Update component custom name (like "Master Wardrobe" instead of just "Wardrobe")
+  const updateComponentName = (
+    spaceId: string,
+    componentId: string,
+    customName: string
+  ) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id === spaceId) {
+          return {
+            ...space,
+            components: space.components.map((c) =>
+              c.id === componentId ? { ...c, customName } : c
+            ),
+          };
+        }
+        return space;
+      })
+    );
+  };
+
+  // Update component variant
+  const updateComponentVariant = (
+    spaceId: string,
+    componentId: string,
+    variantId: string,
+    variantName: string
+  ) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id === spaceId) {
+          return {
+            ...space,
+            components: space.components.map((c) =>
+              c.id === componentId
+                ? {
+                    ...c,
+                    variantId: variantId || undefined,
+                    variantName: variantName || undefined,
+                  }
+                : c
+            ),
+          };
+        }
+        return space;
+      })
+    );
+  };
+
+  // Duplicate component within same space
+  const duplicateComponent = (spaceId: string, componentId: string) => {
+    const space = spaces.find((s) => s.id === spaceId);
+    const component = space?.components.find((c) => c.id === componentId);
+    if (!component) return;
+
+    const newComponent: BuilderComponent = {
+      ...component,
+      id: `new-${generateId()}`,
+      customName: component.customName
+        ? `${component.customName} (Copy)`
+        : `${component.name} (Copy)`,
+      lineItems: component.lineItems.map((item) => ({
+        ...item,
+        id: `new-${generateId()}`,
+      })),
+    };
+
+    setSpaces(
+      spaces.map((s) => {
+        if (s.id === spaceId) {
+          const componentIndex = s.components.findIndex(
+            (c) => c.id === componentId
+          );
+          const newComponents = [...s.components];
+          newComponents.splice(componentIndex + 1, 0, newComponent);
+          return { ...s, components: newComponents };
+        }
+        return s;
+      })
+    );
+  };
+
+  // Duplicate space
+  const duplicateSpace = (spaceId: string) => {
+    const space = spaces.find((s) => s.id === spaceId);
+    if (!space) return;
+
+    const newSpace: BuilderSpace = {
+      ...space,
+      id: `new-${generateId()}`,
+      defaultName: `${space.defaultName} (Copy)`,
+      components: space.components.map((comp) => ({
+        ...comp,
+        id: `new-${generateId()}`,
+        lineItems: comp.lineItems.map((item) => ({
+          ...item,
+          id: `new-${generateId()}`,
+        })),
+      })),
+    };
+
+    const spaceIndex = spaces.findIndex((s) => s.id === spaceId);
+    const newSpaces = [...spaces];
+    newSpaces.splice(spaceIndex + 1, 0, newSpace);
+    setSpaces(newSpaces);
+  };
+
+  // Drag & drop handlers for spaces
+  const handleSpaceDragStart = (spaceId: string) => {
+    setDraggedSpaceId(spaceId);
+  };
+
+  const handleSpaceDragOver = (e: React.DragEvent, spaceId: string) => {
+    e.preventDefault();
+    if (draggedSpaceId && draggedSpaceId !== spaceId) {
+      setDragOverSpaceId(spaceId);
+    }
+  };
+
+  const handleSpaceDragLeave = () => {
+    setDragOverSpaceId(null);
+  };
+
+  const handleSpaceDrop = (targetSpaceId: string) => {
+    if (!draggedSpaceId || draggedSpaceId === targetSpaceId) {
+      setDraggedSpaceId(null);
+      setDragOverSpaceId(null);
+      return;
+    }
+
+    const draggedIndex = spaces.findIndex((s) => s.id === draggedSpaceId);
+    const targetIndex = spaces.findIndex((s) => s.id === targetSpaceId);
+
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    const newSpaces = [...spaces];
+    const [draggedSpace] = newSpaces.splice(draggedIndex, 1);
+    newSpaces.splice(targetIndex, 0, draggedSpace);
+
+    setSpaces(newSpaces);
+    setDraggedSpaceId(null);
+    setDragOverSpaceId(null);
+  };
+
+  const handleSpaceDragEnd = () => {
+    setDraggedSpaceId(null);
+    setDragOverSpaceId(null);
+  };
+
+  // Collapse/Expand all spaces and components
+  const collapseAll = () => {
+    setSpaces(
+      spaces.map((space) => ({
+        ...space,
+        expanded: false,
+        components: space.components.map((comp) => ({
+          ...comp,
+          expanded: false,
+        })),
+      }))
+    );
+  };
+
+  const expandAll = () => {
+    setSpaces(
+      spaces.map((space) => ({
+        ...space,
+        expanded: true,
+        components: space.components.map((comp) => ({
+          ...comp,
+          expanded: true,
+        })),
+      }))
+    );
+  };
+
+  // Check if any spaces are collapsed
+  const hasCollapsedSpaces = spaces.some(
+    (s) => !s.expanded || s.components.some((c) => !c.expanded)
+  );
+
+  // Move space up/down (keyboard alternative to drag)
+  const moveSpace = (spaceId: string, direction: "up" | "down") => {
+    const index = spaces.findIndex((s) => s.id === spaceId);
+    if (index === -1) return;
+
+    const newIndex = direction === "up" ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= spaces.length) return;
+
+    const newSpaces = [...spaces];
+    [newSpaces[index], newSpaces[newIndex]] = [
+      newSpaces[newIndex],
+      newSpaces[index],
+    ];
+    setSpaces(newSpaces);
+  };
+
+  // Move component within a space
+  const moveComponent = (
+    spaceId: string,
+    componentId: string,
+    direction: "up" | "down"
+  ) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id !== spaceId) return space;
+
+        const index = space.components.findIndex((c) => c.id === componentId);
+        if (index === -1) return space;
+
+        const newIndex = direction === "up" ? index - 1 : index + 1;
+        if (newIndex < 0 || newIndex >= space.components.length) return space;
+
+        const newComponents = [...space.components];
+        [newComponents[index], newComponents[newIndex]] = [
+          newComponents[newIndex],
+          newComponents[index],
+        ];
+
+        return { ...space, components: newComponents };
+      })
+    );
+  };
+
   // Cost item operations
   const addCostItem = (
     spaceId: string,
@@ -464,7 +706,7 @@ export default function EditQuotationPage() {
       groupName,
       length: null,
       width: null,
-      measurementUnit: "ft" as MeasurementUnit, // Default for new items, user can change
+      measurementUnit: "mm" as MeasurementUnit, // Default to mm for precision (interior industry standard)
       quantity: 1,
       amount: 0,
       notes: "",
@@ -673,7 +915,7 @@ export default function EditQuotationPage() {
                   groupName: item.group_name || "Other",
                   length: null,
                   width: null,
-                  measurementUnit: "ft" as MeasurementUnit, // Default for new items from template
+                  measurementUnit: "mm" as MeasurementUnit, // Default to mm for precision
                   quantity: 1,
                   amount: 0,
                   notes: "",
@@ -754,23 +996,73 @@ export default function EditQuotationPage() {
   };
 
   // Save quotation
-  const saveQuotation = async (createNewVersion = false) => {
+  const saveQuotation = async (
+    createNewVersion = false,
+    redirectAfterSave = true,
+    overrideSpaces?: BuilderSpace[],
+    overrideVersionNotes?: string
+  ) => {
     try {
       setIsSaving(true);
       setSaveError(null); // Clear any previous error
 
-      // Validate line items
-      const validation = validateLineItems();
-      if (!validation.valid) {
-        // Show first 3 errors max
-        const errorMsg = validation.errors.slice(0, 3).join("\n");
-        const moreCount = validation.errors.length - 3;
-        throw new Error(
-          errorMsg + (moreCount > 0 ? `\n...and ${moreCount} more errors` : "")
-        );
+      // Use override spaces if provided, otherwise use state
+      const spacesToSave = overrideSpaces || spaces;
+      const notesToUse = overrideVersionNotes ?? versionNotes;
+
+      console.log("[saveQuotation] Starting save:", {
+        createNewVersion,
+        redirectAfterSave,
+        spacesCount: spacesToSave.length,
+        versionNotes: notesToUse,
+        hasOverrideSpaces: !!overrideSpaces,
+      });
+
+      // For auto-save, skip validation if there are no line items yet
+      const hasLineItems = spacesToSave.some((s) =>
+        s.components.some((c) => c.lineItems.length > 0)
+      );
+
+      // Validate line items (only if redirecting or has line items)
+      if (redirectAfterSave || hasLineItems) {
+        const validation = validateLineItems();
+        if (!validation.valid && redirectAfterSave) {
+          // Show first 3 errors max
+          const errorMsg = validation.errors.slice(0, 3).join("\n");
+          const moreCount = validation.errors.length - 3;
+          throw new Error(
+            errorMsg +
+              (moreCount > 0 ? `\n...and ${moreCount} more errors` : "")
+          );
+        }
       }
 
-      const { subtotal, taxAmount, total } = calculateTotals();
+      // Calculate totals from the spaces we're saving
+      const calculateTotalsFromSpaces = (
+        spacesData: BuilderSpace[],
+        taxRate: number
+      ) => {
+        const sub = spacesData.reduce((total, space) => {
+          return (
+            total +
+            space.components.reduce((spaceTotal, comp) => {
+              return (
+                spaceTotal +
+                comp.lineItems.reduce((compTotal, item) => {
+                  return compTotal + calculateItemAmount(item);
+                }, 0)
+              );
+            }, 0)
+          );
+        }, 0);
+        const tax = sub * (taxRate / 100);
+        return { subtotal: sub, taxAmount: tax, total: sub + tax };
+      };
+
+      const { subtotal, taxAmount, total } = calculateTotalsFromSpaces(
+        spacesToSave,
+        taxPercent
+      );
 
       const payload = {
         title: quotationName,
@@ -778,11 +1070,12 @@ export default function EditQuotationPage() {
         notes,
         assigned_to: assignedTo,
         subtotal,
+        tax_percent: taxPercent,
         tax_amount: taxAmount,
         grand_total: total,
         create_new_version: createNewVersion,
-        version_notes: createNewVersion ? versionNotes : undefined,
-        spaces: spaces.map((space, spaceIndex) => ({
+        version_notes: createNewVersion ? notesToUse : undefined,
+        spaces: spacesToSave.map((space, spaceIndex) => ({
           id: space.id.startsWith("new-") ? undefined : space.id,
           space_type_id: space.spaceTypeId,
           name: space.defaultName,
@@ -821,27 +1114,156 @@ export default function EditQuotationPage() {
         })),
       };
 
+      console.log("[saveQuotation] Sending request:", {
+        quotationId,
+        createNewVersion,
+        spacesCount: payload.spaces.length,
+        versionNotes: payload.version_notes,
+      });
+
       const response = await fetch(`/api/quotations/${quotationId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
+      const result = await response.json();
+
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to save quotation");
+        console.error("[saveQuotation] API error:", result);
+        throw new Error(result.error || "Failed to save quotation");
       }
 
-      router.push(`/dashboard/quotations/${quotationId}`);
+      console.log("[saveQuotation] API response:", result);
+
+      // For auto-save, don't redirect
+      if (!redirectAfterSave) {
+        setHasUnsavedChanges(false);
+        setLastSavedAt(new Date());
+        setAutoSaveStatus("saved");
+        // Reset status after 2 seconds
+        setTimeout(() => setAutoSaveStatus("idle"), 2000);
+        return;
+      }
+
+      // If a new version was created, redirect to the new version
+      if (createNewVersion && result.newVersionId) {
+        console.log(
+          "[saveQuotation] New version created, redirecting to:",
+          result.newVersionId
+        );
+        router.push(`/dashboard/quotations/${result.newVersionId}`);
+      } else {
+        router.push(`/dashboard/quotations/${quotationId}`);
+      }
     } catch (error) {
       console.error("Error saving:", error);
       setSaveError(
         error instanceof Error ? error.message : "Failed to save quotation"
       );
+      setAutoSaveStatus("error");
     } finally {
       setIsSaving(false);
     }
   };
+
+  // Auto-save function (silent save without redirect)
+  const autoSave = useCallback(async () => {
+    if (!hasUnsavedChanges || isSaving || isLoading) return;
+
+    setAutoSaveStatus("saving");
+    await saveQuotation(false, false);
+  }, [hasUnsavedChanges, isSaving, isLoading]);
+
+  // Trigger auto-save when data changes (debounced)
+  useEffect(() => {
+    // Skip initial load
+    if (isInitialLoadRef.current) {
+      return;
+    }
+
+    // Mark as having unsaved changes
+    setHasUnsavedChanges(true);
+    setAutoSaveStatus("idle");
+
+    // Clear existing timeout
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    // Set new timeout for auto-save (3 seconds after last change)
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      autoSave();
+    }, 3000);
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [spaces, quotationName, validUntil, notes, assignedTo]);
+
+  // Mark initial load complete after data is loaded
+  useEffect(() => {
+    if (!isLoading && isInitialLoadRef.current) {
+      // Small delay to ensure all state is set
+      setTimeout(() => {
+        isInitialLoadRef.current = false;
+      }, 100);
+    }
+  }, [isLoading]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (!isSaving) {
+          saveQuotation(false, true);
+        }
+      }
+
+      // Escape to go back (only if no modal is open)
+      if (
+        e.key === "Escape" &&
+        !showAddSpaceModal &&
+        !showAddComponentModal &&
+        !showSelectVariantModal &&
+        !showAddCostItemModal &&
+        !showTemplateModal &&
+        !showNewVersionModal
+      ) {
+        router.push(`/dashboard/quotations/${quotationId}`);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    isSaving,
+    showAddSpaceModal,
+    showAddComponentModal,
+    showSelectVariantModal,
+    showAddCostItemModal,
+    showTemplateModal,
+    showNewVersionModal,
+    quotationId,
+    router,
+  ]);
+
+  // Warn before leaving with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   // Create a new revision and open it for editing
   const handleCreateRevision = async () => {
@@ -976,6 +1398,26 @@ export default function EditQuotationPage() {
                 Template
               </button>
               <button
+                onClick={() => setShowPricingScenariosModal(true)}
+                disabled={spaces.length === 0}
+                className="px-3 py-1.5 text-sm text-emerald-600 hover:text-emerald-700 border border-emerald-300 rounded-lg hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+                  />
+                </svg>
+                Scenarios
+              </button>
+              <button
                 onClick={handleCreateRevision}
                 disabled={isCreatingRevision}
                 className="px-3 py-1.5 text-sm text-amber-700 border border-amber-300 bg-amber-50 rounded-lg hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
@@ -1000,12 +1442,79 @@ export default function EditQuotationPage() {
                 {isCreatingRevision ? "Creating..." : "Revise"}
               </button>
               <button
-                onClick={() => saveQuotation(false)}
+                onClick={() => saveQuotation(false, true)}
                 disabled={isSaving}
-                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5"
               >
                 {isSaving ? "Saving..." : "Save"}
+                <span className="text-xs text-blue-200 hidden sm:inline">
+                  ⌘S
+                </span>
               </button>
+            </div>
+          </div>
+          {/* Auto-save status bar */}
+          <div className="flex items-center justify-between px-1 py-1 text-xs text-slate-500 border-t border-slate-100 mt-2">
+            <div className="flex items-center gap-2">
+              {autoSaveStatus === "saving" && (
+                <span className="flex items-center gap-1.5 text-blue-600">
+                  <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  Auto-saving...
+                </span>
+              )}
+              {autoSaveStatus === "saved" && (
+                <span className="flex items-center gap-1.5 text-green-600">
+                  <svg
+                    className="w-3.5 h-3.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                  Saved
+                </span>
+              )}
+              {autoSaveStatus === "error" && (
+                <span className="flex items-center gap-1.5 text-red-600">
+                  <svg
+                    className="w-3.5 h-3.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                  Auto-save failed
+                </span>
+              )}
+              {autoSaveStatus === "idle" && hasUnsavedChanges && (
+                <span className="flex items-center gap-1.5 text-amber-600">
+                  <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                  Unsaved changes
+                </span>
+              )}
+              {autoSaveStatus === "idle" &&
+                !hasUnsavedChanges &&
+                lastSavedAt && (
+                  <span className="text-slate-400">
+                    Last saved {lastSavedAt.toLocaleTimeString()}
+                  </span>
+                )}
+            </div>
+            <div className="hidden sm:flex items-center gap-3 text-slate-400">
+              <span>⌘S save</span>
+              <span>Esc back</span>
             </div>
           </div>
         </div>
@@ -1114,6 +1623,63 @@ export default function EditQuotationPage() {
             </div>
           </div>
 
+          {/* Spaces Header with Collapse All */}
+          {spaces.length > 0 && (
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-slate-700">
+                  {spaces.length} Space{spaces.length !== 1 ? "s" : ""}
+                </span>
+                <span className="text-xs text-slate-400">
+                  • {spaces.reduce((sum, s) => sum + s.components.length, 0)}{" "}
+                  Components
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={hasCollapsedSpaces ? expandAll : collapseAll}
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
+                >
+                  {hasCollapsedSpaces ? (
+                    <>
+                      <svg
+                        className="w-3.5 h-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                        />
+                      </svg>
+                      Expand All
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        className="w-3.5 h-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"
+                        />
+                      </svg>
+                      Collapse All
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Spaces */}
           <div className="space-y-4">
             {spaces.length === 0 ? (
@@ -1184,7 +1750,7 @@ export default function EditQuotationPage() {
               </div>
             ) : (
               <>
-                {spaces.map((space) => (
+                {spaces.map((space, index) => (
                   <SpaceCard
                     key={space.id}
                     space={space}
@@ -1202,6 +1768,22 @@ export default function EditQuotationPage() {
                     onUpdateComponentDescription={(componentId, desc) =>
                       updateComponentDescription(space.id, componentId, desc)
                     }
+                    onUpdateComponentName={(componentId, name) =>
+                      updateComponentName(space.id, componentId, name)
+                    }
+                    onUpdateComponentVariant={(
+                      componentId,
+                      variantId,
+                      variantName
+                    ) =>
+                      updateComponentVariant(
+                        space.id,
+                        componentId,
+                        variantId,
+                        variantName
+                      )
+                    }
+                    masterData={masterData}
                     onAddCostItem={(componentId) =>
                       setShowAddCostItemModal({
                         spaceId: space.id,
@@ -1215,29 +1797,66 @@ export default function EditQuotationPage() {
                       deleteLineItem(space.id, componentId, lineItemId)
                     }
                     formatCurrency={formatCurrency}
+                    // Duplicate props
+                    onDuplicateSpace={() => duplicateSpace(space.id)}
+                    onDuplicateComponent={(componentId) =>
+                      duplicateComponent(space.id, componentId)
+                    }
+                    // Drag & drop props
+                    onDragStart={() => handleSpaceDragStart(space.id)}
+                    onDragOver={(e) => handleSpaceDragOver(e, space.id)}
+                    onDragLeave={handleSpaceDragLeave}
+                    onDrop={() => handleSpaceDrop(space.id)}
+                    onDragEnd={handleSpaceDragEnd}
+                    isDragging={draggedSpaceId === space.id}
+                    isDragOver={dragOverSpaceId === space.id}
+                    // Move props for spaces
+                    onMoveUp={() => moveSpace(space.id, "up")}
+                    onMoveDown={() => moveSpace(space.id, "down")}
+                    canMoveUp={index > 0}
+                    canMoveDown={index < spaces.length - 1}
+                    // Move props for components
+                    onMoveComponentUp={(componentId) => {
+                      const componentIndex = space.components.findIndex(
+                        (c) => c.id === componentId
+                      );
+                      if (componentIndex > 0) {
+                        moveComponent(space.id, componentId, "up");
+                      }
+                    }}
+                    onMoveComponentDown={(componentId) => {
+                      const componentIndex = space.components.findIndex(
+                        (c) => c.id === componentId
+                      );
+                      if (componentIndex < space.components.length - 1) {
+                        moveComponent(space.id, componentId, "down");
+                      }
+                    }}
                   />
                 ))}
 
-                {/* Add Space Button */}
-                <button
-                  onClick={() => setShowAddSpaceModal(true)}
-                  className="w-full py-4 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-xl border-2 border-dashed border-blue-300 flex items-center justify-center gap-2"
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
+                {/* Add Space / Paste Space Buttons */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowAddSpaceModal(true)}
+                    className="flex-1 py-4 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-xl border-2 border-dashed border-blue-300 flex items-center justify-center gap-2"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 4v16m8-8H4"
-                    />
-                  </svg>
-                  Add Space
-                </button>
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 4v16m8-8H4"
+                      />
+                    </svg>
+                    Add Space
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -1250,6 +1869,11 @@ export default function EditQuotationPage() {
           subtotal={totals.subtotal}
           taxAmount={totals.taxAmount}
           total={totals.total}
+          taxPercent={taxPercent}
+          onTaxPercentChange={(percent) => {
+            setTaxPercent(percent);
+            setHasUnsavedChanges(true);
+          }}
         />
       </div>
 
@@ -1445,6 +2069,41 @@ export default function EditQuotationPage() {
           </div>
         </div>
       )}
+
+      {/* Pricing Scenarios Modal (Adjustments + Material Swap) */}
+      <PricingScenariosModal
+        isOpen={showPricingScenariosModal}
+        onClose={() => setShowPricingScenariosModal(false)}
+        spaces={spaces}
+        costItems={masterData.cost_items}
+        categories={masterData.cost_item_categories}
+        componentTypes={masterData.component_types}
+        onApply={(modifiedSpaces) => {
+          console.log(
+            "[EditPage] onApply called with",
+            modifiedSpaces.length,
+            "spaces"
+          );
+          setSpaces(modifiedSpaces);
+          setHasUnsavedChanges(true);
+        }}
+        onSaveAsNewVersion={async (modifiedSpaces, notes) => {
+          console.log("[EditPage] onSaveAsNewVersion called");
+          console.log("[EditPage] Modified spaces:", modifiedSpaces.length);
+          console.log("[EditPage] Version notes:", notes);
+          // Update state for UI
+          setSpaces(modifiedSpaces);
+          setVersionNotes(notes || "Pricing scenario applied");
+          // Pass spaces and notes directly to avoid async state issues
+          await saveQuotation(
+            true,
+            true,
+            modifiedSpaces,
+            notes || "Pricing scenario applied"
+          );
+        }}
+        formatCurrency={formatCurrency}
+      />
     </div>
   );
 }

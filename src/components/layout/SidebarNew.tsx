@@ -27,7 +27,10 @@ interface SidebarProps {
 
 export function Sidebar({ isExpanded, setIsExpanded }: SidebarProps) {
   const pathname = usePathname();
-  const { hasPermission, isLoading, permissions } = useUserPermissions();
+  const { hasPermission, permissions } = useUserPermissions();
+
+  // Check if permissions have actually loaded
+  const permissionsLoaded = permissions.length > 0;
 
   // Track which menus are expanded (for sub-menus)
   const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
@@ -137,38 +140,43 @@ export function Sidebar({ isExpanded, setIsExpanded }: SidebarProps) {
     const isParentHighlighted =
       isMenuDirectlyActive(item) || (!isExpanded && hasActiveSub);
 
+    // Only show disabled state if permissions have loaded AND item is disabled
+    // This prevents the flash of disabled icons when switching tabs
+    const isActuallyDisabled = permissionsLoaded && item.disabled;
+
+    // Determine icon CSS class for immediate render (no flash)
+    const iconClass = isActuallyDisabled
+      ? "sidebar-icon-disabled"
+      : isParentHighlighted
+      ? "sidebar-icon-active"
+      : "sidebar-icon-default";
+
     return (
       <div key={item.name}>
         {/* Main menu item */}
         {hasSubItems ? (
           // Expandable menu with sub-items
           <button
-            onClick={() => !item.disabled && toggleSubMenu(item.name)}
-            disabled={item.disabled}
+            onClick={() => !isActuallyDisabled && toggleSubMenu(item.name)}
+            disabled={isActuallyDisabled}
             className={cn(
               "group flex items-center w-full px-3 py-2 text-sm font-medium rounded-md transition-all duration-200 relative",
               !isExpanded && "px-2 justify-center",
-              item.disabled
+              isActuallyDisabled
                 ? "text-slate-400 cursor-not-allowed opacity-50"
                 : isParentHighlighted
                 ? "text-blue-600"
                 : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
             )}
           >
-            {/* Icon */}
-            <div className="shrink-0 w-5 h-5 flex items-center justify-center">
-              <span
-                className={cn(
-                  "transition-colors duration-200",
-                  item.disabled
-                    ? "text-slate-400"
-                    : isParentHighlighted
-                    ? "text-blue-600"
-                    : "text-slate-500 group-hover:text-slate-700"
-                )}
-              >
-                {item.icon}
-              </span>
+            {/* Icon with CSS class for immediate render */}
+            <div
+              className={cn(
+                "shrink-0 w-5 h-5 flex items-center justify-center [&>svg]:w-5 [&>svg]:h-5",
+                iconClass
+              )}
+            >
+              {item.icon}
             </div>
 
             {/* Text and Chevron */}
@@ -178,7 +186,8 @@ export function Sidebar({ isExpanded, setIsExpanded }: SidebarProps) {
                 <span
                   className={cn(
                     "transition-transform duration-200 ml-2 shrink-0",
-                    isSubMenuExpanded ? "rotate-180" : ""
+                    isSubMenuExpanded ? "rotate-180" : "",
+                    iconClass
                   )}
                 >
                   {Icons.chevronDown}
@@ -190,7 +199,7 @@ export function Sidebar({ isExpanded, setIsExpanded }: SidebarProps) {
             {!isExpanded && (
               <div className="absolute left-full ml-2 px-3 py-2 bg-slate-800 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 shadow-lg">
                 {item.name}
-                {item.disabled && (
+                {isActuallyDisabled && (
                   <span className="ml-2 text-slate-400">(No access)</span>
                 )}
               </div>
@@ -199,39 +208,33 @@ export function Sidebar({ isExpanded, setIsExpanded }: SidebarProps) {
         ) : (
           // Regular link menu
           <Link
-            href={item.disabled ? "#" : item.href}
-            onClick={(e) => item.disabled && e.preventDefault()}
+            href={isActuallyDisabled ? "#" : item.href}
+            onClick={(e) => isActuallyDisabled && e.preventDefault()}
             className={cn(
               "group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-all duration-200 relative",
               !isExpanded && "px-2 justify-center",
-              item.disabled
+              isActuallyDisabled
                 ? "text-slate-400 cursor-not-allowed opacity-50"
                 : isParentHighlighted
                 ? "text-blue-600"
                 : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
             )}
           >
-            {/* Icon */}
-            <div className="shrink-0 w-5 h-5 flex items-center justify-center">
-              <span
-                className={cn(
-                  "transition-colors duration-200",
-                  item.disabled
-                    ? "text-slate-400"
-                    : isParentHighlighted
-                    ? "text-blue-600"
-                    : "text-slate-500 group-hover:text-slate-700"
-                )}
-              >
-                {item.icon}
-              </span>
+            {/* Icon with CSS class for immediate render */}
+            <div
+              className={cn(
+                "shrink-0 w-5 h-5 flex items-center justify-center [&>svg]:w-5 [&>svg]:h-5",
+                iconClass
+              )}
+            >
+              {item.icon}
             </div>
 
             {/* Text and Badge */}
             {isExpanded && (
               <div className="flex items-center justify-between flex-1 ml-3 overflow-hidden">
                 <span className="truncate whitespace-nowrap">{item.name}</span>
-                {item.badge && !item.disabled && (
+                {item.badge && !isActuallyDisabled && (
                   <span className="ml-auto shrink-0 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
                     {item.badge}
                   </span>
@@ -243,12 +246,12 @@ export function Sidebar({ isExpanded, setIsExpanded }: SidebarProps) {
             {!isExpanded && (
               <div className="absolute left-full ml-2 px-3 py-2 bg-slate-800 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 shadow-lg">
                 {item.name}
-                {item.badge && !item.disabled && (
+                {item.badge && !isActuallyDisabled && (
                   <span className="ml-2 px-1.5 py-0.5 bg-blue-600 text-xs rounded-full">
                     {item.badge}
                   </span>
                 )}
-                {item.disabled && (
+                {isActuallyDisabled && (
                   <span className="ml-2 text-slate-400">(No access)</span>
                 )}
               </div>
@@ -261,14 +264,18 @@ export function Sidebar({ isExpanded, setIsExpanded }: SidebarProps) {
           <div className="mt-1 ml-4 pl-4 border-l border-slate-200 space-y-0.5">
             {(item.subItems as FilteredSubItem[]).map((subItem) => {
               const isSubActive = isSubItemActive(subItem.href);
+              const isSubItemActuallyDisabled =
+                permissionsLoaded && subItem.disabled;
               return (
                 <Link
                   key={subItem.name}
-                  href={subItem.disabled ? "#" : subItem.href}
-                  onClick={(e) => subItem.disabled && e.preventDefault()}
+                  href={isSubItemActuallyDisabled ? "#" : subItem.href}
+                  onClick={(e) =>
+                    isSubItemActuallyDisabled && e.preventDefault()
+                  }
                   className={cn(
                     "block px-3 py-1.5 text-sm rounded-md transition-colors duration-150 whitespace-nowrap overflow-hidden text-ellipsis",
-                    subItem.disabled
+                    isSubItemActuallyDisabled
                       ? "text-slate-400 cursor-not-allowed opacity-50"
                       : isSubActive
                       ? "text-blue-600 font-medium"
@@ -284,26 +291,6 @@ export function Sidebar({ isExpanded, setIsExpanded }: SidebarProps) {
       </div>
     );
   };
-
-  // Loading state
-  if (isLoading) {
-    return (
-      <aside
-        className={cn(
-          "fixed left-0 top-16 bottom-0 bg-slate-50 border-r border-slate-200 overflow-hidden transition-all duration-300 ease-in-out z-40",
-          isExpanded ? "w-52" : "w-14"
-        )}
-      >
-        <div className="h-full flex items-center justify-center">
-          <div className="animate-pulse flex flex-col space-y-3 w-full px-3">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-10 bg-slate-200 rounded-lg" />
-            ))}
-          </div>
-        </div>
-      </aside>
-    );
-  }
 
   return (
     <aside
@@ -329,13 +316,13 @@ export function Sidebar({ isExpanded, setIsExpanded }: SidebarProps) {
               "text-blue-700 hover:bg-blue-50 hover:text-blue-800"
             )}
           >
-            {/* Help Icon */}
+            {/* Help Icon - explicit stroke to prevent flash */}
             <div className="shrink-0 w-5 h-5 flex items-center justify-center">
               <svg
-                className="w-5 h-5 transition-colors duration-200 text-blue-600 group-hover:text-blue-700"
+                className="w-5 h-5"
                 fill="none"
                 viewBox="0 0 24 24"
-                stroke="currentColor"
+                stroke="#2563eb"
               >
                 <path
                   strokeLinecap="round"

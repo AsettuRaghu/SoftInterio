@@ -9,6 +9,7 @@ import {
   calculateSqft,
   convertToFeet,
   MeasurementUnit,
+  ComponentVariant,
 } from "./types";
 import { LineItemRow } from "./LineItemRow";
 
@@ -22,6 +23,12 @@ interface ComponentCardProps {
   onUpdateLineItem: (lineItemId: string, updates: Partial<LineItem>) => void;
   onDeleteLineItem: (lineItemId: string) => void;
   formatCurrency: (amount: number) => string;
+  onDuplicate?: () => void;
+  onUpdateName?: (name: string) => void;
+  onUpdateVariant?: (variantId: string, variantName: string) => void;
+  availableVariants?: ComponentVariant[];
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }
 
 export function ComponentCard({
@@ -34,6 +41,12 @@ export function ComponentCard({
   onUpdateLineItem,
   onDeleteLineItem,
   formatCurrency,
+  onDuplicate,
+  onUpdateName,
+  onUpdateVariant,
+  availableVariants,
+  onMoveUp,
+  onMoveDown,
 }: ComponentCardProps) {
   // Calculate component total
   const calculateTotal = () => {
@@ -103,15 +116,51 @@ export function ComponentCard({
             </svg>
           </div>
           <div>
-            <h5 className="text-sm font-medium text-slate-900">
-              {component.name}
-              {component.variantName && (
-                <span className="text-slate-500 font-normal">
-                  {" "}
-                  - {component.variantName}
-                </span>
-              )}
-            </h5>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">{component.name}:</span>
+              <input
+                type="text"
+                value={component.customName || component.name}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  onUpdateName?.(e.target.value);
+                }}
+                onClick={(e) => e.stopPropagation()}
+                placeholder={component.name}
+                className="text-sm font-medium text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-purple-500 focus:outline-none px-1 max-w-[180px]"
+              />
+              {availableVariants &&
+                availableVariants.length > 0 &&
+                onUpdateVariant && (
+                  <select
+                    value={component.variantId || ""}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      const variant = availableVariants.find(
+                        (v) => v.id === e.target.value
+                      );
+                      if (variant) {
+                        onUpdateVariant(variant.id, variant.name);
+                      }
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded px-2 py-0.5 hover:border-slate-300 focus:border-purple-500 focus:outline-none cursor-pointer"
+                  >
+                    <option value="">No variant</option>
+                    {availableVariants.map((variant) => (
+                      <option key={variant.id} value={variant.id}>
+                        {variant.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              {component.variantName &&
+                (!availableVariants || availableVariants.length === 0) && (
+                  <span className="text-xs text-slate-500 font-normal">
+                    ({component.variantName})
+                  </span>
+                )}
+            </div>
             <p className="text-xs text-slate-500">
               {component.lineItems.length} cost items
             </p>
@@ -127,6 +176,79 @@ export function ComponentCard({
             <span className="text-sm text-slate-500">
               {component.lineItems.length} items
             </span>
+          )}
+          {/* Move buttons */}
+          {onMoveUp && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveUp();
+              }}
+              title="Move up"
+              className="text-slate-400 hover:text-slate-600"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 15l7-7 7 7"
+                />
+              </svg>
+            </button>
+          )}
+          {onMoveDown && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveDown();
+              }}
+              title="Move down"
+              className="text-slate-400 hover:text-slate-600"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+          )}
+          {onDuplicate && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDuplicate();
+              }}
+              title="Duplicate component"
+              className="text-slate-400 hover:text-blue-600"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                />
+              </svg>
+            </button>
           )}
           <button
             onClick={(e) => {

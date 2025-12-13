@@ -3,17 +3,41 @@
 // =====================================================
 
 // Enums matching database
+
+// Property Category (residential vs commercial)
+export type PropertyCategory = "residential" | "commercial";
+
+// Property Type (aligned with property_type_v2 in properties table)
 export type PropertyType =
-  | "apartment_gated"
-  | "apartment_non_gated"
-  | "villa_gated"
-  | "villa_non_gated"
+  // Residential
+  | "apartment"
+  | "villa"
   | "independent_house"
-  | "commercial_office"
-  | "commercial_retail"
-  | "commercial_restaurant"
-  | "commercial_other"
-  | "unknown";
+  | "penthouse"
+  | "duplex"
+  | "row_house"
+  | "farmhouse"
+  // Commercial
+  | "office"
+  | "retail_shop"
+  | "showroom"
+  | "restaurant_cafe"
+  | "clinic_hospital"
+  | "hotel"
+  | "warehouse"
+  | "co_working"
+  | "other";
+
+// Property Subtype (community type)
+export type PropertySubtype =
+  | "gated_community"
+  | "non_gated"
+  | "standalone"
+  | "mall"
+  | "commercial_complex"
+  | "it_park"
+  | "industrial_area"
+  | "other";
 
 export type ServiceType =
   | "turnkey"
@@ -108,17 +132,53 @@ export type LostReason =
 export type LeadScore = "cold" | "warm" | "hot" | "on_hold";
 
 // Display labels for enums
+export const PropertyCategoryLabels: Record<PropertyCategory, string> = {
+  residential: "Residential",
+  commercial: "Commercial",
+};
+
 export const PropertyTypeLabels: Record<PropertyType, string> = {
-  apartment_gated: "Apartment - Gated Community",
-  apartment_non_gated: "Apartment - Non Gated",
-  villa_gated: "Villa - Gated Community",
-  villa_non_gated: "Villa - Non Gated",
+  // Residential
+  apartment: "Apartment",
+  villa: "Villa",
   independent_house: "Independent House",
-  commercial_office: "Commercial - Office",
-  commercial_retail: "Commercial - Retail",
-  commercial_restaurant: "Commercial - Restaurant/Cafe",
-  commercial_other: "Commercial - Other",
-  unknown: "Unknown",
+  penthouse: "Penthouse",
+  duplex: "Duplex",
+  row_house: "Row House",
+  farmhouse: "Farmhouse",
+  // Commercial
+  office: "Office",
+  retail_shop: "Retail Shop",
+  showroom: "Showroom",
+  restaurant_cafe: "Restaurant/Cafe",
+  clinic_hospital: "Clinic/Hospital",
+  hotel: "Hotel",
+  warehouse: "Warehouse",
+  co_working: "Co-working Space",
+  other: "Other",
+};
+
+// Property types grouped by category for form dropdowns
+export const PropertyTypesByCategory: Record<PropertyCategory, PropertyType[]> = {
+  residential: ["apartment", "villa", "independent_house", "penthouse", "duplex", "row_house", "farmhouse"],
+  commercial: ["office", "retail_shop", "showroom", "restaurant_cafe", "clinic_hospital", "hotel", "warehouse", "co_working", "other"],
+};
+
+export const PropertySubtypeLabels: Record<PropertySubtype, string> = {
+  gated_community: "Gated Community",
+  non_gated: "Non-Gated",
+  standalone: "Standalone",
+  mall: "Mall",
+  commercial_complex: "Commercial Complex",
+  it_park: "IT Park",
+  industrial_area: "Industrial Area",
+  other: "Other",
+};
+
+// Property subtypes by category for form dropdowns
+export const PropertySubtypesByCategory: Record<PropertyCategory, PropertySubtype[]> = {
+  residential: ["gated_community", "non_gated", "standalone", "other"],
+  commercial: ["standalone", "mall", "commercial_complex", "it_park", "industrial_area", "other"],
 };
 
 export const ServiceTypeLabels: Record<ServiceType, string> = {
@@ -260,17 +320,86 @@ export const MeetingTypeLabels: Record<MeetingType, string> = {
   other: "Other",
 };
 
-// Main Lead interface
+// Client interface (from clients table)
+export interface Client {
+  id: string;
+  tenant_id: string;
+  client_type: "individual" | "company" | "partnership" | "huf" | "trust" | "other";
+  status: "active" | "inactive" | "blacklisted";
+  name: string;
+  display_name: string | null;
+  phone: string;
+  phone_secondary: string | null;
+  email: string | null;
+  email_secondary: string | null;
+  company_name: string | null;
+  gst_number: string | null;
+  pan_number: string | null;
+  contact_person_name: string | null;
+  contact_person_phone: string | null;
+  contact_person_email: string | null;
+  contact_person_designation: string | null;
+  address_line1: string | null;
+  address_line2: string | null;
+  landmark: string | null;
+  locality: string | null;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
+  country: string;
+  date_of_birth: string | null;
+  anniversary_date: string | null;
+  occupation: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Property interface (from properties table)
+export interface Property {
+  id: string;
+  tenant_id: string;
+  property_name: string | null;
+  unit_number: string | null;
+  block_tower: string | null;
+  category: PropertyCategory;
+  property_type: PropertyType;
+  property_subtype: PropertySubtype | null;
+  ownership: string | null;
+  status: string | null;
+  carpet_area: number | null;
+  built_up_area: number | null;
+  super_built_up_area: number | null;
+  area_unit: string;
+  bedrooms: number;
+  bathrooms: number;
+  floor_number: number | null;
+  total_floors: number | null;
+  facing: string | null;
+  address_line1: string | null;
+  address_line2: string | null;
+  landmark: string | null;
+  locality: string | null;
+  city: string;
+  state: string | null;
+  pincode: string | null;
+  country: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Main Lead interface (normalized - uses client_id and property_id)
 export interface Lead {
   id: string;
   tenant_id: string;
   lead_number: string;
 
-  // Primary Contact
-  client_name: string;
-  phone: string;
-  email: string;
-  property_type: PropertyType;
+  // Linked Client (FK to clients table)
+  client_id: string;
+  
+  // Linked Property (FK to properties table) - optional
+  property_id: string | null;
 
   // Service & Source
   service_type: ServiceType | null;
@@ -280,14 +409,6 @@ export interface Lead {
   // Timeline
   target_start_date: string | null; // ISO date
   target_end_date: string | null;
-
-  // Property Details
-  property_name: string | null;
-  flat_number: string | null;
-  property_address: string | null;
-  property_city: string | null;
-  property_pincode: string | null;
-  carpet_area_sqft: number | null;
 
   // Budget
   budget_range: BudgetRange | null;
@@ -352,11 +473,14 @@ export interface Lead {
   created_at: string;
   updated_at: string;
 
-  // Joined data (optional)
+  // Joined data (from foreign keys)
+  client?: Client;
+  property?: Property | null;
   assigned_user?: {
     id: string;
     name: string;
     avatar_url: string | null;
+    email?: string;
   };
   created_user?: {
     id: string;
@@ -365,25 +489,31 @@ export interface Lead {
   };
 }
 
-// Lead creation input (only mandatory fields)
+// Lead creation input - client and property data are provided inline
+// API will create client/property records automatically
 export interface CreateLeadInput {
+  // Client Details (will create a new client record)
   client_name: string;
   phone: string;
-  email: string;
-  property_type: PropertyType;
+  email?: string;
 
-  // Optional fields
+  // Property Details (will create a new property record)
+  property_name?: string;
+  unit_number?: string;
+  property_category?: PropertyCategory;
+  property_type?: PropertyType;
+  property_subtype?: PropertySubtype;
+  carpet_area?: number;
+  property_address?: string;
+  property_city?: string;
+  property_pincode?: string;
+
+  // Lead-specific fields
   service_type?: ServiceType;
   lead_source?: LeadSource;
   lead_source_detail?: string;
   target_start_date?: string;
   target_end_date?: string;
-  property_name?: string;
-  flat_number?: string;
-  property_address?: string;
-  property_city?: string;
-  property_pincode?: string;
-  carpet_area_sqft?: number;
   budget_range?: BudgetRange;
   estimated_value?: number;
   project_scope?: string;
@@ -392,19 +522,40 @@ export interface CreateLeadInput {
   notes?: string;
 }
 
-// Lead update input
-export interface UpdateLeadInput
-  extends Partial<
-    Omit<
-      Lead,
-      | "id"
-      | "tenant_id"
-      | "lead_number"
-      | "created_at"
-      | "updated_at"
-      | "created_by"
-    >
-  > {}
+// Lead update input - updates to client/property are passed inline
+// API will update the linked client/property records
+export interface UpdateLeadInput {
+  // Client updates (will update linked client record)
+  client_name?: string;
+  phone?: string;
+  email?: string;
+
+  // Property updates (will update linked property record)
+  property_name?: string;
+  unit_number?: string;
+  property_category?: PropertyCategory;
+  property_type?: PropertyType;
+  property_subtype?: PropertySubtype;
+  carpet_area?: number;
+  property_address?: string;
+  property_city?: string;
+  property_pincode?: string;
+
+  // Lead-specific field updates
+  service_type?: ServiceType | null;
+  lead_source?: LeadSource | null;
+  lead_source_detail?: string | null;
+  target_start_date?: string | null;
+  target_end_date?: string | null;
+  budget_range?: BudgetRange | null;
+  estimated_value?: number | null;
+  project_scope?: string | null;
+  special_requirements?: string | null;
+  lead_score?: LeadScore;
+  assigned_to?: string | null;
+  next_followup_date?: string | null;
+  next_followup_notes?: string | null;
+}
 
 // Stage transition input
 export interface StageTransitionInput {
@@ -418,13 +569,15 @@ export interface StageTransitionInput {
   target_start_date?: string;
   target_end_date?: string;
 
-  // For Requirement Discussion
+  // For Requirement Discussion (updates property)
   budget_range?: BudgetRange;
   project_scope?: string;
   property_name?: string;
+  unit_number?: string;
+  property_category?: PropertyCategory;
   property_type?: PropertyType;
-  flat_number?: string;
-  carpet_area_sqft?: number;
+  property_subtype?: PropertySubtype;
+  carpet_area?: number;
   property_address?: string;
   property_city?: string;
 
@@ -620,9 +773,10 @@ export interface TenantLeadSettings {
 // Valid stage transitions
 // NOTE: Once a lead moves to proposal_discussion, it CANNOT go back to earlier stages
 // because a quotation is auto-created at that stage.
+// NOTE: Once qualified, a lead cannot be disqualified - only new leads can be disqualified
 export const ValidStageTransitions: Record<LeadStage, LeadStage[]> = {
   new: ["qualified", "disqualified"],
-  qualified: ["requirement_discussion", "disqualified"],
+  qualified: ["requirement_discussion", "lost"], // Can move forward or mark as lost
   requirement_discussion: ["proposal_discussion", "lost"], // Forward only - proposal or lost
   proposal_discussion: ["won", "lost"], // Can move to won or lost
   disqualified: [], // Terminal

@@ -7,7 +7,7 @@ export const Icons = {
       className="w-5 h-5"
       fill="none"
       viewBox="0 0 24 24"
-      stroke="currentColor"
+      stroke="#64748b"
     >
       <path
         strokeLinecap="round"
@@ -22,7 +22,7 @@ export const Icons = {
       className="w-5 h-5"
       fill="none"
       viewBox="0 0 24 24"
-      stroke="currentColor"
+      stroke="#64748b"
     >
       <path
         strokeLinecap="round"
@@ -37,7 +37,7 @@ export const Icons = {
       className="w-5 h-5"
       fill="none"
       viewBox="0 0 24 24"
-      stroke="currentColor"
+      stroke="#64748b"
     >
       <path
         strokeLinecap="round"
@@ -52,7 +52,7 @@ export const Icons = {
       className="w-5 h-5"
       fill="none"
       viewBox="0 0 24 24"
-      stroke="currentColor"
+      stroke="#64748b"
     >
       <path
         strokeLinecap="round"
@@ -67,7 +67,7 @@ export const Icons = {
       className="w-5 h-5"
       fill="none"
       viewBox="0 0 24 24"
-      stroke="currentColor"
+      stroke="#64748b"
     >
       <path
         strokeLinecap="round"
@@ -82,7 +82,7 @@ export const Icons = {
       className="w-5 h-5"
       fill="none"
       viewBox="0 0 24 24"
-      stroke="currentColor"
+      stroke="#64748b"
     >
       <path
         strokeLinecap="round"
@@ -97,7 +97,7 @@ export const Icons = {
       className="w-5 h-5"
       fill="none"
       viewBox="0 0 24 24"
-      stroke="currentColor"
+      stroke="#64748b"
     >
       <path
         strokeLinecap="round"
@@ -112,7 +112,7 @@ export const Icons = {
       className="w-5 h-5"
       fill="none"
       viewBox="0 0 24 24"
-      stroke="currentColor"
+      stroke="#64748b"
     >
       <path
         strokeLinecap="round"
@@ -127,7 +127,7 @@ export const Icons = {
       className="w-5 h-5"
       fill="none"
       viewBox="0 0 24 24"
-      stroke="currentColor"
+      stroke="#64748b"
     >
       <path
         strokeLinecap="round"
@@ -142,7 +142,7 @@ export const Icons = {
       className="w-5 h-5"
       fill="none"
       viewBox="0 0 24 24"
-      stroke="currentColor"
+      stroke="#64748b"
     >
       <path
         strokeLinecap="round"
@@ -157,7 +157,7 @@ export const Icons = {
       className="w-5 h-5"
       fill="none"
       viewBox="0 0 24 24"
-      stroke="currentColor"
+      stroke="#64748b"
     >
       <path
         strokeLinecap="round"
@@ -172,7 +172,7 @@ export const Icons = {
       className="w-5 h-5"
       fill="none"
       viewBox="0 0 24 24"
-      stroke="currentColor"
+      stroke="#64748b"
     >
       <path
         strokeLinecap="round"
@@ -193,7 +193,7 @@ export const Icons = {
       className="w-4 h-4"
       fill="none"
       viewBox="0 0 24 24"
-      stroke="currentColor"
+      stroke="#64748b"
     >
       <path
         strokeLinecap="round"
@@ -208,7 +208,7 @@ export const Icons = {
       className="w-4 h-4"
       fill="none"
       viewBox="0 0 24 24"
-      stroke="currentColor"
+      stroke="#64748b"
     >
       <path
         strokeLinecap="round"

@@ -370,6 +370,55 @@ export default function EditTemplatePage() {
     );
   };
 
+  // Update component custom name
+  const updateComponentName = (
+    spaceId: string,
+    componentId: string,
+    customName: string
+  ) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id === spaceId) {
+          return {
+            ...space,
+            components: space.components.map((c) =>
+              c.id === componentId ? { ...c, customName } : c
+            ),
+          };
+        }
+        return space;
+      })
+    );
+  };
+
+  // Update component variant
+  const updateComponentVariant = (
+    spaceId: string,
+    componentId: string,
+    variantId: string,
+    variantName: string
+  ) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id === spaceId) {
+          return {
+            ...space,
+            components: space.components.map((c) =>
+              c.id === componentId
+                ? {
+                    ...c,
+                    variantId: variantId || undefined,
+                    variantName: variantName || undefined,
+                  }
+                : c
+            ),
+          };
+        }
+        return space;
+      })
+    );
+  };
+
   // Cost item operations
   const addCostItem = (
     spaceId: string,
@@ -711,6 +760,22 @@ export default function EditTemplatePage() {
                 onDeleteComponent={(componentId) =>
                   deleteComponent(space.id, componentId)
                 }
+                onUpdateComponentName={(componentId, name) =>
+                  updateComponentName(space.id, componentId, name)
+                }
+                onUpdateComponentVariant={(
+                  componentId,
+                  variantId,
+                  variantName
+                ) =>
+                  updateComponentVariant(
+                    space.id,
+                    componentId,
+                    variantId,
+                    variantName
+                  )
+                }
+                masterData={masterData}
                 onAddCostItem={(componentId) =>
                   setShowAddCostItemModal({ spaceId: space.id, componentId })
                 }

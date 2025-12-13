@@ -10,7 +10,6 @@ import type {
   LeadActivityType,
   LeadNote,
   LeadStageHistory,
-  LeadDocument,
   LeadFamilyMember,
   BudgetRange,
   ServiceType,
@@ -18,9 +17,12 @@ import type {
   DisqualificationReason,
   LostReason,
   PropertyType,
+  PropertyCategory,
+  PropertySubtype,
   LeadScore,
 } from "@/types/leads";
 import type { Task, TaskPriority, TaskStatus } from "@/types/tasks";
+import type { DocumentWithUrl, Document } from "@/types/documents";
 import {
   TaskPriorityColors,
   TaskStatusColors,
@@ -29,9 +31,18 @@ import {
 } from "@/types/tasks";
 import { CreateTaskModal, EditTaskModal } from "@/components/tasks";
 import {
+  AddDocumentModal,
+  DocumentList,
+  DocumentPreviewModal,
+} from "@/components/documents";
+import {
   LeadStageLabels,
   LeadStageColors,
   PropertyTypeLabels,
+  PropertyCategoryLabels,
+  PropertySubtypeLabels,
+  PropertyTypesByCategory,
+  PropertySubtypesByCategory,
   ServiceTypeLabels,
   LeadSourceLabels,
   BudgetRangeLabels,
@@ -87,7 +98,10 @@ export default function LeadDetailPage() {
   const [notes, setNotes] = useState<LeadNote[]>([]);
   const [stageHistory, setStageHistory] = useState<LeadStageHistory[]>([]);
   const [tasks, setTasks] = useState<TaskWithUser[]>([]);
-  const [documents, setDocuments] = useState<LeadDocument[]>([]);
+  const [documents, setDocuments] = useState<DocumentWithUrl[]>([]);
+  const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
+  const [previewDocument, setPreviewDocument] =
+    useState<DocumentWithUrl | null>(null);
   const [familyMembers, setFamilyMembers] = useState<LeadFamilyMember[]>([]);
   const [quotations, setQuotations] = useState<any[]>([]);
   const [revisingId, setRevisingId] = useState<string | null>(null);
@@ -110,27 +124,33 @@ export default function LeadDetailPage() {
     null
   );
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // Edit form state
   const [editForm, setEditForm] = useState({
+    // Client data (from linked client record)
     client_name: "",
     phone: "",
     email: "",
-    property_type: "",
-    service_type: "",
-    lead_source: "",
+    // Property data (from linked property record)
     property_name: "",
-    flat_number: "",
+    unit_number: "",
+    property_category: "",
+    property_type: "",
+    property_subtype: "",
+    carpet_area: "",
     property_address: "",
     property_city: "",
     property_pincode: "",
-    carpet_area_sqft: "",
+    // Lead-specific fields
+    service_type: "",
+    lead_source: "",
     budget_range: "",
     estimated_value: "",
     project_scope: "",
     special_requirements: "",
-    priority: "",
+    lead_score: "",
     target_start_date: "",
     target_end_date: "",
   });
@@ -139,23 +159,28 @@ export default function LeadDetailPage() {
   useEffect(() => {
     if (lead) {
       setEditForm({
-        client_name: lead.client_name || "",
-        phone: lead.phone || "",
-        email: lead.email || "",
-        property_type: lead.property_type || "",
+        // Client data from linked record
+        client_name: lead.client?.name || "",
+        phone: lead.client?.phone || "",
+        email: lead.client?.email || "",
+        // Property data from linked record
+        property_name: lead.property?.property_name || "",
+        unit_number: lead.property?.unit_number || "",
+        property_category: lead.property?.category || "",
+        property_type: lead.property?.property_type || "",
+        property_subtype: lead.property?.property_subtype || "",
+        carpet_area: lead.property?.carpet_area?.toString() || "",
+        property_address: lead.property?.address_line1 || "",
+        property_city: lead.property?.city || "",
+        property_pincode: lead.property?.pincode || "",
+        // Lead-specific fields
         service_type: lead.service_type || "",
         lead_source: lead.lead_source || "",
-        property_name: lead.property_name || "",
-        flat_number: lead.flat_number || "",
-        property_address: lead.property_address || "",
-        property_city: lead.property_city || "",
-        property_pincode: lead.property_pincode || "",
-        carpet_area_sqft: lead.carpet_area_sqft?.toString() || "",
         budget_range: lead.budget_range || "",
         estimated_value: lead.estimated_value?.toString() || "",
         project_scope: lead.project_scope || "",
         special_requirements: lead.special_requirements || "",
-        priority: lead.priority || "medium",
+        lead_score: lead.lead_score || "warm",
         target_start_date: lead.target_start_date || "",
         target_end_date: lead.target_end_date || "",
       });
@@ -172,27 +197,32 @@ export default function LeadDetailPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          // Client updates (will update linked client record)
           client_name: editForm.client_name,
           phone: editForm.phone,
           email: editForm.email || null,
-          property_type: editForm.property_type || null,
-          service_type: editForm.service_type || null,
-          lead_source: editForm.lead_source || null,
+          // Property updates (will update linked property record)
           property_name: editForm.property_name || null,
-          flat_number: editForm.flat_number || null,
+          unit_number: editForm.unit_number || null,
+          property_category: editForm.property_category || null,
+          property_type: editForm.property_type || null,
+          property_subtype: editForm.property_subtype || null,
+          carpet_area: editForm.carpet_area
+            ? parseFloat(editForm.carpet_area)
+            : null,
           property_address: editForm.property_address || null,
           property_city: editForm.property_city || null,
           property_pincode: editForm.property_pincode || null,
-          carpet_area_sqft: editForm.carpet_area_sqft
-            ? parseFloat(editForm.carpet_area_sqft)
-            : null,
+          // Lead-specific fields
+          service_type: editForm.service_type || null,
+          lead_source: editForm.lead_source || null,
           budget_range: editForm.budget_range || null,
           estimated_value: editForm.estimated_value
             ? parseFloat(editForm.estimated_value)
             : null,
           project_scope: editForm.project_scope || null,
           special_requirements: editForm.special_requirements || null,
-          priority: editForm.priority,
+          lead_score: editForm.lead_score || null,
           target_start_date: editForm.target_start_date || null,
           target_end_date: editForm.target_end_date || null,
         }),
@@ -290,10 +320,52 @@ export default function LeadDetailPage() {
     }
   }, []);
 
+  // Fetch documents from unified documents API
+  const fetchDocuments = useCallback(async () => {
+    try {
+      setIsLoadingDocuments(true);
+      const response = await fetch(
+        `/api/documents?linked_type=lead&linked_id=${leadId}`
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setDocuments(data.documents || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch documents:", err);
+    } finally {
+      setIsLoadingDocuments(false);
+    }
+  }, [leadId]);
+
+  // Handle document delete
+  const handleDocumentDelete = useCallback(async (doc: Document) => {
+    try {
+      const response = await fetch(`/api/documents/${doc.id}`, {
+        method: "DELETE",
+      });
+      if (response.ok) {
+        setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+      } else {
+        throw new Error("Failed to delete document");
+      }
+    } catch (err) {
+      console.error("Error deleting document:", err);
+      alert("Failed to delete document");
+    }
+  }, []);
+
   useEffect(() => {
     fetchLead();
     fetchTeamMembers();
   }, [fetchLead, fetchTeamMembers]);
+
+  // Fetch documents when tab changes to documents
+  useEffect(() => {
+    if (activeTab === "documents" && leadId) {
+      fetchDocuments();
+    }
+  }, [activeTab, leadId, fetchDocuments]);
 
   // Open stage modal if query param is present
   useEffect(() => {
@@ -401,9 +473,9 @@ export default function LeadDetailPage() {
   return (
     <PageLayout>
       <PageHeader
-        title={lead.client_name}
-        subtitle={`${lead.lead_number} • ${lead.phone}${
-          lead.email ? ` • ${lead.email}` : ""
+        title={lead.client?.name || "Unknown Client"}
+        subtitle={`${lead.lead_number} • ${lead.client?.phone || ""}${
+          lead.client?.email ? ` • ${lead.client.email}` : ""
         }`}
         breadcrumbs={[
           { label: "Leads", href: "/dashboard/sales/leads" },
@@ -647,11 +719,11 @@ export default function LeadDetailPage() {
                         <div className="space-y-3">
                           <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-100">
                             <div className="w-12 h-12 rounded-full bg-linear-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center text-lg font-bold">
-                              {getInitials(lead.client_name)}
+                              {getInitials(lead.client?.name || "?")}
                             </div>
                             <div>
                               <p className="text-base font-semibold text-slate-900">
-                                {lead.client_name}
+                                {lead.client?.name || "Unknown"}
                               </p>
                               <p className="text-sm text-slate-500">
                                 Lead #{lead.lead_number}
@@ -674,15 +746,17 @@ export default function LeadDetailPage() {
                                 />
                               </svg>
                               <span className="text-sm font-medium text-slate-700">
-                                {lead.phone || "—"}
+                                {lead.client?.phone || "—"}
                               </span>
                             </div>
                             <a
                               href={
-                                lead.email ? `mailto:${lead.email}` : undefined
+                                lead.client?.email
+                                  ? `mailto:${lead.client.email}`
+                                  : undefined
                               }
                               className={`flex items-center gap-3 p-2.5 bg-white rounded-lg border border-slate-100 ${
-                                lead.email
+                                lead.client?.email
                                   ? "hover:bg-blue-50 hover:border-blue-200"
                                   : ""
                               }`}
@@ -701,7 +775,7 @@ export default function LeadDetailPage() {
                                 />
                               </svg>
                               <span className="text-sm font-medium text-slate-700 truncate">
-                                {lead.email || "—"}
+                                {lead.client?.email || "—"}
                               </span>
                             </a>
                           </div>
@@ -750,14 +824,6 @@ export default function LeadDetailPage() {
                           </button>
                         </div>
                         <dl className="space-y-3">
-                          <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                            <dt className="text-sm text-slate-500">
-                              Property Type
-                            </dt>
-                            <dd className="text-sm font-semibold text-slate-900">
-                              {PropertyTypeLabels[lead.property_type]}
-                            </dd>
-                          </div>
                           <div className="flex justify-between items-center py-2 border-b border-slate-100">
                             <dt className="text-sm text-slate-500">
                               Service Type
@@ -857,11 +923,43 @@ export default function LeadDetailPage() {
                         </div>
                         <dl className="space-y-3">
                           <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                            <dt className="text-sm text-slate-500">Category</dt>
+                            <dd className="text-sm font-semibold text-slate-900">
+                              {lead.property?.category
+                                ? PropertyCategoryLabels[lead.property.category]
+                                : "—"}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                            <dt className="text-sm text-slate-500">
+                              Property Type
+                            </dt>
+                            <dd className="text-sm font-semibold text-slate-900">
+                              {lead.property?.property_type
+                                ? PropertyTypeLabels[
+                                    lead.property.property_type
+                                  ]
+                                : "—"}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                            <dt className="text-sm text-slate-500">
+                              Community Type
+                            </dt>
+                            <dd className="text-sm font-semibold text-slate-900">
+                              {lead.property?.property_subtype
+                                ? PropertySubtypeLabels[
+                                    lead.property.property_subtype
+                                  ]
+                                : "—"}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-slate-100">
                             <dt className="text-sm text-slate-500">
                               Property Name
                             </dt>
                             <dd className="text-sm font-semibold text-slate-900">
-                              {lead.property_name || "—"}
+                              {lead.property?.property_name || "—"}
                             </dd>
                           </div>
                           <div className="flex justify-between items-center py-2 border-b border-slate-100">
@@ -869,7 +967,7 @@ export default function LeadDetailPage() {
                               Flat/Unit
                             </dt>
                             <dd className="text-sm font-semibold text-slate-900">
-                              {lead.flat_number || "—"}
+                              {lead.property?.unit_number || "—"}
                             </dd>
                           </div>
                           <div className="flex justify-between items-center py-2 border-b border-slate-100">
@@ -877,30 +975,30 @@ export default function LeadDetailPage() {
                               Carpet Area
                             </dt>
                             <dd className="text-sm font-semibold text-slate-900">
-                              {lead.carpet_area_sqft
-                                ? `${lead.carpet_area_sqft} sq.ft`
+                              {lead.property?.carpet_area
+                                ? `${lead.property.carpet_area.toLocaleString()} sq.ft`
                                 : "—"}
                             </dd>
                           </div>
                           <div className="flex justify-between items-center py-2 border-b border-slate-100">
                             <dt className="text-sm text-slate-500">City</dt>
                             <dd className="text-sm font-semibold text-slate-900">
-                              {lead.property_city || "—"}
+                              {lead.property?.city || "—"}
                             </dd>
                           </div>
                           <div className="flex justify-between items-center py-2 border-b border-slate-100">
                             <dt className="text-sm text-slate-500">Pincode</dt>
                             <dd className="text-sm font-semibold text-slate-900">
-                              {lead.property_pincode || "—"}
+                              {lead.property?.pincode || "—"}
                             </dd>
                           </div>
-                          {lead.property_address && (
+                          {lead.property?.address_line1 && (
                             <div className="pt-2">
                               <dt className="text-sm text-slate-500 mb-1">
                                 Full Address
                               </dt>
                               <dd className="text-sm font-medium text-slate-700 bg-slate-50 rounded-lg p-2">
-                                {lead.property_address}
+                                {lead.property?.address_line1}
                               </dd>
                             </div>
                           )}
@@ -1762,58 +1860,61 @@ export default function LeadDetailPage() {
 
               {/* Documents Tab */}
               {activeTab === "documents" && (
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <div className="flex justify-between items-center">
                     <h3 className="text-base font-bold text-slate-900">
                       Documents
                     </h3>
-                    <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
-                      + Upload
+                    <button
+                      onClick={() => setShowDocumentModal(true)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 4v16m8-8H4"
+                        />
+                      </svg>
+                      Add Document
                     </button>
                   </div>
-                  {documents.length === 0 ? (
-                    <div className="text-center py-8 text-sm text-slate-500">
-                      No documents uploaded yet
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {documents.map((doc) => (
-                        <div
-                          key={doc.id}
-                          className="p-4 bg-slate-50 rounded-lg"
-                        >
-                          <div className="flex items-start gap-3">
-                            <svg
-                              className="w-8 h-8 text-slate-400 shrink-0"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                              />
-                            </svg>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-slate-900 truncate">
-                                {doc.file_name}
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                {doc.document_type || "Document"}
-                              </p>
-                              <p className="text-xs text-slate-400 mt-1">
-                                {formatDate(doc.created_at)}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+
+                  {/* Document List */}
+                  <DocumentList
+                    documents={documents}
+                    onDelete={handleDocumentDelete}
+                    onPreview={(doc) => setPreviewDocument(doc)}
+                    isLoading={isLoadingDocuments}
+                    emptyMessage="No documents uploaded yet. Click 'Add Document' to upload your first document."
+                    viewMode="list"
+                    showCategory
+                    showUploader
+                  />
                 </div>
               )}
+
+              {/* Document Modals */}
+              <AddDocumentModal
+                isOpen={showDocumentModal}
+                onClose={() => setShowDocumentModal(false)}
+                onSuccess={() => {
+                  fetchDocuments();
+                }}
+                linkedType="lead"
+                linkedId={leadId}
+              />
+              <DocumentPreviewModal
+                document={previewDocument}
+                isOpen={!!previewDocument}
+                onClose={() => setPreviewDocument(null)}
+              />
 
               {/* Quotations Tab */}
               {activeTab === "quotations" && (
@@ -2108,7 +2209,7 @@ export default function LeadDetailPage() {
               leadId={lead.id}
               meeting={editingMeeting}
               teamMembers={teamMembers}
-              clientEmail={lead.email}
+              clientEmail={lead.client?.email || undefined}
               onClose={() => {
                 setShowMeetingModal(false);
                 setEditingMeeting(null);
@@ -2132,7 +2233,7 @@ export default function LeadDetailPage() {
             defaultLinkedEntity={{
               type: "lead",
               id: lead.id,
-              name: lead.client_name || "This Lead",
+              name: lead.client?.name || "This Lead",
             }}
           />
 
@@ -2157,7 +2258,7 @@ export default function LeadDetailPage() {
                 created_by_name: editingTask.created_user?.name,
                 related_type: editingTask.related_type,
                 related_id: editingTask.related_id,
-                related_name: lead.client_name || "This Lead",
+                related_name: lead.client?.name || "This Lead",
               }}
               isOpen={true}
               onClose={() => setEditingTask(null)}
@@ -2198,10 +2299,12 @@ function StageTransitionModal({
     target_end_date: lead.target_end_date || "",
     budget_range: lead.budget_range || "",
     project_scope: lead.project_scope || "",
-    property_name: lead.property_name || "",
-    property_type: lead.property_type || "",
-    flat_number: lead.flat_number || "",
-    carpet_area_sqft: lead.carpet_area_sqft?.toString() || "",
+    property_name: lead.property?.property_name || "",
+    property_category: lead.property?.category || "",
+    property_type: lead.property?.property_type || "",
+    property_subtype: lead.property?.property_subtype || "",
+    unit_number: lead.property?.unit_number || "",
+    carpet_area: lead.property?.carpet_area?.toString() || "",
     disqualification_reason: "" as DisqualificationReason | "",
     disqualification_notes: "",
     lost_reason: "" as LostReason | "",
@@ -2212,6 +2315,27 @@ function StageTransitionModal({
     expected_project_start: "",
     change_reason: "",
   });
+
+  // Get available property types based on selected category
+  const availablePropertyTypes = formData.property_category
+    ? PropertyTypesByCategory[formData.property_category as PropertyCategory]
+    : [];
+
+  // Get available subtypes based on selected category
+  const availableSubtypes = formData.property_category
+    ? PropertySubtypesByCategory[formData.property_category as PropertyCategory]
+    : [];
+
+  // Helper to determine if a field is required based on stage
+  // Fields are cumulative: later stages require all previous stage fields
+  const isQualifiedFieldRequired =
+    selectedStage === "qualified" ||
+    selectedStage === "requirement_discussion" ||
+    selectedStage === "proposal_discussion";
+
+  const isRequirementDiscussionFieldRequired =
+    selectedStage === "requirement_discussion" ||
+    selectedStage === "proposal_discussion";
 
   // Get minimum start date - cannot go earlier than original start date (if exists)
   // or today's date
@@ -2266,8 +2390,8 @@ function StageTransitionModal({
         body: JSON.stringify({
           to_stage: selectedStage,
           ...formData,
-          carpet_area_sqft: formData.carpet_area_sqft
-            ? parseFloat(formData.carpet_area_sqft)
+          carpet_area: formData.carpet_area
+            ? parseFloat(formData.carpet_area)
             : undefined,
           won_amount: formData.won_amount
             ? parseFloat(formData.won_amount)
@@ -2460,218 +2584,390 @@ function StageTransitionModal({
                 </div>
               </div>
 
-              {/* Dynamic fields based on selected stage */}
-              {selectedStage === "qualified" && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Property Type <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      required
-                      value={formData.property_type}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          property_type: e.target.value as PropertyType,
-                        })
-                      }
-                      className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
-                    >
-                      <option value="">Select property type</option>
-                      {Object.entries(PropertyTypeLabels).map(
-                        ([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        )
-                      )}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Service Type <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      required
-                      value={formData.service_type}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          service_type: e.target.value,
-                        })
-                      }
-                      className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
-                    >
-                      <option value="">Select service type</option>
-                      {Object.entries(ServiceTypeLabels).map(
-                        ([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        )
-                      )}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Property Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.property_name}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          property_name: e.target.value,
-                        })
-                      }
-                      className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., Prestige Lakeside Habitat"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Target Start Date{" "}
-                        <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        value={formData.target_start_date}
-                        min={getMinStartDate()}
-                        onChange={(e) => handleStartDateChange(e.target.value)}
-                        className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      />
-                      {lead.target_start_date && (
-                        <p className="text-xs text-slate-500 mt-1">
-                          Cannot be earlier than:{" "}
-                          {new Date(
-                            lead.target_start_date
-                          ).toLocaleDateString()}
-                        </p>
-                      )}
+              {/* Show all fields when a stage is selected */}
+              {selectedStage &&
+                !["disqualified", "lost", "won"].includes(selectedStage) && (
+                  <>
+                    {/* Property Details Section */}
+                    <div className="border-t border-slate-200 pt-4">
+                      <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                        <svg
+                          className="w-4 h-4 text-slate-500"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                          />
+                        </svg>
+                        Property Details
+                      </h3>
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Category{" "}
+                              {isQualifiedFieldRequired && (
+                                <span className="text-red-500">*</span>
+                              )}
+                            </label>
+                            <select
+                              required={isQualifiedFieldRequired}
+                              value={formData.property_category}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  property_category: e.target
+                                    .value as PropertyCategory,
+                                  property_type: "",
+                                  property_subtype: "",
+                                })
+                              }
+                              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                            >
+                              <option value="">Select category</option>
+                              {Object.entries(PropertyCategoryLabels).map(
+                                ([value, label]) => (
+                                  <option key={value} value={value}>
+                                    {label}
+                                  </option>
+                                )
+                              )}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Property Type{" "}
+                              {isQualifiedFieldRequired && (
+                                <span className="text-red-500">*</span>
+                              )}
+                            </label>
+                            <select
+                              required={isQualifiedFieldRequired}
+                              value={formData.property_type}
+                              disabled={!formData.property_category}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  property_type: e.target.value as PropertyType,
+                                })
+                              }
+                              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-slate-50"
+                            >
+                              <option value="">
+                                {formData.property_category
+                                  ? "Select type"
+                                  : "Select category first"}
+                              </option>
+                              {availablePropertyTypes.map((type) => (
+                                <option key={type} value={type}>
+                                  {PropertyTypeLabels[type]}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Community Type{" "}
+                              {isQualifiedFieldRequired && (
+                                <span className="text-red-500">*</span>
+                              )}
+                            </label>
+                            <select
+                              required={isQualifiedFieldRequired}
+                              value={formData.property_subtype}
+                              disabled={!formData.property_category}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  property_subtype: e.target
+                                    .value as PropertySubtype,
+                                })
+                              }
+                              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-slate-50"
+                            >
+                              <option value="">
+                                {formData.property_category
+                                  ? "Select subtype"
+                                  : "Select category first"}
+                              </option>
+                              {availableSubtypes.map((subtype) => (
+                                <option key={subtype} value={subtype}>
+                                  {PropertySubtypeLabels[subtype]}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">
+                            Property Name{" "}
+                            {isQualifiedFieldRequired && (
+                              <span className="text-red-500">*</span>
+                            )}
+                          </label>
+                          <input
+                            type="text"
+                            required={isQualifiedFieldRequired}
+                            value={formData.property_name}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                property_name: e.target.value,
+                              })
+                            }
+                            className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            placeholder="e.g., Prestige Lakeside Habitat"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Flat/Unit Number{" "}
+                              {isRequirementDiscussionFieldRequired && (
+                                <span className="text-red-500">*</span>
+                              )}
+                            </label>
+                            <input
+                              type="text"
+                              required={isRequirementDiscussionFieldRequired}
+                              value={formData.unit_number}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  unit_number: e.target.value,
+                                })
+                              }
+                              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                              placeholder="e.g., A-1201"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Carpet Area (sq.ft){" "}
+                              {isRequirementDiscussionFieldRequired && (
+                                <span className="text-red-500">*</span>
+                              )}
+                            </label>
+                            <input
+                              type="number"
+                              required={isRequirementDiscussionFieldRequired}
+                              value={formData.carpet_area}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  carpet_area: e.target.value,
+                                })
+                              }
+                              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                              placeholder="e.g., 1500"
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Target End Date <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        value={formData.target_end_date}
-                        min={getMinEndDate()}
+
+                    {/* Project Details Section */}
+                    <div className="border-t border-slate-200 pt-4">
+                      <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                        <svg
+                          className="w-4 h-4 text-slate-500"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                          />
+                        </svg>
+                        Project Details
+                      </h3>
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Service Type{" "}
+                              {isQualifiedFieldRequired && (
+                                <span className="text-red-500">*</span>
+                              )}
+                            </label>
+                            <select
+                              required={isQualifiedFieldRequired}
+                              value={formData.service_type}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  service_type: e.target.value,
+                                })
+                              }
+                              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                            >
+                              <option value="">Select service type</option>
+                              {Object.entries(ServiceTypeLabels).map(
+                                ([value, label]) => (
+                                  <option key={value} value={value}>
+                                    {label}
+                                  </option>
+                                )
+                              )}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Budget Range{" "}
+                              {isRequirementDiscussionFieldRequired && (
+                                <span className="text-red-500">*</span>
+                              )}
+                            </label>
+                            <select
+                              required={isRequirementDiscussionFieldRequired}
+                              value={formData.budget_range}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  budget_range: e.target.value,
+                                })
+                              }
+                              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                            >
+                              <option value="">Select budget range</option>
+                              {Object.entries(BudgetRangeLabels).map(
+                                ([value, label]) => (
+                                  <option key={value} value={value}>
+                                    {label}
+                                  </option>
+                                )
+                              )}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Target Start Date{" "}
+                              {isQualifiedFieldRequired && (
+                                <span className="text-red-500">*</span>
+                              )}
+                            </label>
+                            <input
+                              type="date"
+                              required={isQualifiedFieldRequired}
+                              value={formData.target_start_date}
+                              min={getMinStartDate()}
+                              onChange={(e) =>
+                                handleStartDateChange(e.target.value)
+                              }
+                              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            />
+                            {lead.target_start_date && (
+                              <p className="text-xs text-slate-500 mt-1">
+                                Cannot be earlier than:{" "}
+                                {new Date(
+                                  lead.target_start_date
+                                ).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Target End Date{" "}
+                              {isQualifiedFieldRequired && (
+                                <span className="text-red-500">*</span>
+                              )}
+                            </label>
+                            <input
+                              type="date"
+                              required={isQualifiedFieldRequired}
+                              value={formData.target_end_date}
+                              min={getMinEndDate()}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  target_end_date: e.target.value,
+                                })
+                              }
+                              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            />
+                            {formData.target_start_date && (
+                              <p className="text-xs text-slate-500 mt-1">
+                                Minimum 1 month after start date
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Notes Section - Always visible */}
+                    <div className="border-t border-slate-200 pt-4">
+                      <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                        <svg
+                          className="w-4 h-4 text-slate-500"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                          />
+                        </svg>
+                        Notes
+                      </h3>
+                      <textarea
+                        required={selectedStage === "proposal_discussion"}
+                        value={formData.change_reason}
                         onChange={(e) =>
                           setFormData({
                             ...formData,
-                            target_end_date: e.target.value,
+                            change_reason: e.target.value,
                           })
                         }
+                        rows={3}
                         className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder={
+                          selectedStage === "proposal_discussion"
+                            ? "Required: Please provide notes for this stage transition..."
+                            : "Optional: Add notes about this stage change..."
+                        }
                       />
-                      {formData.target_start_date && (
-                        <p className="text-xs text-slate-500 mt-1">
-                          Minimum 1 month after start date
+                      {selectedStage === "proposal_discussion" && (
+                        <p className="text-xs text-red-500 mt-1">
+                          * Notes are required for this stage transition
                         </p>
                       )}
                     </div>
-                  </div>
-                </>
-              )}
+                  </>
+                )}
 
-              {selectedStage === "requirement_discussion" && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Flat/Unit Number <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.flat_number}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          flat_number: e.target.value,
-                        })
-                      }
-                      className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., A-1201"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Carpet Area (sq.ft){" "}
-                      <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      value={formData.carpet_area_sqft}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          carpet_area_sqft: e.target.value,
-                        })
-                      }
-                      className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., 1500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Budget Range <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      required
-                      value={formData.budget_range}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          budget_range: e.target.value,
-                        })
-                      }
-                      className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
-                    >
-                      <option value="">Select budget range</option>
-                      {Object.entries(BudgetRangeLabels).map(
-                        ([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        )
-                      )}
-                    </select>
-                  </div>
-                </>
-              )}
-
-              {/* Proposal & Negotiation stage requires notes */}
-              {selectedStage === "proposal_discussion" && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Notes <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    required
-                    value={formData.change_reason}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        change_reason: e.target.value,
-                      })
-                    }
-                    rows={3}
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="Please provide notes for this stage transition..."
-                  />
-                </div>
-              )}
-
+              {/* Disqualified stage fields */}
               {selectedStage === "disqualified" && (
-                <>
+                <div className="border-t border-slate-200 pt-4 space-y-4">
+                  <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    <svg
+                      className="w-4 h-4 text-red-500"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+                      />
+                    </svg>
+                    Disqualification Details
+                  </h3>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">
                       Disqualification Reason{" "}
@@ -2711,15 +3007,33 @@ function StageTransitionModal({
                           disqualification_notes: e.target.value,
                         })
                       }
-                      rows={2}
+                      rows={3}
                       className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="Optional: Add any additional notes..."
                     />
                   </div>
-                </>
+                </div>
               )}
 
+              {/* Lost stage fields */}
               {selectedStage === "lost" && (
-                <>
+                <div className="border-t border-slate-200 pt-4 space-y-4">
+                  <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    <svg
+                      className="w-4 h-4 text-red-500"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    Lost Deal Details
+                  </h3>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">
                       Lost Reason <span className="text-red-500">*</span>
@@ -2770,53 +3084,72 @@ function StageTransitionModal({
                       required
                       value={formData.lost_notes}
                       onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          lost_notes: e.target.value,
-                        })
+                        setFormData({ ...formData, lost_notes: e.target.value })
                       }
                       rows={3}
                       className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                       placeholder="Please provide details about why this lead was lost..."
                     />
                   </div>
-                </>
+                </div>
               )}
 
+              {/* Won stage fields */}
               {selectedStage === "won" && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Won Amount <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      value={formData.won_amount}
-                      onChange={(e) =>
-                        setFormData({ ...formData, won_amount: e.target.value })
-                      }
-                      className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter amount in ₹"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Contract Signed Date{" "}
-                      <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={formData.contract_signed_date}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          contract_signed_date: e.target.value,
-                        })
-                      }
-                      className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
+                <div className="border-t border-slate-200 pt-4 space-y-4">
+                  <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    <svg
+                      className="w-4 h-4 text-green-500"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    Deal Won Details
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Won Amount <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        value={formData.won_amount}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            won_amount: e.target.value,
+                          })
+                        }
+                        className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="Enter amount in ₹"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Contract Signed Date{" "}
+                        <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={formData.contract_signed_date}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            contract_signed_date: e.target.value,
+                          })
+                        }
+                        className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -2854,7 +3187,7 @@ function StageTransitionModal({
                       placeholder="Add any notes about this deal closure..."
                     />
                   </div>
-                </>
+                </div>
               )}
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
@@ -2998,32 +3331,37 @@ function AddNoteModal({
 
 // Edit Lead Modal with dynamic required fields based on stage
 interface EditFormData {
+  // Client data (from linked client record)
   client_name: string;
   phone: string;
   email: string;
-  property_type: string;
-  service_type: string;
-  lead_source: string;
+  // Property data (from linked property record)
   property_name: string;
-  flat_number: string;
+  unit_number: string;
+  property_category: string;
+  property_type: string;
+  property_subtype: string;
+  carpet_area: string;
   property_address: string;
   property_city: string;
   property_pincode: string;
-  carpet_area_sqft: string;
+  // Lead-specific fields
+  service_type: string;
+  lead_source: string;
   budget_range: string;
   estimated_value: string;
   project_scope: string;
   special_requirements: string;
-  priority: string;
+  lead_score: string;
   target_start_date: string;
   target_end_date: string;
 }
 
 // Define required fields per stage
 // New lead - Client Name, Phone Number
-// Qualified - Property Type, Service Type, Property Name, Target Start Date, Target End Date
-// Requirement Discussion - Carpet Area, Flat Number, Budget Range (plus all from previous stages)
-// Proposal & Negotiation - Same as Requirement Discussion
+// Qualified - Property Category, Property Type, Community Type, Property Name, Service Type, Target Start Date, Target End Date
+// Requirement Discussion - Carpet Area, Unit Number, Budget Range (plus all from previous stages)
+// Proposal Discussion - Notes (plus all from previous stages)
 const getRequiredFieldsForStage = (stage: LeadStage): string[] => {
   // Base fields always required (New stage)
   const newFields = ["client_name", "phone"];
@@ -3031,9 +3369,11 @@ const getRequiredFieldsForStage = (stage: LeadStage): string[] => {
   // Qualified stage adds these
   const qualifiedFields = [
     ...newFields,
+    "property_category",
     "property_type",
-    "service_type",
+    "property_subtype",
     "property_name",
+    "service_type",
     "target_start_date",
     "target_end_date",
   ];
@@ -3041,8 +3381,8 @@ const getRequiredFieldsForStage = (stage: LeadStage): string[] => {
   // Requirement Discussion stage adds these
   const requirementFields = [
     ...qualifiedFields,
-    "carpet_area_sqft",
-    "flat_number",
+    "carpet_area",
+    "unit_number",
     "budget_range",
   ];
 
@@ -3071,7 +3411,7 @@ function EditLeadModal({
 }: {
   lead: Lead;
   editForm: EditFormData;
-  setEditForm: (form: EditFormData) => void;
+  setEditForm: React.Dispatch<React.SetStateAction<EditFormData>>;
   onClose: () => void;
   onSave: () => void;
   isSaving: boolean;
@@ -3213,19 +3553,18 @@ function EditLeadModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Priority
+                  Lead Score
                 </label>
                 <select
-                  value={editForm.priority}
+                  value={editForm.lead_score}
                   onChange={(e) =>
-                    setEditForm({ ...editForm, priority: e.target.value })
+                    setEditForm({ ...editForm, lead_score: e.target.value })
                   }
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white"
                 >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="urgent">Urgent</option>
+                  <option value="cold">Cold</option>
+                  <option value="warm">Warm</option>
+                  <option value="hot">Hot</option>
                 </select>
               </div>
 
@@ -3284,25 +3623,91 @@ function EditLeadModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Category <RequiredStar field="property_category" />
+                </label>
+                <select
+                  required={isRequired("property_category")}
+                  value={editForm.property_category}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      property_category: e.target.value,
+                      property_type: "",
+                      property_subtype: "",
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white"
+                >
+                  <option value="">Select category</option>
+                  {Object.entries(PropertyCategoryLabels).map(
+                    ([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Property Type <RequiredStar field="property_type" />
                 </label>
                 <select
                   required={isRequired("property_type")}
                   value={editForm.property_type}
+                  disabled={!editForm.property_category}
                   onChange={(e) =>
                     setEditForm({
                       ...editForm,
                       property_type: e.target.value,
                     })
                   }
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white disabled:bg-slate-50"
                 >
-                  <option value="">Select property type</option>
-                  {Object.entries(PropertyTypeLabels).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
+                  <option value="">
+                    {editForm.property_category
+                      ? "Select type"
+                      : "Select category first"}
+                  </option>
+                  {editForm.property_category &&
+                    PropertyTypesByCategory[
+                      editForm.property_category as PropertyCategory
+                    ]?.map((type) => (
+                      <option key={type} value={type}>
+                        {PropertyTypeLabels[type]}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Community Type <RequiredStar field="property_subtype" />
+                </label>
+                <select
+                  required={isRequired("property_subtype")}
+                  value={editForm.property_subtype}
+                  disabled={!editForm.property_category}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      property_subtype: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white disabled:bg-slate-50"
+                >
+                  <option value="">
+                    {editForm.property_category
+                      ? "Select subtype"
+                      : "Select category first"}
+                  </option>
+                  {editForm.property_category &&
+                    PropertySubtypesByCategory[
+                      editForm.property_category as PropertyCategory
+                    ]?.map((subtype) => (
+                      <option key={subtype} value={subtype}>
+                        {PropertySubtypeLabels[subtype]}
+                      </option>
+                    ))}
                 </select>
               </div>
               <div>
@@ -3325,30 +3730,30 @@ function EditLeadModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Flat/Unit Number <RequiredStar field="flat_number" />
+                  Flat/Unit Number <RequiredStar field="unit_number" />
                 </label>
                 <input
                   type="text"
-                  required={isRequired("flat_number")}
-                  value={editForm.flat_number}
+                  required={isRequired("unit_number")}
+                  value={editForm.unit_number}
                   onChange={(e) =>
-                    setEditForm({ ...editForm, flat_number: e.target.value })
+                    setEditForm({ ...editForm, unit_number: e.target.value })
                   }
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Carpet Area (sq.ft) <RequiredStar field="carpet_area_sqft" />
+                  Carpet Area (sq.ft) <RequiredStar field="carpet_area" />
                 </label>
                 <input
                   type="number"
-                  required={isRequired("carpet_area_sqft")}
-                  value={editForm.carpet_area_sqft}
+                  required={isRequired("carpet_area")}
+                  value={editForm.carpet_area}
                   onChange={(e) =>
                     setEditForm({
                       ...editForm,
-                      carpet_area_sqft: e.target.value,
+                      carpet_area: e.target.value,
                     })
                   }
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"

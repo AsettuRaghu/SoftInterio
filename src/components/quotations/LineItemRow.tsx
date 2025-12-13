@@ -103,8 +103,12 @@ export function LineItemRow({
         </div>
         <input
           type="number"
+          step="0.01"
           value={item.rate}
-          onChange={(e) => onUpdateRate(parseFloat(e.target.value) || 0)}
+          onChange={(e) =>
+            onUpdateRate(Math.max(0, parseFloat(e.target.value) || 0))
+          }
+          onFocus={(e) => e.target.select()}
           className="col-span-2 text-sm border border-slate-200 rounded px-2 py-1 w-full"
         />
         <button
@@ -214,8 +218,11 @@ export function LineItemRow({
                 step="0.01"
                 value={item.length || ""}
                 onChange={(e) =>
-                  onUpdateLength?.(parseFloat(e.target.value) || null)
+                  onUpdateLength?.(
+                    Math.max(0, parseFloat(e.target.value)) || null
+                  )
                 }
+                onFocus={(e) => e.target.select()}
                 placeholder="L"
                 className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:ring-1 focus:ring-blue-500"
               />
@@ -228,8 +235,11 @@ export function LineItemRow({
                 step="0.01"
                 value={item.width || ""}
                 onChange={(e) =>
-                  onUpdateWidth?.(parseFloat(e.target.value) || null)
+                  onUpdateWidth?.(
+                    Math.max(0, parseFloat(e.target.value)) || null
+                  )
                 }
+                onFocus={(e) => e.target.select()}
                 placeholder="W"
                 className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:ring-1 focus:ring-blue-500"
               />
@@ -275,8 +285,11 @@ export function LineItemRow({
                 step="0.01"
                 value={item.length || ""}
                 onChange={(e) =>
-                  onUpdateLength?.(parseFloat(e.target.value) || null)
+                  onUpdateLength?.(
+                    Math.max(0, parseFloat(e.target.value)) || null
+                  )
                 }
+                onFocus={(e) => e.target.select()}
                 placeholder="Length"
                 className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:ring-1 focus:ring-blue-500"
               />
@@ -300,10 +313,14 @@ export function LineItemRow({
               </label>
               <input
                 type="number"
+                step="0.01"
                 value={item.quantity || ""}
                 onChange={(e) =>
-                  onUpdateQuantity?.(parseFloat(e.target.value) || 0)
+                  onUpdateQuantity?.(
+                    Math.max(0, parseFloat(e.target.value) || 0)
+                  )
                 }
+                onFocus={(e) => e.target.select()}
                 placeholder="Qty"
                 className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:ring-1 focus:ring-blue-500"
               />
@@ -330,8 +347,12 @@ export function LineItemRow({
           </label>
           <input
             type="number"
+            step="0.01"
             value={item.rate}
-            onChange={(e) => onUpdateRate(parseFloat(e.target.value) || 0)}
+            onChange={(e) =>
+              onUpdateRate(Math.max(0, parseFloat(e.target.value) || 0))
+            }
+            onFocus={(e) => e.target.select()}
             className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:ring-1 focus:ring-blue-500"
           />
         </div>

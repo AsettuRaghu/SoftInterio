@@ -34,10 +34,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Get current lead
+    // Get current lead with linked property data
     const { data: lead, error: fetchError } = await supabase
       .from("leads")
-      .select("*")
+      .select(`
+        *,
+        property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, city)
+      `)
       .eq("id", id)
       .single();
 
@@ -85,16 +88,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const requirements = getRequiredFieldsForTransition(fromStage, to_stage);
     const missingFields: string[] = [];
 
-    // Check required fields based on transition type
-    if (to_stage === "qualified") {
-      // Qualified requires: property_type, service_type, property_name, target dates
-      if (!body.property_type && !lead.property_type) {
+    // Helper function to check qualified stage requirements
+    const checkQualifiedRequirements = () => {
+      // Qualified requires: property_category, property_type, property_subtype (community), service_type, property_name, target dates
+      if (!body.property_category && !lead.property?.category) {
+        missingFields.push("Property Category");
+      }
+      if (!body.property_type && !lead.property?.property_type) {
         missingFields.push("Property Type");
+      }
+      if (!body.property_subtype && !lead.property?.property_subtype) {
+        missingFields.push("Community Type");
       }
       if (!body.service_type && !lead.service_type) {
         missingFields.push("Service Type");
       }
-      if (!body.property_name && !lead.property_name) {
+      if (!body.property_name && !lead.property?.property_name) {
         missingFields.push("Property Name");
       }
       if (!body.target_start_date && !lead.target_start_date) {
@@ -103,6 +112,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (!body.target_end_date && !lead.target_end_date) {
         missingFields.push("Target End Date");
       }
+    };
+
+    // Helper function to check requirement_discussion stage requirements
+    const checkRequirementDiscussionRequirements = () => {
+      // Requirement Discussion requires: carpet_area, unit_number, budget_range
+      if (!body.carpet_area && !lead.property?.carpet_area) {
+        missingFields.push("Carpet Area");
+      }
+      if (!body.unit_number && !lead.property?.unit_number) {
+        missingFields.push("Flat/Unit Number");
+      }
+      if (!body.budget_range && !lead.budget_range) {
+        missingFields.push("Budget Range");
+      }
+    };
+
+    // Check required fields based on transition type
+    // Validation is CUMULATIVE - later stages require all previous stage fields
+    if (to_stage === "qualified") {
+      checkQualifiedRequirements();
     }
 
     if (to_stage === "disqualified") {
@@ -112,20 +141,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     if (to_stage === "requirement_discussion") {
-      // Requirement Discussion requires: carpet_area, flat_number, budget_range
-      if (!body.carpet_area_sqft && !lead.carpet_area_sqft) {
-        missingFields.push("Carpet Area");
-      }
-      if (!body.flat_number && !lead.flat_number) {
-        missingFields.push("Flat/Unit Number");
-      }
-      if (!body.budget_range && !lead.budget_range) {
-        missingFields.push("Budget Range");
-      }
+      // Requires: ALL qualified fields + requirement_discussion specific fields
+      checkQualifiedRequirements();
+      checkRequirementDiscussionRequirements();
     }
 
-    // Proposal Discussion requires notes
+    // Proposal Discussion requires all previous stage fields + notes
     if (to_stage === "proposal_discussion") {
+      // Requires: ALL qualified fields + ALL requirement_discussion fields + notes
+      checkQualifiedRequirements();
+      checkRequirementDiscussionRequirements();
       if (!body.change_reason) {
         missingFields.push("Notes");
       }
@@ -141,6 +166,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     if (to_stage === "won") {
+      // Won requires all previous fields + won-specific fields
+      checkQualifiedRequirements();
+      checkRequirementDiscussionRequirements();
       if (!body.won_amount) {
         missingFields.push("Won Amount");
       }
@@ -165,20 +193,74 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Build update object
+    // STEP 1: Update or Create Property record if property fields provided
+    const propertyFields = [
+      "property_name", "unit_number", "property_category", "property_type",
+      "property_subtype", "carpet_area"
+    ];
+    const hasPropertyUpdates = propertyFields.some((f) => f in body && body[f as keyof StageTransitionInput]);
+    
+    let propertyId = lead.property_id;
+    
+    if (hasPropertyUpdates) {
+      const propertyData: Record<string, unknown> = {};
+      if (body.property_name) propertyData.property_name = body.property_name;
+      if (body.unit_number) propertyData.unit_number = body.unit_number;
+      if (body.property_category) propertyData.category = body.property_category;
+      if (body.property_type) propertyData.property_type = body.property_type;
+      if (body.property_subtype) propertyData.property_subtype = body.property_subtype;
+      if (body.carpet_area) propertyData.carpet_area = body.carpet_area;
+      
+      if (Object.keys(propertyData).length > 0) {
+        if (lead.property_id) {
+          // Update existing property
+          const { error: propertyError } = await supabase
+            .from("properties")
+            .update(propertyData)
+            .eq("id", lead.property_id);
+          
+          if (propertyError) {
+            console.error("Error updating property:", propertyError);
+            // Don't fail - continue with lead update
+          }
+        } else {
+          // Create new property record since lead has no property yet
+          const { data: newProperty, error: createPropertyError } = await supabase
+            .from("properties")
+            .insert({
+              tenant_id: lead.tenant_id,
+              ...propertyData,
+              city: "Unknown", // Required field with default
+              created_by: user.id,
+            })
+            .select("id")
+            .single();
+          
+          if (createPropertyError) {
+            console.error("Error creating property:", createPropertyError);
+            // Don't fail - continue with lead update
+          } else if (newProperty) {
+            propertyId = newProperty.id;
+          }
+        }
+      }
+    }
+
+    // STEP 2: Build lead update object (only lead-specific fields)
     const updateData: Record<string, unknown> = {
       stage: to_stage,
     };
+    
+    // Link the property if we created a new one
+    if (propertyId && propertyId !== lead.property_id) {
+      updateData.property_id = propertyId;
+    }
 
-    // Add transition-specific fields
+    // Add transition-specific fields that belong on the lead
     if (to_stage === "qualified") {
-      if (body.property_type) updateData.property_type = body.property_type;
       if (body.service_type) updateData.service_type = body.service_type;
-      if (body.property_name) updateData.property_name = body.property_name;
-      if (body.target_start_date)
-        updateData.target_start_date = body.target_start_date;
-      if (body.target_end_date)
-        updateData.target_end_date = body.target_end_date;
+      if (body.target_start_date) updateData.target_start_date = body.target_start_date;
+      if (body.target_end_date) updateData.target_end_date = body.target_end_date;
 
       // Handle assignment - assign to current user if not specified
       const assignTo = body.assigned_to || user.id;
@@ -195,15 +277,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (to_stage === "requirement_discussion") {
       if (body.budget_range) updateData.budget_range = body.budget_range;
       if (body.project_scope) updateData.project_scope = body.project_scope;
-      // Also save property fields collected during this transition
-      if (body.property_name) updateData.property_name = body.property_name;
-      if (body.property_type) updateData.property_type = body.property_type;
-      if (body.flat_number) updateData.flat_number = body.flat_number;
-      if (body.carpet_area_sqft)
-        updateData.carpet_area_sqft = body.carpet_area_sqft;
-      if (body.property_address)
-        updateData.property_address = body.property_address;
-      if (body.property_city) updateData.property_city = body.property_city;
     }
 
     if (to_stage === "lost") {

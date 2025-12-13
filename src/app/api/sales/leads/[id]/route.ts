@@ -41,6 +41,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .select(
         `
         *,
+        client:clients!leads_client_id_fkey(id, name, phone, email, city, address_line1, pincode),
+        property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, address_line1, city, pincode),
         assigned_user:users!leads_assigned_to_fkey(id, name, avatar_url, email),
         created_user:users!leads_created_by_fkey(id, name, avatar_url, email)
       `
@@ -107,15 +109,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         .eq("lead_id", id)
         .order("is_pinned", { ascending: false })
         .order("created_at", { ascending: false }),
+      // Fetch documents from unified documents table
       supabaseAdmin
-        .from("lead_documents")
+        .from("documents")
         .select(
           `
           *,
-          uploaded_user:users!lead_documents_uploaded_by_fkey(id, name, avatar_url)
+          uploaded_user:users!documents_uploaded_by_fkey(id, name, avatar_url)
         `
         )
-        .eq("lead_id", id)
+        .eq("linked_type", "lead")
+        .eq("linked_id", id)
+        .eq("is_latest", true)
         .order("created_at", { ascending: false }),
       // Fetch tasks from main tasks table (linked via related_type/related_id)
       supabaseAdmin
@@ -158,7 +163,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-// PATCH /api/sales/leads/[id] - Update lead
+// PATCH /api/sales/leads/[id] - Update lead and linked client/property records
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     // Protect API route
@@ -173,10 +178,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const body: UpdateLeadInput = await request.json();
 
-    // Check lead exists and get current state
+    // Check lead exists and get current state with linked records
     const { data: existingLead, error: fetchError } = await supabase
       .from("leads")
-      .select("id, stage, assigned_to")
+      .select("id, stage, assigned_to, client_id, property_id")
       .eq("id", id)
       .single();
 
@@ -194,132 +199,162 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Define required fields per stage
-    const getRequiredFieldsForStage = (stage: string): string[] => {
-      const newFields = ["client_name", "phone"];
-      const qualifiedFields = [
-        ...newFields,
-        "property_type",
-        "service_type",
-        "property_name",
-        "target_start_date",
-        "target_end_date",
-      ];
-      const requirementFields = [
-        ...qualifiedFields,
-        "carpet_area_sqft",
-        "flat_number",
-        "budget_range",
-      ];
+    // Initialize lead update data object (may be populated by property creation below)
+    const leadUpdateData: Record<string, unknown> = {};
 
-      switch (stage) {
-        case "new":
-          return newFields;
-        case "qualified":
-          return qualifiedFields;
-        case "requirement_discussion":
-        case "proposal_discussion":
-          return requirementFields;
-        default:
-          return newFields;
-      }
-    };
-
-    const requiredFields = getRequiredFieldsForStage(existingLead.stage);
-    const fieldLabels: Record<string, string> = {
-      client_name: "Client Name",
-      phone: "Phone Number",
-      property_type: "Property Type",
-      service_type: "Service Type",
-      property_name: "Property Name",
-      target_start_date: "Target Start Date",
-      target_end_date: "Target End Date",
-      carpet_area_sqft: "Carpet Area",
-      flat_number: "Flat/Unit Number",
-      budget_range: "Budget Range",
-    };
-
-    // Check if any required field is being set to empty/null
-    const emptyRequiredFields: string[] = [];
-    for (const field of requiredFields) {
-      if (field in body) {
-        const value = body[field as keyof typeof body];
-        if (value === null || value === undefined || value === "") {
-          emptyRequiredFields.push(fieldLabels[field] || field);
+    // STEP 1: Update Client record if client fields provided
+    const clientFields = ["client_name", "phone", "email"];
+    const hasClientUpdates = clientFields.some((f) => f in body);
+    
+    if (hasClientUpdates && existingLead.client_id) {
+      const clientUpdateData: Record<string, unknown> = {};
+      if ("client_name" in body) clientUpdateData.name = body.client_name;
+      if ("phone" in body) clientUpdateData.phone = body.phone;
+      if ("email" in body) clientUpdateData.email = body.email?.toLowerCase() || null;
+      
+      if (Object.keys(clientUpdateData).length > 0) {
+        const { error: clientError } = await supabase
+          .from("clients")
+          .update(clientUpdateData)
+          .eq("id", existingLead.client_id);
+        
+        if (clientError) {
+          console.error("Error updating client:", clientError);
+          return NextResponse.json(
+            { error: "Failed to update client record" },
+            { status: 500 }
+          );
         }
       }
     }
 
-    if (emptyRequiredFields.length > 0) {
-      return NextResponse.json(
-        {
-          error: `Cannot clear required fields for the "${existingLead.stage}" stage`,
-          missingFields: emptyRequiredFields,
-        },
-        { status: 400 }
-      );
+    // STEP 2: Update Property record if property fields provided
+    const propertyFields = [
+      "property_name", "unit_number", "property_category", "property_type",
+      "property_subtype", "carpet_area", "property_address", "property_city", "property_pincode"
+    ];
+    const hasPropertyUpdates = propertyFields.some((f) => f in body);
+    
+    if (hasPropertyUpdates) {
+      const propertyUpdateData: Record<string, unknown> = {};
+      if ("property_name" in body) propertyUpdateData.property_name = body.property_name;
+      if ("unit_number" in body) propertyUpdateData.unit_number = body.unit_number;
+      if ("property_category" in body) propertyUpdateData.category = body.property_category;
+      if ("property_type" in body) propertyUpdateData.property_type = body.property_type;
+      if ("property_subtype" in body) propertyUpdateData.property_subtype = body.property_subtype;
+      if ("carpet_area" in body) propertyUpdateData.carpet_area = body.carpet_area;
+      if ("property_address" in body) propertyUpdateData.address_line1 = body.property_address;
+      if ("property_city" in body) propertyUpdateData.city = body.property_city;
+      if ("property_pincode" in body) propertyUpdateData.pincode = body.property_pincode;
+      
+      if (Object.keys(propertyUpdateData).length > 0) {
+        if (existingLead.property_id) {
+          // Update existing property
+          const { error: propertyError } = await supabase
+            .from("properties")
+            .update(propertyUpdateData)
+            .eq("id", existingLead.property_id);
+          
+          if (propertyError) {
+            console.error("Error updating property:", propertyError);
+            // Don't fail - property update is non-critical
+          }
+        } else {
+          // Create new property if one doesn't exist
+          const { data: userData } = await supabase
+            .from("users")
+            .select("tenant_id")
+            .eq("id", user.id)
+            .single();
+          
+          if (userData?.tenant_id) {
+            const { data: newProperty, error: createPropertyError } = await supabase
+              .from("properties")
+              .insert({
+                tenant_id: userData.tenant_id,
+                property_name: body.property_name || null,
+                unit_number: body.unit_number || null,
+                category: body.property_category || "residential",
+                property_type: body.property_type || "apartment",
+                property_subtype: body.property_subtype || null,
+                carpet_area: body.carpet_area || null,
+                address_line1: body.property_address || null,
+                city: body.property_city || "Unknown",
+                pincode: body.property_pincode || null,
+                created_by: user.id,
+              })
+              .select("id")
+              .single();
+            
+            if (!createPropertyError && newProperty) {
+              // Link the new property to the lead - use leadUpdateData directly
+              leadUpdateData.property_id = newProperty.id;
+            }
+          }
+        }
+      }
     }
 
-    // Build update object (exclude fields that shouldn't be directly updated)
-    const updateData: Record<string, unknown> = {};
-    const allowedFields = [
-      "client_name",
-      "phone",
-      "email",
-      "property_type",
+    // STEP 3: Build lead update object
+    const leadAllowedFields = [
       "service_type",
       "lead_source",
       "lead_source_detail",
       "target_start_date",
       "target_end_date",
-      "property_name",
-      "flat_number",
-      "property_address",
-      "property_city",
-      "property_pincode",
-      "carpet_area_sqft",
       "budget_range",
       "estimated_value",
       "project_scope",
       "special_requirements",
-      "priority",
       "lead_score",
       "next_followup_date",
       "next_followup_notes",
       "assigned_to",
+      "property_id", // In case we created a new property
     ];
 
-    for (const field of allowedFields) {
+    for (const field of leadAllowedFields) {
       if (field in body) {
-        updateData[field] = body[field as keyof UpdateLeadInput];
+        leadUpdateData[field] = body[field as keyof UpdateLeadInput];
       }
     }
 
-    if (Object.keys(updateData).length === 0) {
-      return NextResponse.json(
-        { error: "No valid fields to update" },
-        { status: 400 }
-      );
+    // Only update lead if there are lead-specific fields to update
+    if (Object.keys(leadUpdateData).length > 0) {
+      const { error: updateError } = await supabase
+        .from("leads")
+        .update(leadUpdateData)
+        .eq("id", id);
+
+      if (updateError) {
+        console.error("Error updating lead:", updateError);
+        return NextResponse.json(
+          { error: "Failed to update lead" },
+          { status: 500 }
+        );
+      }
     }
 
-    // Update lead
-    const { data: lead, error: updateError } = await supabase
+    // STEP 4: Fetch and return updated lead with joined data
+    const supabaseAdmin = createAdminClient();
+    const { data: lead, error: refetchError } = await supabaseAdmin
       .from("leads")
-      .update(updateData)
-      .eq("id", id)
       .select(
         `
         *,
+        client:clients!leads_client_id_fkey(id, name, phone, email, city),
+        property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, city),
         assigned_user:users!leads_assigned_to_fkey(id, name, avatar_url),
         created_user:users!leads_created_by_fkey(id, name, avatar_url)
       `
       )
+      .eq("id", id)
       .single();
 
-    if (updateError) {
-      console.error("Error updating lead:", updateError);
+    if (refetchError) {
+      console.error("Error refetching lead:", refetchError);
       return NextResponse.json(
-        { error: "Failed to update lead" },
+        { error: "Lead updated but failed to fetch" },
         { status: 500 }
       );
     }

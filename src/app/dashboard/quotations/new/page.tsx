@@ -795,6 +795,7 @@ function NewQuotationContent() {
             <td className="px-3 py-2">
               <input
                 type="number"
+                step="0.01"
                 value={item.length || ""}
                 onChange={(e) =>
                   updateLineItemDimension(
@@ -802,9 +803,10 @@ function NewQuotationContent() {
                     componentId,
                     item.id,
                     "length",
-                    parseFloat(e.target.value) || 0
+                    Math.max(0, parseFloat(e.target.value) || 0)
                   )
                 }
+                onFocus={(e) => e.target.select()}
                 placeholder="L"
                 className="w-16 px-2 py-1 text-sm border border-slate-300 rounded focus:ring-1 focus:ring-blue-500"
               />
@@ -812,6 +814,7 @@ function NewQuotationContent() {
             <td className="px-3 py-2">
               <input
                 type="number"
+                step="0.01"
                 value={item.width || ""}
                 onChange={(e) =>
                   updateLineItemDimension(
@@ -819,9 +822,10 @@ function NewQuotationContent() {
                     componentId,
                     item.id,
                     "width",
-                    parseFloat(e.target.value) || 0
+                    Math.max(0, parseFloat(e.target.value) || 0)
                   )
                 }
+                onFocus={(e) => e.target.select()}
                 placeholder="W"
                 className="w-16 px-2 py-1 text-sm border border-slate-300 rounded focus:ring-1 focus:ring-blue-500"
               />
@@ -837,6 +841,7 @@ function NewQuotationContent() {
             <td className="px-3 py-2">
               <input
                 type="number"
+                step="0.01"
                 value={item.length || ""}
                 onChange={(e) =>
                   updateLineItemDimension(
@@ -844,9 +849,10 @@ function NewQuotationContent() {
                     componentId,
                     item.id,
                     "length",
-                    parseFloat(e.target.value) || 0
+                    Math.max(0, parseFloat(e.target.value) || 0)
                   )
                 }
+                onFocus={(e) => e.target.select()}
                 placeholder="Length"
                 className="w-20 px-2 py-1 text-sm border border-slate-300 rounded focus:ring-1 focus:ring-blue-500"
               />
@@ -865,6 +871,7 @@ function NewQuotationContent() {
             <td className="px-3 py-2">
               <input
                 type="number"
+                step="0.01"
                 value={item.quantity || ""}
                 onChange={(e) =>
                   updateLineItemDimension(
@@ -872,9 +879,10 @@ function NewQuotationContent() {
                     componentId,
                     item.id,
                     "quantity",
-                    parseFloat(e.target.value) || 0
+                    Math.max(0, parseFloat(e.target.value) || 0)
                   )
                 }
+                onFocus={(e) => e.target.select()}
                 placeholder="Qty"
                 className="w-16 px-2 py-1 text-sm border border-slate-300 rounded focus:ring-1 focus:ring-blue-500"
               />
@@ -1341,15 +1349,20 @@ function NewQuotationContent() {
                                       <td className="px-3 py-2">
                                         <input
                                           type="number"
+                                          step="0.01"
                                           value={item.rate || ""}
                                           onChange={(e) =>
                                             updateLineItemRate(
                                               space.id,
                                               component.id,
                                               item.id,
-                                              parseFloat(e.target.value) || 0
+                                              Math.max(
+                                                0,
+                                                parseFloat(e.target.value) || 0
+                                              )
                                             )
                                           }
+                                          onFocus={(e) => e.target.select()}
                                           className="w-20 px-2 py-1 text-sm text-right border border-slate-300 rounded focus:ring-1 focus:ring-blue-500"
                                         />
                                       </td>
@@ -1385,15 +1398,20 @@ function NewQuotationContent() {
                                   <td className="px-3 py-2">
                                     <input
                                       type="number"
+                                      step="0.01"
                                       value={item.rate || ""}
                                       onChange={(e) =>
                                         updateLineItemRate(
                                           space.id,
                                           null,
                                           item.id,
-                                          parseFloat(e.target.value) || 0
+                                          Math.max(
+                                            0,
+                                            parseFloat(e.target.value) || 0
+                                          )
                                         )
                                       }
+                                      onFocus={(e) => e.target.select()}
                                       className="w-20 px-2 py-1 text-sm text-right border border-slate-300 rounded focus:ring-1 focus:ring-blue-500"
                                     />
                                   </td>
@@ -1456,15 +1474,17 @@ function NewQuotationContent() {
                           <td className="px-3 py-2">
                             <input
                               type="number"
+                              step="0.01"
                               value={item.rate || ""}
                               onChange={(e) =>
                                 updateLineItemRate(
                                   null,
                                   null,
                                   item.id,
-                                  parseFloat(e.target.value) || 0
+                                  Math.max(0, parseFloat(e.target.value) || 0)
                                 )
                               }
+                              onFocus={(e) => e.target.select()}
                               className="w-20 px-2 py-1 text-sm text-right border border-slate-300 rounded focus:ring-1 focus:ring-blue-500"
                             />
                           </td>

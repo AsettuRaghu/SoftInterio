@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+/* Sidebar icon colors - use CSS classes to override hardcoded stroke */
+.sidebar-icon-active svg {
+  stroke: #2563eb !important; /* blue-600 */
+}
+
+.sidebar-icon-disabled svg {
+  stroke: #94a3b8 !important; /* slate-400 */
+}
+
+.sidebar-icon-default svg {
+  stroke: #64748b; /* slate-500 - matches hardcoded value */
+}
+
 /* Custom component styles */
 .sidebar-item {
   display: flex;

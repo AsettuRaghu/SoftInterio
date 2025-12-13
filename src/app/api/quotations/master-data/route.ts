@@ -62,11 +62,17 @@ export async function GET(request: NextRequest) {
           );
       }
 
-      // Filter by tenant_id for security (RLS backup)
-      const { data, error } = await supabase
+      // Build query with tenant_id filter for tenant-specific tables (units are system-wide)
+      let query = supabase
         .from(tableName)
-        .select(selectQuery)
-        .eq("tenant_id", user!.tenantId)
+        .select(selectQuery);
+      
+      // Units table is system-wide (measurement units: sqft, rft, nos), no tenant_id
+      if (type !== "units") {
+        query = query.eq("tenant_id", user!.tenantId);
+      }
+      
+      const { data, error } = await query
         .eq("is_active", true)
         .order("display_order", { ascending: true });
 
@@ -93,10 +99,10 @@ export async function GET(request: NextRequest) {
       costItemCategories,
       costItems,
     ] = await Promise.all([
+      // Units are system-wide (measurement units: sqft, rft, nos), no tenant_id
       supabase
         .from("units")
         .select("*")
-        .eq("tenant_id", tenantId)
         .eq("is_active", true)
         .order("display_order", { ascending: true }),
       supabase

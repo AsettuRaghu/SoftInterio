@@ -79,11 +79,9 @@ export async function GET(request: NextRequest) {
           lead:leads!inner(
             id,
             lead_number,
-            client_name,
-            email,
-            phone,
-            property_name,
-            tenant_id
+            tenant_id,
+            client:clients!leads_client_id_fkey(id, name, email, phone),
+            property:properties!leads_property_id_fkey(id, property_name)
           ),
           created_user:users!lead_activities_created_by_fkey(id, name, avatar_url)
         `)
@@ -111,7 +109,7 @@ export async function GET(request: NextRequest) {
           source_type: "lead" as const,
           source_id: event.lead_id,
           source_number: event.lead?.lead_number,
-          source_name: event.lead?.client_name,
+          source_name: event.lead?.client?.name,
           activity_type: event.activity_type,
           meeting_type: event.meeting_type,
           title: event.title,
@@ -124,9 +122,9 @@ export async function GET(request: NextRequest) {
           created_by: event.created_by,
           created_at: event.created_at,
           created_user: event.created_user,
-          client_email: event.lead?.email,
-          client_phone: event.lead?.phone,
-          property_name: event.lead?.property_name,
+          client_email: event.lead?.client?.email,
+          client_phone: event.lead?.client?.phone,
+          property_name: event.lead?.property?.property_name,
         }));
         allEvents.push(...leadCalendarEvents);
       }

@@ -51,3 +51,9 @@ export {
 } from "./SettingsTable";
 
 export { DataTable } from "./DataTable";
+
+// Filter and Bulk Action Components
+export { FilterBar, QuickFilterPills } from "./FilterBar";
+export type { FilterConfig, FilterOption as FilterBarOption } from "./FilterBar";
+export { BulkActionsBar, SelectCheckbox, StatusDropdown } from "./BulkActions";
+export type { BulkAction as BulkActionConfig } from "./BulkActions";

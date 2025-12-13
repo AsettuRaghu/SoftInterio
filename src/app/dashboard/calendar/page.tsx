@@ -357,6 +357,15 @@ export default function CalendarPage() {
         breadcrumbs={[{ label: "Calendar" }]}
         icon={<CalendarIcon className="w-5 h-5 text-white" />}
         iconBgClass="from-indigo-500 to-indigo-600"
+        actions={
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-linear-to-r from-indigo-600 to-indigo-500 text-white text-sm font-medium rounded-lg hover:from-indigo-700 hover:to-indigo-600 transition-all shadow-sm hover:shadow-md"
+          >
+            <PlusIcon className="w-4 h-4" />
+            New Event
+          </button>
+        }
         stats={
           events.length > 0 ? (
             <>
@@ -433,28 +442,19 @@ export default function CalendarPage() {
                       </button>
                     ))}
                   </div>
-
-                  {/* New Event Button */}
-                  <button
-                    onClick={() => setIsCreateModalOpen(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-lg hover:from-indigo-700 hover:to-indigo-800 transition-all shadow-sm text-sm font-medium"
-                  >
-                    <PlusIcon className="w-4 h-4" />
-                    New Event
-                  </button>
                 </div>
               </div>
 
               {/* Calendar Grid */}
               {viewMode === "month" && (
-                <div className="p-4">
+                <div className="p-3">
                   {/* Day Headers */}
-                  <div className="grid grid-cols-7 mb-2">
+                  <div className="grid grid-cols-7 mb-1">
                     {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
                       (day) => (
                         <div
                           key={day}
-                          className="py-2 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider"
+                          className="py-1.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider"
                         >
                           {day}
                         </div>
@@ -467,17 +467,17 @@ export default function CalendarPage() {
                     {calendarDays.map((day, idx) => (
                       <div
                         key={idx}
-                        className={`min-h-[100px] p-1.5 bg-white ${
+                        className={`min-h-[85px] p-1.5 bg-white ${
                           !day.isCurrentMonth ? "bg-slate-50" : ""
                         } ${isToday(day.date) ? "bg-blue-50" : ""}`}
                       >
-                        <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center justify-between mb-0.5">
                           <span
-                            className={`text-sm font-medium ${
+                            className={`text-xs font-medium ${
                               !day.isCurrentMonth
                                 ? "text-slate-400"
                                 : isToday(day.date)
-                                ? "w-7 h-7 flex items-center justify-center rounded-full bg-blue-600 text-white"
+                                ? "w-6 h-6 flex items-center justify-center rounded-full bg-blue-600 text-white text-xs"
                                 : "text-slate-700"
                             }`}
                           >
@@ -487,29 +487,29 @@ export default function CalendarPage() {
 
                         {/* Events for this day */}
                         <div className="space-y-0.5">
-                          {day.events.slice(0, 3).map((event) => {
+                          {day.events.slice(0, 2).map((event) => {
                             const colors = getEventColor(event);
                             return (
                               <button
                                 key={event.id}
                                 onClick={() => setSelectedEvent(event)}
-                                className={`w-full text-left px-1.5 py-0.5 rounded text-xs truncate ${colors.bg} ${colors.text} hover:opacity-80 transition-opacity`}
+                                className={`w-full text-left px-1 py-0.5 rounded text-[11px] truncate ${colors.bg} ${colors.text} hover:opacity-80 transition-opacity leading-tight`}
                               >
                                 <span
-                                  className={`inline-block w-1.5 h-1.5 rounded-full ${colors.dot} mr-1`}
+                                  className={`inline-block w-1.5 h-1.5 rounded-full ${colors.dot} mr-0.5`}
                                 />
                                 {formatTime(event.scheduled_at)} {event.title}
                               </button>
                             );
                           })}
-                          {day.events.length > 3 && (
+                          {day.events.length > 2 && (
                             <button
                               onClick={() => {
                                 // Could expand to show all events
                               }}
-                              className="w-full text-left px-1.5 py-0.5 text-xs text-slate-500 hover:text-slate-700"
+                              className="w-full text-left px-1 text-[11px] text-slate-500 hover:text-slate-700"
                             >
-                              +{day.events.length - 3} more
+                              +{day.events.length - 2} more
                             </button>
                           )}
                         </div>

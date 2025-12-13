@@ -67,6 +67,8 @@ export async function GET(request: NextRequest) {
       .select(
         `
         *,
+        client:clients!leads_client_id_fkey(id, name, phone, email, city),
+        property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, city),
         assigned_user:users!leads_assigned_to_fkey(id, name, avatar_url),
         created_user:users!leads_created_by_fkey(id, name, avatar_url)
       `,
@@ -88,8 +90,9 @@ export async function GET(request: NextRequest) {
     }
 
     if (search) {
+      // Search in lead_number only (client/property search needs separate handling)
       query = query.or(
-        `client_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,lead_number.ilike.%${search}%,property_name.ilike.%${search}%,property_city.ilike.%${search}%`
+        `lead_number.ilike.%${search}%`
       );
     }
 
@@ -191,6 +194,7 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /api/sales/leads - Create a new lead
+// This also creates linked Client and Property records automatically
 export async function POST(request: NextRequest) {
   console.log("[POST /api/sales/leads] Starting request");
 
@@ -256,29 +260,85 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    // Email and property_type are optional for new leads
 
-    // Create lead
+    // STEP 1: Create Client record
+    console.log("[POST /api/sales/leads] Creating client record");
+    const { data: client, error: clientError } = await supabase
+      .from("clients")
+      .insert({
+        tenant_id: userData.tenant_id,
+        client_type: "individual",
+        status: "active",
+        name: body.client_name.trim(),
+        phone: body.phone.trim(),
+        email: body.email?.trim().toLowerCase() || null,
+        created_by: user.id,
+      })
+      .select("id")
+      .single();
+
+    if (clientError) {
+      console.error(
+        "[POST /api/sales/leads] Error creating client:",
+        clientError
+      );
+      return NextResponse.json(
+        { error: "Failed to create client record", details: clientError.message },
+        { status: 500 }
+      );
+    }
+    console.log("[POST /api/sales/leads] Client created:", client.id);
+
+    // STEP 2: Create Property record (if property details provided)
+    let propertyId: string | null = null;
+    const hasPropertyData = body.property_name || body.unit_number || body.property_city || body.property_category;
+    
+    if (hasPropertyData) {
+      console.log("[POST /api/sales/leads] Creating property record");
+      const { data: property, error: propertyError } = await supabase
+        .from("properties")
+        .insert({
+          tenant_id: userData.tenant_id,
+          property_name: body.property_name || null,
+          unit_number: body.unit_number || null,
+          category: body.property_category || "residential",
+          property_type: body.property_type || "apartment",
+          property_subtype: body.property_subtype || null,
+          carpet_area: body.carpet_area || null,
+          address_line1: body.property_address || null,
+          city: body.property_city || "Unknown",
+          pincode: body.property_pincode || null,
+          created_by: user.id,
+        })
+        .select("id")
+        .single();
+
+      if (propertyError) {
+        console.error(
+          "[POST /api/sales/leads] Error creating property:",
+          propertyError
+        );
+        // Don't fail the lead creation - property is optional
+        console.warn("[POST /api/sales/leads] Continuing without property record");
+      } else {
+        propertyId = property.id;
+        console.log("[POST /api/sales/leads] Property created:", propertyId);
+      }
+    }
+
+    // STEP 3: Create Lead record with linked client and property
     console.log("[POST /api/sales/leads] Creating lead in database");
     const { data: lead, error: createError } = await supabase
       .from("leads")
       .insert({
         tenant_id: userData.tenant_id,
-        client_name: body.client_name.trim(),
-        phone: body.phone.trim(),
-        email: body.email?.trim().toLowerCase() || null,
-        property_type: body.property_type || null,
+        client_id: client.id,
+        property_id: propertyId,
         service_type: body.service_type || null,
         lead_source: body.lead_source || null,
         lead_source_detail: body.lead_source_detail || null,
         target_start_date: body.target_start_date || null,
         target_end_date: body.target_end_date || null,
-        property_name: body.property_name || null,
-        flat_number: body.flat_number || null,
-        property_address: body.property_address || null,
-        property_city: body.property_city || null,
-        property_pincode: body.property_pincode || null,
-        carpet_area_sqft: body.carpet_area_sqft || null,
         budget_range: body.budget_range || null,
         estimated_value: body.estimated_value || null,
         project_scope: body.project_scope || null,
@@ -293,6 +353,8 @@ export async function POST(request: NextRequest) {
       .select(
         `
         *,
+        client:clients!leads_client_id_fkey(id, name, phone, email, city),
+        property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, city),
         assigned_user:users!leads_assigned_to_fkey(id, name, avatar_url),
         created_user:users!leads_created_by_fkey(id, name, avatar_url)
       `
@@ -304,48 +366,13 @@ export async function POST(request: NextRequest) {
         "[POST /api/sales/leads] Error creating lead:",
         JSON.stringify(createError, null, 2)
       );
-      console.error("[POST /api/sales/leads] Error code:", createError.code);
-      console.error(
-        "[POST /api/sales/leads] Error message:",
-        createError.message
-      );
-      console.error(
-        "[POST /api/sales/leads] Error details:",
-        createError.details
-      );
-      console.error("[POST /api/sales/leads] Error hint:", createError.hint);
 
-      // Check if the error is because the table doesn't exist or RLS issue
-      const isTableMissing =
-        createError.code === "42P01" ||
-        createError.code === "PGRST116" ||
-        createError.message?.includes("does not exist") ||
-        createError.message?.includes("relation");
-
-      const isRLSIssue =
-        createError.code === "42501" ||
-        createError.message?.includes("permission denied") ||
-        createError.message?.includes("new row violates row-level security");
-
-      if (isTableMissing) {
-        return NextResponse.json(
-          {
-            error:
-              "Leads module not initialized. Please run the database migration (007_leads_module.sql).",
-          },
-          { status: 500 }
-        );
+      // Clean up created client and property if lead creation fails
+      if (client?.id) {
+        await supabase.from("clients").delete().eq("id", client.id);
       }
-
-      if (isRLSIssue) {
-        return NextResponse.json(
-          {
-            error:
-              "Permission denied. RLS policy may not be configured correctly.",
-            details: createError.message,
-          },
-          { status: 403 }
-        );
+      if (propertyId) {
+        await supabase.from("properties").delete().eq("id", propertyId);
       }
 
       return NextResponse.json(
