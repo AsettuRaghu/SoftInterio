@@ -39,12 +39,6 @@ interface ComponentType {
   icon?: string;
 }
 
-interface ComponentVariant {
-  id: string;
-  name: string;
-  slug: string;
-}
-
 interface SpaceType {
   id: string;
   name: string;
@@ -56,13 +50,10 @@ interface TemplateLineItem {
   id: string;
   space_type_id?: string;
   component_type_id?: string;
-  component_variant_id?: string;
   cost_item_id: string;
-  group_name?: string;
   rate?: number;
   space_type?: SpaceType;
   component_type?: ComponentType;
-  component_variant?: ComponentVariant;
   cost_item?: CostItem;
 }
 
@@ -100,15 +91,12 @@ interface QuotationLineItem {
   // Calculated
   calculatedQuantity: number;
   amount: number;
-  groupName?: string;
 }
 
 interface QuotationComponent {
   id: string;
   componentTypeId: string;
   componentTypeName: string;
-  variantId?: string;
-  variantName?: string;
   description?: string; // User notes/description for this component
   lineItems: QuotationLineItem[];
   expanded: boolean;
@@ -293,7 +281,6 @@ function NewQuotationContent() {
         rate: item.rate || item.cost_item?.default_rate || 0,
         calculatedQuantity: 0,
         amount: 0,
-        groupName: item.group_name,
       };
 
       if (item.space_type_id) {
@@ -317,13 +304,8 @@ function NewQuotationContent() {
 
         if (item.component_type_id) {
           // Find or create component
-          const componentKey = `${item.component_type_id}-${
-            item.component_variant_id || "default"
-          }`;
           let component = space.components.find(
-            (c) =>
-              c.componentTypeId === item.component_type_id &&
-              c.variantId === item.component_variant_id
+            (c) => c.componentTypeId === item.component_type_id
           );
 
           if (!component) {
@@ -332,8 +314,6 @@ function NewQuotationContent() {
               componentTypeId: item.component_type_id,
               componentTypeName:
                 item.component_type?.name || item.component_type_id,
-              variantId: item.component_variant_id,
-              variantName: item.component_variant?.name,
               lineItems: [],
               expanded: true,
               subtotal: 0,
@@ -702,7 +682,6 @@ function NewQuotationContent() {
           sort_order: spaceIndex,
           components: space.components.map((comp, compIndex) => ({
             component_type_id: comp.componentTypeId,
-            component_variant_id: comp.variantId,
             name: comp.componentTypeName,
             sort_order: compIndex,
           })),
@@ -713,7 +692,6 @@ function NewQuotationContent() {
             ...space.directLineItems.map((item, idx) => ({
               cost_item_id: item.costItemId,
               name: item.costItemName,
-              group_name: item.groupName,
               length: item.length,
               width: item.width,
               quantity: item.calculatedQuantity,
@@ -728,7 +706,6 @@ function NewQuotationContent() {
               comp.lineItems.map((item, idx) => ({
                 cost_item_id: item.costItemId,
                 name: item.costItemName,
-                group_name: item.groupName,
                 length: item.length,
                 width: item.width,
                 quantity: item.calculatedQuantity,
@@ -744,7 +721,6 @@ function NewQuotationContent() {
           ...ungroupedLineItems.map((item, idx) => ({
             cost_item_id: item.costItemId,
             name: item.costItemName,
-            group_name: item.groupName,
             length: item.length,
             width: item.width,
             quantity: item.calculatedQuantity,
@@ -1240,12 +1216,6 @@ function NewQuotationContent() {
                               <div>
                                 <h5 className="text-sm font-medium text-slate-900">
                                   {component.componentTypeName}
-                                  {component.variantName && (
-                                    <span className="text-slate-500 font-normal">
-                                      {" "}
-                                      - {component.variantName}
-                                    </span>
-                                  )}
                                 </h5>
                                 <p className="text-xs text-slate-500">
                                   {component.lineItems.length} cost items
@@ -1321,11 +1291,6 @@ function NewQuotationContent() {
                                         <span className="font-medium text-slate-900">
                                           {item.costItemName}
                                         </span>
-                                        {item.groupName && (
-                                          <span className="ml-2 text-xs text-slate-500">
-                                            ({item.groupName})
-                                          </span>
-                                        )}
                                         {item.categoryName && (
                                           <span
                                             className={`ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${getCategoryColor(

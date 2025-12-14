@@ -19,10 +19,37 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const supabase = await createClient();
 
-    // Use the view that pulls client data from lead
+    // Query quotations table directly with all necessary relations
     const { data: quotation, error: quotationError } = await supabase
-      .from("quotations_with_lead")
-      .select("*")
+      .from("quotations")
+      .select(`
+        *,
+        lead:leads!lead_id(
+          id,
+          stage,
+          property:properties(
+            id,
+            property_name,
+            address_line1,
+            city,
+            pincode,
+            carpet_area,
+            property_type
+          )
+        ),
+        client:clients!client_id(
+          id,
+          name,
+          email,
+          phone
+        ),
+        assigned_user:users!assigned_to(
+          id,
+          name,
+          email,
+          avatar_url
+        )
+      `)
       .eq("id", id)
       .single();
 
@@ -39,6 +66,29 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         { status: 500 }
       );
     }
+
+    // Extract relations and flatten data for backward compatibility
+    const lead = quotation.lead as { property?: Record<string, unknown> } | null;
+    const property = lead?.property as Record<string, unknown> | null;
+    const client = quotation.client as { name?: string; email?: string; phone?: string } | null;
+    
+    const flattenedQuotation = {
+      ...quotation,
+      // Client data from relation
+      client_name: client?.name || null,
+      client_email: client?.email || null,
+      client_phone: client?.phone || null,
+      // Property data from lead relation
+      property_name: property?.property_name || null,
+      property_address: property?.address_line1 || null,
+      property_city: property?.city || null,
+      carpet_area_sqft: property?.carpet_area || null,
+      property_type: property?.property_type || null,
+      // Flatten assigned user for backward compatibility
+      assigned_to_name: (quotation.assigned_user as { name?: string } | null)?.name,
+      assigned_to_email: (quotation.assigned_user as { email?: string } | null)?.email,
+      assigned_to_avatar: (quotation.assigned_user as { avatar_url?: string } | null)?.avatar_url,
+    };
 
     // Fetch related data: spaces, components, line items, version history
     const [
@@ -60,27 +110,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         )
         .eq("quotation_id", id)
         .order("display_order", { ascending: true }),
-      // Quotation components with component type and variant info
+      // Quotation components with component type info
       supabase
         .from("quotation_components")
         .select(
           `
           *,
-          component_type:component_types(id, name, slug, icon),
-          component_variant:component_variants(id, name, slug)
+          component_type:component_types(id, name, slug, icon)
         `
         )
         .eq("quotation_id", id)
         .order("display_order", { ascending: true }),
-      // Quotation line items with cost item info
+      // Quotation line items with quotation cost item info
       supabase
         .from("quotation_line_items")
         .select(
           `
           *,
-          cost_item:cost_items(
-            id, name, slug, description,
-            category:cost_item_categories(id, name, slug, color)
+          quotation_cost_item:quotation_cost_items(
+            id, name, slug, description, default_rate, company_cost, vendor_cost,
+            category:quotation_cost_item_categories(id, name, slug, color)
           )
         `
         )
@@ -115,19 +164,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       lineItems || []
     );
 
-    // Build assigned_user from view data (already joined in quotations_with_lead)
-    const assignedUser = quotation.assigned_to
+    // Build assigned_user from joined data
+    const assignedUser = quotation.assigned_user
       ? {
           id: quotation.assigned_to,
-          name: quotation.assigned_to_name,
-          email: quotation.assigned_to_email,
-          avatar_url: quotation.assigned_to_avatar,
+          name: flattenedQuotation.assigned_to_name,
+          email: flattenedQuotation.assigned_to_email,
+          avatar_url: flattenedQuotation.assigned_to_avatar,
         }
       : null;
 
     return NextResponse.json({
       quotation: {
-        ...quotation,
+        ...flattenedQuotation,
         created_user: createdUser || null,
         updated_user: updatedUser || null,
         assigned_user: assignedUser,
@@ -154,6 +203,14 @@ function organizeQuotationData(
   components: any[],
   lineItems: any[]
 ) {
+  // Add backward compatibility alias for cost_item
+  const normalizedLineItems = lineItems.map((item) => ({
+    ...item,
+    // Map new field name to old for backward compatibility
+    cost_item: item.quotation_cost_item || item.cost_item,
+    cost_item_id: item.quotation_cost_item_id || item.cost_item_id,
+  }));
+
   // Create maps for quick lookup
   const spaceMap = new Map(
     spaces.map((s) => [s.id, { ...s, components: [], lineItems: [] }])
@@ -171,9 +228,9 @@ function organizeQuotationData(
   });
 
   // Assign line items to components or spaces
-  const orphanLineItems: typeof lineItems = [];
+  const orphanLineItems: typeof normalizedLineItems = [];
   const spaceValues = Array.from(spaceMap.values());
-  lineItems.forEach((item) => {
+  normalizedLineItems.forEach((item) => {
     if (
       item.quotation_component_id &&
       componentMap.has(item.quotation_component_id)
@@ -226,10 +283,14 @@ async function createNewVersion(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   body: any,
   userId: string,
-  versionNotes?: string
+  versionNotes?: string,
+  targetProjectId?: string | null
 ) {
   try {
-    console.log("[createNewVersion] Starting...");
+    console.log("[createNewVersion] Starting...", {
+      existingProjectId: existingQuotation.project_id,
+      targetProjectId
+    });
 
     // Get the highest version number for this quotation_number
     const { data: versions, error: versionError } = await supabase
@@ -253,11 +314,18 @@ async function createNewVersion(
     // Create the new quotation record (copy from existing + updates from body)
     const { subtotal, tax_percent, tax_amount, grand_total } = body;
 
+    // Use targetProjectId if provided (for transitioning from lead to project)
+    // Otherwise keep the existing project_id/lead_id
+    const shouldAttachToProject = targetProjectId !== undefined;
+    
     const newQuotationData = {
       tenant_id: existingQuotation.tenant_id,
-      lead_id: existingQuotation.lead_id,
+      lead_id: shouldAttachToProject ? null : existingQuotation.lead_id,
+      project_id: shouldAttachToProject ? targetProjectId : existingQuotation.project_id,
+      client_id: existingQuotation.client_id,
       quotation_number: existingQuotation.quotation_number,
       version: newVersion,
+      parent_quotation_id: existingQuotation.id,
       status: "draft" as const,
       title: body.title || existingQuotation.title,
       description: existingQuotation.description,
@@ -368,7 +436,6 @@ async function createNewVersion(
                     quotation_id: newQuotation.id,
                     space_id: insertedSpaces[spaceIndex].id,
                     component_type_id: comp.component_type_id,
-                    component_variant_id: comp.component_variant_id,
                     name: comp.name,
                     description: comp.description || null,
                     subtotal: comp.subtotal || 0,
@@ -439,16 +506,15 @@ async function createNewVersion(
                     quotation_id: newQuotation.id,
                     quotation_space_id: newSpaceId || null,
                     quotation_component_id: newComponentId || null,
-                    cost_item_id: item.cost_item_id,
+                    quotation_cost_item_id: item.quotation_cost_item_id || item.cost_item_id,
                     name: item.name,
-                    group_name: item.group_name,
                     length: item.length,
                     width: item.width,
                     quantity: item.quantity,
                     unit_code: item.unit_code,
                     rate: item.rate,
                     amount: item.amount,
-                    measurement_unit: item.measurement_unit || "ft",
+                    measurement_unit: item.measurement_unit || "mm",
                     display_order: displayOrder++,
                     notes: item.notes,
                     metadata: item.metadata,
@@ -543,7 +609,30 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       quotation_number: existingQuotation.quotation_number,
       version: existingQuotation.version,
       status: existingQuotation.status,
+      lead_id: existingQuotation.lead_id,
+      project_id: existingQuotation.project_id,
     });
+
+    // Check if quotation is associated with a closed lead (won/lost)
+    // Block direct edits, but allow creating new versions (which will attach to project)
+    if (existingQuotation.lead_id && !existingQuotation.project_id && !create_new_version) {
+      const { data: lead } = await supabase
+        .from("leads")
+        .select("stage")
+        .eq("id", existingQuotation.lead_id)
+        .single();
+      
+      if (lead && ["won", "lost"].includes(lead.stage)) {
+        return NextResponse.json(
+          {
+            error: `Cannot modify quotation associated with a ${lead.stage} lead. The lead is closed and quotations are read-only. To make changes, create a new version instead.`,
+            code: "QUOTATION_READ_ONLY_LEAD_CLOSED",
+            suggestion: lead.stage === "won" ? "Create a new version to continue working on the project" : "This quotation is archived with the closed lead"
+          },
+          { status: 403 }
+        );
+      }
+    }
 
     // Prevent modification of approved/rejected quotations (unless creating a new version)
     if (["approved", "rejected"].includes(existingQuotation.status) && !create_new_version) {
@@ -558,12 +647,41 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // Handle creating a new version
     if (create_new_version) {
       console.log("[Quotation PATCH] Creating new version...");
+      
+      // Check if parent quotation is from a closed lead and project exists
+      let targetProjectId = existingQuotation.project_id;
+      
+      if (existingQuotation.lead_id && !existingQuotation.project_id) {
+        // Check if lead is closed and has a project
+        const { data: lead } = await supabase
+          .from("leads")
+          .select("stage, project_id")
+          .eq("id", existingQuotation.lead_id)
+          .single();
+        
+        if (lead && ["won", "lost", "disqualified"].includes(lead.stage) && lead.project_id) {
+          // Lead is closed and has a project - attach new version to project
+          targetProjectId = lead.project_id;
+          console.log("[Quotation PATCH] Lead is closed, attaching new version to project:", lead.project_id);
+        } else if (lead && ["won", "lost", "disqualified"].includes(lead.stage) && !lead.project_id) {
+          // Lead is closed but no project - prevent revision
+          return NextResponse.json(
+            { 
+              error: "Cannot revise quotation for a closed lead without a project. Please create a new quotation at the project level.",
+              code: "LEAD_CLOSED_NO_PROJECT"
+            },
+            { status: 400 }
+          );
+        }
+      }
+      
       return await createNewVersion(
         supabase,
         existingQuotation,
         body,
         user!.id,
-        version_notes
+        version_notes,
+        targetProjectId
       );
     }
 
@@ -591,6 +709,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       "presentation_level",
       "hide_dimensions",
       "assigned_to",
+      "template_id",
     ];
 
     for (const field of allowedFields) {
@@ -687,7 +806,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
                       quotation_id: id,
                       space_id: insertedSpaces[spaceIndex].id,
                       component_type_id: comp.component_type_id,
-                      component_variant_id: comp.component_variant_id,
                       name: comp.name,
                       description: comp.description || null,
                       subtotal: comp.subtotal || 0,
@@ -755,16 +873,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
                       quotation_id: id,
                       quotation_space_id: newSpaceId || null,
                       quotation_component_id: newComponentId || null,
-                      cost_item_id: item.cost_item_id,
+                      quotation_cost_item_id: item.quotation_cost_item_id || item.cost_item_id,
                       name: item.name,
-                      group_name: item.group_name,
                       length: item.length,
                       width: item.width,
                       quantity: item.quantity,
                       unit_code: item.unit_code,
                       rate: item.rate,
                       amount: item.amount,
-                      measurement_unit: item.measurement_unit || "ft",
+                      measurement_unit: item.measurement_unit || "mm",
                       display_order: displayOrder++,
                       notes: item.notes,
                       metadata: item.metadata,
@@ -803,9 +920,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             quotation_id: id,
             quotation_space_id: item.quotation_space_id,
             quotation_component_id: item.quotation_component_id,
-            cost_item_id: item.cost_item_id,
+            quotation_cost_item_id: item.quotation_cost_item_id || item.cost_item_id,
             name: item.name,
-            group_name: item.group_name,
             length: item.length,
             width: item.width,
             quantity: item.quantity,

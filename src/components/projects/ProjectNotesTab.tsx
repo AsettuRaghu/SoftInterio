@@ -20,8 +20,7 @@ import {
 interface ProjectNotesTabProps {
   projectId: string;
   phases: ProjectPhase[];
-  onCreateNote: () => void;
-  onEditNote: (note: ProjectNote) => void;
+  onCountChange?: (count: number) => void;
 }
 
 const CategoryColors: Record<
@@ -39,8 +38,7 @@ const CategoryColors: Record<
 export default function ProjectNotesTab({
   projectId,
   phases,
-  onCreateNote,
-  onEditNote,
+  onCountChange,
 }: ProjectNotesTabProps) {
   const [notes, setNotes] = useState<ProjectNote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +56,9 @@ export default function ProjectNotesTab({
       const response = await fetch(`/api/projects/${projectId}/notes`);
       if (!response.ok) throw new Error("Failed to fetch notes");
       const data = await response.json();
-      setNotes(data.notes || []);
+      const notesList = data.notes || [];
+      setNotes(notesList);
+      onCountChange?.(notesList.length);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -125,30 +125,32 @@ export default function ProjectNotesTab({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium text-slate-900">Project Notes</h3>
+          <h3 className="text-sm font-semibold text-slate-900">
+            Project Notes
+          </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Keep track of meetings, decisions, and important information
+            Track meetings, decisions, and important information
           </p>
         </div>
         <button
           onClick={onCreateNote}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+          className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 text-white rounded-md text-xs hover:bg-blue-700"
         >
-          <PlusIcon className="w-4 h-4" />
+          <PlusIcon className="w-3.5 h-3.5" />
           Add Note
         </button>
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
-          className="px-3 py-1.5 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="all">All Categories</option>
           {Object.entries(ProjectNoteCategoryLabels).map(([value, label]) => (
@@ -161,7 +163,7 @@ export default function ProjectNotesTab({
         <select
           value={phaseFilter}
           onChange={(e) => setPhaseFilter(e.target.value)}
-          className="px-3 py-1.5 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="all">All Phases</option>
           <option value="unassigned">General (No Phase)</option>
@@ -181,23 +183,23 @@ export default function ProjectNotesTab({
 
       {/* Notes List */}
       {filteredNotes.length === 0 ? (
-        <div className="text-center py-12">
-          <DocumentTextIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-600 font-medium">No notes yet</p>
-          <p className="text-slate-500 text-sm mt-1">
+        <div className="text-center py-8">
+          <DocumentTextIcon className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+          <p className="text-sm text-slate-600 font-medium">No notes yet</p>
+          <p className="text-xs text-slate-500 mt-0.5">
             Add your first note to keep track of project information
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {/* Pinned Notes */}
           {pinnedNotes.length > 0 && (
             <div>
-              <h4 className="text-xs font-medium text-slate-700 uppercase tracking-wide mb-2 flex items-center gap-1">
-                <PinIcon className="w-3.5 h-3.5 rotate-45" />
+              <h4 className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                <PinIcon className="w-3 h-3 rotate-45" />
                 Pinned ({pinnedNotes.length})
               </h4>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {pinnedNotes.map((note) => (
                   <NoteCard
                     key={note.id}
@@ -215,11 +217,11 @@ export default function ProjectNotesTab({
           {unpinnedNotes.length > 0 && (
             <div>
               {pinnedNotes.length > 0 && (
-                <h4 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
+                <h4 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">
                   Other Notes ({unpinnedNotes.length})
                 </h4>
               )}
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {unpinnedNotes.map((note) => (
                   <NoteCard
                     key={note.id}
@@ -251,43 +253,45 @@ function NoteCard({ note, onEdit, onDelete, onTogglePin }: NoteCardProps) {
 
   return (
     <div
-      className={`p-4 bg-white border rounded-lg ${
+      className={`p-3 bg-white border rounded-lg ${
         note.is_pinned ? "border-amber-200 bg-amber-50/30" : "border-slate-200"
       }`}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           {/* Header */}
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-1.5 mb-1.5">
             <span
-              className={`px-2 py-0.5 text-xs font-medium rounded ${categoryStyle.bg} ${categoryStyle.text}`}
+              className={`px-1.5 py-0.5 text-xs font-medium rounded ${categoryStyle.bg} ${categoryStyle.text}`}
             >
               {ProjectNoteCategoryLabels[note.category]}
             </span>
             {note.phase && (
-              <span className="px-2 py-0.5 text-xs bg-slate-100 text-slate-600 rounded">
+              <span className="px-1.5 py-0.5 text-xs bg-slate-100 text-slate-600 rounded">
                 {note.phase.name}
               </span>
             )}
             {note.is_pinned && (
-              <PinIcon className="w-3.5 h-3.5 text-amber-500 rotate-45" />
+              <PinIcon className="w-3 h-3 text-amber-500 rotate-45" />
             )}
           </div>
 
           {/* Title */}
           {note.title && (
-            <h4 className="font-medium text-slate-900 mb-1">{note.title}</h4>
+            <h4 className="text-sm font-medium text-slate-900 mb-1">
+              {note.title}
+            </h4>
           )}
 
           {/* Content */}
-          <p className="text-sm text-slate-700 whitespace-pre-wrap line-clamp-4">
+          <p className="text-xs text-slate-700 whitespace-pre-wrap line-clamp-3">
             {note.content}
           </p>
 
           {/* Meta */}
-          <div className="flex items-center gap-3 mt-3 text-xs text-slate-500">
-            <span className="flex items-center gap-1">
-              <CalendarIcon className="w-3.5 h-3.5" />
+          <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
+            <span className="flex items-center gap-0.5">
+              <CalendarIcon className="w-3 h-3" />
               {new Date(note.created_at).toLocaleDateString()}
             </span>
             {note.created_by_user && (
@@ -297,31 +301,31 @@ function NoteCard({ note, onEdit, onDelete, onTogglePin }: NoteCardProps) {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <button
             onClick={() => onTogglePin(note.id, note.is_pinned)}
-            className={`p-1.5 rounded ${
+            className={`p-1 rounded ${
               note.is_pinned
                 ? "text-amber-500 hover:text-amber-700 hover:bg-amber-100"
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"
             }`}
             title={note.is_pinned ? "Unpin" : "Pin"}
           >
-            <PinIcon className="w-4 h-4 rotate-45" />
+            <PinIcon className="w-3.5 h-3.5 rotate-45" />
           </button>
           <button
             onClick={() => onEdit(note)}
-            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded"
+            className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded"
             title="Edit"
           >
-            <PencilIcon className="w-4 h-4" />
+            <PencilIcon className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => onDelete(note.id)}
-            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
             title="Delete"
           >
-            <TrashIcon className="w-4 h-4" />
+            <TrashIcon className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>

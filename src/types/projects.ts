@@ -258,14 +258,27 @@ export interface Project {
   flat_number?: string;
   carpet_area_sqft?: number;
 
-  // Location
-  site_address?: string;
-  city?: string;
-  state?: string;
-  pincode?: string;
+  // Extended Property Details (Joined from properties table)
+  block_tower?: string;
+  built_up_area?: number;
+  super_built_up_area?: number;
+  bedrooms?: number;
+  bathrooms?: number;
+  balconies?: number;
+  floor_number?: number;
+  total_floors?: number;
+  facing?: string;
+  furnishing_status?: string;
+  age_of_property?: number;
+  parking_slots?: number;
+  has_lift?: boolean;
+  has_gym?: boolean;
+  has_power_backup?: boolean;
+  has_security?: boolean;
+  amenities?: string[]; // JSONB in DB, array here
 
   // Project Details
-  project_type: ProjectType; // DEPRECATED: Use property_type instead
+  project_type: ProjectType; // Kept for TS compatibility temporarily, effectively unused
   property_type?: ProjectPropertyType; // NEW: Type of property (aligned with leads)
   project_category: ProjectCategory; // Service category (aligned with leads.service_type)
   status: ProjectStatus;
@@ -275,28 +288,16 @@ export interface Project {
   expected_end_date?: string;
   actual_end_date?: string;
 
-  // Budget & Financials
-  quoted_amount: number;
-  budget_amount: number;
-  actual_cost: number;
-
   // Progress
   overall_progress: number;
 
   // References
   project_manager_id?: string;
-  lead_id?: string; // DEPRECATED: use converted_from_lead_id
+  lead_id?: string;
   quotation_id?: string;
-  converted_from_lead_id?: string;
 
-  // Budget Range (from lead)
-  budget_range?: string;
 
-  // Lead tracking (copied at conversion for reporting)
-  lead_source?: string;
-  lead_source_detail?: string;
-  sales_rep_id?: string;
-  lead_won_date?: string;
+  // Lead tracking
 
   // Metadata
   notes?: string;
@@ -306,7 +307,50 @@ export interface Project {
   updated_at: string;
 
   // Relations (populated by joins)
+  client?: {
+    name: string;
+    email: string;
+    phone: string;
+  };
+  property?: {
+    property_name: string;
+    unit_number: string;
+    block_tower: string;
+    property_type: string;
+    property_subtype: string;
+    address_line1: string;
+    city: string;
+    pincode: string;
+    carpet_area: number;
+    built_up_area: number;
+    super_built_up_area: number;
+    bedrooms: number;
+    bathrooms: number;
+    balconies: number;
+    floor_number: string;
+    total_floors: number;
+    facing: string;
+    furnishing_status: string;
+    age_of_property: string;
+    parking_slots: string;
+    has_lift: boolean;
+    has_gym: boolean;
+    has_power_backup: boolean;
+    has_security: boolean;
+  };
   project_manager?: {
+    id: string;
+    name: string;
+    email: string;
+    avatar_url?: string;
+  };
+  sales_rep?: {
+    id: string;
+    name: string;
+    email: string;
+    avatar_url?: string;
+  };
+  assigned_by_user?: {
     id: string;
     name: string;
     email: string;
@@ -324,22 +368,37 @@ export interface Project {
 export interface ProjectLeadData {
   id: string;
   lead_number?: string;
-
+  
   // Contact info (original lead values)
   client_name?: string;
   email?: string;
   phone?: string;
+  
+  // Source info
+  lead_source?: string;
+  lead_source_detail?: string;
+
+  // Assignment info
+  assigned_to?: string;
+  assigned_by?: string;
+  assigned_user?: {
+      id: string;
+      name: string;
+      email: string;
+      avatar_url?: string;
+  };
+  created_by_user?: {
+      id: string;
+      name: string;
+      email: string;
+      avatar_url?: string;
+  };
 
   // Status
   stage: string;
 
-  // Property details
-  property_name?: string;
-  property_type?: string;
-  flat_number?: string;
-  property_address?: string;
-  property_city?: string;
-  property_pincode?: string;
+  // Property Reference
+  property_id?: string;
   carpet_area_sqft?: number;
 
   // Service & scope
@@ -358,16 +417,6 @@ export interface ProjectLeadData {
   target_start_date?: string;
   target_end_date?: string;
 
-  // Source tracking
-  lead_source?: string;
-  lead_source_detail?: string;
-
-  // Assignment
-  assigned_to?: string;
-
-  // Notes
-  notes?: string;
-
   // Timestamps
   created_at: string;
   updated_at: string;
@@ -376,14 +425,6 @@ export interface ProjectLeadData {
   // Calculated
   lead_duration_days?: number;
   activity_count?: number;
-
-  // Relations
-  assigned_user?: {
-    id: string;
-    name: string;
-    email: string;
-    avatar_url?: string;
-  };
 }
 
 // Lead activity for history
@@ -461,8 +502,8 @@ export interface ProjectSubPhase {
   actual_start_date?: string;
   actual_end_date?: string;
   estimated_duration_hours?: number; // Duration in hours (allows for quick sub-phases)
+  due_date?: string;
 
-  due_date?: string; // DEPRECATED: Use planned_end_date instead
   completed_at?: string;
   completed_by?: string;
   notes?: string;
@@ -573,19 +614,12 @@ export interface ProjectPaymentMilestone {
 export interface CreateProjectRequest {
   name: string;
   description?: string;
-  client_name?: string;
-  client_email?: string;
-  client_phone?: string;
-  site_address?: string;
-  city?: string;
-  state?: string;
-  pincode?: string;
+  // Client Reference
+  client_id?: string;
   project_type: ProjectType;
   project_category: ProjectCategory;
   start_date?: string;
   expected_end_date?: string;
-  quoted_amount?: number;
-  budget_amount?: number;
   project_manager_id?: string;
   lead_id?: string;
   quotation_id?: string;
@@ -882,15 +916,19 @@ export interface ProjectTask {
 // =====================================================
 
 export type ProjectDetailTab =
-  | "overview"
-  | "payments"
-  | "leads"
-  | "procurement"
-  | "documents"
-  | "notes"
-  | "tasks"
+  | "project-mgmt"
   | "rooms"
-  | "project-mgmt";
+  | "overview"
+  | "documents"
+  | "tasks"
+  | "timeline"
+  | "leads"
+  | "notes"
+  | "quotations"
+  | "procurement"
+  | "lead-history"
+  | "calendar"
+  | "payments";
 
 export interface TabConfig {
   key: ProjectDetailTab;

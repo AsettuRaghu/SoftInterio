@@ -15,8 +15,8 @@ export default async function ClientQuotationPage({ params }: PageProps) {
 
   const supabase = await createClient();
 
-  // Find quotation by token (no auth required)
-  const { data: quotation, error } = await supabase
+  // Find quotation by token (no auth required) with relations
+  const { data: rawQuotation, error } = await supabase
     .from("quotations")
     .select(
       `
@@ -29,13 +29,6 @@ export default async function ClientQuotationPage({ params }: PageProps) {
       status,
       valid_from,
       valid_until,
-      client_name,
-      client_email,
-      client_phone,
-      property_name,
-      property_address,
-      property_type,
-      carpet_area,
       subtotal,
       discount_type,
       discount_value,
@@ -49,15 +42,55 @@ export default async function ClientQuotationPage({ params }: PageProps) {
       presentation_level,
       hide_dimensions,
       client_access_token,
-      client_access_expires_at
+      client_access_expires_at,
+      client:clients!client_id(
+        id,
+        name,
+        email,
+        phone
+      ),
+      lead:leads!lead_id(
+        id,
+        property:properties(
+          id,
+          property_name,
+          address_line1,
+          city,
+          carpet_area,
+          property_type
+        )
+      )
     `
     )
     .eq("client_access_token", token)
     .single();
 
-  if (error || !quotation) {
+  if (error || !rawQuotation) {
     notFound();
   }
+
+  // Extract client and property data from relations
+  const client = rawQuotation.client as {
+    name?: string;
+    email?: string;
+    phone?: string;
+  } | null;
+  const lead = rawQuotation.lead as {
+    property?: Record<string, unknown>;
+  } | null;
+  const property = lead?.property as Record<string, unknown> | null;
+
+  // Flatten data for component compatibility
+  const quotation = {
+    ...rawQuotation,
+    client_name: client?.name || null,
+    client_email: client?.email || null,
+    client_phone: client?.phone || null,
+    property_name: property?.property_name as string | null | undefined,
+    property_address: property?.address_line1 as string | null | undefined,
+    property_type: property?.property_type as string | null | undefined,
+    carpet_area: property?.carpet_area as number | null | undefined,
+  };
 
   // Check if expired
   if (quotation.client_access_expires_at) {
@@ -141,8 +174,7 @@ export default async function ClientQuotationPage({ params }: PageProps) {
       depth,
       display_order,
       subtotal,
-      component_type:component_type_id (id, name),
-      component_variant:component_variant_id (id, name)
+      component_type:component_type_id (id, name)
     `
     )
     .eq("quotation_id", quotation.id)
@@ -190,7 +222,6 @@ export default async function ClientQuotationPage({ params }: PageProps) {
       return {
         id: comp.id,
         name: comp.name || comp.component_type?.name,
-        variant_name: comp.component_variant?.name,
         description: comp.description,
         line_items: compLineItems.map((item: any) => ({
           id: item.id,

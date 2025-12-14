@@ -4,12 +4,8 @@ import React from "react";
 import {
   BuilderComponent,
   LineItem,
-  CostItem,
-  CostItemCategory,
   calculateSqft,
   convertToFeet,
-  MeasurementUnit,
-  ComponentVariant,
 } from "./types";
 import { LineItemRow } from "./LineItemRow";
 
@@ -25,10 +21,9 @@ interface ComponentCardProps {
   formatCurrency: (amount: number) => string;
   onDuplicate?: () => void;
   onUpdateName?: (name: string) => void;
-  onUpdateVariant?: (variantId: string, variantName: string) => void;
-  availableVariants?: ComponentVariant[];
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  showValidation?: boolean; // Show validation errors on line items
 }
 
 export function ComponentCard({
@@ -43,37 +38,47 @@ export function ComponentCard({
   formatCurrency,
   onDuplicate,
   onUpdateName,
-  onUpdateVariant,
-  availableVariants,
   onMoveUp,
   onMoveDown,
+  showValidation = false,
 }: ComponentCardProps) {
-  // Calculate component total
-  const calculateTotal = () => {
-    if (mode === "template") return 0;
+  // Calculate component total and sqft
+  const calculateTotalAndSqft = () => {
+    if (mode === "template") return { total: 0, sqft: 0 };
 
-    return component.lineItems.reduce((sum, item) => {
+    let totalAmount = 0;
+    let totalSqft = 0;
+
+    component.lineItems.forEach((item) => {
       const measureType = getMeasurementType(item.unitCode);
-      const unit = item.measurementUnit || "ft";
+      const unit = item.measurementUnit || "mm";
 
       switch (measureType) {
         case "area":
           const sqft = calculateSqft(item.length, item.width, unit);
-          return sum + sqft * item.rate;
+          totalAmount += sqft * item.rate;
+          totalSqft += sqft; // Accumulate sqft
+          break;
         case "length":
           const lengthInFeet = convertToFeet(item.length || 0, unit);
-          return sum + lengthInFeet * item.rate;
+          totalAmount += lengthInFeet * item.rate;
+          break;
         case "quantity":
-          return sum + (item.quantity || 0) * item.rate;
+          totalAmount += (item.quantity || 0) * item.rate;
+          break;
         case "fixed":
-          return sum + item.rate;
+          totalAmount += item.rate;
+          break;
         default:
-          return sum + (item.quantity || 0) * item.rate;
+          totalAmount += (item.quantity || 0) * item.rate;
       }
-    }, 0);
+    });
+
+    return { total: totalAmount, sqft: totalSqft };
   };
 
-  const total = calculateTotal();
+  const { total, sqft: totalSqft } = calculateTotalAndSqft();
+  const costPerSqft = totalSqft > 0 ? total / totalSqft : 0;
 
   return (
     <div className="border border-slate-200 rounded-lg">
@@ -129,37 +134,6 @@ export function ComponentCard({
                 placeholder={component.name}
                 className="text-sm font-medium text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-purple-500 focus:outline-none px-1 max-w-[180px]"
               />
-              {availableVariants &&
-                availableVariants.length > 0 &&
-                onUpdateVariant && (
-                  <select
-                    value={component.variantId || ""}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      const variant = availableVariants.find(
-                        (v) => v.id === e.target.value
-                      );
-                      if (variant) {
-                        onUpdateVariant(variant.id, variant.name);
-                      }
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded px-2 py-0.5 hover:border-slate-300 focus:border-purple-500 focus:outline-none cursor-pointer"
-                  >
-                    <option value="">No variant</option>
-                    {availableVariants.map((variant) => (
-                      <option key={variant.id} value={variant.id}>
-                        {variant.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              {component.variantName &&
-                (!availableVariants || availableVariants.length === 0) && (
-                  <span className="text-xs text-slate-500 font-normal">
-                    ({component.variantName})
-                  </span>
-                )}
             </div>
             <p className="text-xs text-slate-500">
               {component.lineItems.length} cost items
@@ -168,9 +142,16 @@ export function ComponentCard({
         </div>
         <div className="flex items-center gap-3">
           {mode === "quotation" && (
-            <span className="font-semibold text-purple-600">
-              {formatCurrency(total)}
-            </span>
+            <>
+              {totalSqft > 0 && costPerSqft > 0 && (
+                <span className="text-xs text-slate-500 bg-purple-50 px-2 py-0.5 rounded">
+                  {formatCurrency(costPerSqft)}/sqft
+                </span>
+              )}
+              <span className="font-semibold text-purple-600">
+                {formatCurrency(total)}
+              </span>
+            </>
           )}
           {mode === "template" && (
             <span className="text-sm text-slate-500">
@@ -298,10 +279,9 @@ export function ComponentCard({
             <div className="space-y-2">
               {mode === "template" && (
                 <div className="grid grid-cols-12 gap-2 text-xs text-slate-500 mb-2 px-2">
-                  <span className="col-span-3">Cost Item</span>
+                  <span className="col-span-4">Cost Item</span>
                   <span className="col-span-2">Category</span>
-                  <span className="col-span-2">Group</span>
-                  <span className="col-span-2">Unit / Measure</span>
+                  <span className="col-span-3">Unit / Measure</span>
                   <span className="col-span-2">Rate (₹)</span>
                   <span className="col-span-1"></span>
                 </div>
@@ -312,9 +292,6 @@ export function ComponentCard({
                   item={item}
                   mode={mode}
                   onUpdateRate={(rate) => onUpdateLineItem(item.id, { rate })}
-                  onUpdateGroup={(groupName) =>
-                    onUpdateLineItem(item.id, { groupName })
-                  }
                   onUpdateLength={(length) =>
                     onUpdateLineItem(item.id, { length })
                   }
@@ -328,6 +305,7 @@ export function ComponentCard({
                     onUpdateLineItem(item.id, { quantity })
                   }
                   onDelete={() => onDeleteLineItem(item.id)}
+                  showValidation={showValidation}
                 />
               ))}
             </div>

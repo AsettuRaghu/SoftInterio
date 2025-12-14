@@ -189,13 +189,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 
-    // Prevent modification of terminal leads
+    // Prevent modification of closed leads (won/lost/disqualified)
+    // These leads are read-only for audit purposes
     if (["won", "lost", "disqualified"].includes(existingLead.stage)) {
       return NextResponse.json(
         {
-          error: `Cannot modify a ${existingLead.stage} lead`,
+          error: `Cannot modify a ${existingLead.stage} lead. This lead is closed and read-only. ${existingLead.stage === 'won' ? 'Make changes at the project level instead.' : 'This lead is archived.'}`,
+          code: "LEAD_CLOSED",
+          stage: existingLead.stage
         },
-        { status: 400 }
+        { status: 403 }
       );
     }
 

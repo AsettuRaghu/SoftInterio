@@ -69,8 +69,69 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // If details requested, fetch spaces and line items for each template
-    let templatesWithDetails = templates || [];
+    // Always fetch counts for spaces, components, and usage
+    let templatesWithCounts = templates || [];
+    if (templates && templates.length > 0) {
+      const templateIds = templates.map((t) => t.id);
+
+      // Fetch spaces count, unique component types count, and usage count in parallel
+      const [spacesCountResult, lineItemsResult, usageCountResult] = await Promise.all([
+        // Count spaces per template
+        supabase
+          .from("template_spaces")
+          .select("template_id")
+          .in("template_id", templateIds),
+        // Get line items to count unique components per template
+        supabase
+          .from("quotation_template_line_items")
+          .select("template_id, component_type_id")
+          .in("template_id", templateIds),
+        // Count quotations that use each template
+        supabase
+          .from("quotations")
+          .select("template_id")
+          .in("template_id", templateIds),
+      ]);
+
+      // Calculate spaces count per template
+      const spacesCountByTemplate: Record<string, number> = {};
+      (spacesCountResult.data || []).forEach((space) => {
+        spacesCountByTemplate[space.template_id] = (spacesCountByTemplate[space.template_id] || 0) + 1;
+      });
+
+      // Calculate unique components count per template (unique component_type_id)
+      const componentsCountByTemplate: Record<string, number> = {};
+      const componentsSeen: Record<string, Set<string>> = {};
+      (lineItemsResult.data || []).forEach((item) => {
+        if (!componentsSeen[item.template_id]) {
+          componentsSeen[item.template_id] = new Set();
+        }
+        const componentKey = `${item.component_type_id || 'default'}`;
+        componentsSeen[item.template_id].add(componentKey);
+      });
+      Object.keys(componentsSeen).forEach((templateId) => {
+        componentsCountByTemplate[templateId] = componentsSeen[templateId].size;
+      });
+
+      // Calculate usage count per template
+      const usageCountByTemplate: Record<string, number> = {};
+      (usageCountResult.data || []).forEach((quotation) => {
+        if (quotation.template_id) {
+          usageCountByTemplate[quotation.template_id] = (usageCountByTemplate[quotation.template_id] || 0) + 1;
+        }
+      });
+
+      // Attach counts to templates
+      templatesWithCounts = templates.map((template) => ({
+        ...template,
+        spaces_count: spacesCountByTemplate[template.id] || 0,
+        components_count: componentsCountByTemplate[template.id] || 0,
+        usage_count: usageCountByTemplate[template.id] || 0,
+      }));
+    }
+
+    // If details requested, fetch full spaces and line items for each template
+    let templatesWithDetails = templatesWithCounts;
     if (includeDetails && templates && templates.length > 0) {
       const templateIds = templates.map((t) => t.id);
 
@@ -81,14 +142,13 @@ export async function GET(request: NextRequest) {
           .in("template_id", templateIds)
           .order("display_order", { ascending: true }),
         supabase
-          .from("template_line_items")
+          .from("quotation_template_line_items")
           .select(
             `
             *,
             space_type:space_types(id, name, slug),
             component_type:component_types(id, name, slug),
-            component_variant:component_variants(id, name, slug),
-            cost_item:cost_items(id, name, slug, unit_code, default_rate, category:cost_item_categories(id, name, slug, color))
+            cost_item:quotation_cost_items(id, name, slug, unit_code, default_rate, category:quotation_cost_item_categories(id, name, slug, color))
           `
           )
           .in("template_id", templateIds)
@@ -114,8 +174,8 @@ export async function GET(request: NextRequest) {
         lineItemsByTemplate[item.template_id]!.push(item);
       });
 
-      // Attach to templates
-      templatesWithDetails = templates.map((template) => ({
+      // Attach spaces and line_items to templates (preserving counts from templatesWithCounts)
+      templatesWithDetails = templatesWithCounts.map((template) => ({
         ...template,
         spaces: spacesByTemplate[template.id] || [],
         line_items: lineItemsByTemplate[template.id] || [],
@@ -152,6 +212,10 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
 
     const body = await request.json();
+    console.log("=== CREATE TEMPLATE API ===");
+    console.log("User:", user?.id, "Tenant:", user?.tenantId);
+    console.log("Body received:", JSON.stringify(body, null, 2));
+    
     const {
       name,
       description,
@@ -197,47 +261,80 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log("Template created:", template.id);
+
+    // Map to track client space IDs to database space IDs
+    const spaceIdMap = new Map<string, string>();
+
     // Insert template spaces if provided
     if (spaces && Array.isArray(spaces) && spaces.length > 0) {
+      console.log("Inserting", spaces.length, "template spaces");
       const templateSpaces = spaces.map((space, index) => ({
         template_id: template.id,
         space_type_id: space.space_type_id,
         default_name: space.default_name || null,
         display_order: space.display_order ?? index,
       }));
+      console.log("Template spaces:", JSON.stringify(templateSpaces, null, 2));
 
-      const { error: spacesError } = await supabase
+      const { data: insertedSpaces, error: spacesError } = await supabase
         .from("template_spaces")
-        .insert(templateSpaces);
+        .insert(templateSpaces)
+        .select("id, space_type_id, display_order");
 
       if (spacesError) {
         console.error("Error creating template spaces:", spacesError);
         // Don't fail the whole request, just log the error
+      } else {
+        console.log("Template spaces inserted successfully:", insertedSpaces?.length);
+        // Build the mapping from client space index to database space ID
+        // Match by display_order and space_type_id
+        insertedSpaces?.forEach((dbSpace) => {
+          const clientSpace = spaces.find(
+            (s, idx) =>
+              s.space_type_id === dbSpace.space_type_id &&
+              (s.display_order ?? idx) === dbSpace.display_order
+          );
+          if (clientSpace && clientSpace.client_id) {
+            spaceIdMap.set(clientSpace.client_id, dbSpace.id);
+          }
+        });
+        console.log("Space ID mapping:", Object.fromEntries(spaceIdMap));
       }
     }
 
     // Insert template line items if provided
     if (line_items && Array.isArray(line_items) && line_items.length > 0) {
-      const templateLineItems = line_items.map((item, index) => ({
-        template_id: template.id,
-        space_type_id: item.space_type_id || null,
-        component_type_id: item.component_type_id || null,
-        component_variant_id: item.component_variant_id || null,
-        cost_item_id: item.cost_item_id,
-        group_name: item.group_name || null,
-        rate: item.rate || null,
-        display_order: item.display_order ?? index,
-        notes: item.notes || null,
-        metadata: item.metadata || null,
-      }));
+      console.log("Inserting", line_items.length, "template line items");
+      const templateLineItems = line_items.map((item, index) => {
+        // Try to resolve template_space_id from client_space_id
+        const templateSpaceId = item.client_space_id
+          ? spaceIdMap.get(item.client_space_id) || null
+          : null;
+
+        return {
+          template_id: template.id,
+          template_space_id: templateSpaceId,
+          space_type_id: item.space_type_id || null,
+          component_type_id: item.component_type_id || null,
+          cost_item_id: item.cost_item_id,
+          rate: item.rate || null,
+          display_order: item.display_order ?? index,
+          notes: item.notes || null,
+          metadata: item.metadata || null,
+        };
+      });
+      console.log("Template line items:", JSON.stringify(templateLineItems, null, 2));
 
       const { error: itemsError } = await supabase
-        .from("template_line_items")
+        .from("quotation_template_line_items")
         .insert(templateLineItems);
 
       if (itemsError) {
         console.error("Error creating template line items:", itemsError);
         // Don't fail the whole request, just log the error
+      } else {
+        console.log("Template line items inserted successfully");
       }
     }
 
@@ -256,14 +353,13 @@ export async function POST(request: NextRequest) {
         .eq("template_id", template.id)
         .order("display_order", { ascending: true }),
       supabase
-        .from("template_line_items")
+        .from("quotation_template_line_items")
         .select(
           `
           *,
           space_type:space_types(id, name, slug),
           component_type:component_types(id, name, slug),
-          component_variant:component_variants(id, name, slug),
-          cost_item:cost_items(id, name, slug, unit_code, default_rate, category:cost_item_categories(id, name, slug, color))
+          cost_item:quotation_cost_items(id, name, slug, unit_code, default_rate, category:quotation_cost_item_categories(id, name, slug, color))
         `
         )
         .eq("template_id", template.id)

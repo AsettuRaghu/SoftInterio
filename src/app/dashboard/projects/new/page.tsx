@@ -83,7 +83,7 @@ function NewProjectForm() {
     project_manager_id: "",
     notes: "",
     initialize_phases: true,
-    converted_from_lead_id: "",
+    lead_id: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -165,7 +165,7 @@ function NewProjectForm() {
         : "",
       quoted_amount: lead.won_amount ? lead.won_amount.toString() : "",
       budget_amount: lead.won_amount ? lead.won_amount.toString() : "",
-      converted_from_lead_id: lead.id,
+      lead_id: lead.id,
     }));
   };
 
@@ -184,7 +184,7 @@ function NewProjectForm() {
     setCreateMode("manual");
     setFormData((prev) => ({
       ...prev,
-      converted_from_lead_id: "",
+      lead_id: "",
     }));
   };
 
@@ -233,7 +233,7 @@ function NewProjectForm() {
             ? parseFloat(formData.budget_amount)
             : 0,
           project_manager_id: formData.project_manager_id || null,
-          converted_from_lead_id: formData.converted_from_lead_id || null,
+          lead_id: formData.lead_id || null,
         }),
       });
 

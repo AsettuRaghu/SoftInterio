@@ -54,11 +54,6 @@ export const routePermissions: RoutePermission[] = [
     permissions: ["settings.roles.view"],
     description: "Roles management",
   },
-  {
-    pattern: "/dashboard/settings/quotations-config",
-    permissions: ["quotations.view"],
-    description: "Quotations configuration",
-  },
   // Profile is accessible to everyone - no restriction needed
   // {
   //   pattern: "/dashboard/settings/profile",
@@ -119,6 +114,11 @@ export const routePermissions: RoutePermission[] = [
   // QUOTATIONS ROUTES
   // ============================================
   {
+    pattern: "/dashboard/quotations/config",
+    permissions: ["quotations.view"],
+    description: "Quotation config (spaces, components, cost items)",
+  },
+  {
     pattern: "/dashboard/quotations/templates/*",
     permissions: ["quotations.templates.view"],
     description: "Quotation template detail",
@@ -147,6 +147,7 @@ export const routePermissions: RoutePermission[] = [
   // ============================================
   // STOCK & PROCUREMENT ROUTES
   // ============================================
+
   {
     pattern: "/dashboard/stock/inventory/*",
     permissions: ["materials.view"],

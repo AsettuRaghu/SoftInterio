@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import {
@@ -10,14 +10,12 @@ import {
   MasterData,
   SpaceType,
   ComponentType,
-  ComponentVariant,
   CostItem,
   generateId,
   formatCurrency,
 } from "@/components/quotations";
 import { AddSpaceModal } from "@/components/quotations/AddSpaceModal";
 import { AddComponentModal } from "@/components/quotations/AddComponentModal";
-import { SelectVariantModal } from "@/components/quotations/SelectVariantModal";
 import { AddCostItemModal } from "@/components/quotations/AddCostItemModal";
 import { SpaceCard } from "@/components/quotations/SpaceCard";
 
@@ -43,22 +41,20 @@ export default function EditTemplatePage() {
     units: [],
     space_types: [],
     component_types: [],
-    component_variants: [],
-    cost_item_categories: [],
-    cost_items: [],
+    quotation_cost_item_categories: [],
+    quotation_cost_items: [],
   });
   const [isLoadingMasterData, setIsLoadingMasterData] = useState(true);
+
+  // Drag and drop states
+  const [draggedSpaceId, setDraggedSpaceId] = useState<string | null>(null);
+  const [dragOverSpaceId, setDragOverSpaceId] = useState<string | null>(null);
 
   // Modal states
   const [showAddSpaceModal, setShowAddSpaceModal] = useState(false);
   const [showAddComponentModal, setShowAddComponentModal] = useState<
     string | null
   >(null);
-  const [showSelectVariantModal, setShowSelectVariantModal] = useState<{
-    spaceId: string;
-    componentId: string;
-    componentTypeId: string;
-  } | null>(null);
   const [showAddCostItemModal, setShowAddCostItemModal] = useState<{
     spaceId: string;
     componentId: string;
@@ -76,11 +72,14 @@ export default function EditTemplatePage() {
               units: result.data.units || [],
               space_types: result.data.space_types || [],
               component_types: result.data.component_types || [],
-              component_variants: result.data.component_variants || [],
-              cost_item_categories: result.data.cost_item_categories || [],
-              cost_items: result.data.cost_items || [],
-              variants_by_component:
-                result.grouped?.variants_by_component || {},
+              quotation_cost_item_categories:
+                result.data.quotation_cost_item_categories ||
+                result.data.cost_item_categories ||
+                [],
+              quotation_cost_items:
+                result.data.quotation_cost_items ||
+                result.data.cost_items ||
+                [],
               items_by_category: result.grouped?.items_by_category || {},
             });
           }
@@ -116,18 +115,22 @@ export default function EditTemplatePage() {
         setQualityTier(template.quality_tier || "standard");
 
         // Convert API structure to builder format
+        // Use template_space.id (database ID) as the key to properly distinguish multiple spaces of the same type
         const spaceMap = new Map<string, BuilderSpace>();
         const componentMap = new Map<string, BuilderComponent>();
 
-        // Create spaces from template spaces
+        // Create spaces from template spaces - using the actual space instance ID (ts.id) as key
+        // This ensures each space (e.g., Bedroom 1, Bedroom 2) is treated separately
         (template.spaces || []).forEach((ts: any) => {
           const spaceType = masterData.space_types.find(
             (st) => st.id === ts.space_type_id
           );
           const spaceId = generateId();
-          spaceMap.set(ts.space_type_id, {
+          // Use ts.id (template_space database id) as the key, NOT space_type_id
+          spaceMap.set(ts.id, {
             id: spaceId,
             spaceTypeId: ts.space_type_id,
+            templateSpaceId: ts.id, // Store the database ID for reference
             name: spaceType?.name || ts.space_type?.name || "Space",
             defaultName: ts.default_name || spaceType?.name || "Space",
             components: [],
@@ -136,46 +139,57 @@ export default function EditTemplatePage() {
         });
 
         // Process line items to create components
+        // Match line items to spaces using template_space_id first (new schema), then fall back to space_type_id
         (template.line_items || []).forEach((item: any) => {
-          if (!item.space_type_id || !item.component_type_id) return;
+          if (!item.component_type_id) return;
 
-          let space = spaceMap.get(item.space_type_id);
-          if (!space) {
-            const spaceType = masterData.space_types.find(
-              (st) => st.id === item.space_type_id
+          // First try to match by template_space_id (links to specific space instance)
+          let spaceKey = item.template_space_id;
+          let space = spaceKey ? spaceMap.get(spaceKey) : undefined;
+
+          // Fall back to space_type_id if no template_space_id (legacy data)
+          // Find the first space with matching space_type_id
+          if (!space && item.space_type_id) {
+            const matchingEntry = Array.from(spaceMap.entries()).find(
+              ([, s]) => s.spaceTypeId === item.space_type_id
             );
-            space = {
-              id: generateId(),
-              spaceTypeId: item.space_type_id,
-              name: spaceType?.name || item.space_type?.name || "Space",
-              defaultName: spaceType?.name || item.space_type?.name || "Space",
-              components: [],
-              expanded: true,
-            };
-            spaceMap.set(item.space_type_id, space);
+            if (matchingEntry) {
+              spaceKey = matchingEntry[0];
+              space = matchingEntry[1];
+            } else {
+              // Create a new space if none exists
+              const spaceType = masterData.space_types.find(
+                (st) => st.id === item.space_type_id
+              );
+              spaceKey = `legacy-${item.space_type_id}`;
+              space = {
+                id: generateId(),
+                spaceTypeId: item.space_type_id,
+                name: spaceType?.name || item.space_type?.name || "Space",
+                defaultName:
+                  spaceType?.name || item.space_type?.name || "Space",
+                components: [],
+                expanded: true,
+              };
+              spaceMap.set(spaceKey, space);
+            }
           }
 
-          const componentKey = `${item.space_type_id}-${
-            item.component_type_id
-          }-${item.component_variant_id || "default"}`;
+          if (!space) return;
+
+          // Create component key using the resolved space key (unique per space instance)
+          const componentKey = `${spaceKey}-${item.component_type_id}`;
           let component = componentMap.get(componentKey);
           if (!component) {
             const componentType = masterData.component_types.find(
               (ct) => ct.id === item.component_type_id
             );
-            const variant = item.component_variant_id
-              ? masterData.component_variants.find(
-                  (v) => v.id === item.component_variant_id
-                )
-              : null;
 
             component = {
               id: generateId(),
               componentTypeId: item.component_type_id,
-              variantId: item.component_variant_id,
               name:
                 componentType?.name || item.component_type?.name || "Component",
-              variantName: variant?.name || item.component_variant?.name,
               lineItems: [],
               expanded: true,
             };
@@ -183,13 +197,19 @@ export default function EditTemplatePage() {
             space.components.push(component);
           }
 
-          const costItem = masterData.cost_items.find(
-            (ci) => ci.id === item.cost_item_id
+          const costItemsData =
+            masterData.quotation_cost_items || masterData.cost_items || [];
+          const categoriesData =
+            masterData.quotation_cost_item_categories ||
+            masterData.cost_item_categories ||
+            [];
+          const costItem = costItemsData.find(
+            (ci) =>
+              ci.id === item.cost_item_id ||
+              ci.id === item.quotation_cost_item_id
           );
           const category = costItem?.category_id
-            ? masterData.cost_item_categories.find(
-                (c) => c.id === costItem.category_id
-              )
+            ? categoriesData.find((c) => c.id === costItem.category_id)
             : null;
 
           component.lineItems.push({
@@ -210,7 +230,10 @@ export default function EditTemplatePage() {
               0,
             defaultRate:
               costItem?.default_rate || item.cost_item?.default_rate || 0,
-            groupName: item.group_name || "Other",
+            companyCost:
+              costItem?.company_cost || item.cost_item?.company_cost || 0,
+            vendorCost:
+              costItem?.vendor_cost || item.cost_item?.vendor_cost || 0,
           });
         });
 
@@ -228,19 +251,6 @@ export default function EditTemplatePage() {
 
     fetchTemplate();
   }, [templateId, isLoadingMasterData, masterData]);
-
-  // Get variants for component
-  const getVariantsForComponent = useCallback(
-    (componentTypeId: string) => {
-      if (masterData.variants_by_component?.[componentTypeId]) {
-        return masterData.variants_by_component[componentTypeId];
-      }
-      return masterData.component_variants.filter(
-        (v) => v.component_type_id === componentTypeId
-      );
-    },
-    [masterData]
-  );
 
   // Space operations
   const addSpace = (spaceType: SpaceType) => {
@@ -282,6 +292,183 @@ export default function EditTemplatePage() {
     );
   };
 
+  // Collapse/Expand all spaces and components
+  const collapseAll = () => {
+    setSpaces(
+      spaces.map((space) => ({
+        ...space,
+        expanded: false,
+        components: space.components.map((comp) => ({
+          ...comp,
+          expanded: false,
+        })),
+      }))
+    );
+  };
+
+  const expandAll = () => {
+    setSpaces(
+      spaces.map((space) => ({
+        ...space,
+        expanded: true,
+        components: space.components.map((comp) => ({
+          ...comp,
+          expanded: true,
+        })),
+      }))
+    );
+  };
+
+  // Check if any spaces are collapsed
+  const hasCollapsedSpaces = spaces.some(
+    (s) => !s.expanded || s.components.some((c) => !c.expanded)
+  );
+
+  // Move space up/down
+  const moveSpace = (spaceId: string, direction: "up" | "down") => {
+    const index = spaces.findIndex((s) => s.id === spaceId);
+    if (index === -1) return;
+
+    const newIndex = direction === "up" ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= spaces.length) return;
+
+    const newSpaces = [...spaces];
+    [newSpaces[index], newSpaces[newIndex]] = [
+      newSpaces[newIndex],
+      newSpaces[index],
+    ];
+    setSpaces(newSpaces);
+  };
+
+  // Move component up/down within a space
+  const moveComponent = (
+    spaceId: string,
+    componentId: string,
+    direction: "up" | "down"
+  ) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id !== spaceId) return space;
+
+        const compIndex = space.components.findIndex(
+          (c) => c.id === componentId
+        );
+        if (compIndex === -1) return space;
+
+        const newIndex = direction === "up" ? compIndex - 1 : compIndex + 1;
+        if (newIndex < 0 || newIndex >= space.components.length) return space;
+
+        const newComponents = [...space.components];
+        [newComponents[compIndex], newComponents[newIndex]] = [
+          newComponents[newIndex],
+          newComponents[compIndex],
+        ];
+        return { ...space, components: newComponents };
+      })
+    );
+  };
+
+  // Drag & drop handlers for spaces
+  const handleSpaceDragStart = (spaceId: string) => {
+    setDraggedSpaceId(spaceId);
+  };
+
+  const handleSpaceDragOver = (e: React.DragEvent, spaceId: string) => {
+    e.preventDefault();
+    if (draggedSpaceId && draggedSpaceId !== spaceId) {
+      setDragOverSpaceId(spaceId);
+    }
+  };
+
+  const handleSpaceDragLeave = () => {
+    setDragOverSpaceId(null);
+  };
+
+  const handleSpaceDrop = (targetSpaceId: string) => {
+    if (!draggedSpaceId || draggedSpaceId === targetSpaceId) {
+      setDraggedSpaceId(null);
+      setDragOverSpaceId(null);
+      return;
+    }
+
+    const draggedIndex = spaces.findIndex((s) => s.id === draggedSpaceId);
+    const targetIndex = spaces.findIndex((s) => s.id === targetSpaceId);
+
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    const newSpaces = [...spaces];
+    const [draggedSpace] = newSpaces.splice(draggedIndex, 1);
+    newSpaces.splice(targetIndex, 0, draggedSpace);
+
+    setSpaces(newSpaces);
+    setDraggedSpaceId(null);
+    setDragOverSpaceId(null);
+  };
+
+  const handleSpaceDragEnd = () => {
+    setDraggedSpaceId(null);
+    setDragOverSpaceId(null);
+  };
+
+  // Duplicate space with all components and line items
+  const duplicateSpace = (spaceId: string) => {
+    const spaceIndex = spaces.findIndex((s) => s.id === spaceId);
+    if (spaceIndex === -1) return;
+
+    const originalSpace = spaces[spaceIndex];
+    const existingCount = spaces.filter(
+      (s) => s.spaceTypeId === originalSpace.spaceTypeId
+    ).length;
+
+    const newSpace: BuilderSpace = {
+      id: generateId(),
+      spaceTypeId: originalSpace.spaceTypeId,
+      name: originalSpace.name,
+      defaultName: `${originalSpace.name} ${existingCount + 1}`,
+      components: originalSpace.components.map((comp) => ({
+        ...comp,
+        id: generateId(),
+        lineItems: comp.lineItems.map((item) => ({
+          ...item,
+          id: generateId(),
+        })),
+      })),
+      expanded: true,
+    };
+
+    const newSpaces = [...spaces];
+    newSpaces.splice(spaceIndex + 1, 0, newSpace);
+    setSpaces(newSpaces);
+  };
+
+  // Duplicate component with all line items
+  const duplicateComponent = (spaceId: string, componentId: string) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id !== spaceId) return space;
+
+        const compIndex = space.components.findIndex(
+          (c) => c.id === componentId
+        );
+        if (compIndex === -1) return space;
+
+        const originalComp = space.components[compIndex];
+        const newComponent: BuilderComponent = {
+          ...originalComp,
+          id: generateId(),
+          lineItems: originalComp.lineItems.map((item) => ({
+            ...item,
+            id: generateId(),
+          })),
+        };
+
+        const newComponents = [...space.components];
+        newComponents.splice(compIndex + 1, 0, newComponent);
+        return { ...space, components: newComponents };
+      })
+    );
+  };
+
   // Component operations
   const addComponent = (spaceId: string, componentType: ComponentType) => {
     const newComponent: BuilderComponent = {
@@ -300,44 +487,7 @@ export default function EditTemplatePage() {
         return space;
       })
     );
-
-    const variants = getVariantsForComponent(componentType.id);
-    if (variants.length > 0) {
-      setShowSelectVariantModal({
-        spaceId,
-        componentId: newComponent.id,
-        componentTypeId: componentType.id,
-      });
-    }
     setShowAddComponentModal(null);
-  };
-
-  const setComponentVariant = (
-    spaceId: string,
-    componentId: string,
-    variant: ComponentVariant
-  ) => {
-    setSpaces(
-      spaces.map((space) => {
-        if (space.id === spaceId) {
-          return {
-            ...space,
-            components: space.components.map((comp) => {
-              if (comp.id === componentId) {
-                return {
-                  ...comp,
-                  variantId: variant.id,
-                  variantName: variant.name,
-                };
-              }
-              return comp;
-            }),
-          };
-        }
-        return space;
-      })
-    );
-    setShowSelectVariantModal(null);
   };
 
   const deleteComponent = (spaceId: string, componentId: string) => {
@@ -391,44 +541,17 @@ export default function EditTemplatePage() {
     );
   };
 
-  // Update component variant
-  const updateComponentVariant = (
-    spaceId: string,
-    componentId: string,
-    variantId: string,
-    variantName: string
-  ) => {
-    setSpaces(
-      spaces.map((space) => {
-        if (space.id === spaceId) {
-          return {
-            ...space,
-            components: space.components.map((c) =>
-              c.id === componentId
-                ? {
-                    ...c,
-                    variantId: variantId || undefined,
-                    variantName: variantName || undefined,
-                  }
-                : c
-            ),
-          };
-        }
-        return space;
-      })
-    );
-  };
-
   // Cost item operations
   const addCostItem = (
     spaceId: string,
     componentId: string,
-    costItem: CostItem,
-    groupName: string
+    costItem: CostItem
   ) => {
-    const category = masterData.cost_item_categories.find(
-      (c) => c.id === costItem.category_id
-    );
+    const categoriesData =
+      masterData.quotation_cost_item_categories ||
+      masterData.cost_item_categories ||
+      [];
+    const category = categoriesData.find((c) => c.id === costItem.category_id);
 
     const newLineItem: LineItem = {
       id: generateId(),
@@ -439,7 +562,8 @@ export default function EditTemplatePage() {
       unitCode: costItem.unit_code,
       rate: costItem.default_rate,
       defaultRate: costItem.default_rate,
-      groupName,
+      companyCost: costItem.company_cost || 0,
+      vendorCost: costItem.vendor_cost || 0,
     };
 
     setSpaces(
@@ -528,7 +652,9 @@ export default function EditTemplatePage() {
     setIsSaving(true);
 
     try {
+      // Include client_id so the API can map spaces to line items
       const templateSpaces = spaces.map((space, idx) => ({
+        client_id: space.id, // Frontend-generated ID for mapping
         space_type_id: space.spaceTypeId,
         default_name: space.defaultName,
         display_order: idx,
@@ -541,11 +667,10 @@ export default function EditTemplatePage() {
         space.components.forEach((component) => {
           component.lineItems.forEach((lineItem) => {
             templateLineItems.push({
+              client_space_id: space.id, // Reference to specific space instance
               space_type_id: space.spaceTypeId,
               component_type_id: component.componentTypeId,
-              component_variant_id: component.variantId,
               cost_item_id: lineItem.costItemId,
-              group_name: lineItem.groupName,
               rate:
                 lineItem.rate !== lineItem.defaultRate ? lineItem.rate : null,
               display_order: lineItemOrder++,
@@ -743,9 +868,66 @@ export default function EditTemplatePage() {
             </div>
           </div>
 
+          {/* Spaces Header with Collapse All */}
+          {spaces.length > 0 && (
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-slate-700">
+                  {spaces.length} Space{spaces.length !== 1 ? "s" : ""}
+                </span>
+                <span className="text-xs text-slate-400">
+                  • {spaces.reduce((sum, s) => sum + s.components.length, 0)}{" "}
+                  Components
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={hasCollapsedSpaces ? expandAll : collapseAll}
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
+                >
+                  {hasCollapsedSpaces ? (
+                    <>
+                      <svg
+                        className="w-3.5 h-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                        />
+                      </svg>
+                      Expand All
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        className="w-3.5 h-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"
+                        />
+                      </svg>
+                      Collapse All
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Spaces */}
           <div className="space-y-4">
-            {spaces.map((space) => (
+            {spaces.map((space, spaceIndex) => (
               <SpaceCard
                 key={space.id}
                 space={space}
@@ -763,18 +945,6 @@ export default function EditTemplatePage() {
                 onUpdateComponentName={(componentId, name) =>
                   updateComponentName(space.id, componentId, name)
                 }
-                onUpdateComponentVariant={(
-                  componentId,
-                  variantId,
-                  variantName
-                ) =>
-                  updateComponentVariant(
-                    space.id,
-                    componentId,
-                    variantId,
-                    variantName
-                  )
-                }
                 masterData={masterData}
                 onAddCostItem={(componentId) =>
                   setShowAddCostItemModal({ spaceId: space.id, componentId })
@@ -786,6 +956,25 @@ export default function EditTemplatePage() {
                   deleteLineItem(space.id, componentId, lineItemId)
                 }
                 formatCurrency={formatCurrency}
+                // Drag and drop
+                onDragStart={() => handleSpaceDragStart(space.id)}
+                onDragOver={(e) => handleSpaceDragOver(e, space.id)}
+                onDragLeave={handleSpaceDragLeave}
+                onDrop={() => handleSpaceDrop(space.id)}
+                onDragEnd={handleSpaceDragEnd}
+                isDragging={draggedSpaceId === space.id}
+                isDragOver={dragOverSpaceId === space.id}
+                // Duplicate
+                onDuplicateSpace={() => duplicateSpace(space.id)}
+                onDuplicateComponent={(componentId) =>
+                  duplicateComponent(space.id, componentId)
+                }
+                onMoveComponentUp={(componentId) =>
+                  moveComponent(space.id, componentId, "up")
+                }
+                onMoveComponentDown={(componentId) =>
+                  moveComponent(space.id, componentId, "down")
+                }
               />
             ))}
 
@@ -831,37 +1020,25 @@ export default function EditTemplatePage() {
         />
       )}
 
-      {showSelectVariantModal && (
-        <SelectVariantModal
-          isOpen={true}
-          onClose={() => setShowSelectVariantModal(null)}
-          onSelect={(variant) =>
-            setComponentVariant(
-              showSelectVariantModal.spaceId,
-              showSelectVariantModal.componentId,
-              variant
-            )
-          }
-          variants={getVariantsForComponent(
-            showSelectVariantModal.componentTypeId
-          )}
-        />
-      )}
-
       {showAddCostItemModal && (
         <AddCostItemModal
           isOpen={true}
           onClose={() => setShowAddCostItemModal(null)}
-          onAdd={(costItem, groupName) =>
+          onAdd={(costItem) =>
             addCostItem(
               showAddCostItemModal.spaceId,
               showAddCostItemModal.componentId,
-              costItem,
-              groupName
+              costItem
             )
           }
-          costItems={masterData.cost_items}
-          categories={masterData.cost_item_categories}
+          costItems={
+            masterData.quotation_cost_items || masterData.cost_items || []
+          }
+          categories={
+            masterData.quotation_cost_item_categories ||
+            masterData.cost_item_categories ||
+            []
+          }
         />
       )}
     </div>

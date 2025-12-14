@@ -46,7 +46,7 @@ export function BuilderSidebar({
         spaceSum +
         comp.lineItems.reduce((compSum, item) => {
           const measureType = getMeasurementType(item.unitCode);
-          const unit = item.measurementUnit || "ft";
+          const unit = item.measurementUnit || "mm";
 
           switch (measureType) {
             case "area":

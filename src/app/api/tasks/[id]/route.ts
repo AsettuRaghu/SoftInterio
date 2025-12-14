@@ -141,21 +141,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         case "lead":
           const { data: lead } = await supabase
             .from("leads")
-            .select("client_name, lead_number")
+            .select("lead_number, client:clients(name)")
             .eq("id", task.related_id)
             .single();
+          const leadClientName = (lead?.client as { name?: string } | null)?.name;
           relatedName = lead
-            ? `${lead.lead_number} - ${lead.client_name}`
+            ? `${lead.lead_number} - ${leadClientName || "N/A"}`
             : null;
           break;
         case "quotation":
           const { data: quotation } = await supabase
             .from("quotations")
-            .select("quotation_number, client_name")
+            .select(`
+              quotation_number,
+              client:clients!client_id(name)
+            `)
             .eq("id", task.related_id)
             .single();
+          const clientName = (quotation?.client as { name?: string } | null)?.name;
           relatedName = quotation
-            ? `${quotation.quotation_number} - ${quotation.client_name}`
+            ? `${quotation.quotation_number} - ${clientName || "N/A"}`
             : null;
           break;
         case "project":

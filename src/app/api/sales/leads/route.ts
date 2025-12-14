@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
     const stage = searchParams.get("stage") as LeadStage | null;
+    const stages = searchParams.get("stages"); // Comma-separated list of stages
     const assignedTo = searchParams.get("assigned_to");
     const search = searchParams.get("search");
     const sortBy = searchParams.get("sort_by") || "created_at";
@@ -77,7 +78,14 @@ export async function GET(request: NextRequest) {
       .eq("tenant_id", userData.tenant_id);
 
     // Apply filters
-    if (stage) {
+    if (stages) {
+      // Multiple stages filter (comma-separated)
+      const stageList = stages.split(",").map(s => s.trim()).filter(Boolean);
+      if (stageList.length > 0) {
+        query = query.in("stage", stageList);
+      }
+    } else if (stage) {
+      // Single stage filter
       query = query.eq("stage", stage);
     }
 

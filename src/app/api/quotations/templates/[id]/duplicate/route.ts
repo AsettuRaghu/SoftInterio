@@ -43,7 +43,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         .eq("template_id", id)
         .order("display_order", { ascending: true }),
       supabase
-        .from("template_line_items")
+        .from("quotation_template_line_items")
         .select("*")
         .eq("template_id", id)
         .order("display_order", { ascending: true }),
@@ -76,33 +76,42 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Copy template spaces
+    // Copy template spaces and build a mapping from old space ID to new space ID
+    // This is critical for properly linking line items to the correct space instances
+    const spaceIdMapping: Record<string, string> = {};
+    
     if (spacesResult.data && spacesResult.data.length > 0) {
-      const newSpaces = spacesResult.data.map((space) => ({
-        template_id: newTemplate.id,
-        space_type_id: space.space_type_id,
-        default_name: space.default_name,
-        display_order: space.display_order,
-      }));
+      // Insert spaces one by one to get the new IDs for mapping
+      for (const space of spacesResult.data) {
+        const { data: newSpace, error: spaceError } = await supabase
+          .from("template_spaces")
+          .insert({
+            template_id: newTemplate.id,
+            space_type_id: space.space_type_id,
+            default_name: space.default_name,
+            display_order: space.display_order,
+          })
+          .select("id")
+          .single();
 
-      const { error: spacesError } = await supabase
-        .from("template_spaces")
-        .insert(newSpaces);
-
-      if (spacesError) {
-        console.error("Error copying template spaces:", spacesError);
+        if (spaceError) {
+          console.error("Error copying template space:", spaceError);
+        } else if (newSpace) {
+          // Map old space ID to new space ID
+          spaceIdMapping[space.id] = newSpace.id;
+        }
       }
     }
 
-    // Copy template line items
+    // Copy template line items with proper template_space_id mapping
     if (lineItemsResult.data && lineItemsResult.data.length > 0) {
       const newLineItems = lineItemsResult.data.map((item) => ({
         template_id: newTemplate.id,
         space_type_id: item.space_type_id,
+        // Map the template_space_id to the new space's ID
+        template_space_id: item.template_space_id ? spaceIdMapping[item.template_space_id] || null : null,
         component_type_id: item.component_type_id,
-        component_variant_id: item.component_variant_id,
         cost_item_id: item.cost_item_id,
-        group_name: item.group_name,
         rate: item.rate,
         display_order: item.display_order,
         notes: item.notes,
@@ -110,7 +119,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }));
 
       const { error: itemsError } = await supabase
-        .from("template_line_items")
+        .from("quotation_template_line_items")
         .insert(newLineItems);
 
       if (itemsError) {
@@ -126,14 +135,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         .eq("template_id", newTemplate.id)
         .order("display_order", { ascending: true }),
       supabase
-        .from("template_line_items")
+        .from("quotation_template_line_items")
         .select(
           `
           *,
           space_type:space_types(id, name, slug),
           component_type:component_types(id, name, slug),
-          component_variant:component_variants(id, name, slug),
-          cost_item:cost_items(id, name, slug, unit_code, default_rate, category:cost_item_categories(id, name, slug, color))
+          cost_item:quotation_cost_items(id, name, slug, unit_code, default_rate, category:quotation_cost_item_categories(id, name, slug, color))
         `
         )
         .eq("template_id", newTemplate.id)

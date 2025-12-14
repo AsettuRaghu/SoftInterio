@@ -49,14 +49,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         .eq("template_id", id)
         .order("display_order", { ascending: true }),
       supabase
-        .from("template_line_items")
+        .from("quotation_template_line_items")
         .select(
           `
           *,
           space_type:space_types(id, name, slug),
           component_type:component_types(id, name, slug, icon),
-          component_variant:component_variants(id, name, slug),
-          cost_item:cost_items(id, name, slug, unit_code, default_rate, quality_tier, category:cost_item_categories(id, name, slug, color, icon))
+          cost_item:quotation_cost_items(id, name, slug, unit_code, default_rate, quality_tier, category:quotation_cost_item_categories(id, name, slug, color, icon))
         `
         )
         .eq("template_id", id)
@@ -172,6 +171,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Map to track client space IDs to database space IDs
+    const spaceIdMap = new Map<string, string>();
+
     // Update template spaces if provided
     if (spaces !== undefined) {
       // Delete existing spaces
@@ -186,31 +188,52 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           display_order: space.display_order ?? index,
         }));
 
-        await supabase.from("template_spaces").insert(templateSpaces);
+        const { data: insertedSpaces } = await supabase
+          .from("template_spaces")
+          .insert(templateSpaces)
+          .select("id, space_type_id, display_order");
+
+        // Build the mapping from client space index to database space ID
+        insertedSpaces?.forEach((dbSpace) => {
+          const clientSpace = spaces.find(
+            (s, idx) =>
+              s.space_type_id === dbSpace.space_type_id &&
+              (s.display_order ?? idx) === dbSpace.display_order
+          );
+          if (clientSpace && clientSpace.client_id) {
+            spaceIdMap.set(clientSpace.client_id, dbSpace.id);
+          }
+        });
       }
     }
 
     // Update template line items if provided
     if (line_items !== undefined) {
       // Delete existing line items
-      await supabase.from("template_line_items").delete().eq("template_id", id);
+      await supabase.from("quotation_template_line_items").delete().eq("template_id", id);
 
       // Insert new line items
       if (Array.isArray(line_items) && line_items.length > 0) {
-        const templateLineItems = line_items.map((item, index) => ({
-          template_id: id,
-          space_type_id: item.space_type_id || null,
-          component_type_id: item.component_type_id || null,
-          component_variant_id: item.component_variant_id || null,
-          cost_item_id: item.cost_item_id,
-          group_name: item.group_name || null,
-          rate: item.rate || null,
-          display_order: item.display_order ?? index,
-          notes: item.notes || null,
-          metadata: item.metadata || null,
-        }));
+        const templateLineItems = line_items.map((item, index) => {
+          // Try to resolve template_space_id from client_space_id
+          const templateSpaceId = item.client_space_id
+            ? spaceIdMap.get(item.client_space_id) || null
+            : null;
 
-        await supabase.from("template_line_items").insert(templateLineItems);
+          return {
+            template_id: id,
+            template_space_id: templateSpaceId,
+            space_type_id: item.space_type_id || null,
+            component_type_id: item.component_type_id || null,
+            cost_item_id: item.cost_item_id,
+            rate: item.rate || null,
+            display_order: item.display_order ?? index,
+            notes: item.notes || null,
+            metadata: item.metadata || null,
+          };
+        });
+
+        await supabase.from("quotation_template_line_items").insert(templateLineItems);
       }
     }
 
@@ -222,14 +245,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         .eq("template_id", id)
         .order("display_order", { ascending: true }),
       supabase
-        .from("template_line_items")
+        .from("quotation_template_line_items")
         .select(
           `
           *,
           space_type:space_types(id, name, slug),
           component_type:component_types(id, name, slug),
-          component_variant:component_variants(id, name, slug),
-          cost_item:cost_items(id, name, slug, unit_code, default_rate, category:cost_item_categories(id, name, slug, color))
+          cost_item:quotation_cost_items(id, name, slug, unit_code, default_rate, category:quotation_cost_item_categories(id, name, slug, color))
         `
         )
         .eq("template_id", id)

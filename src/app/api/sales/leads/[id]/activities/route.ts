@@ -8,6 +8,73 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
+// GET /api/sales/leads/[id]/activities - Get all activities for a lead
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
+    const { id: leadId } = await params;
+    const supabase = await createClient();
+    const supabaseAdmin = createAdminClient();
+
+    // Get user's tenant first for security
+    const { data: userData } = await supabase
+      .from("users")
+      .select("tenant_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!userData?.tenant_id) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // Verify the lead exists and belongs to the tenant
+    const { data: lead, error: leadError } = await supabaseAdmin
+      .from("leads")
+      .select("id, tenant_id")
+      .eq("id", leadId)
+      .eq("tenant_id", userData.tenant_id)
+      .single();
+
+    if (leadError || !lead) {
+      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+
+    // Fetch activities
+    const { data: activities, error: activitiesError } = await supabaseAdmin
+      .from("lead_activities")
+      .select(
+        `
+        *,
+        created_user:users!lead_activities_created_by_fkey(id, name, avatar_url)
+      `
+      )
+      .eq("lead_id", leadId)
+      .order("created_at", { ascending: false });
+
+    if (activitiesError) {
+      console.error("Error fetching activities:", activitiesError);
+      return NextResponse.json(
+        { error: "Failed to fetch activities" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ activities: activities || [] });
+  } catch (error) {
+    console.error("Get activities API error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
 // POST /api/sales/leads/[id]/activities - Create a new activity
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {

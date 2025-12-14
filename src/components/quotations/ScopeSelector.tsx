@@ -356,11 +356,6 @@ export function ScopeSelector({
                           <span className="text-sm text-slate-600">
                             {comp.name}
                           </span>
-                          {comp.variantName && (
-                            <span className="text-xs text-slate-400">
-                              ({comp.variantName})
-                            </span>
-                          )}
                         </label>
                       );
                     })}

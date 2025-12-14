@@ -416,10 +416,7 @@ export default function QuotationTemplatesPage() {
     <PageLayout>
       <PageHeader
         title="Quotation Templates"
-        breadcrumbs={[
-          { label: "Quotations", href: "/dashboard/quotations" },
-          { label: "Templates" },
-        ]}
+        breadcrumbs={[{ label: "Quotations" }, { label: "Templates" }]}
         actions={
           <div className="flex items-center gap-2">
             {/* View Mode Toggle */}
@@ -473,81 +470,57 @@ export default function QuotationTemplatesPage() {
       />
 
       <PageContent>
-        {/* Quality Tier Tabs */}
-        <div className="mb-4 flex items-center gap-4">
-          <span className="text-sm text-slate-500">Quality Tier:</span>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setQualityTierFilter("")}
-              className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
-                qualityTierFilter === ""
-                  ? "bg-slate-800 text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              All ({stats.total})
-            </button>
-            {["luxury", "premium", "standard", "basic"].map((tier) => (
+        {/* Toolbar with Search and Filters */}
+        <div className="mb-4 flex items-center gap-3">
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-xs">
+            <input
+              type="text"
+              placeholder="Search by name, property type, or tier..."
+              value={searchValue}
+              onChange={(e) => setSearchValue(e.target.value)}
+              className="w-full pl-3 pr-8 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            />
+            {searchValue && (
               <button
-                key={tier}
-                onClick={() =>
-                  setQualityTierFilter(qualityTierFilter === tier ? "" : tier)
-                }
-                className={`px-3 py-1.5 text-sm rounded-full transition-colors flex items-center gap-1.5 ${
-                  qualityTierFilter === tier
-                    ? QUALITY_TIER_COLORS[tier]
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
+                onClick={() => setSearchValue("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-slate-100"
               >
-                <span
-                  className={`w-2 h-2 rounded-full ${QUALITY_TIER_DOT_COLORS[tier]}`}
-                />
-                {QUALITY_TIER_LABELS[tier]}
-                {stats.tierCounts[tier] && (
-                  <span className="text-xs opacity-70">
-                    ({stats.tierCounts[tier]})
-                  </span>
-                )}
+                <span className="text-slate-400 text-xs">✕</span>
               </button>
-            ))}
+            )}
           </div>
-        </div>
 
-        {/* Property Type Pills */}
-        {Object.keys(stats.propertyTypeCounts).length > 0 && (
-          <div className="mb-4 flex items-center gap-4">
-            <span className="text-sm text-slate-500">Property:</span>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setPropertyTypeFilter("")}
-                className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
-                  propertyTypeFilter === ""
-                    ? "bg-slate-600 text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                All
-              </button>
+          {/* Quality Tier Filter Dropdown */}
+          <select
+            value={qualityTierFilter}
+            onChange={(e) => setQualityTierFilter(e.target.value)}
+            className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 cursor-pointer"
+          >
+            <option value="">All Tiers ({stats.total})</option>
+            {["luxury", "premium", "standard", "basic"].map((tier) => (
+              <option key={tier} value={tier}>
+                {QUALITY_TIER_LABELS[tier]} ({stats.tierCounts[tier] || 0})
+              </option>
+            ))}
+          </select>
+
+          {/* Property Type Filter Dropdown */}
+          {Object.keys(stats.propertyTypeCounts).length > 0 && (
+            <select
+              value={propertyTypeFilter}
+              onChange={(e) => setPropertyTypeFilter(e.target.value)}
+              className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 cursor-pointer"
+            >
+              <option value="">All Properties</option>
               {Object.entries(stats.propertyTypeCounts).map(([type, count]) => (
-                <button
-                  key={type}
-                  onClick={() =>
-                    setPropertyTypeFilter(
-                      propertyTypeFilter === type ? "" : type
-                    )
-                  }
-                  className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
-                    propertyTypeFilter === type
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
+                <option key={type} value={type}>
                   {PROPERTY_TYPE_LABELS[type] || type} ({count})
-                </button>
+                </option>
               ))}
-            </div>
-          </div>
-        )}
+            </select>
+          )}
+        </div>
 
         {viewMode === "cards" ? (
           /* Cards View */
@@ -654,10 +627,7 @@ export default function QuotationTemplatesPage() {
             columns={columns}
             keyExtractor={(t) => t.id}
             isLoading={isLoading}
-            showToolbar={true}
-            searchValue={searchValue}
-            onSearchChange={setSearchValue}
-            searchPlaceholder="Search by name, property type, or tier..."
+            showToolbar={false}
             sortable={true}
             sortState={sortState}
             onSort={handleSort}
@@ -667,7 +637,9 @@ export default function QuotationTemplatesPage() {
             emptyState={{
               title: "No templates found",
               description:
-                "Create your first quotation template to get started.",
+                qualityTierFilter || propertyTypeFilter || searchValue
+                  ? "No templates match your filters. Try a different filter."
+                  : "Create your first quotation template to get started.",
               icon: <RectangleStackIcon className="w-6 h-6 text-slate-400" />,
             }}
           />

@@ -3,12 +3,7 @@ import { ReactNode } from "react";
 // Icons as components for cleaner code
 export const Icons = {
   dashboard: (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="#64748b"
-    >
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#64748b">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -18,12 +13,7 @@ export const Icons = {
     </svg>
   ),
   sales: (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="#64748b"
-    >
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#64748b">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -33,12 +23,7 @@ export const Icons = {
     </svg>
   ),
   projects: (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="#64748b"
-    >
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#64748b">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -48,12 +33,7 @@ export const Icons = {
     </svg>
   ),
   quotations: (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="#64748b"
-    >
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#64748b">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -63,12 +43,7 @@ export const Icons = {
     </svg>
   ),
   stock: (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="#64748b"
-    >
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#64748b">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -78,12 +53,7 @@ export const Icons = {
     </svg>
   ),
   finance: (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="#64748b"
-    >
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#64748b">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -93,12 +63,7 @@ export const Icons = {
     </svg>
   ),
   tasks: (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="#64748b"
-    >
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#64748b">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -108,12 +73,7 @@ export const Icons = {
     </svg>
   ),
   calendar: (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="#64748b"
-    >
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#64748b">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -123,12 +83,7 @@ export const Icons = {
     </svg>
   ),
   documents: (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="#64748b"
-    >
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#64748b">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -138,12 +93,7 @@ export const Icons = {
     </svg>
   ),
   library: (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="#64748b"
-    >
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#64748b">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -153,12 +103,7 @@ export const Icons = {
     </svg>
   ),
   reports: (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="#64748b"
-    >
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#64748b">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -168,12 +113,7 @@ export const Icons = {
     </svg>
   ),
   settings: (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="#64748b"
-    >
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#64748b">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -189,12 +129,7 @@ export const Icons = {
     </svg>
   ),
   chevronDown: (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="#64748b"
-    >
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="#64748b">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -204,12 +139,7 @@ export const Icons = {
     </svg>
   ),
   chevronRight: (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="#64748b"
-    >
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="#64748b">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -295,6 +225,11 @@ export const navigationConfig: NavigationItem[] = [
         name: "Templates",
         href: "/dashboard/quotations/templates",
         // Uses quotations.view for now; can change to quotations.templates.view after running migration 010
+        permission: "quotations.view",
+      },
+      {
+        name: "Quotation Config",
+        href: "/dashboard/quotations/config",
         permission: "quotations.view",
       },
     ],
@@ -405,11 +340,6 @@ export const navigationConfig: NavigationItem[] = [
         name: "Team",
         href: "/dashboard/settings/team",
         permission: "settings.team.view",
-      },
-      {
-        name: "Quotations Config",
-        href: "/dashboard/settings/quotations-config",
-        permission: "quotations.view",
       },
       {
         name: "Subscription",

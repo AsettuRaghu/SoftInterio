@@ -33,12 +33,6 @@ interface ComponentType {
   icon?: string;
 }
 
-interface ComponentVariant {
-  id: string;
-  name: string;
-  slug: string;
-}
-
 interface SpaceType {
   id: string;
   name: string;
@@ -60,16 +54,13 @@ interface TemplateLineItem {
   template_id: string;
   space_type_id?: string;
   component_type_id?: string;
-  component_variant_id?: string;
   cost_item_id: string;
-  group_name?: string;
   rate?: number;
   display_order: number;
   notes?: string;
   // Joined relations
   space_type?: SpaceType;
   component_type?: ComponentType;
-  component_variant?: ComponentVariant;
   cost_item?: CostItem;
 }
 
@@ -144,16 +135,16 @@ interface ComponentGroup {
   componentTypeId: string;
   componentTypeName: string;
   componentTypeIcon?: string;
-  variantId?: string;
-  variantName?: string;
   lineItems: TemplateLineItem[];
 }
 
 interface SpaceGroup {
+  templateSpaceId: string; // Database ID of the template_space instance
   spaceTypeId: string;
   spaceTypeName: string;
   spaceTypeIcon?: string;
   defaultName?: string;
+  displayOrder: number;
   components: ComponentGroup[];
   directLineItems: TemplateLineItem[]; // Line items not grouped under a component
 }
@@ -168,74 +159,100 @@ function organizeLineItems(
   const spaceMap = new Map<string, SpaceGroup>();
   const ungroupedLineItems: TemplateLineItem[] = [];
 
-  // Initialize space groups from template_spaces
+  // Initialize space groups from template_spaces - use space.id as the key
+  // This ensures each space instance (e.g., Bedroom 1, Bedroom 2) is separate
   spaces.forEach((space) => {
-    spaceMap.set(space.space_type_id, {
+    spaceMap.set(space.id, {
+      templateSpaceId: space.id,
       spaceTypeId: space.space_type_id,
       spaceTypeName: space.space_type?.name || space.space_type_id,
       spaceTypeIcon: space.space_type?.icon,
       defaultName: space.default_name,
+      displayOrder: space.display_order,
       components: [],
       directLineItems: [],
     });
   });
 
-  // Group line items
+  // Group line items by template_space_id first, then fall back to space_type_id
   lineItems.forEach((item) => {
-    if (item.space_type_id) {
-      let spaceGroup = spaceMap.get(item.space_type_id);
-
-      // Create space group if it doesn't exist (in case spaces array is incomplete)
-      if (!spaceGroup) {
-        spaceGroup = {
-          spaceTypeId: item.space_type_id,
-          spaceTypeName: item.space_type?.name || item.space_type_id,
-          spaceTypeIcon: item.space_type?.icon,
-          components: [],
-          directLineItems: [],
-        };
-        spaceMap.set(item.space_type_id, spaceGroup);
-      }
-
-      if (item.component_type_id) {
-        // Find or create component group within space
-        const componentKey = `${item.component_type_id}-${
-          item.component_variant_id || "default"
-        }`;
-        let componentGroup = spaceGroup.components.find(
-          (c) =>
-            c.componentTypeId === item.component_type_id &&
-            c.variantId === item.component_variant_id
-        );
-
-        if (!componentGroup) {
-          componentGroup = {
-            componentTypeId: item.component_type_id,
-            componentTypeName:
-              item.component_type?.name || item.component_type_id,
-            componentTypeIcon: item.component_type?.icon,
-            variantId: item.component_variant_id,
-            variantName: item.component_variant?.name,
-            lineItems: [],
-          };
-          spaceGroup.components.push(componentGroup);
-        }
-
-        componentGroup.lineItems.push(item);
-      } else {
-        // Line item directly under space (no component)
-        spaceGroup.directLineItems.push(item);
-      }
-    } else {
-      // No space - ungrouped
-      ungroupedLineItems.push(item);
+    // First try to match by template_space_id (new schema)
+    const templateSpaceId = (item as any).template_space_id;
+    if (templateSpaceId && spaceMap.has(templateSpaceId)) {
+      const spaceGroup = spaceMap.get(templateSpaceId)!;
+      addLineItemToSpaceGroup(spaceGroup, item);
+      return;
     }
+
+    // Fall back to space_type_id matching (legacy)
+    if (item.space_type_id) {
+      // Find a space group with matching space_type_id
+      // If there are multiple, use the first one (legacy behavior)
+      const matchingSpace = Array.from(spaceMap.values()).find(
+        (sg) => sg.spaceTypeId === item.space_type_id
+      );
+
+      if (matchingSpace) {
+        addLineItemToSpaceGroup(matchingSpace, item);
+        return;
+      }
+
+      // Create a new space group if none exists (in case spaces array is incomplete)
+      const newSpaceGroup: SpaceGroup = {
+        templateSpaceId: `legacy-${item.space_type_id}`,
+        spaceTypeId: item.space_type_id,
+        spaceTypeName: item.space_type?.name || item.space_type_id,
+        spaceTypeIcon: item.space_type?.icon,
+        displayOrder: spaceMap.size,
+        components: [],
+        directLineItems: [],
+      };
+      spaceMap.set(newSpaceGroup.templateSpaceId, newSpaceGroup);
+      addLineItemToSpaceGroup(newSpaceGroup, item);
+      return;
+    }
+
+    // No space - ungrouped
+    ungroupedLineItems.push(item);
   });
 
+  // Sort by display order
+  const sortedGroups = Array.from(spaceMap.values()).sort(
+    (a, b) => a.displayOrder - b.displayOrder
+  );
+
   return {
-    spaceGroups: Array.from(spaceMap.values()),
+    spaceGroups: sortedGroups,
     ungroupedLineItems,
   };
+}
+
+// Helper function to add a line item to a space group
+function addLineItemToSpaceGroup(
+  spaceGroup: SpaceGroup,
+  item: TemplateLineItem
+) {
+  if (item.component_type_id) {
+    // Find or create component group within space
+    let componentGroup = spaceGroup.components.find(
+      (c) => c.componentTypeId === item.component_type_id
+    );
+
+    if (!componentGroup) {
+      componentGroup = {
+        componentTypeId: item.component_type_id,
+        componentTypeName: item.component_type?.name || item.component_type_id,
+        componentTypeIcon: item.component_type?.icon,
+        lineItems: [],
+      };
+      spaceGroup.components.push(componentGroup);
+    }
+
+    componentGroup.lineItems.push(item);
+  } else {
+    // Line item directly under space (no component)
+    spaceGroup.directLineItems.push(item);
+  }
 }
 
 // ============================================================================
@@ -367,6 +384,32 @@ export default function TemplateDetailPage() {
       return newSet;
     });
   };
+
+  // Collapse/Expand all spaces and components
+  const collapseAll = () => {
+    setExpandedSpaces(new Set());
+    setExpandedComponents(new Set());
+  };
+
+  const expandAll = () => {
+    const allSpaces = new Set(spaceGroups.map((s) => s.templateSpaceId));
+    const allComponents = new Set<string>();
+    spaceGroups.forEach((space) => {
+      space.components.forEach((comp) => {
+        const componentKey = `${space.templateSpaceId}-${comp.componentTypeId}`;
+        allComponents.add(componentKey);
+      });
+    });
+    setExpandedSpaces(allSpaces);
+    setExpandedComponents(allComponents);
+  };
+
+  // Check if any spaces are collapsed
+  const hasCollapsedItems =
+    spaceGroups.length > 0 &&
+    (expandedSpaces.size < spaceGroups.length ||
+      expandedComponents.size <
+        spaceGroups.reduce((sum, s) => sum + s.components.length, 0));
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -563,62 +606,105 @@ export default function TemplateDetailPage() {
       <div className="flex gap-4">
         {/* Main Content */}
         <div className="flex-1 space-y-4">
-          {/* Template Info Card */}
-          <div className="bg-white rounded-lg border border-slate-200 p-5">
-            <h3 className="text-sm font-semibold text-slate-900 mb-4">
-              Template Details
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">
-                  Template Type
-                </label>
-                <p className="text-sm text-slate-900">
+          {/* Template Info Card - Compact */}
+          <div className="bg-white rounded-lg border border-slate-200 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500">Type:</span>
+                <span className="text-sm font-medium text-slate-900">
                   {PROPERTY_TYPES[template.property_type] ||
                     template.property_type}
-                </p>
+                </span>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">
-                  Quality Tier
-                </label>
-                <p className="text-sm text-slate-900">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500">Tier:</span>
+                <span className="text-sm font-medium text-slate-900">
                   {template.quality_tier?.charAt(0).toUpperCase() +
                     template.quality_tier?.slice(1) || "Standard"}
-                </p>
+                </span>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">
-                  Base Price
-                </label>
-                <p className="text-sm text-slate-900 font-semibold">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500">Base:</span>
+                <span className="text-sm font-semibold text-slate-900">
                   {formatCurrency(template.base_price || 0)}
-                </p>
+                </span>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">
-                  Usage Count
-                </label>
-                <p className="text-sm text-slate-900">
-                  {template.usage_count || 0} times
-                </p>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500">Used:</span>
+                <span className="text-sm text-slate-900">
+                  {template.usage_count || 0}x
+                </span>
               </div>
+              {template.description && (
+                <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                  <span className="text-xs text-slate-500">Desc:</span>
+                  <span className="text-sm text-slate-600 truncate">
+                    {template.description}
+                  </span>
+                </div>
+              )}
             </div>
-            {template.description && (
-              <div className="mt-4 pt-4 border-t border-slate-100">
-                <label className="block text-xs font-medium text-slate-500 mb-1">
-                  Description
-                </label>
-                <p className="text-sm text-slate-700">{template.description}</p>
-              </div>
-            )}
           </div>
 
           {/* Template Structure - V2 with Cost Items */}
           <div className="bg-white rounded-lg border border-slate-200 p-5">
-            <h3 className="text-sm font-semibold text-slate-900 mb-4">
-              Template Structure
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-slate-900">
+                Template Structure
+              </h3>
+              {spaceGroups.length > 0 && (
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-500">
+                    {spaceGroups.length} spaces •{" "}
+                    {spaceGroups.reduce(
+                      (sum, s) => sum + s.components.length,
+                      0
+                    )}{" "}
+                    components
+                  </span>
+                  <button
+                    onClick={hasCollapsedItems ? expandAll : collapseAll}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
+                  >
+                    {hasCollapsedItems ? (
+                      <>
+                        <svg
+                          className="w-3.5 h-3.5"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                          />
+                        </svg>
+                        Expand All
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          className="w-3.5 h-3.5"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"
+                          />
+                        </svg>
+                        Collapse All
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
 
             {spaceGroups.length === 0 && ungroupedLineItems.length === 0 ? (
               <div className="text-center py-8">
@@ -649,19 +735,19 @@ export default function TemplateDetailPage() {
                 {/* Space Groups */}
                 {spaceGroups.map((space) => (
                   <div
-                    key={space.spaceTypeId}
+                    key={space.templateSpaceId}
                     className="border border-slate-200 rounded-lg overflow-hidden"
                   >
                     {/* Space Header */}
                     <div
                       className="flex items-center justify-between px-4 py-3 bg-slate-50 cursor-pointer"
-                      onClick={() => toggleSpace(space.spaceTypeId)}
+                      onClick={() => toggleSpace(space.templateSpaceId)}
                     >
                       <div className="flex items-center gap-3">
                         <button className="text-slate-600">
                           <svg
                             className={`w-5 h-5 transition-transform ${
-                              expandedSpaces.has(space.spaceTypeId)
+                              expandedSpaces.has(space.templateSpaceId)
                                 ? "rotate-90"
                                 : ""
                             }`}
@@ -710,13 +796,11 @@ export default function TemplateDetailPage() {
                     </div>
 
                     {/* Space Content */}
-                    {expandedSpaces.has(space.spaceTypeId) && (
+                    {expandedSpaces.has(space.templateSpaceId) && (
                       <div className="p-4 space-y-3 border-t border-slate-100">
                         {/* Components within Space */}
                         {space.components.map((component, idx) => {
-                          const componentKey = `${space.spaceTypeId}-${
-                            component.componentTypeId
-                          }-${component.variantId || "default"}`;
+                          const componentKey = `${space.templateSpaceId}-${component.componentTypeId}`;
                           return (
                             <div
                               key={componentKey}
@@ -765,12 +849,6 @@ export default function TemplateDetailPage() {
                                   <div>
                                     <h5 className="text-sm font-medium text-slate-900">
                                       {component.componentTypeName}
-                                      {component.variantName && (
-                                        <span className="text-slate-500 font-normal">
-                                          {" "}
-                                          - {component.variantName}
-                                        </span>
-                                      )}
                                     </h5>
                                     <p className="text-xs text-slate-500">
                                       {component.lineItems.length} cost items
@@ -800,49 +878,47 @@ export default function TemplateDetailPage() {
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                      {component.lineItems.map((item) => (
-                                        <tr
-                                          key={item.id}
-                                          className="hover:bg-slate-50"
-                                        >
-                                          <td className="px-3 py-2">
-                                            <span className="font-medium text-slate-900">
-                                              {item.cost_item?.name ||
-                                                item.cost_item_id}
-                                            </span>
-                                            {item.group_name && (
-                                              <span className="ml-2 text-xs text-slate-500">
-                                                ({item.group_name})
+                                      {component.lineItems.map(
+                                        (item, itemIdx) => (
+                                          <tr
+                                            key={`${item.id}-${itemIdx}`}
+                                            className="hover:bg-slate-50"
+                                          >
+                                            <td className="px-3 py-2">
+                                              <span className="font-medium text-slate-900">
+                                                {item.cost_item?.name ||
+                                                  item.cost_item_id}
                                               </span>
-                                            )}
-                                          </td>
-                                          <td className="px-3 py-2">
-                                            <span
-                                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getCategoryColor(
-                                                item.cost_item?.category?.slug
-                                              )}`}
-                                            >
-                                              {item.cost_item?.category?.name ||
-                                                "—"}
-                                            </span>
-                                          </td>
-                                          <td className="px-3 py-2 text-slate-600">
-                                            {item.cost_item?.unit_code || "—"}
-                                          </td>
-                                          <td className="px-3 py-2 text-right font-medium text-slate-900">
-                                            {formatCurrency(
-                                              item.rate ||
-                                                item.cost_item?.default_rate ||
-                                                0
-                                            )}
-                                            <span className="text-slate-500 font-normal">
-                                              /
-                                              {item.cost_item?.unit_code ||
-                                                "unit"}
-                                            </span>
-                                          </td>
-                                        </tr>
-                                      ))}
+                                            </td>
+                                            <td className="px-3 py-2">
+                                              <span
+                                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getCategoryColor(
+                                                  item.cost_item?.category?.slug
+                                                )}`}
+                                              >
+                                                {item.cost_item?.category
+                                                  ?.name || "—"}
+                                              </span>
+                                            </td>
+                                            <td className="px-3 py-2 text-slate-600">
+                                              {item.cost_item?.unit_code || "—"}
+                                            </td>
+                                            <td className="px-3 py-2 text-right font-medium text-slate-900">
+                                              {formatCurrency(
+                                                item.rate ||
+                                                  item.cost_item
+                                                    ?.default_rate ||
+                                                  0
+                                              )}
+                                              <span className="text-slate-500 font-normal">
+                                                /
+                                                {item.cost_item?.unit_code ||
+                                                  "unit"}
+                                              </span>
+                                            </td>
+                                          </tr>
+                                        )
+                                      )}
                                     </tbody>
                                   </table>
                                 </div>
@@ -859,9 +935,9 @@ export default function TemplateDetailPage() {
                             </h5>
                             <table className="w-full text-sm">
                               <tbody className="divide-y divide-slate-100">
-                                {space.directLineItems.map((item) => (
+                                {space.directLineItems.map((item, itemIdx) => (
                                   <tr
-                                    key={item.id}
+                                    key={`${item.id}-${itemIdx}`}
                                     className="hover:bg-slate-50"
                                   >
                                     <td className="px-3 py-2">
@@ -929,8 +1005,11 @@ export default function TemplateDetailPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {ungroupedLineItems.map((item) => (
-                          <tr key={item.id} className="hover:bg-slate-50">
+                        {ungroupedLineItems.map((item, itemIdx) => (
+                          <tr
+                            key={`${item.id}-${itemIdx}`}
+                            className="hover:bg-slate-50"
+                          >
                             <td className="px-3 py-2">
                               <span className="font-medium text-slate-900">
                                 {item.cost_item?.name || item.cost_item_id}
@@ -977,7 +1056,7 @@ export default function TemplateDetailPage() {
               <div className="space-y-2 mb-4">
                 {spaceGroups.map((space) => (
                   <div
-                    key={space.spaceTypeId}
+                    key={space.templateSpaceId}
                     className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0"
                   >
                     <span className="text-sm text-slate-600">

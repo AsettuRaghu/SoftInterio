@@ -10,7 +10,6 @@ import {
   MasterData,
   SpaceType,
   ComponentType,
-  ComponentVariant,
   CostItem,
   generateId,
   formatCurrency,
@@ -21,7 +20,6 @@ import {
 } from "@/components/quotations";
 import { AddSpaceModal } from "@/components/quotations/AddSpaceModal";
 import { AddComponentModal } from "@/components/quotations/AddComponentModal";
-import { SelectVariantModal } from "@/components/quotations/SelectVariantModal";
 import { AddCostItemModal } from "@/components/quotations/AddCostItemModal";
 import { SpaceCard } from "@/components/quotations/SpaceCard";
 import { BuilderSidebar } from "@/components/quotations/BuilderSidebar";
@@ -63,9 +61,8 @@ export default function EditQuotationPage() {
     units: [],
     space_types: [],
     component_types: [],
-    component_variants: [],
-    cost_item_categories: [],
-    cost_items: [],
+    quotation_cost_item_categories: [],
+    quotation_cost_items: [],
   });
 
   // Modal states
@@ -73,11 +70,6 @@ export default function EditQuotationPage() {
   const [showAddComponentModal, setShowAddComponentModal] = useState<
     string | null
   >(null);
-  const [showSelectVariantModal, setShowSelectVariantModal] = useState<{
-    spaceId: string;
-    componentId: string;
-    componentTypeId: string;
-  } | null>(null);
   const [showAddCostItemModal, setShowAddCostItemModal] = useState<{
     spaceId: string;
     componentId: string;
@@ -90,6 +82,9 @@ export default function EditQuotationPage() {
 
   // Template modal
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [appliedTemplateId, setAppliedTemplateId] = useState<string | null>(
+    null
+  ); // Track which template was applied
   const [templates, setTemplates] = useState<
     Array<{
       id: string;
@@ -121,6 +116,9 @@ export default function EditQuotationPage() {
   const [draggedSpaceId, setDraggedSpaceId] = useState<string | null>(null);
   const [dragOverSpaceId, setDragOverSpaceId] = useState<string | null>(null);
 
+  // Validation state - triggers red highlighting on mandatory fields
+  const [showValidation, setShowValidation] = useState(false);
+
   // Fetch master data
   useEffect(() => {
     const fetchMasterData = async () => {
@@ -133,11 +131,14 @@ export default function EditQuotationPage() {
               units: result.data.units || [],
               space_types: result.data.space_types || [],
               component_types: result.data.component_types || [],
-              component_variants: result.data.component_variants || [],
-              cost_item_categories: result.data.cost_item_categories || [],
-              cost_items: result.data.cost_items || [],
-              variants_by_component:
-                result.grouped?.variants_by_component || {},
+              quotation_cost_item_categories:
+                result.data.quotation_cost_item_categories ||
+                result.data.cost_item_categories ||
+                [],
+              quotation_cost_items:
+                result.data.quotation_cost_items ||
+                result.data.cost_items ||
+                [],
               items_by_category: result.grouped?.items_by_category || {},
             });
           }
@@ -184,12 +185,10 @@ export default function EditQuotationPage() {
               (comp: any, compIdx: number) => ({
                 id: comp.id,
                 componentTypeId: comp.component_type_id || "",
-                variantId: comp.component_variant_id,
                 name:
                   comp.component_type?.name ||
                   comp.name ||
                   `Component ${compIdx + 1}`,
-                variantName: comp.component_variant?.name,
                 description: comp.description || "",
                 expanded: true,
                 lineItems: (comp.lineItems || []).map((item: any) => ({
@@ -200,14 +199,19 @@ export default function EditQuotationPage() {
                   categoryName: item.cost_item?.category?.name || "Other",
                   categoryColor: item.cost_item?.category?.color || "#718096",
                   unitCode: item.unit_code || "nos",
+                  // Rate is the ACTUAL rate from quotation_line_items (what client pays)
                   rate: item.rate || 0,
-                  defaultRate: item.rate || 0,
-                  groupName: item.group_name || "Other",
+                  // Default rate is the BASE COST from cost_items (suggested price)
+                  defaultRate: item.cost_item?.default_rate || 0,
+                  // Company cost is what we consider for internal costing
+                  companyCost: item.cost_item?.company_cost || 0,
+                  // Vendor cost is what we pay to purchase
+                  vendorCost: item.cost_item?.vendor_cost || 0,
                   length: item.length,
                   width: item.width,
-                  // Use stored measurement_unit from DB, default to ft for legacy data
+                  // Use stored measurement_unit from DB, default to mm
                   measurementUnit: (item.measurement_unit ||
-                    "ft") as MeasurementUnit,
+                    "mm") as MeasurementUnit,
                   quantity: item.quantity || 1,
                   amount: item.amount || 0,
                   notes: item.notes || "",
@@ -260,19 +264,6 @@ export default function EditQuotationPage() {
     }
   }, [shouldOpenTemplateModal, isLoading, quotationId, router]);
 
-  // Get variants for a component type
-  const getVariantsForComponent = useCallback(
-    (componentTypeId: string) => {
-      if (masterData.variants_by_component?.[componentTypeId]) {
-        return masterData.variants_by_component[componentTypeId];
-      }
-      return masterData.component_variants.filter(
-        (v) => v.component_type_id === componentTypeId
-      );
-    },
-    [masterData]
-  );
-
   // Calculate totals
   const calculateTotals = useCallback(() => {
     let subtotal = 0;
@@ -291,7 +282,7 @@ export default function EditQuotationPage() {
   // Calculate single item amount
   const calculateItemAmount = (item: LineItem): number => {
     const measureType = getMeasurementInfo(item.unitCode).type;
-    const unit = item.measurementUnit || "ft"; // Use stored unit, default to ft for legacy data
+    const unit = item.measurementUnit || "mm"; // Use stored unit, default to mm for legacy data
     switch (measureType) {
       case "area":
         // Use calculateSqft to properly convert from selected unit to sqft
@@ -368,45 +359,7 @@ export default function EditQuotationPage() {
         return space;
       })
     );
-
-    // Check if component has variants
-    const variants = getVariantsForComponent(componentType.id);
-    if (variants.length > 0) {
-      setShowSelectVariantModal({
-        spaceId,
-        componentId: newComponent.id,
-        componentTypeId: componentType.id,
-      });
-    }
     setShowAddComponentModal(null);
-  };
-
-  const setComponentVariant = (
-    spaceId: string,
-    componentId: string,
-    variant: ComponentVariant
-  ) => {
-    setSpaces(
-      spaces.map((space) => {
-        if (space.id === spaceId) {
-          return {
-            ...space,
-            components: space.components.map((comp) => {
-              if (comp.id === componentId) {
-                return {
-                  ...comp,
-                  variantId: variant.id,
-                  variantName: variant.name,
-                };
-              }
-              return comp;
-            }),
-          };
-        }
-        return space;
-      })
-    );
-    setShowSelectVariantModal(null);
   };
 
   const deleteComponent = (spaceId: string, componentId: string) => {
@@ -472,34 +425,6 @@ export default function EditQuotationPage() {
             ...space,
             components: space.components.map((c) =>
               c.id === componentId ? { ...c, customName } : c
-            ),
-          };
-        }
-        return space;
-      })
-    );
-  };
-
-  // Update component variant
-  const updateComponentVariant = (
-    spaceId: string,
-    componentId: string,
-    variantId: string,
-    variantName: string
-  ) => {
-    setSpaces(
-      spaces.map((space) => {
-        if (space.id === spaceId) {
-          return {
-            ...space,
-            components: space.components.map((c) =>
-              c.id === componentId
-                ? {
-                    ...c,
-                    variantId: variantId || undefined,
-                    variantName: variantName || undefined,
-                  }
-                : c
             ),
           };
         }
@@ -687,12 +612,13 @@ export default function EditQuotationPage() {
   const addCostItem = (
     spaceId: string,
     componentId: string,
-    costItem: CostItem,
-    groupName: string
+    costItem: CostItem
   ) => {
-    const category = masterData.cost_item_categories.find(
-      (c) => c.id === costItem.category_id
-    );
+    const categoriesData =
+      masterData.quotation_cost_item_categories ||
+      masterData.cost_item_categories ||
+      [];
+    const category = categoriesData.find((c) => c.id === costItem.category_id);
 
     const newLineItem: LineItem = {
       id: `new-${generateId()}`,
@@ -703,7 +629,8 @@ export default function EditQuotationPage() {
       unitCode: costItem.unit_code,
       rate: costItem.default_rate,
       defaultRate: costItem.default_rate,
-      groupName,
+      companyCost: costItem.company_cost || 0,
+      vendorCost: costItem.vendor_cost || 0,
       length: null,
       width: null,
       measurementUnit: "mm" as MeasurementUnit, // Default to mm for precision (interior industry standard)
@@ -836,11 +763,7 @@ export default function EditQuotationPage() {
       // Group line items
       (template.line_items || []).forEach((item: any) => {
         const spaceKey = item.space_type_id || "ungrouped";
-        const componentKey = item.component_type_id
-          ? `${item.component_type_id}-${
-              item.component_variant_id || "default"
-            }`
-          : "direct";
+        const componentKey = item.component_type_id || "direct";
 
         if (!lineItemsBySpace[spaceKey]) lineItemsBySpace[spaceKey] = {};
         if (!lineItemsBySpace[spaceKey][componentKey])
@@ -866,30 +789,31 @@ export default function EditQuotationPage() {
             const componentType = masterData.component_types.find(
               (ct) => ct.id === firstItem.component_type_id
             );
-            const variant = firstItem.component_variant_id
-              ? masterData.component_variants.find(
-                  (v) => v.id === firstItem.component_variant_id
-                )
-              : null;
 
             components.push({
               id: `new-${generateId()}`,
               componentTypeId: firstItem.component_type_id || "",
-              variantId: firstItem.component_variant_id,
               name:
                 componentType?.name ||
                 firstItem.component_type?.name ||
                 "Component",
-              variantName: variant?.name || firstItem.component_variant?.name,
               expanded: true,
               lineItems: items.map((item: any) => {
-                const costItem = masterData.cost_items.find(
-                  (ci) => ci.id === item.cost_item_id
+                const costItemsData =
+                  masterData.quotation_cost_items ||
+                  masterData.cost_items ||
+                  [];
+                const categoriesData =
+                  masterData.quotation_cost_item_categories ||
+                  masterData.cost_item_categories ||
+                  [];
+                const costItem = costItemsData.find(
+                  (ci) =>
+                    ci.id === item.cost_item_id ||
+                    ci.id === item.quotation_cost_item_id
                 );
                 const category = costItem?.category_id
-                  ? masterData.cost_item_categories.find(
-                      (c) => c.id === costItem.category_id
-                    )
+                  ? categoriesData.find((c) => c.id === costItem.category_id)
                   : null;
 
                 return {
@@ -912,7 +836,10 @@ export default function EditQuotationPage() {
                     0,
                   defaultRate:
                     costItem?.default_rate || item.cost_item?.default_rate || 0,
-                  groupName: item.group_name || "Other",
+                  companyCost:
+                    costItem?.company_cost || item.cost_item?.company_cost || 0,
+                  vendorCost:
+                    costItem?.vendor_cost || item.cost_item?.vendor_cost || 0,
                   length: null,
                   width: null,
                   measurementUnit: "mm" as MeasurementUnit, // Default to mm for precision
@@ -940,6 +867,7 @@ export default function EditQuotationPage() {
       });
 
       setSpaces(newSpaces);
+      setAppliedTemplateId(templateId); // Track which template was applied
       setShowTemplateModal(false);
       setSelectedTemplateId(null);
       setTemplateSearch("");
@@ -970,7 +898,7 @@ export default function EditQuotationPage() {
           switch (measureType) {
             case "area":
               if (!item.length || item.length <= 0) {
-                errors.push(`Length is required for "${itemLabel}"`);
+                errors.push(`Height is required for "${itemLabel}"`);
               }
               if (!item.width || item.width <= 0) {
                 errors.push(`Width is required for "${itemLabel}"`);
@@ -978,7 +906,7 @@ export default function EditQuotationPage() {
               break;
             case "length":
               if (!item.length || item.length <= 0) {
-                errors.push(`Length is required for "${itemLabel}"`);
+                errors.push(`Height is required for "${itemLabel}"`);
               }
               break;
             case "quantity":
@@ -1027,6 +955,8 @@ export default function EditQuotationPage() {
       if (redirectAfterSave || hasLineItems) {
         const validation = validateLineItems();
         if (!validation.valid && redirectAfterSave) {
+          // Enable validation highlighting on mandatory fields
+          setShowValidation(true);
           // Show first 3 errors max
           const errorMsg = validation.errors.slice(0, 3).join("\n");
           const moreCount = validation.errors.length - 3;
@@ -1069,6 +999,7 @@ export default function EditQuotationPage() {
         valid_until: validUntil || null,
         notes,
         assigned_to: assignedTo,
+        template_id: appliedTemplateId, // Track which template was used
         subtotal,
         tax_percent: taxPercent,
         tax_amount: taxAmount,
@@ -1083,7 +1014,6 @@ export default function EditQuotationPage() {
           components: space.components.map((comp, compIndex) => ({
             id: comp.id.startsWith("new-") ? undefined : comp.id,
             component_type_id: comp.componentTypeId,
-            component_variant_id: comp.variantId,
             name: comp.name,
             description: comp.description,
             sort_order: compIndex,
@@ -1095,7 +1025,6 @@ export default function EditQuotationPage() {
                 id: item.id.startsWith("new-") ? undefined : item.id,
                 cost_item_id: item.costItemId,
                 name: item.costItemName,
-                group_name: item.groupName,
                 // Store dimensions as-is (in user's selected unit)
                 length: item.length,
                 width: item.width,
@@ -1103,7 +1032,7 @@ export default function EditQuotationPage() {
                 unit_code: item.unitCode,
                 rate: item.rate,
                 // Store the measurement unit so we know how to interpret dimensions
-                measurement_unit: item.measurementUnit || "ft",
+                measurement_unit: item.measurementUnit || "mm",
                 // Calculate amount on frontend
                 amount: calculatedAmount,
                 display_order: itemIndex,
@@ -1229,7 +1158,6 @@ export default function EditQuotationPage() {
         e.key === "Escape" &&
         !showAddSpaceModal &&
         !showAddComponentModal &&
-        !showSelectVariantModal &&
         !showAddCostItemModal &&
         !showTemplateModal &&
         !showNewVersionModal
@@ -1244,7 +1172,6 @@ export default function EditQuotationPage() {
     isSaving,
     showAddSpaceModal,
     showAddComponentModal,
-    showSelectVariantModal,
     showAddCostItemModal,
     showTemplateModal,
     showNewVersionModal,
@@ -1348,8 +1275,9 @@ export default function EditQuotationPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Link
-                href={`/dashboard/quotations/${quotationId}`}
+                href="/dashboard/quotations"
                 className="text-slate-600 hover:text-slate-900"
+                title="Back to Quotations"
               >
                 <svg
                   className="w-5 h-5"
@@ -1366,12 +1294,23 @@ export default function EditQuotationPage() {
                 </svg>
               </Link>
               <div className="flex items-center gap-2">
-                <h1 className="text-lg font-bold text-slate-900">
-                  Edit Quotation
-                </h1>
-                <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+                <Link 
+                  href="/dashboard/quotations"
+                  className="text-sm text-slate-500 hover:text-slate-700"
+                >
+                  Quotations
+                </Link>
+                <span className="text-slate-400">/</span>
+                <Link 
+                  href={`/dashboard/quotations/${quotationId}`}
+                  className="text-sm text-slate-500 hover:text-slate-700"
+                >
                   {quotationNumber}
-                </span>
+                </Link>
+                <span className="text-slate-400">/</span>
+                <h1 className="text-lg font-bold text-slate-900">
+                  Edit
+                </h1>
                 <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
                   v{version}
                 </span>
@@ -1771,18 +1710,6 @@ export default function EditQuotationPage() {
                     onUpdateComponentName={(componentId, name) =>
                       updateComponentName(space.id, componentId, name)
                     }
-                    onUpdateComponentVariant={(
-                      componentId,
-                      variantId,
-                      variantName
-                    ) =>
-                      updateComponentVariant(
-                        space.id,
-                        componentId,
-                        variantId,
-                        variantName
-                      )
-                    }
                     masterData={masterData}
                     onAddCostItem={(componentId) =>
                       setShowAddCostItemModal({
@@ -1832,6 +1759,7 @@ export default function EditQuotationPage() {
                         moveComponent(space.id, componentId, "down");
                       }
                     }}
+                    showValidation={showValidation}
                   />
                 ))}
 
@@ -1896,37 +1824,25 @@ export default function EditQuotationPage() {
         />
       )}
 
-      {showSelectVariantModal && (
-        <SelectVariantModal
-          isOpen={true}
-          onClose={() => setShowSelectVariantModal(null)}
-          onSelect={(variant) =>
-            setComponentVariant(
-              showSelectVariantModal.spaceId,
-              showSelectVariantModal.componentId,
-              variant
-            )
-          }
-          variants={getVariantsForComponent(
-            showSelectVariantModal.componentTypeId
-          )}
-        />
-      )}
-
       {showAddCostItemModal && (
         <AddCostItemModal
           isOpen={true}
           onClose={() => setShowAddCostItemModal(null)}
-          onAdd={(costItem, groupName) =>
+          onAdd={(costItem) =>
             addCostItem(
               showAddCostItemModal.spaceId,
               showAddCostItemModal.componentId,
-              costItem,
-              groupName
+              costItem
             )
           }
-          costItems={masterData.cost_items}
-          categories={masterData.cost_item_categories}
+          costItems={
+            masterData.quotation_cost_items || masterData.cost_items || []
+          }
+          categories={
+            masterData.quotation_cost_item_categories ||
+            masterData.cost_item_categories ||
+            []
+          }
         />
       )}
 
@@ -2075,8 +1991,14 @@ export default function EditQuotationPage() {
         isOpen={showPricingScenariosModal}
         onClose={() => setShowPricingScenariosModal(false)}
         spaces={spaces}
-        costItems={masterData.cost_items}
-        categories={masterData.cost_item_categories}
+        costItems={
+          masterData.quotation_cost_items || masterData.cost_items || []
+        }
+        categories={
+          masterData.quotation_cost_item_categories ||
+          masterData.cost_item_categories ||
+          []
+        }
         componentTypes={masterData.component_types}
         onApply={(modifiedSpaces) => {
           console.log(

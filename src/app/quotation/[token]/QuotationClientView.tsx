@@ -28,7 +28,6 @@ interface LineItem {
 interface Component {
   id: string;
   name: string;
-  variant_name?: string;
   description?: string;
   line_items: LineItem[];
   subtotal: number;
@@ -415,11 +414,6 @@ export function QuotationClientView({ quotation, company, token }: Props) {
                                 <span className="font-medium text-slate-900">
                                   {component.name}
                                 </span>
-                                {component.variant_name && (
-                                  <span className="text-slate-500 ml-2">
-                                    ({component.variant_name})
-                                  </span>
-                                )}
                               </div>
                             </div>
                             <span className="font-semibold text-slate-700">

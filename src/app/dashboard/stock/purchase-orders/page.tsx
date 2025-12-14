@@ -1,42 +1,39 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import { createPortal } from "react-dom";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { POStatusBadge, CreatePurchaseOrderModal } from "@/components/stock";
 import type { PurchaseOrder, POStatus, POPaymentStatus } from "@/types/stock";
 import { POPaymentStatusLabels, POPaymentStatusColors } from "@/types/stock";
 import {
-  MagnifyingGlassIcon,
+  PageLayout,
+  PageHeader,
+  PageContent,
+  StatBadge,
+} from "@/components/ui/PageLayout";
+import {
+  AppTable,
+  useAppTableSort,
+  useAppTableSearch,
+  type ColumnDef,
+} from "@/components/ui/AppTable";
+import {
   PlusIcon,
   ClipboardDocumentListIcon,
-  FunnelIcon,
-  XMarkIcon,
   EyeIcon,
-  ChevronUpDownIcon,
   ChevronRightIcon,
   CheckCircleIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 
-type SortField =
-  | "po_number"
-  | "order_date"
-  | "expected_delivery"
-  | "status"
-  | "total_amount"
-  | "created_at";
-type SortOrder = "asc" | "desc";
-
-interface Pagination {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
-}
-
-// Status workflow definition - Complete approval workflow
-// Draft → Pending Approval → Approved → Sent to Vendor → Dispatched → Received
+// Status workflow definition
 const STATUS_WORKFLOW: Record<
   POStatus,
   { next: POStatus | null; label: string; color: string; canApprove?: boolean }
@@ -75,21 +72,29 @@ const STATUS_WORKFLOW: Record<
   cancelled: { next: null, label: "", color: "" },
 };
 
-const statusOptions: { value: POStatus | "all"; label: string }[] = [
-  { value: "all", label: "All Status" },
-  { value: "draft", label: "Draft" },
-  { value: "pending_approval", label: "Pending Approval" },
-  { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
-  { value: "sent_to_vendor", label: "Sent to Vendor" },
-  { value: "dispatched", label: "Dispatched" },
-  { value: "partially_received", label: "Partially Received" },
-  { value: "fully_received", label: "Fully Received" },
-  { value: "closed", label: "Closed" },
-  { value: "cancelled", label: "Cancelled" },
+// Status options for filter
+const STATUS_OPTIONS = [
+  { value: "draft", label: "Draft", color: "#94a3b8" },
+  { value: "pending_approval", label: "Pending Approval", color: "#eab308" },
+  { value: "approved", label: "Approved", color: "#22c55e" },
+  { value: "sent_to_vendor", label: "Sent to Vendor", color: "#3b82f6" },
+  { value: "dispatched", label: "Dispatched", color: "#06b6d4" },
+  {
+    value: "partially_received",
+    label: "Partially Received",
+    color: "#8b5cf6",
+  },
+  { value: "fully_received", label: "Fully Received", color: "#22c55e" },
 ];
 
-// Status stepper component - shows order progress
+interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+// Status stepper component
 function POStatusStepper({ status }: { status: POStatus }) {
   const steps = [
     { key: "draft", label: "Draft" },
@@ -112,14 +117,11 @@ function POStatusStepper({ status }: { status: POStatus }) {
       "fully_received",
     ];
     const currentIndex = statusOrder.indexOf(status);
-
-    // Map step keys to their position in the order
     let stepIndex = statusOrder.indexOf(stepKey);
-    // Handle special cases - acknowledged maps to sent_to_vendor step
+
     if (stepKey === "sent_to_vendor" && status === "acknowledged") {
       return "completed";
     }
-    // Handle partially_received mapping to dispatched step visually
     if (stepKey === "dispatched" && status === "partially_received") {
       return "completed";
     }
@@ -168,7 +170,7 @@ function POStatusStepper({ status }: { status: POStatus }) {
   );
 }
 
-// Payment Status Badge Component
+// Payment Status Badge
 function POPaymentStatusBadge({ status }: { status: POPaymentStatus }) {
   const colors = POPaymentStatusColors[status] || POPaymentStatusColors.pending;
   const label = POPaymentStatusLabels[status] || status;
@@ -185,15 +187,11 @@ function POPaymentStatusBadge({ status }: { status: POPaymentStatus }) {
 
 export default function PurchaseOrdersPage() {
   const router = useRouter();
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [allPurchaseOrders, setAllPurchaseOrders] = useState<PurchaseOrder[]>(
+    []
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState<POStatus | "all">("all");
-  const [hideClosed, setHideClosed] = useState(true); // Hide closed POs by default
-  const [sortField, setSortField] = useState<SortField>("created_at");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
-  const [showFilters, setShowFilters] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [statusUpdateId, setStatusUpdateId] = useState<string | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
@@ -210,6 +208,83 @@ export default function PurchaseOrdersPage() {
     totalPages: 0,
   });
 
+  // Filter states
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [hideClosed, setHideClosed] = useState(true);
+
+  // Use AppTable hooks
+  const { sortState, handleSort, sortData } = useAppTableSort<PurchaseOrder>();
+  const { searchValue, setSearchValue } = useAppTableSearch<PurchaseOrder>([]);
+
+  // Custom filter function
+  const filterData = useCallback(
+    (data: PurchaseOrder[], searchTerm: string) => {
+      let filtered = data;
+
+      // Apply status filter
+      if (statusFilter) {
+        filtered = filtered.filter((po) => po.status === statusFilter);
+      }
+
+      // Hide closed/cancelled by default
+      if (hideClosed && !statusFilter) {
+        filtered = filtered.filter(
+          (po) => !["closed", "cancelled"].includes(po.status)
+        );
+      }
+
+      // Apply search filter
+      if (searchTerm) {
+        const query = searchTerm.toLowerCase();
+        filtered = filtered.filter(
+          (po) =>
+            po.po_number?.toLowerCase().includes(query) ||
+            po.vendor?.name?.toLowerCase().includes(query) ||
+            po.vendor?.contact_person?.toLowerCase().includes(query)
+        );
+      }
+
+      return filtered;
+    },
+    [statusFilter, hideClosed]
+  );
+
+  // Custom sort value getter
+  const getSortValue = useCallback((item: PurchaseOrder, column: string) => {
+    switch (column) {
+      case "po_number":
+        return item.po_number?.toLowerCase() || "";
+      case "order_date":
+        return item.order_date ? new Date(item.order_date) : null;
+      case "expected_delivery":
+        return item.expected_delivery ? new Date(item.expected_delivery) : null;
+      case "total_amount":
+        return item.total_amount || 0;
+      case "status":
+        const statusOrder = [
+          "draft",
+          "pending_approval",
+          "approved",
+          "sent_to_vendor",
+          "dispatched",
+          "partially_received",
+          "fully_received",
+          "closed",
+          "cancelled",
+        ];
+        return statusOrder.indexOf(item.status);
+      case "created_at":
+      default:
+        return item.created_at ? new Date(item.created_at) : null;
+    }
+  }, []);
+
+  // Process data: filter -> sort
+  const processedPurchaseOrders = useMemo(() => {
+    const filtered = filterData(allPurchaseOrders, searchValue);
+    return sortData(filtered, getSortValue);
+  }, [allPurchaseOrders, searchValue, filterData, sortData, getSortValue]);
+
   // Fetch purchase orders
   const fetchPurchaseOrders = useCallback(async () => {
     try {
@@ -217,15 +292,6 @@ export default function PurchaseOrdersPage() {
       setError(null);
 
       const params = new URLSearchParams();
-      if (searchQuery) params.set("search", searchQuery);
-      if (filterStatus !== "all") {
-        params.set("status", filterStatus);
-      } else if (hideClosed) {
-        // Exclude closed status when "All Status" is selected and hideClosed is true
-        params.set("exclude_status", "closed");
-      }
-      params.set("sort_by", sortField);
-      params.set("sort_order", sortOrder);
       params.set("limit", pagination.limit.toString());
       params.set(
         "offset",
@@ -240,7 +306,7 @@ export default function PurchaseOrdersPage() {
       }
 
       const data = await response.json();
-      setPurchaseOrders(data.purchaseOrders || []);
+      setAllPurchaseOrders(data.purchaseOrders || []);
       setPagination((prev) => ({
         ...prev,
         total: data.total || 0,
@@ -253,15 +319,7 @@ export default function PurchaseOrdersPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [
-    searchQuery,
-    filterStatus,
-    hideClosed,
-    sortField,
-    sortOrder,
-    pagination.page,
-    pagination.limit,
-  ]);
+  }, [pagination.page, pagination.limit]);
 
   useEffect(() => {
     fetchPurchaseOrders();
@@ -283,71 +341,26 @@ export default function PurchaseOrdersPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Handle status dropdown toggle with position calculation
-  const handleStatusDropdownToggle = (
-    poId: string,
-    buttonElement: HTMLButtonElement | null
-  ) => {
-    if (statusUpdateId === poId) {
-      setStatusUpdateId(null);
-      setDropdownPosition(null);
-    } else {
-      setStatusUpdateId(poId);
-      if (buttonElement) {
-        const rect = buttonElement.getBoundingClientRect();
-        const dropdownWidth = 192; // w-48 = 12rem = 192px
-        const dropdownHeight = 120; // approximate height
-        const viewportHeight = window.innerHeight;
+  // Calculate stats
+  const stats = useMemo(() => {
+    const total = allPurchaseOrders.length;
+    const draft = allPurchaseOrders.filter(
+      (po) => po.status === "draft"
+    ).length;
+    const pendingApproval = allPurchaseOrders.filter(
+      (po) => po.status === "pending_approval"
+    ).length;
+    const inProgress = allPurchaseOrders.filter((po) =>
+      ["approved", "sent_to_vendor", "dispatched"].includes(po.status)
+    ).length;
+    const totalValue = allPurchaseOrders
+      .filter(
+        (po) => !["cancelled", "fully_received", "closed"].includes(po.status)
+      )
+      .reduce((sum, po) => sum + (po.total_amount || 0), 0);
 
-        // Position dropdown above if not enough space below
-        let top = rect.bottom + 4;
-        if (top + dropdownHeight > viewportHeight) {
-          top = rect.top - dropdownHeight - 4;
-        }
-
-        // Align to right edge of button
-        let left = rect.right - dropdownWidth;
-        if (left < 0) left = rect.left;
-
-        setDropdownPosition({ top, left });
-      }
-    }
-  };
-
-  // Handle sort
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortOrder("asc");
-    }
-    setPagination((prev) => ({ ...prev, page: 1 }));
-  };
-
-  // Render sort icon
-  const renderSortIcon = (field: SortField) => {
-    if (sortField !== field) {
-      return <ChevronUpDownIcon className="h-3.5 w-3.5 text-slate-400" />;
-    }
-    return (
-      <ChevronUpDownIcon
-        className={`h-3.5 w-3.5 text-blue-600 ${
-          sortOrder === "desc" ? "rotate-180" : ""
-        }`}
-      />
-    );
-  };
-
-  // Clear filters
-  const clearFilters = () => {
-    setSearchQuery("");
-    setFilterStatus("all");
-    setHideClosed(true); // Reset to default
-    setPagination((prev) => ({ ...prev, page: 1 }));
-  };
-
-  const hasActiveFilters = searchQuery || filterStatus !== "all" || !hideClosed;
+    return { total, draft, pendingApproval, inProgress, totalValue };
+  }, [allPurchaseOrders]);
 
   // Format currency
   const formatCurrency = (amount: number) => {
@@ -360,12 +373,42 @@ export default function PurchaseOrdersPage() {
   };
 
   // Format date
-  const formatDate = (dateStr: string) => {
+  const formatDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return "—";
     return new Date(dateStr).toLocaleDateString("en-IN", {
       day: "numeric",
       month: "short",
       year: "numeric",
     });
+  };
+
+  // Handle status dropdown toggle
+  const handleStatusDropdownToggle = (
+    poId: string,
+    buttonElement: HTMLButtonElement | null
+  ) => {
+    if (statusUpdateId === poId) {
+      setStatusUpdateId(null);
+      setDropdownPosition(null);
+    } else {
+      setStatusUpdateId(poId);
+      if (buttonElement) {
+        const rect = buttonElement.getBoundingClientRect();
+        const dropdownWidth = 192;
+        const dropdownHeight = 120;
+        const viewportHeight = window.innerHeight;
+
+        let top = rect.bottom + 4;
+        if (top + dropdownHeight > viewportHeight) {
+          top = rect.top - dropdownHeight - 4;
+        }
+
+        let left = rect.right - dropdownWidth;
+        if (left < 0) left = rect.left;
+
+        setDropdownPosition({ top, left });
+      }
+    }
   };
 
   // Update PO status
@@ -386,8 +429,7 @@ export default function PurchaseOrdersPage() {
         throw new Error(data.error || "Failed to update status");
       }
 
-      // Update local state
-      setPurchaseOrders((prev) =>
+      setAllPurchaseOrders((prev) =>
         prev.map((po) => (po.id === poId ? { ...po, status: newStatus } : po))
       );
       setStatusUpdateId(null);
@@ -398,621 +440,318 @@ export default function PurchaseOrdersPage() {
     }
   };
 
-  // Stats - Updated for new status workflow with approval
-  const stats = {
-    total: pagination.total,
-    draft: purchaseOrders.filter((po) => po.status === "draft").length,
-    pendingApproval: purchaseOrders.filter(
-      (po) => po.status === "pending_approval"
-    ).length,
-    approved: purchaseOrders.filter((po) => po.status === "approved").length,
-    sent: purchaseOrders.filter((po) => po.status === "sent_to_vendor").length,
-    dispatched: purchaseOrders.filter((po) =>
-      ["dispatched", "acknowledged"].includes(po.status)
-    ).length,
-    received: purchaseOrders.filter((po) =>
-      ["partially_received", "fully_received"].includes(po.status)
-    ).length,
-    totalValue: purchaseOrders
-      .filter((po) => !["cancelled", "fully_received"].includes(po.status))
-      .reduce((sum, po) => sum + (po.total_amount || 0), 0),
-  };
-
-  return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="bg-white rounded-lg border border-slate-200 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-              <Link href="/dashboard" className="hover:text-slate-700">
-                Dashboard
-              </Link>
-              <span>/</span>
-              <Link href="/dashboard/stock" className="hover:text-slate-700">
-                Stock
-              </Link>
-              <span>/</span>
-              <span className="text-slate-700">Purchase Orders</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-lg font-semibold text-slate-900">
-                Purchase Orders
-              </h1>
-              <div className="hidden md:flex items-center gap-2">
-                <span className="px-2 py-0.5 text-xs rounded-full bg-slate-100 text-slate-700">
-                  {stats.total} Total
-                </span>
-                {stats.draft > 0 && (
-                  <span className="px-2 py-0.5 text-xs rounded-full bg-amber-50 text-amber-700">
-                    {stats.draft} Draft
-                  </span>
-                )}
-                {stats.pendingApproval > 0 && (
-                  <span className="px-2 py-0.5 text-xs rounded-full bg-yellow-50 text-yellow-700">
-                    {stats.pendingApproval} Pending Approval
-                  </span>
-                )}
-                {stats.sent > 0 && (
-                  <span className="px-2 py-0.5 text-xs rounded-full bg-blue-50 text-blue-700">
-                    {stats.sent} Sent
-                  </span>
-                )}
-                {stats.dispatched > 0 && (
-                  <span className="px-2 py-0.5 text-xs rounded-full bg-cyan-50 text-cyan-700">
-                    {stats.dispatched} In Transit
-                  </span>
-                )}
-                <span className="px-2 py-0.5 text-xs rounded-full bg-green-50 text-green-700">
-                  {formatCurrency(stats.totalValue)}
-                </span>
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            <PlusIcon className="h-3.5 w-3.5" />
-            Add PO
-          </button>
+  // Define table columns
+  const columns: ColumnDef<PurchaseOrder>[] = [
+    {
+      key: "po_number",
+      header: "PO Number",
+      width: "12%",
+      sortable: true,
+      render: (po) => (
+        <div className="text-sm font-medium text-blue-600 hover:text-blue-700">
+          {po.po_number}
         </div>
-      </div>
-
-      {/* Search and Filters */}
-      <div className="bg-white rounded-lg border border-slate-200 px-4 py-3">
-        <div className="flex flex-col md:flex-row gap-3">
-          {/* Search */}
-          <div className="flex-1">
-            <div className="relative">
-              <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search by PO number, vendor name..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setPagination((prev) => ({ ...prev, page: 1 }));
-                }}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
+      ),
+    },
+    {
+      key: "vendor",
+      header: "Vendor",
+      width: "18%",
+      render: (po) => (
+        <div>
+          <div className="text-sm font-medium text-slate-900">
+            {po.vendor?.name || "Unknown"}
           </div>
-
-          {/* Filter Toggle & Quick Filters */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md border transition-colors ${
-                showFilters || hasActiveFilters
-                  ? "border-blue-300 bg-blue-50 text-blue-700"
-                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              <FunnelIcon className="h-3.5 w-3.5" />
-              Filters
-              {hasActiveFilters && (
-                <span className="px-1.5 py-0.5 text-[10px] bg-blue-600 text-white rounded-full">
-                  {(searchQuery ? 1 : 0) +
-                    (filterStatus !== "all" ? 1 : 0) +
-                    (!hideClosed ? 1 : 0)}
-                </span>
-              )}
-            </button>
-
-            {/* Show Closed toggle */}
-            <label className="inline-flex items-center gap-2 px-3 py-2 text-xs text-slate-600 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={!hideClosed}
-                onChange={(e) => {
-                  setHideClosed(!e.target.checked);
-                  setPagination((prev) => ({ ...prev, page: 1 }));
-                }}
-                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-              />
-              Show Closed
-            </label>
-
-            {hasActiveFilters && (
-              <button
-                onClick={clearFilters}
-                className="inline-flex items-center gap-1 px-2 py-2 text-xs text-slate-500 hover:text-slate-700"
-              >
-                <XMarkIcon className="h-3.5 w-3.5" />
-                Clear
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Expandable Filters */}
-        {showFilters && (
-          <div className="mt-3 pt-3 border-t border-slate-200">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  Status
-                </label>
-                <select
-                  value={filterStatus}
-                  onChange={(e) => {
-                    setFilterStatus(e.target.value as POStatus | "all");
-                    setPagination((prev) => ({ ...prev, page: 1 }));
-                  }}
-                  className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500"
-                >
-                  {statusOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Table */}
-      <div className="bg-white rounded-lg border border-slate-200">
-        {/* Loading State */}
-        {isLoading && (
-          <div className="p-8">
-            <div className="animate-pulse space-y-3">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex items-center gap-4">
-                  <div className="w-20 h-4 bg-slate-200 rounded" />
-                  <div className="flex-1 h-4 bg-slate-200 rounded" />
-                  <div className="w-24 h-4 bg-slate-200 rounded" />
-                  <div className="w-24 h-4 bg-slate-200 rounded" />
-                  <div className="w-20 h-4 bg-slate-200 rounded" />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Error State */}
-        {error && !isLoading && (
-          <div className="p-8 text-center">
-            <div className="text-red-500 mb-2">
-              <svg
-                className="w-12 h-12 mx-auto"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
-            </div>
-            <p className="text-sm font-medium text-slate-900">
-              Error loading purchase orders
-            </p>
-            <p className="text-xs text-slate-500 mt-1">{error}</p>
-            <button
-              onClick={fetchPurchaseOrders}
-              className="mt-3 px-3 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
-            >
-              Try again
-            </button>
-          </div>
-        )}
-
-        {/* Empty State */}
-        {!isLoading && !error && purchaseOrders.length === 0 && (
-          <div className="p-12 text-center">
-            <ClipboardDocumentListIcon className="h-12 w-12 mx-auto text-slate-300 mb-3" />
-            <h3 className="text-sm font-semibold text-slate-900 mb-1">
-              {hasActiveFilters
-                ? "No purchase orders match your filters"
-                : "No purchase orders yet"}
-            </h3>
-            <p className="text-xs text-slate-500 mb-4">
-              {hasActiveFilters
-                ? "Try adjusting your search or filters."
-                : "Get started by creating your first purchase order."}
-            </p>
-            {!hasActiveFilters && (
-              <button
-                onClick={() => setIsCreateModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                <PlusIcon className="h-3.5 w-3.5" />
-                Add PO
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Table Content */}
-        {!isLoading && !error && purchaseOrders.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="text-left px-4 py-3">
-                    <button
-                      onClick={() => handleSort("po_number")}
-                      className="flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900"
-                    >
-                      PO Number
-                      {renderSortIcon("po_number")}
-                    </button>
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">
-                    Vendor
-                  </th>
-                  <th className="text-left px-4 py-3">
-                    <button
-                      onClick={() => handleSort("order_date")}
-                      className="flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900"
-                    >
-                      Date
-                      {renderSortIcon("order_date")}
-                    </button>
-                  </th>
-                  <th className="text-right px-4 py-3">
-                    <button
-                      onClick={() => handleSort("total_amount")}
-                      className="flex items-center gap-1 ml-auto text-xs font-semibold text-slate-600 hover:text-slate-900"
-                    >
-                      Amount
-                      {renderSortIcon("total_amount")}
-                    </button>
-                  </th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-slate-600">
-                    Progress
-                  </th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-slate-600">
-                    Status
-                  </th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-slate-600">
-                    Payment
-                  </th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-slate-600">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {purchaseOrders.map((po) => {
-                  const workflow = STATUS_WORKFLOW[po.status];
-                  const canProgress = workflow.next !== null;
-
-                  return (
-                    <tr
-                      key={po.id}
-                      className="hover:bg-slate-50 cursor-pointer"
-                      onClick={() =>
-                        router.push(`/dashboard/stock/purchase-orders/${po.id}`)
-                      }
-                    >
-                      <td className="px-4 py-3">
-                        <div className="text-sm font-medium text-blue-600 hover:text-blue-700">
-                          {po.po_number}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-sm font-medium text-slate-900">
-                          {po.vendor?.name || "Unknown"}
-                        </div>
-                        {po.vendor?.contact_person && (
-                          <div className="text-xs text-slate-500">
-                            {po.vendor.contact_person}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-sm text-slate-900">
-                          {formatDate(po.order_date)}
-                        </div>
-                        {po.expected_delivery && (
-                          <div className="text-xs text-slate-500">
-                            Due: {formatDate(po.expected_delivery)}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="text-sm font-semibold text-slate-900">
-                          {formatCurrency(po.total_amount)}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex justify-center">
-                          <POStatusStepper status={po.status} />
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <POStatusBadge status={po.status} />
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <POPaymentStatusBadge
-                          status={
-                            (po.payment_status as POPaymentStatus) || "pending"
-                          }
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div
-                          className="flex items-center justify-end gap-1"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {/* Status Update Button */}
-                          {canProgress && (
-                            <div
-                              className="relative"
-                              ref={
-                                statusUpdateId === po.id
-                                  ? statusDropdownRef
-                                  : null
-                              }
-                            >
-                              <button
-                                ref={(el) => {
-                                  if (el)
-                                    statusButtonRefs.current.set(po.id, el);
-                                  else statusButtonRefs.current.delete(po.id);
-                                }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleStatusDropdownToggle(
-                                    po.id,
-                                    statusButtonRefs.current.get(po.id) || null
-                                  );
-                                }}
-                                className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md transition-colors ${
-                                  workflow.color === "blue"
-                                    ? "bg-blue-50 text-blue-700 hover:bg-blue-100"
-                                    : workflow.color === "green"
-                                    ? "bg-green-50 text-green-700 hover:bg-green-100"
-                                    : workflow.color === "purple"
-                                    ? "bg-purple-50 text-purple-700 hover:bg-purple-100"
-                                    : "bg-slate-50 text-slate-700 hover:bg-slate-100"
-                                }`}
-                              >
-                                <ChevronRightIcon className="h-3 w-3" />
-                                {workflow.label}
-                              </button>
-
-                              {/* Status Update Dropdown - rendered as portal */}
-                              {statusUpdateId === po.id &&
-                                dropdownPosition &&
-                                typeof document !== "undefined" &&
-                                createPortal(
-                                  <div
-                                    ref={statusDropdownRef}
-                                    className="fixed w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-9999"
-                                    style={{
-                                      top: dropdownPosition.top,
-                                      left: dropdownPosition.left,
-                                    }}
-                                  >
-                                    <div className="p-2 border-b border-slate-100 bg-slate-50">
-                                      <p className="text-xs font-medium text-slate-600">
-                                        Update Status
-                                      </p>
-                                    </div>
-                                    <div className="p-1">
-                                      <button
-                                        onClick={() =>
-                                          handleStatusUpdate(
-                                            po.id,
-                                            workflow.next!
-                                          )
-                                        }
-                                        disabled={isUpdatingStatus}
-                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-green-50 rounded-md text-green-700"
-                                      >
-                                        <CheckCircleIcon className="h-4 w-4" />
-                                        {workflow.label}
-                                      </button>
-                                      {/* Can cancel until goods are received */}
-                                      {![
-                                        "cancelled",
-                                        "partially_received",
-                                        "fully_received",
-                                      ].includes(po.status) && (
-                                        <button
-                                          onClick={() =>
-                                            handleStatusUpdate(
-                                              po.id,
-                                              "cancelled"
-                                            )
-                                          }
-                                          disabled={isUpdatingStatus}
-                                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-red-50 rounded-md text-red-600"
-                                        >
-                                          <XMarkIcon className="h-4 w-4" />
-                                          Cancel PO
-                                        </button>
-                                      )}
-                                    </div>
-                                  </div>,
-                                  document.body
-                                )}
-                            </div>
-                          )}
-
-                          {/* View Button */}
-                          <button
-                            onClick={() =>
-                              router.push(
-                                `/dashboard/stock/purchase-orders/${po.id}`
-                              )
-                            }
-                            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
-                            title="View Details"
-                          >
-                            <EyeIcon className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Pagination */}
-        {!isLoading &&
-          !error &&
-          purchaseOrders.length > 0 &&
-          pagination.totalPages > 1 && (
-            <div className="px-4 py-3 border-t border-slate-200 bg-slate-50">
-              <div className="flex items-center justify-between">
-                <div className="text-xs text-slate-600">
-                  Showing{" "}
-                  <span className="font-medium">
-                    {(pagination.page - 1) * pagination.limit + 1}
-                  </span>{" "}
-                  to{" "}
-                  <span className="font-medium">
-                    {Math.min(
-                      pagination.page * pagination.limit,
-                      pagination.total
-                    )}
-                  </span>{" "}
-                  of <span className="font-medium">{pagination.total}</span>{" "}
-                  results
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setPagination({ ...pagination, page: 1 })}
-                    disabled={pagination.page === 1}
-                    className="p-1.5 text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="First page"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() =>
-                      setPagination({
-                        ...pagination,
-                        page: pagination.page - 1,
-                      })
-                    }
-                    disabled={pagination.page === 1}
-                    className="p-1.5 text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="Previous page"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 19l-7-7 7-7"
-                      />
-                    </svg>
-                  </button>
-
-                  <span className="px-3 text-sm text-slate-700">
-                    Page <span className="font-medium">{pagination.page}</span>{" "}
-                    of{" "}
-                    <span className="font-medium">
-                      {pagination.totalPages || 1}
-                    </span>
-                  </span>
-
-                  <button
-                    onClick={() =>
-                      setPagination({
-                        ...pagination,
-                        page: pagination.page + 1,
-                      })
-                    }
-                    disabled={pagination.page >= pagination.totalPages}
-                    className="p-1.5 text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="Next page"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() =>
-                      setPagination({
-                        ...pagination,
-                        page: pagination.totalPages,
-                      })
-                    }
-                    disabled={pagination.page >= pagination.totalPages}
-                    className="p-1.5 text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="Last page"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M13 5l7 7-7 7M5 5l7 7-7 7"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              </div>
+          {po.vendor?.contact_person && (
+            <div className="text-xs text-slate-500">
+              {po.vendor.contact_person}
             </div>
           )}
-      </div>
+        </div>
+      ),
+    },
+    {
+      key: "order_date",
+      header: "Date",
+      width: "12%",
+      sortable: true,
+      render: (po) => (
+        <div>
+          <div className="text-sm text-slate-900">
+            {formatDate(po.order_date)}
+          </div>
+          {po.expected_delivery && (
+            <div className="text-xs text-slate-500">
+              Due: {formatDate(po.expected_delivery)}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "total_amount",
+      header: "Amount",
+      width: "12%",
+      sortable: true,
+      align: "right",
+      render: (po) => (
+        <div className="text-sm font-semibold text-slate-900">
+          {formatCurrency(po.total_amount)}
+        </div>
+      ),
+    },
+    {
+      key: "progress",
+      header: "Progress",
+      width: "12%",
+      align: "center",
+      render: (po) => (
+        <div className="flex justify-center">
+          <POStatusStepper status={po.status} />
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "12%",
+      align: "center",
+      render: (po) => <POStatusBadge status={po.status} />,
+    },
+    {
+      key: "payment_status",
+      header: "Payment",
+      width: "10%",
+      align: "center",
+      render: (po) => (
+        <POPaymentStatusBadge
+          status={(po.payment_status as POPaymentStatus) || "pending"}
+        />
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "12%",
+      render: (po) => {
+        const workflow = STATUS_WORKFLOW[po.status];
+        const canProgress = workflow.next !== null;
+
+        return (
+          <div
+            className="flex items-center justify-end gap-1"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {canProgress && (
+              <div
+                className="relative"
+                ref={statusUpdateId === po.id ? statusDropdownRef : null}
+              >
+                <button
+                  ref={(el) => {
+                    if (el) statusButtonRefs.current.set(po.id, el);
+                    else statusButtonRefs.current.delete(po.id);
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleStatusDropdownToggle(
+                      po.id,
+                      statusButtonRefs.current.get(po.id) || null
+                    );
+                  }}
+                  className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md transition-colors ${
+                    workflow.color === "blue"
+                      ? "bg-blue-50 text-blue-700 hover:bg-blue-100"
+                      : workflow.color === "green"
+                      ? "bg-green-50 text-green-700 hover:bg-green-100"
+                      : workflow.color === "purple"
+                      ? "bg-purple-50 text-purple-700 hover:bg-purple-100"
+                      : "bg-slate-50 text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  <ChevronRightIcon className="h-3 w-3" />
+                  {workflow.label}
+                </button>
+
+                {statusUpdateId === po.id &&
+                  dropdownPosition &&
+                  typeof document !== "undefined" &&
+                  createPortal(
+                    <div
+                      ref={statusDropdownRef}
+                      className="fixed w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-9999"
+                      style={{
+                        top: dropdownPosition.top,
+                        left: dropdownPosition.left,
+                      }}
+                    >
+                      <div className="p-2 border-b border-slate-100 bg-slate-50">
+                        <p className="text-xs font-medium text-slate-600">
+                          Update Status
+                        </p>
+                      </div>
+                      <div className="p-1">
+                        <button
+                          onClick={() =>
+                            handleStatusUpdate(po.id, workflow.next!)
+                          }
+                          disabled={isUpdatingStatus}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-green-50 rounded-md text-green-700"
+                        >
+                          <CheckCircleIcon className="h-4 w-4" />
+                          {workflow.label}
+                        </button>
+                        {![
+                          "cancelled",
+                          "partially_received",
+                          "fully_received",
+                        ].includes(po.status) && (
+                          <button
+                            onClick={() =>
+                              handleStatusUpdate(po.id, "cancelled")
+                            }
+                            disabled={isUpdatingStatus}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-red-50 rounded-md text-red-600"
+                          >
+                            <XMarkIcon className="h-4 w-4" />
+                            Cancel PO
+                          </button>
+                        )}
+                      </div>
+                    </div>,
+                    document.body
+                  )}
+              </div>
+            )}
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                router.push(`/dashboard/stock/purchase-orders/${po.id}`);
+              }}
+              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
+              title="View Details"
+            >
+              <EyeIcon className="h-4 w-4" />
+            </button>
+          </div>
+        );
+      },
+    },
+  ];
+
+  return (
+    <PageLayout isLoading={isLoading && allPurchaseOrders.length === 0}>
+      <PageHeader
+        title="Purchase Orders"
+        breadcrumbs={[
+          { label: "Stock & Procurement" },
+          { label: "Purchase Orders" },
+        ]}
+        actions={
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm font-medium"
+          >
+            <PlusIcon className="w-4 h-4" />
+            Add PO
+          </button>
+        }
+        stats={
+          <>
+            <StatBadge label="Total" value={stats.total} color="slate" />
+            <StatBadge label="Draft" value={stats.draft} color="slate" />
+            <StatBadge
+              label="Pending Approval"
+              value={stats.pendingApproval}
+              color="amber"
+            />
+            <StatBadge
+              label="In Progress"
+              value={stats.inProgress}
+              color="blue"
+            />
+            <StatBadge
+              label="Pipeline Value"
+              value={formatCurrency(stats.totalValue)}
+              color="green"
+            />
+          </>
+        }
+      />
+
+      <PageContent>
+        {/* Toolbar with Search and Filters */}
+        <div className="mb-4 flex items-center gap-3">
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-xs">
+            <input
+              type="text"
+              placeholder="Search by PO number, vendor name..."
+              value={searchValue}
+              onChange={(e) => setSearchValue(e.target.value)}
+              className="w-full pl-3 pr-8 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            />
+            {searchValue && (
+              <button
+                onClick={() => setSearchValue("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-slate-100"
+              >
+                <span className="text-slate-400 text-xs">✕</span>
+              </button>
+            )}
+          </div>
+
+          {/* Status Filter Dropdown */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 cursor-pointer"
+          >
+            <option value="">All Status</option>
+            {STATUS_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+
+          {/* Show Closed Toggle */}
+          <label className="inline-flex items-center gap-2 text-sm text-slate-600 cursor-pointer whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={!hideClosed}
+              onChange={(e) => setHideClosed(!e.target.checked)}
+              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+            />
+            Show Closed
+          </label>
+        </div>
+
+        <AppTable
+          data={processedPurchaseOrders}
+          columns={columns}
+          keyExtractor={(po) => po.id}
+          isLoading={isLoading}
+          showToolbar={false}
+          sortable={true}
+          sortState={sortState}
+          onSort={handleSort}
+          onRowClick={(po) =>
+            router.push(`/dashboard/stock/purchase-orders/${po.id}`)
+          }
+          emptyState={{
+            title: "No purchase orders found",
+            description:
+              statusFilter || !hideClosed || searchValue
+                ? "No purchase orders match your filters. Try a different filter."
+                : "Get started by creating your first purchase order.",
+            icon: (
+              <ClipboardDocumentListIcon className="w-6 h-6 text-slate-400" />
+            ),
+          }}
+        />
+      </PageContent>
 
       {/* Modals */}
       <CreatePurchaseOrderModal
@@ -1020,6 +759,6 @@ export default function PurchaseOrdersPage() {
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={fetchPurchaseOrders}
       />
-    </div>
+    </PageLayout>
   );
 }

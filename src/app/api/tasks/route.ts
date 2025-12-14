@@ -150,12 +150,13 @@ export async function GET(request: NextRequest) {
         if (subtaskLeadIds.length > 0) {
           const { data: subtaskLeads } = await supabase
             .from("leads")
-            .select("id, client_name")
+            .select("id, lead_number, client:clients(name)")
             .in("id", subtaskLeadIds);
 
           if (subtaskLeads) {
             subtaskLeads.forEach((lead: any) => {
-              const name = lead.client_name || "Unnamed Lead";
+              const clientName = (lead.client as { name?: string } | null)?.name;
+              const name = clientName || lead.lead_number || "Unnamed Lead";
               subtaskLeadMap.set(lead.id, name);
             });
           }
@@ -250,13 +251,14 @@ export async function GET(request: NextRequest) {
       if (leadIds.length > 0) {
         const { data: leads } = await supabase
           .from("leads")
-          .select("id, client_name")
+          .select("id, lead_number, client:clients(name)")
           .in("id", leadIds);
 
         if (leads) {
           const leadMap = new Map<string, string>();
           leads.forEach((lead: any) => {
-            const name = lead.client_name || "Unnamed Lead";
+            const clientName = (lead.client as { name?: string } | null)?.name;
+            const name = clientName || lead.lead_number || "Unnamed Lead";
             leadMap.set(lead.id, name);
           });
 

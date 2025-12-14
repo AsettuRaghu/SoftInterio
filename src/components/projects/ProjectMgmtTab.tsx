@@ -30,6 +30,7 @@ interface ProjectMgmtTabProps {
   onRefresh: () => void;
   onEditPhase?: (phase: ProjectPhase) => void;
   onEditSubPhase?: (subPhase: ProjectSubPhase, phaseId: string) => void;
+  onSubPhaseClick?: (phaseId: string, subPhaseId: string) => void;
   onQuickAction?: (
     subPhaseId: string,
     phaseId: string,
@@ -350,22 +351,45 @@ const QuickActions = ({ status, onAction, loading }: QuickActionsProps) => {
   }
 };
 
+// Assuming ProjectMgmtTabProps is defined elsewhere, adding onSubPhaseClick to its structure
+// For the purpose of this edit, we'll add it to the destructuring and usage.
+// If the interface was provided, it would look like this:
+// interface ProjectMgmtTabProps {
+//   projectId: string;
+//   projectCategory: string;
+//   phases: ProjectPhase[];
+//   initializingPhases?: boolean;
+//   onInitializePhases: () => void;
+//   onResetPhases: () => void;
+//   onRefresh: () => void;
+//   onEditPhase: (phase: ProjectPhase) => void;
+//   onEditSubPhase?: (subPhase: ProjectSubPhase, phaseId: string) => void;
+//   onSubPhaseClick?: (phaseId: string, subPhaseId: string) => void; // Added this line
+//   onQuickAction?: (
+//     subPhaseId: string,
+//     phaseId: string,
+//     action: "start" | "hold" | "resume" | "complete" | "cancel",
+//     notes: string
+//   ) => Promise<ProjectSubPhase | null>;
+// }
+
 export default function ProjectMgmtTab({
   projectId,
   projectCategory,
-  phases: initialPhases,
+  phases: initialPhases = [],
   initializingPhases = false,
   onInitializePhases,
   onResetPhases,
   onRefresh,
   onEditPhase,
   onEditSubPhase,
+  onSubPhaseClick,
   onQuickAction,
 }: ProjectMgmtTabProps) {
   // Local state for inline updates (optimistic UI)
-  const [phases, setPhases] = useState<ProjectPhase[]>(initialPhases);
+  const [phases, setPhases] = useState<ProjectPhase[]>(initialPhases || []);
   const [expandedPhases, setExpandedPhases] = useState<Set<string>>(
-    new Set(initialPhases.map((p) => p.id))
+    new Set((initialPhases || []).map((p) => p.id))
   );
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
@@ -735,7 +759,8 @@ export default function ProjectMgmtTab({
                       .map((subPhase) => (
                         <div
                           key={subPhase.id}
-                          className={`grid grid-cols-[32px_minmax(200px,1.5fr)_minmax(100px,1fr)_100px_100px_minmax(120px,1fr)_minmax(120px,1fr)_90px] gap-3 px-4 py-2.5 items-center border-b border-slate-100 hover:bg-white/80 ${
+                          onClick={() => onSubPhaseClick?.(phase.id, subPhase.id)}
+                          className={`grid grid-cols-[32px_minmax(200px,1.5fr)_minmax(100px,1fr)_100px_100px_minmax(120px,1fr)_minmax(120px,1fr)_90px] gap-3 px-4 py-2.5 items-center border-b border-slate-100 hover:bg-white/80 cursor-pointer ${
                             subPhase.status === "completed"
                               ? "bg-green-50/20"
                               : subPhase.status === "in_progress"

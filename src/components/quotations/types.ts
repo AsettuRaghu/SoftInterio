@@ -1,50 +1,18 @@
 // Shared types for quotation builder components
+// Re-export core types from main types file
+export type {
+  Unit,
+  SpaceType,
+  ComponentType,
+  QuotationCostItemCategory,
+  QuotationCostItem,
+  CostItemCategory,
+  CostItem,
+} from "@/types/quotations";
 
-export interface Unit {
-  id: string;
-  code: string;
-  name: string;
-  calculation_type: string;
-}
-
-export interface CostItemCategory {
-  id: string;
-  name: string;
-  slug: string;
-  color?: string;
-}
-
-export interface CostItem {
-  id: string;
-  name: string;
-  slug: string;
-  category_id?: string;
-  unit_code: string;
-  default_rate: number;
-  quality_tier?: string;
-  category?: CostItemCategory;
-}
-
-export interface ComponentType {
-  id: string;
-  name: string;
-  slug: string;
-  description?: string;
-}
-
-export interface ComponentVariant {
-  id: string;
-  name: string;
-  slug: string;
-  component_type_id: string;
-}
-
-export interface SpaceType {
-  id: string;
-  name: string;
-  slug: string;
-  description?: string;
-}
+// ============================================================================
+// MEASUREMENT UTILITIES (UI-specific)
+// ============================================================================
 
 // Measurement unit options for dimension input
 export type MeasurementUnit = "mm" | "cm" | "inch" | "ft";
@@ -77,7 +45,13 @@ export const calculateSqft = (
   return lengthInFeet * widthInFeet;
 };
 
-// Builder-specific types
+// ============================================================================
+// BUILDER-SPECIFIC TYPES (UI State)
+// ============================================================================
+
+// Import needed types for builder interfaces
+import type { QuotationCostItemCategory, QuotationCostItem, SpaceType, ComponentType, Unit } from "@/types/quotations";
+
 export interface LineItem {
   id: string;
   costItemId: string;
@@ -87,11 +61,11 @@ export interface LineItem {
   unitCode: string;
   rate: number;
   defaultRate: number;
-  groupName: string;
-  // Quotation-specific fields (not in templates)
+  companyCost: number;
+  vendorCost: number;
   length?: number | null;
   width?: number | null;
-  measurementUnit?: MeasurementUnit; // Single unit for both L and W
+  measurementUnit?: MeasurementUnit;
   quantity?: number;
   amount?: number;
   notes?: string;
@@ -100,10 +74,8 @@ export interface LineItem {
 export interface BuilderComponent {
   id: string;
   componentTypeId: string;
-  variantId?: string;
   name: string;
-  customName?: string; // User-editable name (like "TV Unit" instead of just "Wardrobe")
-  variantName?: string;
+  customName?: string;
   description?: string;
   lineItems: LineItem[];
   expanded: boolean;
@@ -112,6 +84,7 @@ export interface BuilderComponent {
 export interface BuilderSpace {
   id: string;
   spaceTypeId: string;
+  templateSpaceId?: string;
   name: string;
   defaultName: string;
   components: BuilderComponent[];
@@ -122,60 +95,30 @@ export interface MasterData {
   units: Unit[];
   space_types: SpaceType[];
   component_types: ComponentType[];
-  component_variants: ComponentVariant[];
-  cost_item_categories: CostItemCategory[];
-  cost_items: CostItem[];
-  variants_by_component?: Record<string, ComponentVariant[]>;
-  items_by_category?: Record<string, CostItem[]>;
+  quotation_cost_item_categories: QuotationCostItemCategory[];
+  quotation_cost_items: QuotationCostItem[];
+  // Legacy aliases for backward compatibility
+  cost_item_categories?: QuotationCostItemCategory[];
+  cost_items?: QuotationCostItem[];
+  items_by_category?: Record<string, QuotationCostItem[]>;
 }
 
-// Utility constants
-export const GROUP_NAMES = [
-  "Carcass",
-  "Shutter",
-  "Hardware",
-  "Finish",
-  "Labour",
-  "Accessories",
-  "Other",
-];
+// ============================================================================
+// UI UTILITY CONSTANTS
+// ============================================================================
 
 export const UNIT_MEASUREMENT_INFO: Record<
   string,
   { type: string; label: string; color: string }
 > = {
   sqft: { type: "area", label: "L×W", color: "bg-blue-100 text-blue-700" },
-  rft: {
-    type: "length",
-    label: "Length",
-    color: "bg-green-100 text-green-700",
-  },
-  nos: {
-    type: "quantity",
-    label: "Qty",
-    color: "bg-purple-100 text-purple-700",
-  },
-  set: {
-    type: "quantity",
-    label: "Qty",
-    color: "bg-purple-100 text-purple-700",
-  },
+  rft: { type: "length", label: "Length", color: "bg-green-100 text-green-700" },
+  nos: { type: "quantity", label: "Qty", color: "bg-purple-100 text-purple-700" },
+  set: { type: "quantity", label: "Qty", color: "bg-purple-100 text-purple-700" },
   lot: { type: "fixed", label: "Fixed", color: "bg-gray-100 text-gray-700" },
-  lumpsum: {
-    type: "fixed",
-    label: "Fixed",
-    color: "bg-gray-100 text-gray-700",
-  },
-  kg: {
-    type: "quantity",
-    label: "Qty",
-    color: "bg-purple-100 text-purple-700",
-  },
-  ltr: {
-    type: "quantity",
-    label: "Qty",
-    color: "bg-purple-100 text-purple-700",
-  },
+  lumpsum: { type: "fixed", label: "Fixed", color: "bg-gray-100 text-gray-700" },
+  kg: { type: "quantity", label: "Qty", color: "bg-purple-100 text-purple-700" },
+  ltr: { type: "quantity", label: "Qty", color: "bg-purple-100 text-purple-700" },
 };
 
 export const getMeasurementInfo = (unitCode: string) => {

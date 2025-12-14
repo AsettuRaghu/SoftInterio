@@ -9,7 +9,7 @@ interface RouteParams {
 // GET - Get rooms for a project (from quotation_spaces)
 // Quotation can be linked via:
 // 1. Direct project.quotation_id
-// 2. Through the lead: project.converted_from_lead_id -> lead.id -> quotation.lead_id
+// 2. Through the lead: project.lead_id -> lead.id -> quotation.lead_id
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     // Protect API route
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { data: project, error: projectError } = await supabase
       .from("projects")
       .select(
-        "id, quotation_id, converted_from_lead_id, lead_id, project_number, name"
+        "id, quotation_id, lead_id, project_number, name"
       )
       .eq("id", projectId)
       .single();
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     // If no direct quotation_id, try to find via lead
     if (!quotationId) {
-      const leadId = project.converted_from_lead_id || project.lead_id;
+      const leadId = project.lead_id;
 
       if (leadId) {
         // Find quotation linked to this lead

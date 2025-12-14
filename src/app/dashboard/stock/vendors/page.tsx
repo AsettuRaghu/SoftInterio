@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { CreateVendorModal, EditVendorModal } from "@/components/stock";
 import type {
   Vendor,
@@ -9,23 +8,27 @@ import type {
   UpdateVendorInput,
 } from "@/types/stock";
 import {
-  MagnifyingGlassIcon,
+  PageLayout,
+  PageHeader,
+  PageContent,
+  StatBadge,
+} from "@/components/ui/PageLayout";
+import {
+  AppTable,
+  useAppTableSort,
+  useAppTableSearch,
+  type ColumnDef,
+} from "@/components/ui/AppTable";
+import {
   PlusIcon,
   PhoneIcon,
   EnvelopeIcon,
-  PencilSquareIcon,
-  ChevronUpDownIcon,
   BuildingStorefrontIcon,
-  FunnelIcon,
-  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import {
   StarIcon as StarIconSolid,
   HeartIcon as HeartIconSolid,
 } from "@heroicons/react/24/solid";
-
-type SortField = "name" | "city" | "rating" | "credit_days" | "created_at";
-type SortOrder = "asc" | "desc";
 
 interface Pagination {
   page: number;
@@ -34,27 +37,94 @@ interface Pagination {
   totalPages: number;
 }
 
+// Status filter options
+const STATUS_OPTIONS = [
+  { value: "active", label: "Active", color: "#22c55e" },
+  { value: "inactive", label: "Inactive", color: "#94a3b8" },
+];
+
 export default function VendorsPage() {
-  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [allVendors, setAllVendors] = useState<Vendor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState<
-    "all" | "active" | "inactive"
-  >("all");
-  const [filterPreferred, setFilterPreferred] = useState<boolean | null>(null);
-  const [filterCity, setFilterCity] = useState<string>("");
-  const [sortField, setSortField] = useState<SortField>("name");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
   const [pagination, setPagination] = useState<Pagination>({
     page: 1,
     limit: 50,
     total: 0,
     totalPages: 0,
   });
+
+  // Filter states
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [preferredFilter, setPreferredFilter] = useState<boolean | null>(null);
+
+  // Use AppTable hooks
+  const { sortState, handleSort, sortData } = useAppTableSort<Vendor>();
+  const { searchValue, setSearchValue } = useAppTableSearch<Vendor>([]);
+
+  // Custom filter function
+  const filterData = useCallback(
+    (data: Vendor[], searchTerm: string) => {
+      let filtered = data;
+
+      // Apply status filter
+      if (statusFilter) {
+        filtered = filtered.filter((v) =>
+          statusFilter === "active" ? v.is_active : !v.is_active
+        );
+      }
+
+      // Apply preferred filter
+      if (preferredFilter !== null) {
+        filtered = filtered.filter((v) =>
+          preferredFilter ? v.is_preferred : !v.is_preferred
+        );
+      }
+
+      // Apply search filter
+      if (searchTerm) {
+        const query = searchTerm.toLowerCase();
+        filtered = filtered.filter(
+          (vendor) =>
+            vendor.name?.toLowerCase().includes(query) ||
+            vendor.code?.toLowerCase().includes(query) ||
+            vendor.contact_person?.toLowerCase().includes(query) ||
+            vendor.email?.toLowerCase().includes(query) ||
+            vendor.phone?.toLowerCase().includes(query) ||
+            vendor.city?.toLowerCase().includes(query) ||
+            vendor.gst_number?.toLowerCase().includes(query)
+        );
+      }
+
+      return filtered;
+    },
+    [statusFilter, preferredFilter]
+  );
+
+  // Custom sort value getter
+  const getSortValue = useCallback((item: Vendor, column: string) => {
+    switch (column) {
+      case "name":
+        return item.name?.toLowerCase() || "";
+      case "city":
+        return item.city?.toLowerCase() || "";
+      case "rating":
+        return item.rating || 0;
+      case "credit_days":
+        return item.credit_days || 0;
+      case "created_at":
+      default:
+        return item.created_at ? new Date(item.created_at) : null;
+    }
+  }, []);
+
+  // Process data: filter -> sort
+  const processedVendors = useMemo(() => {
+    const filtered = filterData(allVendors, searchValue);
+    return sortData(filtered, getSortValue);
+  }, [allVendors, searchValue, filterData, sortData, getSortValue]);
 
   // Fetch vendors
   const fetchVendors = useCallback(async () => {
@@ -63,14 +133,6 @@ export default function VendorsPage() {
       setError(null);
 
       const params = new URLSearchParams();
-      if (searchQuery) params.set("search", searchQuery);
-      if (filterStatus !== "all")
-        params.set("is_active", filterStatus === "active" ? "true" : "false");
-      if (filterPreferred !== null)
-        params.set("is_preferred", filterPreferred ? "true" : "false");
-      if (filterCity) params.set("city", filterCity);
-      params.set("sort_by", sortField);
-      params.set("sort_order", sortOrder);
       params.set("limit", pagination.limit.toString());
       params.set(
         "offset",
@@ -83,7 +145,7 @@ export default function VendorsPage() {
       }
 
       const data = await response.json();
-      setVendors(data.vendors || []);
+      setAllVendors(data.vendors || []);
       setPagination((prev) => ({
         ...prev,
         total: data.total || 0,
@@ -94,20 +156,21 @@ export default function VendorsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [
-    searchQuery,
-    filterStatus,
-    filterPreferred,
-    filterCity,
-    sortField,
-    sortOrder,
-    pagination.page,
-    pagination.limit,
-  ]);
+  }, [pagination.page, pagination.limit]);
 
   useEffect(() => {
     fetchVendors();
   }, [fetchVendors]);
+
+  // Calculate stats
+  const stats = useMemo(() => {
+    const total = allVendors.length;
+    const active = allVendors.filter((v) => v.is_active).length;
+    const preferred = allVendors.filter((v) => v.is_preferred).length;
+    const inactive = allVendors.filter((v) => !v.is_active).length;
+
+    return { total, active, preferred, inactive };
+  }, [allVendors]);
 
   // Create vendor
   const handleCreateVendor = async (vendorData: CreateVendorInput) => {
@@ -144,30 +207,6 @@ export default function VendorsPage() {
     fetchVendors();
   };
 
-  // Handle sort
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortOrder("asc");
-    }
-  };
-
-  // Render sort icon
-  const renderSortIcon = (field: SortField) => {
-    if (sortField !== field) {
-      return <ChevronUpDownIcon className="w-4 h-4 text-slate-400" />;
-    }
-    return (
-      <ChevronUpDownIcon
-        className={`w-4 h-4 text-blue-600 ${
-          sortOrder === "desc" ? "rotate-180" : ""
-        }`}
-      />
-    );
-  };
-
   // Render rating stars
   const renderRating = (rating: number | undefined) => {
     const r = rating || 0;
@@ -186,662 +225,270 @@ export default function VendorsPage() {
     );
   };
 
-  // Get unique cities for filter
-  const uniqueCities = Array.from(
-    new Set(vendors.map((v) => v.city).filter(Boolean))
-  );
-
-  // Stats
-  const activeVendors = vendors.filter((v) => v.is_active).length;
-  const preferredVendors = vendors.filter((v) => v.is_preferred).length;
-
-  // Clear all filters
-  const clearFilters = () => {
-    setSearchQuery("");
-    setFilterStatus("all");
-    setFilterPreferred(null);
-    setFilterCity("");
-    setPagination((prev) => ({ ...prev, page: 1 }));
-  };
-
-  // Reset to page 1 when search changes
-  const handleSearchChange = (value: string) => {
-    setSearchQuery(value);
-    setPagination((prev) => ({ ...prev, page: 1 }));
-  };
-
-  // Reset to page 1 when filter changes
-  const handleFilterStatusChange = (value: "all" | "active" | "inactive") => {
-    setFilterStatus(value);
-    setPagination((prev) => ({ ...prev, page: 1 }));
-  };
-
-  // Reset to page 1 when city filter changes
-  const handleFilterCityChange = (value: string) => {
-    setFilterCity(value);
-    setPagination((prev) => ({ ...prev, page: 1 }));
-  };
-
-  const hasActiveFilters =
-    searchQuery ||
-    filterStatus !== "all" ||
-    filterPreferred !== null ||
-    filterCity;
-
-  return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="bg-white rounded-lg border border-slate-200 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-              <Link href="/dashboard" className="hover:text-slate-700">
-                Dashboard
-              </Link>
-              <span>/</span>
-              <Link href="/dashboard/stock" className="hover:text-slate-700">
-                Stock
-              </Link>
-              <span>/</span>
-              <span className="text-slate-700">Vendors</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-lg font-semibold text-slate-900">Vendors</h1>
-              <div className="hidden md:flex items-center gap-2">
-                <span className="px-2 py-0.5 text-xs rounded-full bg-slate-100 text-slate-700">
-                  {pagination.total} Total
-                </span>
-                <span className="px-2 py-0.5 text-xs rounded-full bg-green-50 text-green-700">
-                  {activeVendors} Active
-                </span>
-                {preferredVendors > 0 && (
-                  <span className="px-2 py-0.5 text-xs rounded-full bg-amber-50 text-amber-700 flex items-center gap-1">
-                    <HeartIconSolid className="h-3 w-3" />
-                    {preferredVendors} Preferred
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700"
+  // Define table columns
+  const columns: ColumnDef<Vendor>[] = [
+    {
+      key: "name",
+      header: "Vendor",
+      width: "22%",
+      sortable: true,
+      render: (vendor) => (
+        <div className="flex items-center gap-3">
+          <div
+            className={`w-9 h-9 ${
+              vendor.is_preferred
+                ? "bg-linear-to-br from-amber-500 to-orange-500"
+                : "bg-linear-to-br from-blue-500 to-purple-500"
+            } rounded-lg flex items-center justify-center text-white font-semibold text-xs shrink-0 relative`}
           >
-            <PlusIcon className="h-3.5 w-3.5" />
-            Add Vendor
+            {vendor.name
+              .split(" ")
+              .map((n) => n[0])
+              .slice(0, 2)
+              .join("")
+              .toUpperCase()}
+            {vendor.is_preferred && (
+              <HeartIconSolid className="absolute -top-1 -right-1 h-4 w-4 text-red-500 drop-shadow" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-slate-900 truncate">
+                {vendor.display_name || vendor.name}
+              </p>
+              {vendor.is_preferred && (
+                <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 rounded">
+                  Preferred
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500">{vendor.code}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "contact",
+      header: "Contact",
+      width: "20%",
+      render: (vendor) => (
+        <div className="space-y-1">
+          {vendor.contact_person && (
+            <p className="text-sm text-slate-900">{vendor.contact_person}</p>
+          )}
+          {vendor.phone && (
+            <div className="flex items-center gap-1.5 text-xs text-slate-600">
+              <PhoneIcon className="w-3 h-3 text-slate-400" />
+              <a href={`tel:${vendor.phone}`} className="hover:text-blue-600">
+                {vendor.phone}
+              </a>
+            </div>
+          )}
+          {vendor.email && (
+            <div className="flex items-center gap-1.5 text-xs text-slate-600">
+              <EnvelopeIcon className="w-3 h-3 text-slate-400" />
+              <a
+                href={`mailto:${vendor.email}`}
+                className="hover:text-blue-600 truncate max-w-[180px]"
+              >
+                {vendor.email}
+              </a>
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "city",
+      header: "Location",
+      width: "12%",
+      sortable: true,
+      render: (vendor) =>
+        vendor.city ? (
+          <div>
+            <p className="text-sm text-slate-900">{vendor.city}</p>
+            {vendor.state && (
+              <p className="text-xs text-slate-500">{vendor.state}</p>
+            )}
+          </div>
+        ) : (
+          <span className="text-xs text-slate-400">—</span>
+        ),
+    },
+    {
+      key: "gst",
+      header: "GST / Terms",
+      width: "15%",
+      render: (vendor) => (
+        <div className="space-y-1">
+          {vendor.gst_number && (
+            <p className="text-xs font-mono text-slate-700">
+              {vendor.gst_number}
+            </p>
+          )}
+          {vendor.payment_terms && (
+            <p className="text-xs text-slate-500">{vendor.payment_terms}</p>
+          )}
+          {vendor.credit_days && vendor.credit_days > 0 && (
+            <p className="text-xs text-slate-500">
+              {vendor.credit_days} days credit
+            </p>
+          )}
+          {!vendor.gst_number && !vendor.payment_terms && (
+            <span className="text-xs text-slate-400">—</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "rating",
+      header: "Rating",
+      width: "12%",
+      sortable: true,
+      align: "center",
+      render: (vendor) => renderRating(vendor.rating),
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "10%",
+      align: "center",
+      render: (vendor) => (
+        <span
+          className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
+            vendor.is_active
+              ? "bg-green-100 text-green-700"
+              : "bg-slate-100 text-slate-600"
+          }`}
+        >
+          {vendor.is_active ? "Active" : "Inactive"}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "9%",
+      render: (vendor) => (
+        <div className="flex items-center justify-end">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditingVendor(vendor);
+            }}
+            className="px-2 py-1 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded font-medium"
+          >
+            Edit
           </button>
         </div>
-      </div>
+      ),
+    },
+  ];
 
-      {/* Search and Filters */}
-      <div className="bg-white rounded-lg border border-slate-200 px-4 py-3">
-        <div className="flex flex-col md:flex-row gap-3">
-          {/* Search */}
-          <div className="flex-1">
-            <div className="relative">
-              <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search by name, code, contact, email, phone..."
-                value={searchQuery}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-          </div>
+  return (
+    <PageLayout isLoading={isLoading && allVendors.length === 0}>
+      <PageHeader
+        title="Vendors"
+        breadcrumbs={[{ label: "Stock & Procurement" }, { label: "Vendors" }]}
+        actions={
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm font-medium"
+          >
+            <PlusIcon className="w-4 h-4" />
+            Add Vendor
+          </button>
+        }
+        stats={
+          <>
+            <StatBadge label="Total" value={stats.total} color="slate" />
+            <StatBadge label="Active" value={stats.active} color="green" />
+            <StatBadge
+              label="Preferred"
+              value={stats.preferred}
+              color="amber"
+            />
+          </>
+        }
+      />
 
-          {/* Filter Toggle & Quick Filters */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md border transition-colors ${
-                showFilters || hasActiveFilters
-                  ? "border-blue-300 bg-blue-50 text-blue-700"
-                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              <FunnelIcon className="w-4 h-4" />
-              Filters
-              {hasActiveFilters && (
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
-              )}
-            </button>
-
-            {hasActiveFilters && (
+      <PageContent>
+        {/* Toolbar with Search and Filters */}
+        <div className="mb-4 flex items-center gap-3">
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-xs">
+            <input
+              type="text"
+              placeholder="Search by name, code, contact, email, phone..."
+              value={searchValue}
+              onChange={(e) => setSearchValue(e.target.value)}
+              className="w-full pl-3 pr-8 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            />
+            {searchValue && (
               <button
-                onClick={clearFilters}
-                className="inline-flex items-center gap-1 px-2 py-2 text-xs text-slate-500 hover:text-slate-700"
+                onClick={() => setSearchValue("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-slate-100"
               >
-                <XMarkIcon className="w-4 h-4" />
-                Clear
+                <span className="text-slate-400 text-xs">✕</span>
               </button>
             )}
           </div>
+
+          {/* Status Filter Dropdown */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 cursor-pointer"
+          >
+            <option value="">All Status</option>
+            {STATUS_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+
+          {/* Preferred Filter Dropdown */}
+          <select
+            value={
+              preferredFilter === null
+                ? ""
+                : preferredFilter
+                ? "preferred"
+                : "regular"
+            }
+            onChange={(e) => {
+              const val = e.target.value;
+              setPreferredFilter(val === "" ? null : val === "preferred");
+            }}
+            className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 cursor-pointer"
+          >
+            <option value="">All Types</option>
+            <option value="preferred">Preferred</option>
+            <option value="regular">Regular</option>
+          </select>
         </div>
 
-        {/* Expanded Filters */}
-        {showFilters && (
-          <div className="mt-3 pt-3 border-t border-slate-200 flex flex-wrap gap-3">
-            {/* Status Filter */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500">Status:</span>
-              <div className="flex gap-1">
-                {(["all", "active", "inactive"] as const).map((status) => (
-                  <button
-                    key={status}
-                    onClick={() => handleFilterStatusChange(status)}
-                    className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors capitalize ${
-                      filterStatus === status
-                        ? "bg-blue-600 text-white"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                  >
-                    {status}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Preferred Filter */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500">Preferred:</span>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => {
-                    setFilterPreferred(null);
-                    setPagination((prev) => ({ ...prev, page: 1 }));
-                  }}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-                    filterPreferred === null
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  All
-                </button>
-                <button
-                  onClick={() => {
-                    setFilterPreferred(true);
-                    setPagination((prev) => ({ ...prev, page: 1 }));
-                  }}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors flex items-center gap-1 ${
-                    filterPreferred === true
-                      ? "bg-amber-500 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  <HeartIconSolid className="h-3 w-3" />
-                  Preferred
-                </button>
-                <button
-                  onClick={() => {
-                    setFilterPreferred(false);
-                    setPagination((prev) => ({ ...prev, page: 1 }));
-                  }}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-                    filterPreferred === false
-                      ? "bg-slate-600 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  Other
-                </button>
-              </div>
-            </div>
-
-            {/* City Filter */}
-            {uniqueCities.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">City:</span>
-                <select
-                  value={filterCity}
-                  onChange={(e) => handleFilterCityChange(e.target.value)}
-                  className="px-2 py-1 text-xs border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All Cities</option>
-                  {uniqueCities.map((city) => (
-                    <option key={city} value={city}>
-                      {city}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Table */}
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        {/* Loading State */}
-        {isLoading && (
-          <div className="p-8">
-            <div className="animate-pulse space-y-3">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex items-center gap-4">
-                  <div className="w-8 h-8 bg-slate-200 rounded-lg" />
-                  <div className="flex-1 h-4 bg-slate-200 rounded" />
-                  <div className="w-24 h-4 bg-slate-200 rounded" />
-                  <div className="w-32 h-4 bg-slate-200 rounded" />
-                  <div className="w-20 h-4 bg-slate-200 rounded" />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Error State */}
-        {error && !isLoading && (
-          <div className="p-8 text-center">
-            <div className="text-red-500 mb-2">
-              <svg
-                className="w-12 h-12 mx-auto"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
-            </div>
-            <p className="text-sm font-medium text-slate-900">
-              Error loading vendors
-            </p>
-            <p className="text-xs text-slate-500 mt-1">{error}</p>
-            <button
-              onClick={fetchVendors}
-              className="mt-3 px-3 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
-            >
-              Try again
-            </button>
-          </div>
-        )}
-
-        {/* Empty State */}
-        {!isLoading && !error && vendors.length === 0 && (
-          <div className="p-12 text-center">
-            <BuildingStorefrontIcon className="h-12 w-12 mx-auto text-slate-300 mb-3" />
-            <h3 className="text-sm font-semibold text-slate-900 mb-1">
-              {hasActiveFilters
-                ? "No vendors match your filters"
-                : "No vendors yet"}
-            </h3>
-            <p className="text-xs text-slate-500 mb-4">
-              {hasActiveFilters
-                ? "Try adjusting your search or filters."
-                : "Get started by adding your first vendor."}
-            </p>
-            {!hasActiveFilters && (
-              <button
-                onClick={() => setIsCreateModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                <PlusIcon className="h-3.5 w-3.5" />
-                Add Vendor
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Table Content */}
-        {!isLoading && !error && vendors.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="text-left px-4 py-3">
-                    <button
-                      onClick={() => handleSort("name")}
-                      className="flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900"
-                    >
-                      Vendor
-                      {renderSortIcon("name")}
-                    </button>
-                  </th>
-                  <th className="text-left px-4 py-3">
-                    <span className="text-xs font-semibold text-slate-600">
-                      Contact
-                    </span>
-                  </th>
-                  <th className="text-left px-4 py-3">
-                    <button
-                      onClick={() => handleSort("city")}
-                      className="flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900"
-                    >
-                      Location
-                      {renderSortIcon("city")}
-                    </button>
-                  </th>
-                  <th className="text-left px-4 py-3">
-                    <span className="text-xs font-semibold text-slate-600">
-                      GST / Terms
-                    </span>
-                  </th>
-                  <th className="text-center px-4 py-3">
-                    <button
-                      onClick={() => handleSort("rating")}
-                      className="flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900 mx-auto"
-                    >
-                      Rating
-                      {renderSortIcon("rating")}
-                    </button>
-                  </th>
-                  <th className="text-center px-4 py-3">
-                    <span className="text-xs font-semibold text-slate-600">
-                      Status
-                    </span>
-                  </th>
-                  <th className="text-right px-4 py-3">
-                    <span className="text-xs font-semibold text-slate-600">
-                      Actions
-                    </span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {vendors.map((vendor) => (
-                  <tr
-                    key={vendor.id}
-                    className="hover:bg-slate-50 transition-colors"
-                  >
-                    {/* Vendor Name & Code */}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-9 h-9 ${
-                            vendor.is_preferred
-                              ? "bg-linear-to-br from-amber-500 to-orange-500"
-                              : "bg-linear-to-br from-blue-500 to-purple-500"
-                          } rounded-lg flex items-center justify-center text-white font-semibold text-xs shrink-0 relative`}
-                        >
-                          {vendor.name
-                            .split(" ")
-                            .map((n) => n[0])
-                            .slice(0, 2)
-                            .join("")
-                            .toUpperCase()}
-                          {vendor.is_preferred && (
-                            <HeartIconSolid className="absolute -top-1 -right-1 h-4 w-4 text-red-500 drop-shadow" />
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium text-slate-900 truncate">
-                              {vendor.display_name || vendor.name}
-                            </p>
-                            {vendor.is_preferred && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 rounded">
-                                Preferred
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-slate-500">
-                            {vendor.code}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Contact Info */}
-                    <td className="px-4 py-3">
-                      <div className="space-y-1">
-                        {vendor.contact_person && (
-                          <p className="text-sm text-slate-900">
-                            {vendor.contact_person}
-                          </p>
-                        )}
-                        {vendor.phone && (
-                          <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                            <PhoneIcon className="w-3 h-3 text-slate-400" />
-                            <a
-                              href={`tel:${vendor.phone}`}
-                              className="hover:text-blue-600"
-                            >
-                              {vendor.phone}
-                            </a>
-                          </div>
-                        )}
-                        {vendor.email && (
-                          <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                            <EnvelopeIcon className="w-3 h-3 text-slate-400" />
-                            <a
-                              href={`mailto:${vendor.email}`}
-                              className="hover:text-blue-600 truncate max-w-[180px]"
-                            >
-                              {vendor.email}
-                            </a>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Location */}
-                    <td className="px-4 py-3">
-                      {vendor.city ? (
-                        <div>
-                          <p className="text-sm text-slate-900">
-                            {vendor.city}
-                          </p>
-                          {vendor.state && (
-                            <p className="text-xs text-slate-500">
-                              {vendor.state}
-                            </p>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-slate-400">—</span>
-                      )}
-                    </td>
-
-                    {/* GST & Payment Terms */}
-                    <td className="px-4 py-3">
-                      <div className="space-y-1">
-                        {vendor.gst_number && (
-                          <p className="text-xs font-mono text-slate-700">
-                            {vendor.gst_number}
-                          </p>
-                        )}
-                        {vendor.payment_terms && (
-                          <p className="text-xs text-slate-500">
-                            {vendor.payment_terms}
-                          </p>
-                        )}
-                        {vendor.credit_days && vendor.credit_days > 0 && (
-                          <p className="text-xs text-slate-500">
-                            {vendor.credit_days} days credit
-                          </p>
-                        )}
-                        {!vendor.gst_number && !vendor.payment_terms && (
-                          <span className="text-xs text-slate-400">—</span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Rating */}
-                    <td className="px-4 py-3 text-center">
-                      {renderRating(vendor.rating)}
-                    </td>
-
-                    {/* Status */}
-                    <td className="px-4 py-3 text-center">
-                      <span
-                        className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
-                          vendor.is_active
-                            ? "bg-green-100 text-green-700"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        {vendor.is_active ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => setEditingVendor(vendor)}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded"
-                        >
-                          <PencilSquareIcon className="w-3.5 h-3.5" />
-                          Edit
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Pagination */}
-      {!isLoading && !error && vendors.length > 0 && (
-        <div className="bg-white rounded-lg border border-slate-200 px-4 py-3">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            {/* Results info */}
-            <div className="text-sm text-slate-600">
-              Showing{" "}
-              <span className="font-medium">
-                {(pagination.page - 1) * pagination.limit + 1}
-              </span>{" "}
-              to{" "}
-              <span className="font-medium">
-                {Math.min(pagination.page * pagination.limit, pagination.total)}
-              </span>{" "}
-              of <span className="font-medium">{pagination.total}</span> vendors
-              {hasActiveFilters && " (filtered)"}
-            </div>
-
-            {/* Pagination controls */}
-            <div className="flex items-center gap-3">
-              {/* Rows per page */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-600">Rows per page:</span>
-                <select
-                  value={pagination.limit}
-                  onChange={(e) => {
-                    setPagination({
-                      ...pagination,
-                      limit: parseInt(e.target.value),
-                      page: 1,
-                    });
-                  }}
-                  className="px-2 py-1 text-sm border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
-              </div>
-
-              {/* Page navigation */}
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setPagination({ ...pagination, page: 1 })}
-                  disabled={pagination.page === 1}
-                  className="p-1.5 text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-                  title="First page"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
-                    />
-                  </svg>
-                </button>
-                <button
-                  onClick={() =>
-                    setPagination({ ...pagination, page: pagination.page - 1 })
-                  }
-                  disabled={pagination.page === 1}
-                  className="p-1.5 text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-                  title="Previous page"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 19l-7-7 7-7"
-                    />
-                  </svg>
-                </button>
-
-                <span className="px-3 text-sm text-slate-700">
-                  Page <span className="font-medium">{pagination.page}</span> of{" "}
-                  <span className="font-medium">
-                    {pagination.totalPages || 1}
-                  </span>
-                </span>
-
-                <button
-                  onClick={() =>
-                    setPagination({ ...pagination, page: pagination.page + 1 })
-                  }
-                  disabled={pagination.page >= pagination.totalPages}
-                  className="p-1.5 text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-                  title="Next page"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
-                </button>
-                <button
-                  onClick={() =>
-                    setPagination({
-                      ...pagination,
-                      page: pagination.totalPages,
-                    })
-                  }
-                  disabled={pagination.page >= pagination.totalPages}
-                  className="p-1.5 text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-                  title="Last page"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 5l7 7-7 7M5 5l7 7-7 7"
-                    />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+        <AppTable
+          data={processedVendors}
+          columns={columns}
+          keyExtractor={(v) => v.id}
+          isLoading={isLoading}
+          showToolbar={false}
+          sortable={true}
+          sortState={sortState}
+          onSort={handleSort}
+          onRowClick={(vendor) => setEditingVendor(vendor)}
+          emptyState={{
+            title: "No vendors found",
+            description:
+              statusFilter || preferredFilter !== null || searchValue
+                ? "No vendors match your filters. Try a different filter."
+                : "Get started by adding your first vendor.",
+            icon: <BuildingStorefrontIcon className="w-6 h-6 text-slate-400" />,
+          }}
+        />
+      </PageContent>
 
       {/* Modals */}
       <CreateVendorModal
@@ -856,6 +503,6 @@ export default function VendorsPage() {
         onClose={() => setEditingVendor(null)}
         onSubmit={handleUpdateVendor}
       />
-    </div>
+    </PageLayout>
   );
 }

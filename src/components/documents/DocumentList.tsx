@@ -287,12 +287,19 @@ export function DocumentList({
             </div>
             {/* Info */}
             <div className="p-3">
-              <p
-                className="truncate text-sm font-medium text-slate-700"
-                title={doc.original_name}
-              >
-                {doc.title || doc.original_name}
-              </p>
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <p
+                  className="truncate text-sm font-medium text-slate-700"
+                  title={doc.original_name}
+                >
+                  {doc.title || doc.original_name}
+                </p>
+                {(doc as any)._isFromLead && (
+                  <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                    Lead
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-500">
                 {formatFileSize(doc.file_size)}
                 {showCategory && doc.category && (
@@ -378,12 +385,19 @@ export function DocumentList({
 
           {/* Info */}
           <div className="min-w-0 flex-1">
-            <p
-              className="truncate font-medium text-slate-700"
-              title={doc.original_name}
-            >
-              {doc.title || doc.original_name}
-            </p>
+            <div className="flex items-center gap-2">
+              <p
+                className="truncate font-medium text-slate-700"
+                title={doc.original_name}
+              >
+                {doc.title || doc.original_name}
+              </p>
+              {(doc as any)._isFromLead && (
+                <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                  From Lead
+                </span>
+              )}
+            </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
               <span>{formatFileSize(doc.file_size)}</span>
               {showCategory && doc.category && (

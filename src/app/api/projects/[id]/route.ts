@@ -131,6 +131,145 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       };
     });
 
+    // Fetch full project details with client and property relations for flattening
+    // Note: We fetch all related data separately to avoid Supabase join syntax issues
+    const { data: fullProject, error: fullProjectError } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (fullProjectError) {
+       console.error("Error fetching full project details:", fullProjectError);
+       return NextResponse.json(
+         { error: "Failed to fetch project details" },
+         { status: 500 }
+       );
+    }
+    
+    // Fetch project manager data separately if project_manager_id exists
+    let pManager = null;
+    if (fullProject?.project_manager_id) {
+      const { data: managerData } = await supabase
+        .from("users")
+        .select("id, name, email, avatar_url")
+        .eq("id", fullProject.project_manager_id)
+        .single();
+      pManager = managerData;
+    }
+    
+    // Fetch client data separately if client_id exists
+    let pClient = null;
+    if (fullProject?.client_id) {
+      const { data: clientData } = await supabase
+        .from("clients")
+        .select("name, email, phone")
+        .eq("id", fullProject.client_id)
+        .single();
+      pClient = clientData;
+    }
+    
+    // Fetch property data separately if property_id exists
+    let pProperty = null;
+    if (fullProject?.property_id) {
+      const { data: propertyData } = await supabase
+        .from("properties")
+        .select(`
+          property_name,
+          unit_number,
+          block_tower,
+          property_type,
+          property_subtype,
+          address_line1,
+          city,
+          pincode,
+          carpet_area,
+          built_up_area,
+          super_built_up_area,
+          bedrooms,
+          bathrooms,
+          balconies,
+          floor_number,
+          total_floors,
+          facing,
+          furnishing_status,
+          age_of_property,
+          parking_slots,
+          has_lift,
+          has_gym,
+          has_power_backup,
+          has_security
+        `)
+        .eq("id", fullProject.property_id)
+        .single();
+      pProperty = propertyData;
+    }
+    
+    // Fetch lead data if converted from lead
+    let pLead = null;
+    let effectiveSalesRep = null;
+    let assignedByUser = null;
+    if (fullProject?.lead_id) {
+      const { data: leadData, error: leadError } = await supabase
+        .from("leads")
+        .select(`
+          id,
+          lead_number,
+          lead_source,
+          lead_source_detail,
+          service_type,
+          stage,
+          budget_range,
+          estimated_value,
+          won_amount,
+          won_at,
+          contract_signed_date,
+          expected_project_start,
+          target_start_date,
+          target_end_date,
+          assigned_to,
+          assigned_by,
+          assigned_user:users!leads_assigned_to_fkey(id, name, email, avatar_url),
+          created_by_user:users!leads_assigned_by_fkey(id, name, email, avatar_url)
+        `)
+        .eq("id", fullProject.lead_id)
+        .single();
+      
+      if (leadError) {
+        console.error("Error fetching lead data:", leadError);
+      }
+      
+      pLead = leadData;
+      effectiveSalesRep = leadData?.assigned_user;
+      assignedByUser = leadData?.created_by_user;
+    }
+
+    // Log what we found for debugging
+    console.log("Project data fetched:", {
+      project_id: fullProject.id,
+      project_number: fullProject.project_number,
+      has_client_id: !!fullProject.client_id,
+      has_property_id: !!fullProject.property_id,
+      has_lead_id: !!fullProject.lead_id,
+      lead_id_value: fullProject.lead_id,
+      client_found: !!pClient,
+      property_found: !!pProperty,
+      lead_found: !!pLead,
+      lead_data: pLead,
+    });
+    
+    const flattenedProject = {
+      ...project,
+      
+      // Relations - all fetched separately
+      client: pClient,
+      property: pProperty,
+      lead: pLead,
+      sales_rep: effectiveSalesRep,
+      assigned_by_user: assignedByUser,
+      project_manager: pManager || project.project_manager
+    };
+
     // Fetch payment milestones
     const { data: paymentMilestones } = await supabase
       .from("project_payment_milestones")
@@ -146,8 +285,30 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Fetch lead data if project was converted from lead
     let leadData = null;
     let leadActivities = null;
-    if (project.converted_from_lead_id || project.lead_id) {
-      const leadId = project.converted_from_lead_id || project.lead_id;
+    
+    // Try to find linked lead ID
+    let leadId = project.lead_id;
+
+    // Fallback: If no link on project, check if any lead points to this project
+    if (!leadId) {
+      const { data: reverseLinkedLead } = await supabase
+        .from("leads")
+        .select("id")
+        .eq("project_id", id)
+        .limit(1)
+        .single();
+      
+      if (reverseLinkedLead) {
+        leadId = reverseLinkedLead.id;
+        // Optionally update the project to fix the missing link
+        await supabase
+          .from("projects")
+          .update({ lead_id: leadId, converted_from_lead_id: leadId })
+          .eq("id", id);
+      }
+    }
+
+    if (leadId) {
 
       const { data: lead } = await supabase
         .from("leads")
@@ -155,9 +316,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           `
           id,
           lead_number,
-          client_name,
-          email,
-          phone,
+          lead_number,
           stage,
           property_name,
           property_type,
@@ -182,6 +341,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           created_at,
           updated_at,
           won_at,
+          client:clients!client_id(name, email, phone),
           assigned_user:users!assigned_to(id, name, email, avatar_url)
         `
         )
@@ -220,9 +380,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
         leadActivities = activities;
 
-        // Build lead data with calculated fields
+        // Build lead data with calculated fields and flattened client info
+        // Handle client relation which might be returned as an array or object
+        const linkedClient = Array.isArray(lead.client) ? lead.client[0] : lead.client;
+        
         leadData = {
           ...lead,
+          client_name: linkedClient?.name || "Unknown",
+          email: linkedClient?.email,
+          phone: linkedClient?.phone,
           lead_duration_days: leadDurationDays,
           activity_count: count || 0,
         };
@@ -231,10 +397,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({
       project: {
-        ...project,
+        ...flattenedProject,
         phases: phasesWithDeps || [],
         payment_milestones: paymentMilestones || [],
-        lead: leadData,
+        // Use lead from flattenedProject (pLead) which has all the comprehensive fields
+        // Don't overwrite with leadData which is less complete
         lead_activities: leadActivities,
       },
     });
@@ -276,18 +443,72 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const body = await request.json();
 
-    // Remove non-updatable fields
+    // Separate property updates from project updates
+    // Extended property fields need to be extracted
     const {
-      phases,
-      payment_milestones,
-      project_manager,
-      phase_summary,
-      ...updateData
+        block_tower,
+        built_up_area,
+        super_built_up_area,
+        bedrooms,
+        bathrooms,
+        balconies,
+        floor_number,
+        total_floors,
+        facing,
+        furnishing_status,
+        age_of_property,
+        parking_slots,
+        has_lift,
+        has_gym,
+        has_power_backup,
+        has_security,
+        // Existing flat property fields that we want to sync to property table
+        property_name,
+        property_type,
+        flat_number, // maps to unit_number
+        carpet_area_sqft, // maps to carpet_area
+        site_address, // maps to address_line1
+        city,
+        pincode,
+        // Project specific fields
+        phases,
+        payment_milestones,
+        project_manager,
+        phase_summary,
+        client_name, // These might be flattened but belong to project or client
+        client_email,
+        client_phone,
+        ...projectUpdateData
     } = body;
+
+    // 1. Update Project Table
+    const { data: existingProject, error: fetchError } = await supabase
+        .from("projects")
+        .select("property_id")
+        .eq("id", id)
+        .single();
+    
+    if (fetchError) throw fetchError;
+
+    // Prepare project updates (keep original project fields)
+    // We can also update the denormalized fields on project if they exist there, 
+    // but we prioritize checking what columns actually exist. 
+    // Based on schemas, project has property_type, etc. So we should update project too if those columns exist.
+    // However, the prompt says "removed from projects table".
+    // So we primarily rely on `projectUpdateData`. 
+    // We will manually add back the ones that ARE on the project table if needed.
+    // Checking types: Project has property_type, project_category, status, etc.
+    
+    const projectUpdates: any = { ...projectUpdateData };
+    if (body.project_category) projectUpdates.project_category = body.project_category;
+    if (body.status) projectUpdates.status = body.status;
+    if (body.description) projectUpdates.description = body.description;
+    if (body.notes) projectUpdates.notes = body.notes;
+    // ... maps other direct fields automatically via ...projectUpdateData
 
     const { data: project, error } = await supabase
       .from("projects")
-      .update(updateData)
+      .update(projectUpdates)
       .eq("id", id)
       .eq("tenant_id", userData.tenant_id)
       .select()
@@ -296,6 +517,44 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (error) {
       console.error("Error updating project:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // 2. Update Property Table if property_id exists
+    if (existingProject?.property_id) {
+        const propertyUpdates: any = {};
+        
+        // Map fields
+        if (property_name !== undefined) propertyUpdates.property_name = property_name;
+        if (property_type !== undefined) propertyUpdates.property_type = property_type;
+        if (flat_number !== undefined) propertyUpdates.unit_number = flat_number;
+        if (carpet_area_sqft !== undefined) propertyUpdates.carpet_area = carpet_area_sqft;
+        if (site_address !== undefined) propertyUpdates.address_line1 = site_address;
+        if (city !== undefined) propertyUpdates.city = city;
+        if (pincode !== undefined) propertyUpdates.pincode = pincode;
+
+        // Extended fields
+        if (block_tower !== undefined) propertyUpdates.block_tower = block_tower;
+        if (built_up_area !== undefined) propertyUpdates.built_up_area = built_up_area;
+        if (super_built_up_area !== undefined) propertyUpdates.super_built_up_area = super_built_up_area;
+        if (bedrooms !== undefined) propertyUpdates.bedrooms = bedrooms;
+        if (bathrooms !== undefined) propertyUpdates.bathrooms = bathrooms;
+        if (balconies !== undefined) propertyUpdates.balconies = balconies;
+        if (floor_number !== undefined) propertyUpdates.floor_number = floor_number;
+        if (total_floors !== undefined) propertyUpdates.total_floors = total_floors;
+        if (facing !== undefined) propertyUpdates.facing = facing;
+        if (furnishing_status !== undefined) propertyUpdates.furnishing_status = furnishing_status;
+
+        if (Object.keys(propertyUpdates).length > 0) {
+            const { error: propError } = await supabase
+                .from("properties")
+                .update(propertyUpdates)
+                .eq("id", existingProject.property_id);
+            
+            if (propError) {
+                console.error("Error updating property:", propError);
+                // We don't fail the whole request, but log it
+            }
+        }
     }
 
     return NextResponse.json({ project });

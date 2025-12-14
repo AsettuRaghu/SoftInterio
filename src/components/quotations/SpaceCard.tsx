@@ -3,10 +3,7 @@
 import React from "react";
 import {
   BuilderSpace,
-  BuilderComponent,
   LineItem,
-  ComponentType,
-  ComponentVariant,
   MasterData,
   calculateSqft,
   convertToFeet,
@@ -27,11 +24,6 @@ interface SpaceCardProps {
     description: string
   ) => void;
   onUpdateComponentName?: (componentId: string, name: string) => void;
-  onUpdateComponentVariant?: (
-    componentId: string,
-    variantId: string,
-    variantName: string
-  ) => void;
   masterData?: MasterData;
   onAddCostItem: (componentId: string) => void;
   onUpdateLineItem: (
@@ -59,6 +51,8 @@ interface SpaceCardProps {
   canMoveDown?: boolean;
   onMoveComponentUp?: (componentId: string) => void;
   onMoveComponentDown?: (componentId: string) => void;
+  // Validation
+  showValidation?: boolean;
 }
 
 export function SpaceCard({
@@ -72,7 +66,6 @@ export function SpaceCard({
   onDeleteComponent,
   onUpdateComponentDescription,
   onUpdateComponentName,
-  onUpdateComponentVariant,
   masterData,
   onAddCostItem,
   onUpdateLineItem,
@@ -93,38 +86,47 @@ export function SpaceCard({
   canMoveDown,
   onMoveComponentUp,
   onMoveComponentDown,
+  showValidation = false,
 }: SpaceCardProps) {
-  // Calculate space total
-  const calculateTotal = () => {
-    if (mode === "template") return 0;
+  // Calculate space total and sqft
+  const calculateTotalAndSqft = () => {
+    if (mode === "template") return { total: 0, sqft: 0 };
 
-    return space.components.reduce((spaceSum, comp) => {
-      return (
-        spaceSum +
-        comp.lineItems.reduce((compSum, item) => {
-          const measureType = getMeasurementType(item.unitCode);
-          const unit = item.measurementUnit || "ft";
+    let totalAmount = 0;
+    let totalSqft = 0;
 
-          switch (measureType) {
-            case "area":
-              const sqft = calculateSqft(item.length, item.width, unit);
-              return compSum + sqft * item.rate;
-            case "length":
-              const lengthInFeet = convertToFeet(item.length || 0, unit);
-              return compSum + lengthInFeet * item.rate;
-            case "quantity":
-              return compSum + (item.quantity || 0) * item.rate;
-            case "fixed":
-              return compSum + item.rate;
-            default:
-              return compSum + (item.quantity || 0) * item.rate;
-          }
-        }, 0)
-      );
-    }, 0);
+    space.components.forEach((comp) => {
+      comp.lineItems.forEach((item) => {
+        const measureType = getMeasurementType(item.unitCode);
+        const unit = item.measurementUnit || "mm";
+
+        switch (measureType) {
+          case "area":
+            const sqft = calculateSqft(item.length, item.width, unit);
+            totalAmount += sqft * item.rate;
+            totalSqft += sqft; // Accumulate sqft
+            break;
+          case "length":
+            const lengthInFeet = convertToFeet(item.length || 0, unit);
+            totalAmount += lengthInFeet * item.rate;
+            break;
+          case "quantity":
+            totalAmount += (item.quantity || 0) * item.rate;
+            break;
+          case "fixed":
+            totalAmount += item.rate;
+            break;
+          default:
+            totalAmount += (item.quantity || 0) * item.rate;
+        }
+      });
+    });
+
+    return { total: totalAmount, sqft: totalSqft };
   };
 
-  const total = calculateTotal();
+  const { total, sqft: totalSqft } = calculateTotalAndSqft();
+  const costPerSqft = totalSqft > 0 ? total / totalSqft : 0;
 
   return (
     <div
@@ -202,9 +204,16 @@ export function SpaceCard({
         </div>
         <div className="flex items-center gap-3">
           {mode === "quotation" && (
-            <span className="text-lg font-bold text-blue-600">
-              {formatCurrency(total)}
-            </span>
+            <>
+              {totalSqft > 0 && costPerSqft > 0 && (
+                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                  {formatCurrency(costPerSqft)}/sqft
+                </span>
+              )}
+              <span className="text-lg font-bold text-blue-600">
+                {formatCurrency(total)}
+              </span>
+            </>
           )}
           {mode === "template" && (
             <span className="text-sm text-slate-500">
@@ -329,19 +338,6 @@ export function SpaceCard({
                   ? (name) => onUpdateComponentName(component.id, name)
                   : undefined
               }
-              onUpdateVariant={
-                onUpdateComponentVariant
-                  ? (variantId, variantName) =>
-                      onUpdateComponentVariant(
-                        component.id,
-                        variantId,
-                        variantName
-                      )
-                  : undefined
-              }
-              availableVariants={
-                masterData?.variants_by_component?.[component.componentTypeId]
-              }
               onAddCostItem={() => onAddCostItem(component.id)}
               onUpdateLineItem={(lineItemId, updates) =>
                 onUpdateLineItem(component.id, lineItemId, updates)
@@ -365,6 +361,7 @@ export function SpaceCard({
                   ? () => onMoveComponentDown(component.id)
                   : undefined
               }
+              showValidation={showValidation}
             />
           ))}
 

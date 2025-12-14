@@ -23,7 +23,6 @@ interface PaymentTerm {
 
 interface LineItemData {
   name: string;
-  group_name?: string;
   unit_code: string;
   length?: number;
   width?: number;
@@ -34,7 +33,6 @@ interface LineItemData {
 
 interface ComponentData {
   name: string;
-  variant_name?: string;
   description?: string;
   line_items: LineItemData[];
   subtotal: number;
@@ -287,11 +285,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "bold",
     color: "#1e293b",
-  },
-  componentVariant: {
-    fontSize: 9,
-    color: "#64748b",
-    marginLeft: 8,
   },
   componentTotal: {
     fontSize: 10,
@@ -657,11 +650,6 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
                   <View style={styles.componentHeader}>
                     <View style={styles.flexRow}>
                       <Text style={styles.componentName}>{component.name}</Text>
-                      {component.variant_name && (
-                        <Text style={styles.componentVariant}>
-                          ({component.variant_name})
-                        </Text>
-                      )}
                     </View>
                     <Text style={styles.componentTotal}>
                       {formatCurrency(component.subtotal)}
@@ -730,16 +718,6 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
                         >
                           <View style={styles.flex3}>
                             <Text style={styles.lineItemCell}>{item.name}</Text>
-                            {item.group_name && (
-                              <Text
-                                style={[
-                                  styles.lineItemCell,
-                                  { color: "#94a3b8", fontSize: 7 },
-                                ]}
-                              >
-                                {item.group_name}
-                              </Text>
-                            )}
                           </View>
                           <Text
                             style={[

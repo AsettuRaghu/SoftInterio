@@ -6,7 +6,7 @@ import { CostItem, CostItemCategory, getMeasurementInfo } from "./types";
 interface AddCostItemModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (costItem: CostItem, groupName: string) => void;
+  onAdd: (costItem: CostItem) => void;
   costItems: CostItem[];
   categories: CostItemCategory[];
 }
@@ -61,21 +61,6 @@ export function AddCostItemModal({
 
     return filtered;
   }, [itemsByCategory, searchQuery]);
-
-  const getDefaultGroup = (categorySlug?: string) => {
-    switch (categorySlug) {
-      case "material":
-        return "Carcass";
-      case "hardware":
-        return "Hardware";
-      case "finish":
-        return "Finish";
-      case "labour":
-        return "Labour";
-      default:
-        return "Other";
-    }
-  };
 
   // Scroll to category when tab is clicked
   const scrollToCategory = (categoryId: string) => {
@@ -305,9 +290,7 @@ export function AddCostItemModal({
                       return (
                         <button
                           key={item.id}
-                          onClick={() =>
-                            onAdd(item, getDefaultGroup(category.slug))
-                          }
+                          onClick={() => onAdd(item)}
                           className="p-3 text-left border border-slate-200 rounded-lg hover:border-amber-500 hover:bg-amber-50 transition-colors group"
                         >
                           <div className="flex items-start justify-between">

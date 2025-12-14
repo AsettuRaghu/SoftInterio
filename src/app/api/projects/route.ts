@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
       .select(
         `
         *,
+        client:clients!client_id(name),
         project_manager:users!project_manager_id(id, name, email, avatar_url)
       `,
         { count: "exact" }
@@ -52,8 +53,13 @@ export async function GET(request: NextRequest) {
 
     // Apply filters
     if (search) {
+      // For searching linked client name, we need to rely on the client relation
+      // Supabase/PostgREST doesn't support easy deep filtering on joined generic columns without embedding
+      // A common workaround is searching the project name/number normally, 
+      // OR doing a separate search for clients and filtering by ID.
+      // For now, simpler fuzzy search on project fields:
       query = query.or(
-        `project_number.ilike.%${search}%,name.ilike.%${search}%,client_name.ilike.%${search}%`
+        `project_number.ilike.%${search}%,name.ilike.%${search}%`
       );
     }
 
@@ -120,15 +126,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Attach phase summaries to projects
-    const projectsWithSummary = projects?.map((p) => ({
-      ...p,
-      phase_summary: phaseSummaries[p.id] || {
-        total: 0,
-        completed: 0,
-        in_progress: 0,
-      },
-    }));
+    // Attach phase summaries and flat client_name to projects
+    const projectsWithSummary = projects?.map((p: any) => {
+      const pClient = Array.isArray(p.client) ? p.client[0] : p.client;
+      return {
+        ...p,
+        client_name: pClient?.name || "Unknown Client",
+        phase_summary: phaseSummaries[p.id] || {
+          total: 0,
+          completed: 0,
+          in_progress: 0,
+        },
+      };
+    });
 
     return NextResponse.json({
       projects: projectsWithSummary,
@@ -191,7 +201,6 @@ export async function POST(request: NextRequest) {
       project_manager_id,
       lead_id,
       quotation_id,
-      converted_from_lead_id,
       notes,
       initialize_phases = true, // Whether to initialize phases from templates
     } = body;
@@ -233,7 +242,6 @@ export async function POST(request: NextRequest) {
         project_manager_id,
         lead_id,
         quotation_id,
-        converted_from_lead_id,
         notes,
         created_by: user.id,
       })
@@ -260,12 +268,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Update the lead with project_id reference if created from a lead
-    if (converted_from_lead_id && project) {
+    if (lead_id && project) {
       try {
         await supabase
           .from("leads")
           .update({ project_id: project.id })
-          .eq("id", converted_from_lead_id);
+          .eq("id", lead_id);
       } catch (leadUpdateError) {
         console.error("Error linking project to lead:", leadUpdateError);
         // Don't fail - project was created successfully

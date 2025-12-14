@@ -39,10 +39,24 @@ export async function GET(
     const { token } = await params;
     const supabase = await createClient();
 
-    // Find quotation by token (no auth required)
+    // Find quotation by token (no auth required) with relations
     const { data: quotation, error: quotationError } = await supabase
       .from("quotations")
-      .select("*")
+      .select(`
+        *,
+        client:clients!client_id(id, name, email, phone),
+        lead:leads!lead_id(
+          id,
+          property:properties(
+            id,
+            property_name,
+            address_line1,
+            city,
+            carpet_area,
+            property_type
+          )
+        )
+      `)
       .eq("client_access_token", token)
       .single();
 
@@ -52,6 +66,11 @@ export async function GET(
         { status: 404 }
       );
     }
+
+    // Extract client and property data from relations
+    const client = quotation.client as { name?: string; email?: string; phone?: string } | null;
+    const lead = quotation.lead as { property?: Record<string, unknown> } | null;
+    const property = lead?.property as Record<string, unknown> | null;
 
     // Check if expired
     if (quotation.client_access_expires_at) {
@@ -91,8 +110,7 @@ export async function GET(
         depth,
         display_order,
         subtotal,
-        component_type:component_type_id (id, name),
-        component_variant:component_variant_id (id, name)
+        component_type:component_type_id (id, name)
       `)
       .eq("quotation_id", quotation.id)
       .order("display_order");
@@ -105,7 +123,6 @@ export async function GET(
         quotation_space_id,
         quotation_component_id,
         name,
-        group_name,
         length,
         width,
         quantity,
@@ -138,7 +155,6 @@ export async function GET(
 
         const lineItems: LineItemData[] = compLineItems.map((item: any) => ({
           name: item.name,
-          group_name: item.group_name,
           unit_code: item.unit_code,
           length: item.length,
           width: item.width,
@@ -151,7 +167,6 @@ export async function GET(
 
         return {
           name: comp.name || comp.component_type?.name || "Component",
-          variant_name: comp.component_variant?.name,
           description: comp.description,
           line_items: lineItems,
           subtotal: componentSubtotal,
@@ -184,14 +199,14 @@ export async function GET(
       valid_from: quotation.valid_from,
       valid_until: quotation.valid_until,
 
-      client_name: quotation.client_name,
-      client_email: quotation.client_email,
-      client_phone: quotation.client_phone,
+      client_name: client?.name || null,
+      client_email: client?.email || null,
+      client_phone: client?.phone || null,
 
-      property_name: quotation.property_name,
-      property_address: quotation.property_address,
-      property_type: quotation.property_type,
-      carpet_area: quotation.carpet_area,
+      property_name: property?.property_name as string | null | undefined,
+      property_address: property?.address_line1 as string | null | undefined,
+      property_type: property?.property_type as string | null | undefined,
+      carpet_area: property?.carpet_area as number | null | undefined,
 
       subtotal: subtotal,
       discount_type: quotation.discount_type,

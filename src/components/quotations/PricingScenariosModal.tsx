@@ -73,7 +73,7 @@ export function PricingScenariosModal({
   // Calculate item amount
   const calculateItemAmount = useCallback((item: LineItem): number => {
     const measureType = getMeasurementInfo(item.unitCode).type;
-    const unit = item.measurementUnit || "ft";
+    const unit = item.measurementUnit || "mm";
     switch (measureType) {
       case "area":
         const sqft = calculateSqft(item.length, item.width, unit);
@@ -94,7 +94,7 @@ export function PricingScenariosModal({
   const calculateItemAmountWithRate = useCallback(
     (item: LineItem, rate: number): number => {
       const measureType = getMeasurementInfo(item.unitCode).type;
-      const unit = item.measurementUnit || "ft";
+      const unit = item.measurementUnit || "mm";
       switch (measureType) {
         case "area":
           const sqft = calculateSqft(item.length, item.width, unit);

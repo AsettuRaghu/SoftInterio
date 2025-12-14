@@ -27,11 +27,23 @@ CREATE TYPE "public"."approval_status_enum" AS ENUM (
     'pending',
     'approved',
     'rejected',
-    'revision_requested'
+    'revision_requested',
+    'not_required',
+    'skipped'
 );
 
 
 ALTER TYPE "public"."approval_status_enum" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."area_unit" AS ENUM (
+    'sqft',
+    'sqm',
+    'sqyd'
+);
+
+
+ALTER TYPE "public"."area_unit" OWNER TO "postgres";
 
 
 CREATE TYPE "public"."billing_cycle_enum" AS ENUM (
@@ -44,18 +56,45 @@ ALTER TYPE "public"."billing_cycle_enum" OWNER TO "postgres";
 
 
 CREATE TYPE "public"."budget_range_enum" AS ENUM (
-    'below_5l',
-    '5l_10l',
-    '10l_20l',
-    '20l_35l',
-    '35l_50l',
-    '50l_1cr',
-    'above_1cr',
+    'below_10l',
+    'around_10l',
+    'around_20l',
+    'around_30l',
+    'around_40l',
+    'around_50l',
+    'above_50l',
     'not_disclosed'
 );
 
 
 ALTER TYPE "public"."budget_range_enum" OWNER TO "postgres";
+
+
+COMMENT ON TYPE "public"."budget_range_enum" IS 'Budget range options: below_10l (Below ₹10 Lakhs), around_10l (~₹10 Lakhs), around_20l (~₹20 Lakhs), around_30l (~₹30 Lakhs), around_40l (~₹40 Lakhs), around_50l (~₹50 Lakhs), above_50l (Above ₹50 Lakhs), not_disclosed (Not Disclosed)';
+
+
+
+CREATE TYPE "public"."client_status" AS ENUM (
+    'active',
+    'inactive',
+    'blacklisted'
+);
+
+
+ALTER TYPE "public"."client_status" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."client_type" AS ENUM (
+    'individual',
+    'company',
+    'partnership',
+    'huf',
+    'trust',
+    'other'
+);
+
+
+ALTER TYPE "public"."client_type" OWNER TO "postgres";
 
 
 CREATE TYPE "public"."disqualification_reason_enum" AS ENUM (
@@ -72,6 +111,59 @@ CREATE TYPE "public"."disqualification_reason_enum" AS ENUM (
 
 
 ALTER TYPE "public"."disqualification_reason_enum" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."document_category" AS ENUM (
+    'contract',
+    'agreement',
+    'proposal',
+    'design',
+    'floor_plan',
+    '3d_render',
+    'photo',
+    'invoice',
+    'receipt',
+    'purchase_order',
+    'delivery_note',
+    'identification',
+    'property_document',
+    'reference',
+    'other'
+);
+
+
+ALTER TYPE "public"."document_category" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."document_linked_type" AS ENUM (
+    'lead',
+    'project',
+    'quotation',
+    'invoice',
+    'client',
+    'property',
+    'purchase_order',
+    'vendor',
+    'expense'
+);
+
+
+ALTER TYPE "public"."document_linked_type" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."facing_direction" AS ENUM (
+    'north',
+    'south',
+    'east',
+    'west',
+    'north_east',
+    'north_west',
+    'south_east',
+    'south_west'
+);
+
+
+ALTER TYPE "public"."facing_direction" OWNER TO "postgres";
 
 
 CREATE TYPE "public"."invitation_status_enum" AS ENUM (
@@ -106,6 +198,8 @@ CREATE TYPE "public"."lead_activity_type_enum" AS ENUM (
     'email_received',
     'meeting_scheduled',
     'meeting_completed',
+    'client_meeting',
+    'internal_meeting',
     'site_visit',
     'quotation_sent',
     'quotation_revised',
@@ -209,6 +303,19 @@ CREATE TYPE "public"."notification_type_enum" AS ENUM (
 
 
 ALTER TYPE "public"."notification_type_enum" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."ownership_type" AS ENUM (
+    'owned',
+    'rented',
+    'leased',
+    'family_owned',
+    'under_construction',
+    'other'
+);
+
+
+ALTER TYPE "public"."ownership_type" OWNER TO "postgres";
 
 
 CREATE TYPE "public"."payment_milestone_status_enum" AS ENUM (
@@ -335,6 +442,42 @@ CREATE TYPE "public"."project_sub_phase_status_enum" AS ENUM (
 ALTER TYPE "public"."project_sub_phase_status_enum" OWNER TO "postgres";
 
 
+CREATE TYPE "public"."property_category" AS ENUM (
+    'residential',
+    'commercial'
+);
+
+
+ALTER TYPE "public"."property_category" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."property_status" AS ENUM (
+    'under_construction',
+    'ready_to_move',
+    'occupied',
+    'vacant',
+    'renovation_in_progress'
+);
+
+
+ALTER TYPE "public"."property_status" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."property_subtype" AS ENUM (
+    'gated_community',
+    'non_gated',
+    'standalone',
+    'mall',
+    'commercial_complex',
+    'it_park',
+    'industrial_area',
+    'other'
+);
+
+
+ALTER TYPE "public"."property_subtype" OWNER TO "postgres";
+
+
 CREATE TYPE "public"."property_type_enum" AS ENUM (
     'apartment_gated',
     'apartment_non_gated',
@@ -350,6 +493,40 @@ CREATE TYPE "public"."property_type_enum" AS ENUM (
 
 
 ALTER TYPE "public"."property_type_enum" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."property_type_v2" AS ENUM (
+    'apartment',
+    'villa',
+    'independent_house',
+    'penthouse',
+    'duplex',
+    'row_house',
+    'farmhouse',
+    'office',
+    'retail_shop',
+    'showroom',
+    'restaurant_cafe',
+    'clinic_hospital',
+    'hotel',
+    'warehouse',
+    'co_working',
+    'other'
+);
+
+
+ALTER TYPE "public"."property_type_v2" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."quotation_type_enum" AS ENUM (
+    'sales',
+    'revision',
+    'change_order',
+    'supplementary'
+);
+
+
+ALTER TYPE "public"."quotation_type_enum" OWNER TO "postgres";
 
 
 CREATE TYPE "public"."service_type_enum" AS ENUM (
@@ -564,6 +741,102 @@ $$;
 
 
 ALTER FUNCTION "public"."calculate_component_subtotal_v2"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."calculate_lead_score"("p_lead_id" "uuid") RETURNS TABLE("activity_score" integer, "engagement_level" character varying, "days_since_last_activity" integer, "total_activities" integer, "suggested_lead_score" character varying)
+    LANGUAGE "plpgsql"
+    AS $$
+DECLARE
+    v_base_score integer := 0;
+    v_decay_score integer := 0;
+    v_recency_bonus integer := 0;
+    v_final_score integer := 0;
+    v_days_inactive integer := 0;
+    v_total_acts integer := 0;
+    v_engagement character varying(20);
+    v_suggested_score character varying(20);
+    v_last_activity timestamp with time zone;
+BEGIN
+    -- Calculate activity-based score
+    SELECT 
+        COALESCE(SUM(
+            CASE activity_type
+                WHEN 'site_visit' THEN 30
+                WHEN 'meeting_completed' THEN 25
+                WHEN 'quotation_sent' THEN 20
+                WHEN 'quotation_revised' THEN 15
+                WHEN 'meeting_scheduled' THEN 15
+                WHEN 'call_made' THEN 10
+                WHEN 'call_received' THEN 10
+                WHEN 'call_missed' THEN -5
+                WHEN 'email_sent' THEN 5
+                WHEN 'email_received' THEN 8
+                WHEN 'document_uploaded' THEN 5
+                WHEN 'note_added' THEN 2
+                ELSE 0
+            END
+        ), 0),
+        COUNT(*),
+        MAX(created_at)
+    INTO v_base_score, v_total_acts, v_last_activity
+    FROM lead_activities
+    WHERE lead_id = p_lead_id
+    AND created_at > NOW() - INTERVAL '90 days'; -- Only count recent activities
+    
+    -- Calculate days since last activity
+    IF v_last_activity IS NOT NULL THEN
+        v_days_inactive := EXTRACT(DAY FROM (NOW() - v_last_activity))::integer;
+    ELSE
+        -- Check lead creation date if no activities
+        SELECT EXTRACT(DAY FROM (NOW() - created_at))::integer
+        INTO v_days_inactive
+        FROM leads WHERE id = p_lead_id;
+    END IF;
+    
+    -- Apply decay for inactivity (lose 5 points per week of inactivity)
+    v_decay_score := (v_days_inactive / 7) * 5;
+    
+    -- Recency bonus (activity in last 3 days)
+    IF v_days_inactive <= 3 THEN
+        v_recency_bonus := 20;
+    ELSIF v_days_inactive <= 7 THEN
+        v_recency_bonus := 10;
+    END IF;
+    
+    -- Calculate final score (capped between 0 and 100)
+    v_final_score := GREATEST(0, LEAST(100, v_base_score - v_decay_score + v_recency_bonus));
+    
+    -- Determine engagement level
+    IF v_final_score >= 60 THEN
+        v_engagement := 'high';
+    ELSIF v_final_score >= 30 THEN
+        v_engagement := 'medium';
+    ELSE
+        v_engagement := 'low';
+    END IF;
+    
+    -- Suggest lead_score based on calculated metrics
+    IF v_days_inactive > 30 AND v_final_score < 20 THEN
+        v_suggested_score := 'cold';
+    ELSIF v_final_score >= 60 OR (v_days_inactive <= 7 AND v_total_acts >= 3) THEN
+        v_suggested_score := 'hot';
+    ELSIF v_final_score >= 30 OR v_total_acts >= 2 THEN
+        v_suggested_score := 'warm';
+    ELSE
+        v_suggested_score := 'cold';
+    END IF;
+    
+    RETURN QUERY SELECT 
+        v_final_score,
+        v_engagement,
+        v_days_inactive,
+        v_total_acts,
+        v_suggested_score;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."calculate_lead_score"("p_lead_id" "uuid") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."calculate_line_item_amount"() RETURNS "trigger"
@@ -1088,6 +1361,63 @@ COMMENT ON FUNCTION "public"."can_start_sub_phase"("p_sub_phase_id" "uuid") IS '
 
 
 
+CREATE OR REPLACE FUNCTION "public"."carry_forward_lead_data_to_project"("p_lead_id" "uuid", "p_project_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+    v_notes_count INTEGER := 0;
+    v_documents_count INTEGER := 0;
+    v_quotations_count INTEGER := 0;
+    v_result JSONB;
+BEGIN
+    -- 1. Link notes to project (not copy - they retain lead_id as well)
+    UPDATE lead_notes 
+    SET project_id = p_project_id
+    WHERE lead_id = p_lead_id
+    AND project_id IS NULL;
+    
+    GET DIAGNOSTICS v_notes_count = ROW_COUNT;
+    
+    -- 2. Link documents to project
+    UPDATE lead_documents 
+    SET project_id = p_project_id
+    WHERE lead_id = p_lead_id
+    AND project_id IS NULL;
+    
+    GET DIAGNOSTICS v_documents_count = ROW_COUNT;
+    
+    -- 3. Link quotations to project (quotations table already has project_id)
+    UPDATE quotations 
+    SET project_id = p_project_id
+    WHERE lead_id = p_lead_id
+    AND project_id IS NULL;
+    
+    GET DIAGNOSTICS v_quotations_count = ROW_COUNT;
+    
+    -- Build result summary
+    v_result := jsonb_build_object(
+        'success', true,
+        'lead_id', p_lead_id,
+        'project_id', p_project_id,
+        'carried_forward', jsonb_build_object(
+            'notes', v_notes_count,
+            'documents', v_documents_count,
+            'quotations', v_quotations_count
+        )
+    );
+    
+    RETURN v_result;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."carry_forward_lead_data_to_project"("p_lead_id" "uuid", "p_project_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."carry_forward_lead_data_to_project"("p_lead_id" "uuid", "p_project_id" "uuid") IS 'Links existing lead notes, documents, and quotations to a project when a lead is won. Call this when creating a project from a won lead.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."cleanup_old_notifications"("days_to_keep" integer DEFAULT 90) RETURNS integer
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
@@ -1212,6 +1542,8 @@ CREATE OR REPLACE FUNCTION "public"."create_project_from_lead"("p_lead_id" "uuid
     AS $$
 DECLARE
     v_lead RECORD;
+    v_client RECORD;
+    v_property RECORD;
     v_project_id UUID;
     v_project_number TEXT;
     v_property_type project_property_type_enum;
@@ -1225,13 +1557,25 @@ BEGIN
         RAISE EXCEPTION 'Lead not found: %', p_lead_id;
     END IF;
     
+    -- Get client details (from linked client record)
+    SELECT * INTO v_client FROM clients WHERE id = v_lead.client_id;
+    
+    -- Get property details (from linked property record, may be null)
+    IF v_lead.property_id IS NOT NULL THEN
+        SELECT * INTO v_property FROM properties WHERE id = v_lead.property_id;
+    END IF;
+    
     -- Check if project already exists for this lead
     IF v_lead.project_id IS NOT NULL THEN
         RETURN v_lead.project_id; -- Return existing project
     END IF;
     
-    -- Map leads.property_type to projects.property_type (direct mapping now!)
-    v_property_type := v_lead.property_type::TEXT::project_property_type_enum;
+    -- Map property_type to projects.property_type (from properties table)
+    BEGIN
+        v_property_type := COALESCE(v_property.property_type, 'apartment')::TEXT::project_property_type_enum;
+    EXCEPTION WHEN OTHERS THEN
+        v_property_type := 'apartment'::project_property_type_enum;
+    END;
     
     -- Map leads.service_type to projects.project_category
     v_project_category := CASE 
@@ -1252,15 +1596,15 @@ BEGIN
         v_project_number := 'PRJ-' || to_char(NOW(), 'YYYYMMDD') || '-' || floor(random() * 10000)::text;
     END;
     
-    -- Generate project name
+    -- Generate project name (use property name or client name)
     v_project_name := COALESCE(
-        v_lead.property_name, 
-        v_lead.client_name || '''s ' || 
+        v_property.property_name, 
+        v_client.name || '''s ' || 
         CASE 
-            WHEN v_lead.property_type::TEXT LIKE 'apartment%' THEN 'Apartment'
-            WHEN v_lead.property_type::TEXT LIKE 'villa%' THEN 'Villa'
-            WHEN v_lead.property_type::TEXT = 'independent_house' THEN 'House'
-            WHEN v_lead.property_type::TEXT LIKE 'commercial%' THEN 'Commercial'
+            WHEN v_property.property_type::TEXT LIKE 'apartment%' THEN 'Apartment'
+            WHEN v_property.property_type::TEXT LIKE 'villa%' THEN 'Villa'
+            WHEN v_property.property_type::TEXT = 'independent_house' THEN 'House'
+            WHEN v_property.property_type::TEXT LIKE 'commercial%' THEN 'Commercial'
             ELSE 'Property'
         END || ' Project'
     );
@@ -1271,20 +1615,20 @@ BEGIN
         project_number,
         name,
         description,
-        -- Client info
+        -- Client info (from clients table)
         client_name,
         client_email,
         client_phone,
-        -- Property info (NEW: aligned with leads)
+        -- Property info (from properties table)
         property_type,
         property_name,
         flat_number,
         carpet_area_sqft,
-        -- Location
+        -- Location (from properties table)
         site_address,
         city,
         pincode,
-        -- Project classification (NEW: aligned with leads)
+        -- Project classification
         project_category,
         project_type,  -- Keep for backward compatibility
         -- Dates
@@ -1294,7 +1638,7 @@ BEGIN
         quoted_amount,
         budget_amount,
         budget_range,
-        -- Lead tracking (NEW)
+        -- Lead tracking
         lead_source,
         lead_source_detail,
         sales_rep_id,
@@ -1311,29 +1655,29 @@ BEGIN
         v_project_number,
         v_project_name,
         v_lead.project_scope,
-        -- Client info
-        v_lead.client_name,
-        v_lead.email,
-        v_lead.phone,
-        -- Property info
+        -- Client info (from clients table)
+        v_client.name,
+        v_client.email,
+        v_client.phone,
+        -- Property info (from properties table)
         v_property_type,
-        v_lead.property_name,
-        v_lead.flat_number,
-        v_lead.carpet_area_sqft,
-        -- Location
-        v_lead.property_address,
-        v_lead.property_city,
-        v_lead.property_pincode,
+        v_property.property_name,
+        v_property.unit_number,
+        v_property.carpet_area,
+        -- Location (from properties table)
+        v_property.address_line1,
+        COALESCE(v_property.city, 'Unknown'),
+        v_property.pincode,
         -- Project classification
         v_project_category,
         -- Legacy project_type (backward compatibility)
         CASE 
-            WHEN v_lead.property_type::TEXT LIKE 'apartment%' THEN 'apartment'
-            WHEN v_lead.property_type::TEXT LIKE 'villa%' THEN 'villa'
-            WHEN v_lead.property_type::TEXT = 'independent_house' THEN 'residential'
-            WHEN v_lead.property_type::TEXT LIKE 'commercial_office%' THEN 'office'
-            WHEN v_lead.property_type::TEXT LIKE 'commercial_retail%' THEN 'retail'
-            WHEN v_lead.property_type::TEXT LIKE 'commercial%' THEN 'commercial'
+            WHEN v_property.property_type::TEXT LIKE 'apartment%' THEN 'apartment'
+            WHEN v_property.property_type::TEXT LIKE 'villa%' THEN 'villa'
+            WHEN v_property.property_type::TEXT = 'independent_house' THEN 'residential'
+            WHEN v_property.property_type::TEXT LIKE 'commercial_office%' THEN 'office'
+            WHEN v_property.property_type::TEXT LIKE 'commercial_retail%' THEN 'retail'
+            WHEN v_property.property_type::TEXT LIKE 'commercial%' THEN 'commercial'
             ELSE 'residential'
         END,
         -- Dates
@@ -1399,6 +1743,174 @@ $$;
 ALTER FUNCTION "public"."create_project_from_lead"("p_lead_id" "uuid", "p_created_by" "uuid", "p_project_category" "text", "p_initialize_phases" boolean) OWNER TO "postgres";
 
 
+COMMENT ON FUNCTION "public"."create_project_from_lead"("p_lead_id" "uuid", "p_created_by" "uuid", "p_project_category" "text", "p_initialize_phases" boolean) IS 'Creates a project from a lead, pulling client data from clients table and property data from properties table';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."create_project_from_lead"("p_lead_id" "uuid", "p_created_by" "uuid", "p_project_category" "text" DEFAULT 'turnkey'::"text", "p_initialize_phases" boolean DEFAULT true, "p_quotation_id" "uuid" DEFAULT NULL::"uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+    v_lead RECORD;
+    v_project_id UUID;
+    v_project_number TEXT;
+    v_project_category project_category_enum;
+    v_quotation_id UUID := p_quotation_id;
+    v_client_id UUID;
+    v_property_id UUID;
+    v_project_name TEXT;
+BEGIN
+    -- Get lead details
+    SELECT * INTO v_lead FROM leads WHERE id = p_lead_id;
+    
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Lead not found: %', p_lead_id;
+    END IF;
+    
+    -- Set Client and Property IDs from Lead
+    v_client_id := v_lead.client_id;
+    v_property_id := v_lead.property_id;
+    
+    -- Check if project already exists for this lead
+    IF v_lead.project_id IS NOT NULL THEN
+        RETURN v_lead.project_id; -- Return existing project
+    END IF;
+
+    -- If no quotation ID provided, try to find the latest one for this lead
+    IF v_quotation_id IS NULL THEN
+        SELECT id INTO v_quotation_id FROM quotations 
+        WHERE lead_id = p_lead_id 
+        ORDER BY created_at DESC LIMIT 1;
+    END IF;
+    
+    -- Map leads.service_type to projects.project_category
+    v_project_category := CASE 
+        WHEN v_lead.service_type::TEXT = 'turnkey' THEN 'turnkey'::project_category_enum
+        WHEN v_lead.service_type::TEXT = 'modular' THEN 'modular'::project_category_enum
+        WHEN v_lead.service_type::TEXT = 'renovation' THEN 'renovation'::project_category_enum
+        WHEN v_lead.service_type::TEXT = 'consultation' THEN 'consultation'::project_category_enum
+        WHEN v_lead.service_type::TEXT = 'commercial_fitout' THEN 'commercial_fitout'::project_category_enum
+        WHEN v_lead.service_type::TEXT = 'other' THEN 'other'::project_category_enum
+        WHEN p_project_category = 'hybrid' THEN 'hybrid'::project_category_enum
+        ELSE 'turnkey'::project_category_enum
+    END;
+    
+    -- Generate project number
+    BEGIN
+        SELECT generate_project_number(v_lead.tenant_id) INTO v_project_number;
+    EXCEPTION WHEN OTHERS THEN
+        v_project_number := 'PRJ-' || to_char(NOW(), 'YYYYMMDD') || '-' || floor(random() * 10000)::text;
+    END;
+    
+    -- Generate project name using Client Name + Category/Type (fetching client name safely)
+    DECLARE
+        v_client_name TEXT;
+    BEGIN
+        SELECT name INTO v_client_name FROM clients WHERE id = v_client_id;
+        v_project_name := COALESCE(v_client_name, 'New') || ' - ' || INITCAP(v_project_category::TEXT) || ' Project';
+    END;
+    
+    -- Create project with ONLY basic and linked fields (No client_name/property_name columns)
+    INSERT INTO projects (
+        tenant_id,
+        project_number,
+        name,
+        description,
+        client_id,    -- Linked Client
+        property_id,  -- Linked Property
+        project_category,
+        start_date,
+        expected_end_date,
+        quoted_amount,
+        budget_amount,
+        budget_range,
+        lead_source,
+        lead_source_detail,
+        sales_rep_id,
+        lead_won_date,
+        converted_from_lead_id,
+        lead_id,
+        quotation_id,
+        status,
+        created_by,
+        is_active
+    ) VALUES (
+        v_lead.tenant_id,
+        v_project_number,
+        v_project_name,
+        v_lead.project_scope,
+        v_client_id,
+        v_property_id,
+        v_project_category,
+        COALESCE(v_lead.expected_project_start, v_lead.target_start_date, CURRENT_DATE),
+        v_lead.target_end_date,
+        COALESCE(v_lead.won_amount, v_lead.estimated_value, 0),
+        COALESCE(v_lead.won_amount, v_lead.estimated_value, 0),
+        v_lead.budget_range::TEXT,
+        v_lead.lead_source::TEXT,
+        v_lead.lead_source_detail,
+        v_lead.assigned_to,
+        v_lead.won_at,
+        p_lead_id,
+        p_lead_id,
+        v_quotation_id,
+        'planning',
+        p_created_by,
+        true
+    ) RETURNING id INTO v_project_id;
+    
+    -- Update lead with project reference
+    UPDATE leads 
+    SET project_id = v_project_id,
+        updated_at = NOW()
+    WHERE id = p_lead_id;
+
+    -- Link existing Lead Documents to the new Project
+    UPDATE lead_documents
+    SET project_id = v_project_id
+    WHERE lead_id = p_lead_id;
+
+    -- Link existing Lead Notes to the new Project
+    UPDATE lead_notes
+    SET project_id = v_project_id
+    WHERE lead_id = p_lead_id;
+    
+    -- Initialize phases if requested
+    IF p_initialize_phases THEN
+        BEGIN
+            PERFORM initialize_project_phases(
+                v_project_id, 
+                v_lead.tenant_id, 
+                v_project_category::TEXT
+            );
+        EXCEPTION WHEN OTHERS THEN
+            RAISE NOTICE 'Phase initialization failed: %', SQLERRM;
+        END;
+    END IF;
+    
+    -- Create activity log
+    INSERT INTO lead_activities (
+        lead_id,
+        activity_type,
+        title,
+        description,
+        created_by
+    ) VALUES (
+        p_lead_id,
+        'other',
+        'Project Created',
+        'Project ' || v_project_number || ' created from this lead',
+        p_created_by
+    );
+    
+    RETURN v_project_id;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."create_project_from_lead"("p_lead_id" "uuid", "p_created_by" "uuid", "p_project_category" "text", "p_initialize_phases" boolean, "p_quotation_id" "uuid") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."create_quotation_for_lead"("p_lead_id" "uuid", "p_user_id" "uuid" DEFAULT NULL::"uuid") RETURNS "uuid"
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
@@ -1407,6 +1919,8 @@ DECLARE
     v_quotation_id UUID;
     v_quotation_number VARCHAR(50);
     v_lead RECORD;
+    v_client RECORD;
+    v_property RECORD;
     v_assignee UUID;
 BEGIN
     -- Get lead details
@@ -1418,13 +1932,21 @@ BEGIN
     
     v_tenant_id := v_lead.tenant_id;
     
+    -- Get client details (from linked client record)
+    SELECT * INTO v_client FROM clients WHERE id = v_lead.client_id;
+    
+    -- Get property details (from linked property record, may be null)
+    IF v_lead.property_id IS NOT NULL THEN
+        SELECT * INTO v_property FROM properties WHERE id = v_lead.property_id;
+    END IF;
+    
     -- Determine assignee: provided user > lead's assigned user > lead creator
     v_assignee := COALESCE(p_user_id, v_lead.assigned_to, v_lead.created_by);
     
     -- Generate quotation number
     v_quotation_number := generate_quotation_number(v_tenant_id);
     
-    -- Create the quotation with assigned_to set to creator
+    -- Create the quotation with data from clients and properties tables
     INSERT INTO quotations (
         tenant_id,
         quotation_number,
@@ -1450,14 +1972,14 @@ BEGIN
         v_quotation_number,
         1,
         p_lead_id,
-        v_lead.client_name,
-        v_lead.email,
-        v_lead.phone,
-        v_lead.property_name,
-        v_lead.property_address,
-        v_lead.property_type::VARCHAR,
-        v_lead.carpet_area_sqft,
-        COALESCE(v_lead.service_type::VARCHAR, 'Interior') || ' - ' || v_lead.client_name,
+        v_client.name,
+        v_client.email,
+        v_client.phone,
+        v_property.property_name,
+        v_property.address_line1,
+        COALESCE(v_property.property_type, 'apartment')::VARCHAR,
+        v_property.carpet_area,
+        COALESCE(v_lead.service_type::VARCHAR, 'Interior') || ' - ' || v_client.name,
         'draft',
         CURRENT_DATE,
         CURRENT_DATE + INTERVAL '30 days',
@@ -1490,7 +2012,7 @@ $$;
 ALTER FUNCTION "public"."create_quotation_for_lead"("p_lead_id" "uuid", "p_user_id" "uuid") OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."create_quotation_for_lead"("p_lead_id" "uuid", "p_user_id" "uuid") IS 'Creates a new quotation for a lead. Called automatically when lead moves to proposal_discussion stage.';
+COMMENT ON FUNCTION "public"."create_quotation_for_lead"("p_lead_id" "uuid", "p_user_id" "uuid") IS 'Creates a new quotation for a lead. Called automatically when lead moves to proposal_discussion stage. Now pulls client data from clients table and property data from properties table.';
 
 
 
@@ -1499,7 +2021,6 @@ CREATE OR REPLACE FUNCTION "public"."create_quotation_revision"("p_quotation_id"
     AS $$
 DECLARE
     v_new_quotation_id UUID;
-    v_current_version INTEGER;
     v_quotation RECORD;
 BEGIN
     -- Get current quotation
@@ -1509,13 +2030,7 @@ BEGIN
         RAISE EXCEPTION 'Quotation not found: %', p_quotation_id;
     END IF;
     
-    -- Get max version for this quotation number
-    SELECT COALESCE(MAX(version), 0) INTO v_current_version
-    FROM quotations
-    WHERE tenant_id = v_quotation.tenant_id
-    AND quotation_number = v_quotation.quotation_number;
-    
-    -- Use the duplicate_quotation function (already exists)
+    -- Use the duplicate_quotation function (handles version calculation internally)
     v_new_quotation_id := duplicate_quotation(p_quotation_id, p_user_id);
     
     -- Update to mark as revision (not auto-created)
@@ -1620,13 +2135,28 @@ CREATE OR REPLACE FUNCTION "public"."duplicate_quotation"("p_quotation_id" "uuid
 DECLARE
     v_new_quotation_id UUID;
     v_new_version INTEGER;
-    v_old_version INTEGER;
+    v_quotation RECORD;
+    v_space_mapping JSONB := '{}';
+    v_component_mapping JSONB := '{}';
+    v_old_space RECORD;
+    v_new_space_id UUID;
+    v_old_component RECORD;
+    v_new_component_id UUID;
 BEGIN
-    -- Get current version
-    SELECT version INTO v_old_version FROM quotations WHERE id = p_quotation_id;
-    v_new_version := COALESCE(v_old_version, 0) + 1;
+    -- Get current quotation
+    SELECT * INTO v_quotation FROM quotations WHERE id = p_quotation_id;
     
-    -- Create new quotation header (now includes assigned_to)
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Quotation not found: %', p_quotation_id;
+    END IF;
+    
+    -- Get max version for this quotation number across all versions
+    SELECT COALESCE(MAX(version), 0) + 1 INTO v_new_version
+    FROM quotations
+    WHERE tenant_id = v_quotation.tenant_id
+    AND quotation_number = v_quotation.quotation_number;
+    
+    -- Create new quotation header
     INSERT INTO quotations (
         tenant_id, quotation_number, version, parent_quotation_id,
         lead_id, client_id, project_id,
@@ -1637,7 +2167,7 @@ BEGIN
         discount_type, discount_value, tax_percent, overhead_percent,
         payment_terms, terms_and_conditions, notes,
         presentation_level, hide_dimensions,
-        assigned_to,
+        assigned_to, template_id,
         created_by, updated_by
     )
     SELECT 
@@ -1650,137 +2180,121 @@ BEGIN
         discount_type, discount_value, tax_percent, overhead_percent,
         payment_terms, terms_and_conditions, notes,
         COALESCE(presentation_level, 'space_component'), COALESCE(hide_dimensions, true),
-        assigned_to, -- Keep same assignee for revision
+        assigned_to, template_id,
         p_user_id, p_user_id
     FROM quotations WHERE id = p_quotation_id
     RETURNING id INTO v_new_quotation_id;
     
-    -- Copy spaces
-    INSERT INTO quotation_spaces (quotation_id, space_type_id, name, description, display_order, subtotal, metadata)
-    SELECT v_new_quotation_id, space_type_id, name, description, display_order, subtotal, metadata
-    FROM quotation_spaces WHERE quotation_id = p_quotation_id;
+    -- Copy quotation_spaces (columns: id, quotation_id, space_type_id, name, description, display_order, subtotal, metadata)
+    FOR v_old_space IN 
+        SELECT * FROM quotation_spaces 
+        WHERE quotation_id = p_quotation_id 
+        ORDER BY display_order
+    LOOP
+        INSERT INTO quotation_spaces (
+            quotation_id, space_type_id, name, description, 
+            display_order, subtotal, metadata
+        )
+        VALUES (
+            v_new_quotation_id, v_old_space.space_type_id, v_old_space.name, v_old_space.description,
+            v_old_space.display_order, v_old_space.subtotal, v_old_space.metadata
+        )
+        RETURNING id INTO v_new_space_id;
+        
+        v_space_mapping := v_space_mapping || jsonb_build_object(v_old_space.id::text, v_new_space_id::text);
+    END LOOP;
     
-    -- Copy components
-    INSERT INTO quotation_components (
-        quotation_id, space_id, component_type_id, component_variant_id,
-        name, description, subtotal, display_order
-    )
-    SELECT 
-        v_new_quotation_id, 
-        ns.id,
-        oc.component_type_id,
-        oc.component_variant_id,
-        oc.name, oc.description, oc.subtotal, oc.display_order
-    FROM quotation_components oc
-    JOIN quotation_spaces os ON os.id = oc.space_id
-    JOIN quotation_spaces ns ON ns.quotation_id = v_new_quotation_id 
-        AND ns.display_order = os.display_order
-    WHERE oc.quotation_id = p_quotation_id;
+    -- Copy quotation_components (columns: id, quotation_id, space_id, component_type_id, name, description, 
+    --   width, height, depth, configuration, display_order, subtotal, metadata, variant_type_id)
+    FOR v_old_component IN 
+        SELECT * FROM quotation_components 
+        WHERE quotation_id = p_quotation_id 
+        ORDER BY display_order
+    LOOP
+        INSERT INTO quotation_components (
+            quotation_id, space_id, component_type_id, name, description,
+            width, height, depth, configuration, display_order, subtotal, metadata
+        )
+        VALUES (
+            v_new_quotation_id, 
+            CASE 
+                WHEN v_old_component.space_id IS NOT NULL 
+                THEN (v_space_mapping->>v_old_component.space_id::text)::uuid 
+                ELSE NULL 
+            END,
+            v_old_component.component_type_id, v_old_component.name, v_old_component.description,
+            v_old_component.width, v_old_component.height, v_old_component.depth,
+            v_old_component.configuration, v_old_component.display_order, 
+            v_old_component.subtotal, v_old_component.metadata
+        )
+        RETURNING id INTO v_new_component_id;
+        
+        v_component_mapping := v_component_mapping || jsonb_build_object(v_old_component.id::text, v_new_component_id::text);
+    END LOOP;
     
-    -- Copy line items with space but no component
+    -- Copy quotation_line_items (columns: id, quotation_id, quotation_space_id, quotation_component_id,
+    --   quotation_cost_item_id, name, length, width, quantity, unit_code, rate, amount,
+    --   display_order, notes, metadata, measurement_unit, company_cost, vendor_cost)
+    -- Note: margin_amount is GENERATED ALWAYS, so we don't insert it
     INSERT INTO quotation_line_items (
         quotation_id, quotation_space_id, quotation_component_id,
-        cost_item_id, name, group_name,
-        length, width, quantity, unit_code, rate, amount,
-        measurement_unit, display_order, notes, metadata
+        quotation_cost_item_id, name, length, width, quantity, 
+        unit_code, rate, amount, display_order, notes, metadata,
+        measurement_unit, company_cost, vendor_cost
     )
     SELECT 
         v_new_quotation_id,
-        ns.id,
-        NULL,
-        oli.cost_item_id, oli.name, oli.group_name,
-        oli.length, oli.width, oli.quantity, oli.unit_code, oli.rate, oli.amount,
-        oli.measurement_unit, oli.display_order, oli.notes, oli.metadata
+        CASE 
+            WHEN oli.quotation_space_id IS NOT NULL 
+            THEN (v_space_mapping->>oli.quotation_space_id::text)::uuid 
+            ELSE NULL 
+        END,
+        CASE 
+            WHEN oli.quotation_component_id IS NOT NULL 
+            THEN (v_component_mapping->>oli.quotation_component_id::text)::uuid 
+            ELSE NULL 
+        END,
+        oli.quotation_cost_item_id, oli.name, oli.length, oli.width, oli.quantity,
+        oli.unit_code, oli.rate, oli.amount, oli.display_order, oli.notes, oli.metadata,
+        oli.measurement_unit, oli.company_cost, oli.vendor_cost
     FROM quotation_line_items oli
-    JOIN quotation_spaces os ON os.id = oli.quotation_space_id
-    JOIN quotation_spaces ns ON ns.quotation_id = v_new_quotation_id 
-        AND ns.display_order = os.display_order
-    WHERE oli.quotation_id = p_quotation_id
-      AND oli.quotation_component_id IS NULL;
+    WHERE oli.quotation_id = p_quotation_id;
     
-    -- Copy line items with component
-    INSERT INTO quotation_line_items (
-        quotation_id, quotation_space_id, quotation_component_id,
-        cost_item_id, name, group_name,
-        length, width, quantity, unit_code, rate, amount,
-        measurement_unit, display_order, notes, metadata
-    )
-    SELECT 
-        v_new_quotation_id,
-        ns.id,
-        nc.id,
-        oli.cost_item_id, oli.name, oli.group_name,
-        oli.length, oli.width, oli.quantity, oli.unit_code, oli.rate, oli.amount,
-        oli.measurement_unit, oli.display_order, oli.notes, oli.metadata
-    FROM quotation_line_items oli
-    JOIN quotation_components oc ON oc.id = oli.quotation_component_id
-    JOIN quotation_spaces os ON os.id = oc.space_id
-    JOIN quotation_spaces ns ON ns.quotation_id = v_new_quotation_id 
-        AND ns.display_order = os.display_order
-    JOIN quotation_components nc ON nc.space_id = ns.id 
-        AND nc.display_order = oc.display_order
-    WHERE oli.quotation_id = p_quotation_id
-      AND oli.quotation_component_id IS NOT NULL;
-    
-    -- Copy orphan line items
-    INSERT INTO quotation_line_items (
-        quotation_id, quotation_space_id, quotation_component_id,
-        cost_item_id, name, group_name,
-        length, width, quantity, unit_code, rate, amount,
-        measurement_unit, display_order, notes, metadata
-    )
-    SELECT 
-        v_new_quotation_id,
-        NULL,
-        NULL,
-        oli.cost_item_id, oli.name, oli.group_name,
-        oli.length, oli.width, oli.quantity, oli.unit_code, oli.rate, oli.amount,
-        oli.measurement_unit, oli.display_order, oli.notes, oli.metadata
-    FROM quotation_line_items oli
-    WHERE oli.quotation_id = p_quotation_id
-      AND oli.quotation_space_id IS NULL
-      AND oli.quotation_component_id IS NULL;
-    
-    -- Copy materials (backward compatibility)
+    -- Copy quotation_materials (columns: id, quotation_id, component_id, material_id, category_id,
+    --   name, category_name, specifications, display_order, subtotal, metadata)
     INSERT INTO quotation_materials (
         quotation_id, component_id, material_id, category_id,
-        name, category_name, specifications, display_order, metadata
+        name, category_name, specifications, display_order, subtotal, metadata
     )
     SELECT 
         v_new_quotation_id,
-        nc.id,
+        (v_component_mapping->>om.component_id::text)::uuid,
         om.material_id, om.category_id,
-        om.name, om.category_name, om.specifications, om.display_order, om.metadata
+        om.name, om.category_name, om.specifications, 
+        om.display_order, om.subtotal, om.metadata
     FROM quotation_materials om
-    JOIN quotation_components oc ON oc.id = om.component_id
-    JOIN quotation_spaces os ON os.id = oc.space_id
-    JOIN quotation_spaces ns ON ns.quotation_id = v_new_quotation_id 
-        AND ns.display_order = os.display_order
-    JOIN quotation_components nc ON nc.space_id = ns.id 
-        AND nc.display_order = oc.display_order
-    WHERE om.quotation_id = p_quotation_id;
+    WHERE om.quotation_id = p_quotation_id
+      AND v_component_mapping ? om.component_id::text;
     
-    -- Copy cost attributes (backward compatibility)
+    -- Copy quotation_cost_attributes (columns: id, quotation_id, material_id, attribute_type_id,
+    --   name, quantity, unit, rate, amount, is_auto_calculated, calculation_source, display_order, metadata, component_id)
     INSERT INTO quotation_cost_attributes (
         quotation_id, material_id, attribute_type_id,
-        name, quantity, unit, rate, amount, is_auto_calculated, calculation_source, display_order, metadata
+        name, quantity, unit, rate, amount, 
+        is_auto_calculated, calculation_source, display_order, metadata, component_id
     )
     SELECT 
         v_new_quotation_id,
         nm.id,
         oca.attribute_type_id,
         oca.name, oca.quantity, oca.unit, oca.rate, oca.amount, 
-        oca.is_auto_calculated, oca.calculation_source, oca.display_order, oca.metadata
+        oca.is_auto_calculated, oca.calculation_source, oca.display_order, oca.metadata,
+        (v_component_mapping->>oca.component_id::text)::uuid
     FROM quotation_cost_attributes oca
     JOIN quotation_materials om ON om.id = oca.material_id
-    JOIN quotation_components oc ON oc.id = om.component_id
-    JOIN quotation_spaces os ON os.id = oc.space_id
-    JOIN quotation_spaces ns ON ns.quotation_id = v_new_quotation_id 
-        AND ns.display_order = os.display_order
-    JOIN quotation_components nc ON nc.space_id = ns.id 
-        AND nc.display_order = oc.display_order
-    JOIN quotation_materials nm ON nm.component_id = nc.id 
+    JOIN quotation_materials nm ON nm.quotation_id = v_new_quotation_id 
         AND nm.display_order = om.display_order
+        AND (v_component_mapping->>om.component_id::text)::uuid = nm.component_id
     WHERE oca.quotation_id = p_quotation_id;
     
     RETURN v_new_quotation_id;
@@ -1791,8 +2305,20 @@ $$;
 ALTER FUNCTION "public"."duplicate_quotation"("p_quotation_id" "uuid", "p_user_id" "uuid") OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."duplicate_quotation"("p_quotation_id" "uuid", "p_user_id" "uuid") IS 'Creates a copy/revision of a quotation including assigned_to field.';
+COMMENT ON FUNCTION "public"."duplicate_quotation"("p_quotation_id" "uuid", "p_user_id" "uuid") IS 'Creates a copy/revision of a quotation with proper ID mapping. Updated to match actual table schemas.';
 
+
+
+CREATE OR REPLACE FUNCTION "public"."generate_client_access_token"() RETURNS "text"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+    RETURN encode(gen_random_bytes(32), 'hex');
+END;
+$$;
+
+
+ALTER FUNCTION "public"."generate_client_access_token"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."generate_grn_number"("p_tenant_id" "uuid") RETURNS "text"
@@ -1866,18 +2392,40 @@ CREATE OR REPLACE FUNCTION "public"."generate_lead_number"("p_tenant_id" "uuid")
 DECLARE
     v_prefix VARCHAR(10);
     v_next_num INTEGER;
+    v_current_month VARCHAR(6);
+    v_stored_month VARCHAR(6);
     v_lead_number VARCHAR(50);
 BEGIN
-    INSERT INTO tenant_lead_settings (tenant_id)
-    VALUES (p_tenant_id)
+    -- Get current month in YYYYMM format
+    v_current_month := TO_CHAR(CURRENT_DATE, 'YYYYMM');
+    
+    -- Ensure tenant settings exist
+    INSERT INTO tenant_lead_settings (tenant_id, lead_number_month, lead_number_next)
+    VALUES (p_tenant_id, v_current_month, 1)
     ON CONFLICT (tenant_id) DO NOTHING;
     
-    UPDATE tenant_lead_settings
-    SET lead_number_next = lead_number_next + 1
-    WHERE tenant_id = p_tenant_id
-    RETURNING lead_number_prefix, lead_number_next - 1 INTO v_prefix, v_next_num;
+    -- Get current stored month
+    SELECT lead_number_month INTO v_stored_month
+    FROM tenant_lead_settings
+    WHERE tenant_id = p_tenant_id;
     
-    v_lead_number := v_prefix || '-' || TO_CHAR(CURRENT_DATE, 'YYYY') || '-' || LPAD(v_next_num::TEXT, 5, '0');
+    -- If month has changed, reset the counter
+    IF v_stored_month IS NULL OR v_stored_month != v_current_month THEN
+        UPDATE tenant_lead_settings
+        SET lead_number_month = v_current_month,
+            lead_number_next = 2  -- Will return 1, then increment to 2
+        WHERE tenant_id = p_tenant_id
+        RETURNING lead_number_prefix, 1 INTO v_prefix, v_next_num;
+    ELSE
+        -- Same month, just increment
+        UPDATE tenant_lead_settings
+        SET lead_number_next = lead_number_next + 1
+        WHERE tenant_id = p_tenant_id
+        RETURNING lead_number_prefix, lead_number_next - 1 INTO v_prefix, v_next_num;
+    END IF;
+    
+    -- Generate lead number: LD-YYYYMM-XXX (3 digits, padded)
+    v_lead_number := v_prefix || '-' || v_current_month || '-' || LPAD(v_next_num::TEXT, 3, '0');
     
     RETURN v_lead_number;
 END;
@@ -1885,6 +2433,10 @@ $$;
 
 
 ALTER FUNCTION "public"."generate_lead_number"("p_tenant_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."generate_lead_number"("p_tenant_id" "uuid") IS 'Generates unique lead numbers per tenant in format LD-YYYYMM-XXX. Counter resets each month.';
+
 
 
 CREATE OR REPLACE FUNCTION "public"."generate_mr_number"("p_tenant_id" "uuid") RETURNS "text"
@@ -1948,6 +2500,30 @@ $$;
 
 
 ALTER FUNCTION "public"."generate_project_number"("p_tenant_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."generate_quotation_client_link"("p_quotation_id" "uuid") RETURNS TABLE("token" "text", "expires_at" timestamp with time zone)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+    v_token TEXT;
+    v_expires TIMESTAMPTZ;
+BEGIN
+    v_token := generate_client_access_token();
+    v_expires := now() + INTERVAL '30 days';
+    
+    UPDATE quotations
+    SET 
+        client_access_token = v_token,
+        client_access_expires_at = v_expires
+    WHERE id = p_quotation_id;
+    
+    RETURN QUERY SELECT v_token, v_expires;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."generate_quotation_client_link"("p_quotation_id" "uuid") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."generate_quotation_number"("p_tenant_id" "uuid") RETURNS character varying
@@ -3052,10 +3628,23 @@ DECLARE
     v_lead_client_name VARCHAR(255);
     v_won_amount DECIMAL(12,2);
     v_triggered_by UUID;
+    v_client_id UUID;
 BEGIN
     -- Only trigger when stage changes to 'won'
     IF NEW.stage = 'won' AND (OLD.stage IS NULL OR OLD.stage != 'won') THEN
-        v_lead_client_name := NEW.client_name;
+        
+        -- Get Client Name from linked table since 'client_name' column is deprecated/removed
+        v_client_id := NEW.client_id;
+        
+        IF v_client_id IS NOT NULL THEN
+            SELECT name INTO v_lead_client_name FROM clients WHERE id = v_client_id;
+        END IF;
+
+        -- Fallback if client name lookup fails or isn't linked
+        IF v_lead_client_name IS NULL THEN
+            v_lead_client_name := COALESCE(NEW.lead_number, 'Unknown Client');
+        END IF;
+
         v_won_amount := NEW.won_amount;
         v_triggered_by := auth.uid();
         
@@ -3093,7 +3682,6 @@ BEGIN
             );
         END LOOP;
     END IF;
-    
     RETURN NEW;
 END;
 $$;
@@ -4879,6 +5467,29 @@ COMMENT ON FUNCTION "public"."start_sub_phase"("p_sub_phase_id" "uuid", "p_user_
 
 
 
+CREATE OR REPLACE FUNCTION "public"."sync_cost_item_from_po"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  -- When a PO item is created or updated, sync the vendor cost to cost_items
+  IF NEW.cost_item_id IS NOT NULL THEN
+    UPDATE cost_items
+    SET 
+      vendor_cost = NEW.unit_price,
+      last_purchase_date = NOW(),
+      last_vendor_id = (SELECT vendor_id FROM purchase_orders WHERE id = NEW.po_id),
+      updated_at = NOW()
+    WHERE id = NEW.cost_item_id;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."sync_cost_item_from_po"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."sync_user_email_verification"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
@@ -4898,6 +5509,56 @@ $$;
 
 
 ALTER FUNCTION "public"."sync_user_email_verification"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."track_quotation_view"("p_token" "text", "p_ip_address" "inet" DEFAULT NULL::"inet", "p_user_agent" "text" DEFAULT NULL::"text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+    v_quotation_id UUID;
+BEGIN
+    -- Find quotation by token
+    SELECT id INTO v_quotation_id
+    FROM quotations
+    WHERE client_access_token = p_token
+    AND (client_access_expires_at IS NULL OR client_access_expires_at > now());
+    
+    IF v_quotation_id IS NULL THEN
+        RETURN NULL;
+    END IF;
+    
+    -- Update view stats
+    UPDATE quotations
+    SET 
+        client_view_count = COALESCE(client_view_count, 0) + 1,
+        last_client_view_at = now(),
+        viewed_at = COALESCE(viewed_at, now()),
+        status = CASE WHEN status = 'sent' THEN 'viewed' ELSE status END
+    WHERE id = v_quotation_id;
+    
+    -- Log activity
+    INSERT INTO quotation_activities (
+        quotation_id,
+        activity_type,
+        title,
+        description,
+        ip_address,
+        user_agent
+    ) VALUES (
+        v_quotation_id,
+        'viewed',
+        'Client Viewed Quotation',
+        'Quotation was viewed via client portal link',
+        p_ip_address,
+        p_user_agent
+    );
+    
+    RETURN v_quotation_id;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."track_quotation_view"("p_token" "text", "p_ip_address" "inet", "p_user_agent" "text") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."trg_update_payment_milestone_status"() RETURNS "trigger"
@@ -5015,6 +5676,28 @@ $$;
 
 
 ALTER FUNCTION "public"."trg_update_sub_phase_progress"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trigger_carry_forward_on_lead_won"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+BEGIN
+    -- Only trigger when:
+    -- 1. Stage changes to 'won'
+    -- 2. project_id is set (lead is linked to a project)
+    IF NEW.stage = 'won' 
+       AND OLD.stage != 'won'
+       AND NEW.project_id IS NOT NULL
+    THEN
+        PERFORM carry_forward_lead_data_to_project(NEW.id, NEW.project_id);
+    END IF;
+    
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."trigger_carry_forward_on_lead_won"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."trigger_record_stage_change"() RETURNS "trigger"
@@ -5142,6 +5825,34 @@ $$;
 ALTER FUNCTION "public"."trigger_update_lead_last_activity"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."trigger_update_lead_score"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+DECLARE
+    score_data RECORD;
+BEGIN
+    -- Calculate new score for the lead
+    SELECT * INTO score_data FROM calculate_lead_score(NEW.lead_id);
+    
+    -- Update the lead's score
+    UPDATE leads SET
+        activity_score = score_data.activity_score,
+        engagement_level = score_data.engagement_level,
+        days_since_last_activity = score_data.days_since_last_activity,
+        total_activities = score_data.total_activities,
+        score_updated_at = NOW(),
+        last_activity_at = NOW(),
+        last_activity_type = NEW.activity_type
+    WHERE id = NEW.lead_id;
+    
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."trigger_update_lead_score"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."trigger_update_user_count"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     AS $$
@@ -5157,6 +5868,74 @@ $$;
 
 
 ALTER FUNCTION "public"."trigger_update_user_count"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."update_calendar_events_updated_at"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_calendar_events_updated_at"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."update_clients_updated_at"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_clients_updated_at"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."update_documents_updated_at"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_documents_updated_at"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."update_lead_scores"() RETURNS "void"
+    LANGUAGE "plpgsql"
+    AS $$
+DECLARE
+    r RECORD;
+    score_data RECORD;
+BEGIN
+    -- Update all active leads
+    FOR r IN 
+        SELECT id FROM leads 
+        WHERE stage NOT IN ('won', 'lost', 'disqualified')
+    LOOP
+        SELECT * INTO score_data FROM calculate_lead_score(r.id);
+        
+        UPDATE leads SET
+            activity_score = score_data.activity_score,
+            engagement_level = score_data.engagement_level,
+            days_since_last_activity = score_data.days_since_last_activity,
+            total_activities = score_data.total_activities,
+            score_updated_at = NOW()
+        WHERE id = r.id;
+    END LOOP;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_lead_scores"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."update_phase_progress"() RETURNS "trigger"
@@ -5355,6 +6134,19 @@ $$;
 
 
 ALTER FUNCTION "public"."update_projects_updated_at"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."update_properties_updated_at"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_properties_updated_at"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."update_stock_on_grn"() RETURNS "trigger"
@@ -5582,6 +6374,253 @@ CREATE TABLE IF NOT EXISTS "public"."audit_logs" (
 ALTER TABLE "public"."audit_logs" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."calendar_events" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "tenant_id" "uuid" NOT NULL,
+    "title" character varying(255) NOT NULL,
+    "description" "text",
+    "event_type" character varying(50) DEFAULT 'other'::character varying NOT NULL,
+    "scheduled_at" timestamp with time zone NOT NULL,
+    "end_at" timestamp with time zone,
+    "is_all_day" boolean DEFAULT false,
+    "location" character varying(500),
+    "is_completed" boolean DEFAULT false,
+    "completed_at" timestamp with time zone,
+    "completed_by" "uuid",
+    "notes" "text",
+    "linked_type" character varying(20),
+    "linked_id" "uuid",
+    "attendees" "jsonb" DEFAULT '[]'::"jsonb",
+    "created_by" "uuid",
+    "updated_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."calendar_events" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."calendar_events" IS 'Standalone calendar events that can optionally link to leads or projects';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."clients" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "tenant_id" "uuid" NOT NULL,
+    "client_type" "public"."client_type" DEFAULT 'individual'::"public"."client_type" NOT NULL,
+    "status" "public"."client_status" DEFAULT 'active'::"public"."client_status" NOT NULL,
+    "name" character varying(255) NOT NULL,
+    "display_name" character varying(255),
+    "phone" character varying(20) NOT NULL,
+    "phone_secondary" character varying(20),
+    "email" character varying(255),
+    "email_secondary" character varying(255),
+    "company_name" character varying(255),
+    "gst_number" character varying(20),
+    "pan_number" character varying(15),
+    "contact_person_name" character varying(255),
+    "contact_person_phone" character varying(20),
+    "contact_person_email" character varying(255),
+    "contact_person_designation" character varying(100),
+    "address_line1" character varying(255),
+    "address_line2" character varying(255),
+    "landmark" character varying(255),
+    "locality" character varying(255),
+    "city" character varying(100),
+    "state" character varying(100),
+    "pincode" character varying(10),
+    "country" character varying(100) DEFAULT 'India'::character varying,
+    "date_of_birth" "date",
+    "anniversary_date" "date",
+    "occupation" character varying(100),
+    "company_industry" character varying(100),
+    "referred_by_client_id" "uuid",
+    "referral_source" character varying(100),
+    "referral_notes" "text",
+    "preferred_contact_method" character varying(50),
+    "preferred_contact_time" character varying(100),
+    "communication_language" character varying(50) DEFAULT 'English'::character varying,
+    "notes" "text",
+    "internal_notes" "text",
+    "tags" "jsonb" DEFAULT '[]'::"jsonb",
+    "created_by" "uuid",
+    "updated_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."clients" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."clients" IS 'Central client registry for all modules (leads, projects, quotations)';
+
+
+
+COMMENT ON COLUMN "public"."clients"."name" IS 'Full name for individuals, Company name for businesses';
+
+
+
+COMMENT ON COLUMN "public"."clients"."display_name" IS 'Preferred name for addressing the client';
+
+
+
+COMMENT ON COLUMN "public"."clients"."referred_by_client_id" IS 'Self-referential FK for tracking referrals';
+
+
+
+COMMENT ON COLUMN "public"."clients"."tags" IS 'JSON array of tags for categorization';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."leads" (
+    "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
+    "tenant_id" "uuid" NOT NULL,
+    "lead_number" character varying(50) NOT NULL,
+    "service_type" "public"."service_type_enum",
+    "lead_source" "public"."lead_source_enum",
+    "lead_source_detail" character varying(255),
+    "target_start_date" "date",
+    "target_end_date" "date",
+    "estimated_value" numeric(12,2),
+    "project_scope" "text",
+    "special_requirements" "text",
+    "stage" "public"."lead_stage_enum" DEFAULT 'new'::"public"."lead_stage_enum" NOT NULL,
+    "stage_changed_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    "disqualification_reason" "public"."disqualification_reason_enum",
+    "disqualification_notes" "text",
+    "lost_reason" "public"."lost_reason_enum",
+    "lost_to_competitor" character varying(255),
+    "lost_notes" "text",
+    "won_amount" numeric(12,2),
+    "won_at" timestamp with time zone,
+    "contract_signed_date" "date",
+    "expected_project_start" "date",
+    "assigned_to" "uuid",
+    "assigned_at" timestamp with time zone,
+    "assigned_by" "uuid",
+    "created_by" "uuid" NOT NULL,
+    "requires_approval" boolean DEFAULT false,
+    "approval_status" character varying(20) DEFAULT NULL::character varying,
+    "approval_requested_at" timestamp with time zone,
+    "approval_requested_by" "uuid",
+    "approved_at" timestamp with time zone,
+    "approved_by" "uuid",
+    "approval_notes" "text",
+    "priority" character varying(20) DEFAULT 'medium'::character varying,
+    "last_activity_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    "last_activity_type" "public"."lead_activity_type_enum",
+    "next_followup_date" "date",
+    "next_followup_notes" "text",
+    "created_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    "project_id" "uuid",
+    "lead_score" character varying(20) DEFAULT 'warm'::character varying,
+    "activity_score" integer DEFAULT 0,
+    "engagement_level" character varying(20) DEFAULT 'low'::character varying,
+    "days_since_last_activity" integer,
+    "total_activities" integer DEFAULT 0,
+    "score_updated_at" timestamp with time zone,
+    "budget_range" "public"."budget_range_enum",
+    "property_id" "uuid",
+    "client_id" "uuid"
+);
+
+
+ALTER TABLE "public"."leads" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."leads" IS 'Main leads/opportunities table for sales pipeline';
+
+
+
+COMMENT ON COLUMN "public"."leads"."lead_score" IS 'Lead score indicating engagement level: cold, warm, hot, on_hold';
+
+
+
+COMMENT ON COLUMN "public"."leads"."activity_score" IS 'Calculated score based on lead activities (0-100)';
+
+
+
+COMMENT ON COLUMN "public"."leads"."engagement_level" IS 'Derived from activity_score: low, medium, high';
+
+
+
+COMMENT ON COLUMN "public"."leads"."days_since_last_activity" IS 'Days since last activity, used for cold lead detection';
+
+
+
+COMMENT ON COLUMN "public"."leads"."total_activities" IS 'Total count of activities for this lead';
+
+
+
+COMMENT ON COLUMN "public"."leads"."score_updated_at" IS 'When the score was last calculated';
+
+
+
+CREATE OR REPLACE VIEW "public"."client_details" AS
+ SELECT "c"."id",
+    "c"."tenant_id",
+    "c"."client_type",
+    "c"."status",
+    "c"."name",
+    "c"."display_name",
+    "c"."phone",
+    "c"."phone_secondary",
+    "c"."email",
+    "c"."email_secondary",
+    "c"."company_name",
+    "c"."gst_number",
+    "c"."pan_number",
+    "c"."contact_person_name",
+    "c"."contact_person_phone",
+    "c"."contact_person_email",
+    "c"."contact_person_designation",
+    "c"."address_line1",
+    "c"."address_line2",
+    "c"."landmark",
+    "c"."locality",
+    "c"."city",
+    "c"."state",
+    "c"."pincode",
+    "c"."country",
+    "c"."date_of_birth",
+    "c"."anniversary_date",
+    "c"."occupation",
+    "c"."company_industry",
+    "c"."referred_by_client_id",
+    "c"."referral_source",
+    "c"."referral_notes",
+    "c"."preferred_contact_method",
+    "c"."preferred_contact_time",
+    "c"."communication_language",
+    "c"."notes",
+    "c"."internal_notes",
+    "c"."tags",
+    "c"."created_by",
+    "c"."updated_by",
+    "c"."created_at",
+    "c"."updated_at",
+    ( SELECT "count"(*) AS "count"
+           FROM "public"."leads" "l"
+          WHERE ("l"."client_id" = "c"."id")) AS "lead_count",
+    ( SELECT "count"(*) AS "count"
+           FROM "public"."leads" "l"
+          WHERE (("l"."client_id" = "c"."id") AND ("l"."stage" = 'won'::"public"."lead_stage_enum"))) AS "won_lead_count",
+    ( SELECT COALESCE("sum"("l"."won_amount"), (0)::numeric) AS "coalesce"
+           FROM "public"."leads" "l"
+          WHERE (("l"."client_id" = "c"."id") AND ("l"."stage" = 'won'::"public"."lead_stage_enum"))) AS "total_business_value",
+    "referrer"."name" AS "referred_by_name",
+    ("creator"."raw_user_meta_data" ->> 'full_name'::"text") AS "created_by_name"
+   FROM (("public"."clients" "c"
+     LEFT JOIN "public"."clients" "referrer" ON (("c"."referred_by_client_id" = "referrer"."id")))
+     LEFT JOIN "auth"."users" "creator" ON (("c"."created_by" = "creator"."id")));
+
+
+ALTER VIEW "public"."client_details" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."commission_items" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "tenant_id" "uuid" NOT NULL,
@@ -5626,8 +6665,7 @@ CREATE TABLE IF NOT EXISTS "public"."component_templates" (
     "is_active" boolean DEFAULT true,
     "created_by" "uuid",
     "created_at" timestamp with time zone DEFAULT "now"(),
-    "updated_at" timestamp with time zone DEFAULT "now"(),
-    "variant_type_id" "uuid"
+    "updated_at" timestamp with time zone DEFAULT "now"()
 );
 
 
@@ -5736,7 +6774,7 @@ CREATE TABLE IF NOT EXISTS "public"."cost_attribute_types" (
 ALTER TABLE "public"."cost_attribute_types" OWNER TO "postgres";
 
 
-CREATE TABLE IF NOT EXISTS "public"."cost_item_categories" (
+CREATE TABLE IF NOT EXISTS "public"."quotation_cost_item_categories" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "tenant_id" "uuid" NOT NULL,
     "name" character varying(100) NOT NULL,
@@ -5752,14 +6790,14 @@ CREATE TABLE IF NOT EXISTS "public"."cost_item_categories" (
 );
 
 
-ALTER TABLE "public"."cost_item_categories" OWNER TO "postgres";
+ALTER TABLE "public"."quotation_cost_item_categories" OWNER TO "postgres";
 
 
-COMMENT ON TABLE "public"."cost_item_categories" IS 'Categories for organizing cost items (Material, Hardware, Labour, etc.)';
+COMMENT ON TABLE "public"."quotation_cost_item_categories" IS 'Categories for organizing quotation cost items (e.g., Carcass, Shutter, Hardware, Labour)';
 
 
 
-CREATE TABLE IF NOT EXISTS "public"."cost_items" (
+CREATE TABLE IF NOT EXISTS "public"."quotation_cost_items" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "tenant_id" "uuid" NOT NULL,
     "category_id" "uuid",
@@ -5779,14 +6817,277 @@ CREATE TABLE IF NOT EXISTS "public"."cost_items" (
     "reorder_level" numeric(12,4) DEFAULT 0,
     "min_order_qty" numeric(12,4) DEFAULT 1,
     "lead_time_days" integer DEFAULT 0,
-    "default_vendor_id" "uuid"
+    "default_vendor_id" "uuid",
+    "vendor_cost" numeric(12,2) DEFAULT 0,
+    "company_cost" numeric(12,2) DEFAULT 0,
+    "retail_price" numeric(12,2),
+    "margin_percent" numeric(5,2),
+    "last_purchase_date" timestamp with time zone,
+    "last_vendor_id" "uuid"
 );
 
 
-ALTER TABLE "public"."cost_items" OWNER TO "postgres";
+ALTER TABLE "public"."quotation_cost_items" OWNER TO "postgres";
 
 
-COMMENT ON TABLE "public"."cost_items" IS 'Anything with a price - materials, hardware, labour, services';
+COMMENT ON TABLE "public"."quotation_cost_items" IS 'Master list of cost items used in quotations. These are tenant-defined items like PreLam_Carcass_18MM_HDHMR, Kitchen_Drawer_Tanden, etc. Separate from stock/procurement items.';
+
+
+
+COMMENT ON COLUMN "public"."quotation_cost_items"."default_rate" IS 'Default customer-facing rate (base rate with margin included)';
+
+
+
+COMMENT ON COLUMN "public"."quotation_cost_items"."vendor_cost" IS 'Purchase price from vendor (updated from latest PO)';
+
+
+
+COMMENT ON COLUMN "public"."quotation_cost_items"."company_cost" IS 'Internal cost to the company (what it costs to deliver this item)';
+
+
+
+COMMENT ON COLUMN "public"."quotation_cost_items"."retail_price" IS 'Maximum retail price (MRP) for reference';
+
+
+
+COMMENT ON COLUMN "public"."quotation_cost_items"."margin_percent" IS 'Target margin percentage over company cost';
+
+
+
+COMMENT ON COLUMN "public"."quotation_cost_items"."last_purchase_date" IS 'Date of last purchase order for this item';
+
+
+
+COMMENT ON COLUMN "public"."quotation_cost_items"."last_vendor_id" IS 'Last vendor this item was purchased from';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."stock_materials" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "company_id" "uuid" NOT NULL,
+    "name" character varying(255) NOT NULL,
+    "sku" character varying(100) NOT NULL,
+    "description" "text",
+    "category" character varying(100),
+    "item_type" character varying(50) DEFAULT 'raw_material'::character varying,
+    "unit_of_measure" character varying(50) DEFAULT 'pcs'::character varying,
+    "current_quantity" numeric(12,2) DEFAULT 0,
+    "minimum_quantity" numeric(12,2) DEFAULT 0,
+    "reorder_quantity" numeric(12,2) DEFAULT 0,
+    "unit_cost" numeric(12,2) DEFAULT 0,
+    "selling_price" numeric(12,2),
+    "preferred_vendor_id" "uuid",
+    "storage_location" character varying(255),
+    "notes" "text",
+    "is_active" boolean DEFAULT true,
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    "brand_id" "uuid",
+    "vendor_cost" numeric(12,2),
+    "company_cost" numeric(12,2),
+    "retail_price" numeric(12,2),
+    "markup_percent" numeric(5,2),
+    "markup_amount" numeric(12,2),
+    "revenue_head_id" "uuid",
+    "is_commission_item" boolean DEFAULT false,
+    "commission_percent" numeric(5,2),
+    "specifications" "jsonb" DEFAULT '{}'::"jsonb",
+    "cost_item_id" "uuid",
+    CONSTRAINT "stock_materials_item_type_check" CHECK ((("item_type")::"text" = ANY ((ARRAY['raw_material'::character varying, 'hardware'::character varying, 'consumable'::character varying, 'finished_good'::character varying, 'accessory'::character varying])::"text"[])))
+);
+
+
+ALTER TABLE "public"."stock_materials" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."stock_materials" IS 'Inventory items tracked for stock management';
+
+
+
+COMMENT ON COLUMN "public"."stock_materials"."vendor_cost" IS 'Cost price from vendor/dealer';
+
+
+
+COMMENT ON COLUMN "public"."stock_materials"."company_cost" IS 'Internal cost used in quotations (includes markup)';
+
+
+
+COMMENT ON COLUMN "public"."stock_materials"."retail_price" IS 'MRP or market reference price';
+
+
+
+COMMENT ON COLUMN "public"."stock_materials"."markup_percent" IS 'Percentage markup over vendor cost';
+
+
+
+COMMENT ON COLUMN "public"."stock_materials"."is_commission_item" IS 'True for items where revenue is commission-based (appliances, lighting)';
+
+
+
+COMMENT ON COLUMN "public"."stock_materials"."specifications" IS 'JSONB column storing material specifications like dimensions, weight, color, finish, grade, material composition, etc.';
+
+
+
+COMMENT ON COLUMN "public"."stock_materials"."cost_item_id" IS 'Links to cost_items for unified pricing management';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."stock_vendors" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "tenant_id" "uuid" NOT NULL,
+    "code" character varying(50) NOT NULL,
+    "name" character varying(255) NOT NULL,
+    "display_name" character varying(255),
+    "contact_person" character varying(255),
+    "email" character varying(255),
+    "phone" character varying(50),
+    "alternate_phone" character varying(50),
+    "website" character varying(255),
+    "address_line1" "text",
+    "address_line2" "text",
+    "city" character varying(100),
+    "state" character varying(100),
+    "pincode" character varying(20),
+    "country" character varying(100) DEFAULT 'India'::character varying,
+    "gst_number" character varying(20),
+    "pan_number" character varying(20),
+    "payment_terms" character varying(100),
+    "credit_days" integer DEFAULT 30,
+    "credit_limit" numeric(14,2) DEFAULT 0,
+    "category_ids" "uuid"[],
+    "bank_name" character varying(255),
+    "bank_account_number" character varying(50),
+    "bank_ifsc" character varying(20),
+    "is_active" boolean DEFAULT true,
+    "rating" integer DEFAULT 0,
+    "notes" "text",
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    "is_preferred" boolean DEFAULT false,
+    CONSTRAINT "stock_vendors_rating_check" CHECK ((("rating" >= 0) AND ("rating" <= 5)))
+);
+
+
+ALTER TABLE "public"."stock_vendors" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."stock_vendors" IS 'Suppliers and vendors for stock materials';
+
+
+
+CREATE OR REPLACE VIEW "public"."cost_items_with_stock" WITH ("security_invoker"='true') AS
+ SELECT "ci"."id",
+    "ci"."tenant_id",
+    "ci"."category_id",
+    "ci"."name",
+    "ci"."slug",
+    "ci"."description",
+    "ci"."unit_code",
+    "ci"."default_rate",
+    "ci"."specifications",
+    "ci"."quality_tier",
+    "ci"."display_order",
+    "ci"."is_active",
+    "ci"."is_system",
+    "ci"."created_at",
+    "ci"."updated_at",
+    "ci"."is_stockable",
+    "ci"."reorder_level",
+    "ci"."min_order_qty",
+    "ci"."lead_time_days",
+    "ci"."default_vendor_id",
+    "ci"."vendor_cost",
+    "ci"."company_cost",
+    "ci"."retail_price",
+    "ci"."margin_percent",
+    "ci"."last_purchase_date",
+    "ci"."last_vendor_id",
+    COALESCE("sm"."current_quantity", (0)::numeric) AS "current_stock",
+    COALESCE("sm"."minimum_quantity", (0)::numeric) AS "minimum_stock",
+    "sm"."storage_location",
+    "sm"."id" AS "stock_material_id",
+    "cat"."name" AS "category_name",
+    "cat"."slug" AS "category_slug",
+    "cat"."color" AS "category_color",
+    "v"."name" AS "last_vendor_name",
+        CASE
+            WHEN (("ci"."company_cost" > (0)::numeric) AND ("ci"."default_rate" > (0)::numeric)) THEN "round"(((("ci"."default_rate" - "ci"."company_cost") / "ci"."company_cost") * (100)::numeric), 2)
+            ELSE NULL::numeric
+        END AS "calculated_margin_percent",
+        CASE
+            WHEN ("ci"."is_stockable" AND (COALESCE("sm"."current_quantity", (0)::numeric) = (0)::numeric)) THEN 'out_of_stock'::"text"
+            WHEN ("ci"."is_stockable" AND (COALESCE("sm"."current_quantity", (0)::numeric) <= COALESCE("sm"."minimum_quantity", (0)::numeric))) THEN 'low_stock'::"text"
+            WHEN "ci"."is_stockable" THEN 'in_stock'::"text"
+            ELSE 'not_applicable'::"text"
+        END AS "stock_status"
+   FROM ((("public"."quotation_cost_items" "ci"
+     LEFT JOIN "public"."stock_materials" "sm" ON (("sm"."cost_item_id" = "ci"."id")))
+     LEFT JOIN "public"."quotation_cost_item_categories" "cat" ON (("cat"."id" = "ci"."category_id")))
+     LEFT JOIN "public"."stock_vendors" "v" ON (("v"."id" = "ci"."last_vendor_id")));
+
+
+ALTER VIEW "public"."cost_items_with_stock" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."documents" (
+    "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
+    "tenant_id" "uuid" NOT NULL,
+    "linked_type" "public"."document_linked_type" NOT NULL,
+    "linked_id" "uuid" NOT NULL,
+    "file_name" character varying(255) NOT NULL,
+    "original_name" character varying(255) NOT NULL,
+    "file_type" character varying(100),
+    "file_extension" character varying(20),
+    "file_size" bigint,
+    "storage_bucket" character varying(100) DEFAULT 'documents'::character varying NOT NULL,
+    "storage_path" "text" NOT NULL,
+    "category" "public"."document_category" DEFAULT 'other'::"public"."document_category",
+    "title" character varying(255),
+    "description" "text",
+    "tags" "text"[],
+    "version" integer DEFAULT 1,
+    "parent_id" "uuid",
+    "is_latest" boolean DEFAULT true,
+    "uploaded_by" "uuid" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+ALTER TABLE "public"."documents" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."documents" IS 'Unified document storage for all modules (leads, projects, quotations, etc.)';
+
+
+
+COMMENT ON COLUMN "public"."documents"."linked_type" IS 'Type of entity this document is attached to';
+
+
+
+COMMENT ON COLUMN "public"."documents"."linked_id" IS 'UUID of the linked entity';
+
+
+
+COMMENT ON COLUMN "public"."documents"."file_name" IS 'Stored filename (may include timestamp/uuid for uniqueness)';
+
+
+
+COMMENT ON COLUMN "public"."documents"."original_name" IS 'Original filename as uploaded by user';
+
+
+
+COMMENT ON COLUMN "public"."documents"."storage_path" IS 'Full path within the storage bucket';
+
+
+
+COMMENT ON COLUMN "public"."documents"."parent_id" IS 'Reference to previous version of this document';
+
+
+
+COMMENT ON COLUMN "public"."documents"."is_latest" IS 'Whether this is the latest version of the document';
 
 
 
@@ -5871,7 +7172,11 @@ CREATE TABLE IF NOT EXISTS "public"."lead_activities" (
     "meeting_notes" "text",
     "email_subject" character varying(255),
     "created_by" "uuid" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+    "created_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    "attendees" "jsonb" DEFAULT '[]'::"jsonb",
+    "meeting_type" character varying(50),
+    "tenant_id" "uuid",
+    "linked_note_id" "uuid"
 );
 
 
@@ -5879,6 +7184,18 @@ ALTER TABLE "public"."lead_activities" OWNER TO "postgres";
 
 
 COMMENT ON TABLE "public"."lead_activities" IS 'Activity timeline for leads';
+
+
+
+COMMENT ON COLUMN "public"."lead_activities"."attendees" IS 'JSON array of attendees: [{type: "team", id: uuid, name: string} or {type: "external", email: string, name: string}]';
+
+
+
+COMMENT ON COLUMN "public"."lead_activities"."meeting_type" IS 'Sub-type for meetings: client_meeting, internal_meeting, site_visit, other';
+
+
+
+COMMENT ON COLUMN "public"."lead_activities"."linked_note_id" IS 'Reference to lead_notes if meeting notes were saved as a note';
 
 
 
@@ -5893,7 +7210,8 @@ CREATE TABLE IF NOT EXISTS "public"."lead_documents" (
     "document_type" character varying(50),
     "description" "text",
     "uploaded_by" "uuid" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+    "created_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    "project_id" "uuid"
 );
 
 
@@ -5901,6 +7219,10 @@ ALTER TABLE "public"."lead_documents" OWNER TO "postgres";
 
 
 COMMENT ON TABLE "public"."lead_documents" IS 'Documents attached to leads';
+
+
+
+COMMENT ON COLUMN "public"."lead_documents"."project_id" IS 'Reference to project when lead is converted to project. Documents are linked (not copied) to maintain single source of truth.';
 
 
 
@@ -5931,7 +7253,8 @@ CREATE TABLE IF NOT EXISTS "public"."lead_notes" (
     "is_pinned" boolean DEFAULT false,
     "created_by" "uuid" NOT NULL,
     "created_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+    "updated_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    "project_id" "uuid"
 );
 
 
@@ -5939,6 +7262,10 @@ ALTER TABLE "public"."lead_notes" OWNER TO "postgres";
 
 
 COMMENT ON TABLE "public"."lead_notes" IS 'Notes/comments on leads';
+
+
+
+COMMENT ON COLUMN "public"."lead_notes"."project_id" IS 'Reference to project when lead is converted to project. Notes are linked (not copied) to maintain single source of truth.';
 
 
 
@@ -6009,118 +7336,30 @@ CREATE TABLE IF NOT EXISTS "public"."lead_won_requests" (
 ALTER TABLE "public"."lead_won_requests" OWNER TO "postgres";
 
 
-CREATE TABLE IF NOT EXISTS "public"."leads" (
-    "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
-    "tenant_id" "uuid" NOT NULL,
-    "lead_number" character varying(50) NOT NULL,
-    "client_name" character varying(255) NOT NULL,
-    "phone" character varying(20) NOT NULL,
-    "email" character varying(255),
-    "property_type" "public"."property_type_enum",
-    "service_type" "public"."service_type_enum",
-    "lead_source" "public"."lead_source_enum",
-    "lead_source_detail" character varying(255),
-    "target_start_date" "date",
-    "target_end_date" "date",
-    "property_name" character varying(255),
-    "flat_number" character varying(50),
-    "property_address" "text",
-    "property_city" character varying(100),
-    "property_pincode" character varying(10),
-    "carpet_area_sqft" numeric(10,2),
-    "budget_range" "public"."budget_range_enum",
-    "estimated_value" numeric(12,2),
-    "project_scope" "text",
-    "special_requirements" "text",
-    "stage" "public"."lead_stage_enum" DEFAULT 'new'::"public"."lead_stage_enum" NOT NULL,
-    "stage_changed_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    "disqualification_reason" "public"."disqualification_reason_enum",
-    "disqualification_notes" "text",
-    "lost_reason" "public"."lost_reason_enum",
-    "lost_to_competitor" character varying(255),
-    "lost_notes" "text",
-    "won_amount" numeric(12,2),
-    "won_at" timestamp with time zone,
-    "contract_signed_date" "date",
-    "expected_project_start" "date",
-    "assigned_to" "uuid",
-    "assigned_at" timestamp with time zone,
-    "assigned_by" "uuid",
-    "created_by" "uuid" NOT NULL,
-    "requires_approval" boolean DEFAULT false,
-    "approval_status" character varying(20) DEFAULT NULL::character varying,
-    "approval_requested_at" timestamp with time zone,
-    "approval_requested_by" "uuid",
-    "approved_at" timestamp with time zone,
-    "approved_by" "uuid",
-    "approval_notes" "text",
-    "priority" character varying(20) DEFAULT 'medium'::character varying,
-    "last_activity_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    "last_activity_type" "public"."lead_activity_type_enum",
-    "next_followup_date" "date",
-    "next_followup_notes" "text",
-    "created_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    "payment_terms" "text",
-    "token_amount" numeric(12,2),
-    "token_received_date" "date",
-    "handover_notes" "text",
-    "handover_completed" boolean DEFAULT false,
-    "handover_completed_at" timestamp with time zone,
-    "project_id" "uuid"
-);
-
-
-ALTER TABLE "public"."leads" OWNER TO "postgres";
-
-
-COMMENT ON TABLE "public"."leads" IS 'Main leads/opportunities table for sales pipeline';
-
-
-
 CREATE TABLE IF NOT EXISTS "public"."projects" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "tenant_id" "uuid" NOT NULL,
     "project_number" character varying(50) NOT NULL,
     "name" character varying(255) NOT NULL,
     "description" "text",
-    "client_name" character varying(255),
-    "client_email" character varying(255),
-    "client_phone" character varying(50),
-    "site_address" "text",
-    "city" character varying(100),
-    "state" character varying(100),
-    "pincode" character varying(20),
-    "project_type" character varying(50) DEFAULT 'residential'::character varying,
     "status" character varying(30) DEFAULT 'planning'::character varying,
     "start_date" "date",
     "expected_end_date" "date",
     "actual_end_date" "date",
-    "quoted_amount" numeric(14,2) DEFAULT 0,
-    "budget_amount" numeric(14,2) DEFAULT 0,
     "actual_cost" numeric(14,2) DEFAULT 0,
     "project_manager_id" "uuid",
-    "lead_id" "uuid",
     "quotation_id" "uuid",
     "notes" "text",
     "is_active" boolean DEFAULT true,
     "created_by" "uuid",
     "created_at" timestamp with time zone DEFAULT "now"(),
     "updated_at" timestamp with time zone DEFAULT "now"(),
-    "converted_from_lead_id" "uuid",
+    "lead_id" "uuid",
     "overall_progress" integer DEFAULT 0,
-    "flat_number" character varying(50),
-    "property_name" character varying(255),
-    "carpet_area_sqft" numeric(10,2),
-    "lead_source" character varying(50),
-    "sales_rep_id" "uuid",
-    "lead_won_date" timestamp with time zone,
-    "property_type" "public"."project_property_type_enum" DEFAULT 'unknown'::"public"."project_property_type_enum",
-    "budget_range" character varying(30),
-    "lead_source_detail" character varying(255),
     "project_category" "public"."project_category_enum" DEFAULT 'turnkey'::"public"."project_category_enum",
+    "client_id" "uuid",
+    "property_id" "uuid",
     CONSTRAINT "projects_overall_progress_check" CHECK ((("overall_progress" >= 0) AND ("overall_progress" <= 100))),
-    CONSTRAINT "projects_project_type_check" CHECK ((("project_type")::"text" = ANY ((ARRAY['residential'::character varying, 'commercial'::character varying, 'hospitality'::character varying, 'retail'::character varying, 'office'::character varying, 'villa'::character varying, 'apartment'::character varying, 'other'::character varying])::"text"[]))),
     CONSTRAINT "projects_status_check" CHECK ((("status")::"text" = ANY ((ARRAY['planning'::character varying, 'design'::character varying, 'procurement'::character varying, 'execution'::character varying, 'finishing'::character varying, 'handover'::character varying, 'completed'::character varying, 'on_hold'::character varying, 'cancelled'::character varying])::"text"[])))
 );
 
@@ -6128,51 +7367,11 @@ CREATE TABLE IF NOT EXISTS "public"."projects" (
 ALTER TABLE "public"."projects" OWNER TO "postgres";
 
 
-COMMENT ON TABLE "public"."projects" IS 'Interior design projects - aligned with leads module for seamless conversion';
+COMMENT ON TABLE "public"."projects" IS 'Interior design projects with proper FK relationships: client_id→clients, property_id→properties, lead_id→leads, project_manager_id→users';
 
 
 
-COMMENT ON COLUMN "public"."projects"."project_type" IS 'DEPRECATED: Use property_type instead. Kept for backward compatibility.';
-
-
-
-COMMENT ON COLUMN "public"."projects"."lead_id" IS 'DEPRECATED: Use converted_from_lead_id instead. Will be removed in future migration.';
-
-
-
-COMMENT ON COLUMN "public"."projects"."flat_number" IS 'Flat/unit number (e.g., A-1502)';
-
-
-
-COMMENT ON COLUMN "public"."projects"."property_name" IS 'Property/building name (e.g., Prestige Lakeside)';
-
-
-
-COMMENT ON COLUMN "public"."projects"."carpet_area_sqft" IS 'Carpet area in square feet';
-
-
-
-COMMENT ON COLUMN "public"."projects"."lead_source" IS 'How the lead was acquired';
-
-
-
-COMMENT ON COLUMN "public"."projects"."sales_rep_id" IS 'Sales representative who converted the lead';
-
-
-
-COMMENT ON COLUMN "public"."projects"."lead_won_date" IS 'Date when lead was marked as won';
-
-
-
-COMMENT ON COLUMN "public"."projects"."property_type" IS 'Type of property (apartment, villa, commercial, etc.) - matches leads.property_type';
-
-
-
-COMMENT ON COLUMN "public"."projects"."budget_range" IS 'Budget range from lead';
-
-
-
-COMMENT ON COLUMN "public"."projects"."lead_source_detail" IS 'Additional source details (e.g., referrer name)';
+COMMENT ON COLUMN "public"."projects"."lead_id" IS 'Foreign key to the lead that was converted into this project. Links project back to its sales origin.';
 
 
 
@@ -6180,25 +7379,113 @@ COMMENT ON COLUMN "public"."projects"."project_category" IS 'Service category (t
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."properties" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "tenant_id" "uuid" NOT NULL,
+    "property_name" character varying(255),
+    "unit_number" character varying(50),
+    "block_tower" character varying(100),
+    "category" "public"."property_category" DEFAULT 'residential'::"public"."property_category" NOT NULL,
+    "property_type" "public"."property_type_v2" DEFAULT 'apartment'::"public"."property_type_v2" NOT NULL,
+    "property_subtype" "public"."property_subtype" DEFAULT 'gated_community'::"public"."property_subtype",
+    "ownership" "public"."ownership_type" DEFAULT 'owned'::"public"."ownership_type",
+    "status" "public"."property_status" DEFAULT 'ready_to_move'::"public"."property_status",
+    "carpet_area" numeric(10,2),
+    "built_up_area" numeric(10,2),
+    "super_built_up_area" numeric(10,2),
+    "area_unit" "public"."area_unit" DEFAULT 'sqft'::"public"."area_unit",
+    "plot_area" numeric(10,2),
+    "bedrooms" integer DEFAULT 0,
+    "bathrooms" integer DEFAULT 0,
+    "balconies" integer DEFAULT 0,
+    "kitchens" integer DEFAULT 1,
+    "living_rooms" integer DEFAULT 1,
+    "dining_rooms" integer DEFAULT 0,
+    "study_rooms" integer DEFAULT 0,
+    "servant_rooms" integer DEFAULT 0,
+    "pooja_rooms" integer DEFAULT 0,
+    "store_rooms" integer DEFAULT 0,
+    "floor_number" integer,
+    "total_floors" integer,
+    "facing" "public"."facing_direction",
+    "furnishing_status" character varying(50),
+    "age_of_property" integer,
+    "address_line1" character varying(255),
+    "address_line2" character varying(255),
+    "landmark" character varying(255),
+    "locality" character varying(255),
+    "city" character varying(100) NOT NULL,
+    "state" character varying(100),
+    "pincode" character varying(10),
+    "country" character varying(100) DEFAULT 'India'::character varying,
+    "latitude" numeric(10,8),
+    "longitude" numeric(11,8),
+    "parking_slots" integer DEFAULT 0,
+    "has_lift" boolean DEFAULT false,
+    "has_power_backup" boolean DEFAULT false,
+    "has_security" boolean DEFAULT false,
+    "has_gym" boolean DEFAULT false,
+    "has_swimming_pool" boolean DEFAULT false,
+    "has_clubhouse" boolean DEFAULT false,
+    "amenities" "jsonb" DEFAULT '[]'::"jsonb",
+    "description" "text",
+    "internal_notes" "text",
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."properties" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."properties" IS 'Central property registry for all modules (leads, projects, quotations)';
+
+
+
+COMMENT ON COLUMN "public"."properties"."unit_number" IS 'Flat/Unit/Door number';
+
+
+
+COMMENT ON COLUMN "public"."properties"."block_tower" IS 'Building block or tower name';
+
+
+
+COMMENT ON COLUMN "public"."properties"."carpet_area" IS 'Actual usable floor area in sqft';
+
+
+
+COMMENT ON COLUMN "public"."properties"."built_up_area" IS 'Carpet area + wall thickness';
+
+
+
+COMMENT ON COLUMN "public"."properties"."super_built_up_area" IS 'Built-up area + proportionate common areas';
+
+
+
+COMMENT ON COLUMN "public"."properties"."amenities" IS 'JSON array of additional amenities like garden, terrace, etc.';
+
+
+
 CREATE OR REPLACE VIEW "public"."leads_with_project_status" AS
  SELECT "l"."id",
     "l"."tenant_id",
     "l"."lead_number",
-    "l"."client_name",
-    "l"."phone",
-    "l"."email",
-    "l"."property_type",
+    "c"."name" AS "client_name",
+    "c"."phone",
+    "c"."email",
+    ("p"."property_type")::"text" AS "property_type",
+    "p"."property_name",
+    "p"."unit_number" AS "flat_number",
+    "p"."address_line1" AS "property_address",
+    "p"."city" AS "property_city",
+    "p"."pincode" AS "property_pincode",
+    "p"."carpet_area" AS "carpet_area_sqft",
     "l"."service_type",
     "l"."lead_source",
     "l"."lead_source_detail",
     "l"."target_start_date",
     "l"."target_end_date",
-    "l"."property_name",
-    "l"."flat_number",
-    "l"."property_address",
-    "l"."property_city",
-    "l"."property_pincode",
-    "l"."carpet_area_sqft",
     "l"."budget_range",
     "l"."estimated_value",
     "l"."project_scope",
@@ -6232,23 +7519,19 @@ CREATE OR REPLACE VIEW "public"."leads_with_project_status" AS
     "l"."next_followup_notes",
     "l"."created_at",
     "l"."updated_at",
-    "l"."payment_terms",
-    "l"."token_amount",
-    "l"."token_received_date",
-    "l"."handover_notes",
-    "l"."handover_completed",
-    "l"."handover_completed_at",
     "l"."project_id",
-    "p"."id" AS "linked_project_id",
-    "p"."project_number",
-    "p"."status" AS "project_status",
-    "p"."overall_progress" AS "project_progress",
+    "proj"."id" AS "linked_project_id",
+    "proj"."project_number",
+    "proj"."status" AS "project_status",
+    "proj"."overall_progress" AS "project_progress",
         CASE
-            WHEN ("p"."id" IS NOT NULL) THEN true
+            WHEN ("proj"."id" IS NOT NULL) THEN true
             ELSE false
         END AS "has_project"
-   FROM ("public"."leads" "l"
-     LEFT JOIN "public"."projects" "p" ON (("l"."project_id" = "p"."id")));
+   FROM ((("public"."leads" "l"
+     LEFT JOIN "public"."clients" "c" ON (("l"."client_id" = "c"."id")))
+     LEFT JOIN "public"."properties" "p" ON (("l"."property_id" = "p"."id")))
+     LEFT JOIN "public"."projects" "proj" ON (("l"."project_id" = "proj"."id")));
 
 
 ALTER VIEW "public"."leads_with_project_status" OWNER TO "postgres";
@@ -6486,69 +7769,56 @@ COMMENT ON TABLE "public"."project_checklist_items" IS 'Checklist items within s
 
 
 
-CREATE TABLE IF NOT EXISTS "public"."stock_materials" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "company_id" "uuid" NOT NULL,
+CREATE TABLE IF NOT EXISTS "public"."users" (
+    "id" "uuid" NOT NULL,
+    "tenant_id" "uuid" NOT NULL,
     "name" character varying(255) NOT NULL,
-    "sku" character varying(100) NOT NULL,
-    "description" "text",
-    "category" character varying(100),
-    "item_type" character varying(50) DEFAULT 'raw_material'::character varying,
-    "unit_of_measure" character varying(50) DEFAULT 'pcs'::character varying,
-    "current_quantity" numeric(12,2) DEFAULT 0,
-    "minimum_quantity" numeric(12,2) DEFAULT 0,
-    "reorder_quantity" numeric(12,2) DEFAULT 0,
-    "unit_cost" numeric(12,2) DEFAULT 0,
-    "selling_price" numeric(12,2),
-    "preferred_vendor_id" "uuid",
-    "storage_location" character varying(255),
-    "notes" "text",
-    "is_active" boolean DEFAULT true,
-    "created_by" "uuid",
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "updated_at" timestamp with time zone DEFAULT "now"(),
-    "brand_id" "uuid",
-    "vendor_cost" numeric(12,2),
-    "company_cost" numeric(12,2),
-    "retail_price" numeric(12,2),
-    "markup_percent" numeric(5,2),
-    "markup_amount" numeric(12,2),
-    "revenue_head_id" "uuid",
-    "is_commission_item" boolean DEFAULT false,
-    "commission_percent" numeric(5,2),
-    "specifications" "jsonb" DEFAULT '{}'::"jsonb",
-    CONSTRAINT "stock_materials_item_type_check" CHECK ((("item_type")::"text" = ANY ((ARRAY['raw_material'::character varying, 'hardware'::character varying, 'consumable'::character varying, 'finished_good'::character varying, 'accessory'::character varying])::"text"[])))
+    "email" character varying(255) NOT NULL,
+    "phone" character varying(20),
+    "avatar_url" "text",
+    "status" "public"."user_status_enum" DEFAULT 'pending_verification'::"public"."user_status_enum" NOT NULL,
+    "is_super_admin" boolean DEFAULT false,
+    "email_verified_at" timestamp with time zone,
+    "last_login_at" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    "created_by_user_id" "uuid",
+    "primary_tenant_id" "uuid"
 );
 
 
-ALTER TABLE "public"."stock_materials" OWNER TO "postgres";
+ALTER TABLE "public"."users" OWNER TO "postgres";
 
 
-COMMENT ON TABLE "public"."stock_materials" IS 'Inventory items tracked for stock management';
+CREATE OR REPLACE VIEW "public"."project_documents_combined" AS
+ SELECT "d"."id",
+    "d"."lead_id",
+    "d"."project_id",
+    "d"."file_name",
+    "d"."file_type",
+    "d"."file_size_bytes",
+    "d"."file_url",
+    "d"."storage_path",
+    "d"."document_type",
+    "d"."description",
+    "d"."uploaded_by",
+    "d"."created_at",
+        CASE
+            WHEN (("d"."project_id" IS NOT NULL) AND ("d"."lead_id" IS NOT NULL)) THEN 'carried_forward'::"text"
+            WHEN ("d"."project_id" IS NOT NULL) THEN 'project_native'::"text"
+            ELSE 'lead_only'::"text"
+        END AS "source_type",
+    "u"."name" AS "uploaded_by_name",
+    "u"."avatar_url" AS "uploaded_by_avatar"
+   FROM ("public"."lead_documents" "d"
+     LEFT JOIN "public"."users" "u" ON (("d"."uploaded_by" = "u"."id")))
+  WHERE ("d"."project_id" IS NOT NULL);
 
 
-
-COMMENT ON COLUMN "public"."stock_materials"."vendor_cost" IS 'Cost price from vendor/dealer';
-
+ALTER VIEW "public"."project_documents_combined" OWNER TO "postgres";
 
 
-COMMENT ON COLUMN "public"."stock_materials"."company_cost" IS 'Internal cost used in quotations (includes markup)';
-
-
-
-COMMENT ON COLUMN "public"."stock_materials"."retail_price" IS 'MRP or market reference price';
-
-
-
-COMMENT ON COLUMN "public"."stock_materials"."markup_percent" IS 'Percentage markup over vendor cost';
-
-
-
-COMMENT ON COLUMN "public"."stock_materials"."is_commission_item" IS 'True for items where revenue is commission-based (appliances, lighting)';
-
-
-
-COMMENT ON COLUMN "public"."stock_materials"."specifications" IS 'JSONB column storing material specifications like dimensions, weight, color, finish, grade, material composition, etc.';
+COMMENT ON VIEW "public"."project_documents_combined" IS 'Combined view of all project documents including those carried forward from leads. Use source_type column to distinguish origin.';
 
 
 
@@ -6667,50 +7937,6 @@ COMMENT ON COLUMN "public"."stock_purchase_orders"."closed_at" IS 'Timestamp whe
 
 
 
-CREATE TABLE IF NOT EXISTS "public"."stock_vendors" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "tenant_id" "uuid" NOT NULL,
-    "code" character varying(50) NOT NULL,
-    "name" character varying(255) NOT NULL,
-    "display_name" character varying(255),
-    "contact_person" character varying(255),
-    "email" character varying(255),
-    "phone" character varying(50),
-    "alternate_phone" character varying(50),
-    "website" character varying(255),
-    "address_line1" "text",
-    "address_line2" "text",
-    "city" character varying(100),
-    "state" character varying(100),
-    "pincode" character varying(20),
-    "country" character varying(100) DEFAULT 'India'::character varying,
-    "gst_number" character varying(20),
-    "pan_number" character varying(20),
-    "payment_terms" character varying(100),
-    "credit_days" integer DEFAULT 30,
-    "credit_limit" numeric(14,2) DEFAULT 0,
-    "category_ids" "uuid"[],
-    "bank_name" character varying(255),
-    "bank_account_number" character varying(50),
-    "bank_ifsc" character varying(20),
-    "is_active" boolean DEFAULT true,
-    "rating" integer DEFAULT 0,
-    "notes" "text",
-    "created_by" "uuid",
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "updated_at" timestamp with time zone DEFAULT "now"(),
-    "is_preferred" boolean DEFAULT false,
-    CONSTRAINT "stock_vendors_rating_check" CHECK ((("rating" >= 0) AND ("rating" <= 5)))
-);
-
-
-ALTER TABLE "public"."stock_vendors" OWNER TO "postgres";
-
-
-COMMENT ON TABLE "public"."stock_vendors" IS 'Suppliers and vendors for stock materials';
-
-
-
 CREATE OR REPLACE VIEW "public"."project_material_costs" AS
  SELECT "p"."id" AS "project_id",
     "p"."project_number",
@@ -6739,6 +7965,34 @@ CREATE OR REPLACE VIEW "public"."project_material_costs" AS
 
 
 ALTER VIEW "public"."project_material_costs" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."project_notes_combined" AS
+ SELECT "n"."id",
+    "n"."lead_id",
+    "n"."project_id",
+    "n"."content",
+    "n"."is_pinned",
+    "n"."created_by",
+    "n"."created_at",
+    "n"."updated_at",
+        CASE
+            WHEN (("n"."project_id" IS NOT NULL) AND ("n"."lead_id" IS NOT NULL)) THEN 'carried_forward'::"text"
+            WHEN ("n"."project_id" IS NOT NULL) THEN 'project_native'::"text"
+            ELSE 'lead_only'::"text"
+        END AS "source_type",
+    "u"."name" AS "created_by_name",
+    "u"."avatar_url" AS "created_by_avatar"
+   FROM ("public"."lead_notes" "n"
+     LEFT JOIN "public"."users" "u" ON (("n"."created_by" = "u"."id")))
+  WHERE ("n"."project_id" IS NOT NULL);
+
+
+ALTER VIEW "public"."project_notes_combined" OWNER TO "postgres";
+
+
+COMMENT ON VIEW "public"."project_notes_combined" IS 'Combined view of all project notes including those carried forward from leads. Use source_type column to distinguish origin.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."project_payment_milestone_templates" (
@@ -7130,27 +8384,6 @@ COMMENT ON COLUMN "public"."project_sub_phases"."estimated_duration_hours" IS 'E
 
 
 
-CREATE TABLE IF NOT EXISTS "public"."users" (
-    "id" "uuid" NOT NULL,
-    "tenant_id" "uuid" NOT NULL,
-    "name" character varying(255) NOT NULL,
-    "email" character varying(255) NOT NULL,
-    "phone" character varying(20),
-    "avatar_url" "text",
-    "status" "public"."user_status_enum" DEFAULT 'pending_verification'::"public"."user_status_enum" NOT NULL,
-    "is_super_admin" boolean DEFAULT false,
-    "email_verified_at" timestamp with time zone,
-    "last_login_at" timestamp with time zone,
-    "created_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    "created_by_user_id" "uuid",
-    "primary_tenant_id" "uuid"
-);
-
-
-ALTER TABLE "public"."users" OWNER TO "postgres";
-
-
 CREATE OR REPLACE VIEW "public"."project_phases_summary" AS
  SELECT "pp"."id",
     "pp"."project_id",
@@ -7226,6 +8459,96 @@ CREATE TABLE IF NOT EXISTS "public"."project_sub_phase_templates" (
 ALTER TABLE "public"."project_sub_phase_templates" OWNER TO "postgres";
 
 
+CREATE OR REPLACE VIEW "public"."property_details" AS
+ SELECT "p"."id",
+    "p"."tenant_id",
+    "p"."property_name",
+    "p"."unit_number",
+    "p"."block_tower",
+    "p"."category",
+    "p"."property_type",
+    "p"."property_subtype",
+    "p"."ownership",
+    "p"."status",
+    "p"."carpet_area",
+    "p"."built_up_area",
+    "p"."super_built_up_area",
+    "p"."area_unit",
+    "p"."plot_area",
+    "p"."bedrooms",
+    "p"."bathrooms",
+    "p"."balconies",
+    "p"."kitchens",
+    "p"."living_rooms",
+    "p"."dining_rooms",
+    "p"."study_rooms",
+    "p"."servant_rooms",
+    "p"."pooja_rooms",
+    "p"."store_rooms",
+    "p"."floor_number",
+    "p"."total_floors",
+    "p"."facing",
+    "p"."furnishing_status",
+    "p"."age_of_property",
+    "p"."address_line1",
+    "p"."address_line2",
+    "p"."landmark",
+    "p"."locality",
+    "p"."city",
+    "p"."state",
+    "p"."pincode",
+    "p"."country",
+    "p"."latitude",
+    "p"."longitude",
+    "p"."parking_slots",
+    "p"."has_lift",
+    "p"."has_power_backup",
+    "p"."has_security",
+    "p"."has_gym",
+    "p"."has_swimming_pool",
+    "p"."has_clubhouse",
+    "p"."amenities",
+    "p"."description",
+    "p"."internal_notes",
+    "p"."created_by",
+    "p"."created_at",
+    "p"."updated_at",
+    "concat_ws"(', '::"text", NULLIF(("p"."unit_number")::"text", ''::"text"), NULLIF(("p"."block_tower")::"text", ''::"text"), NULLIF(("p"."property_name")::"text", ''::"text"), NULLIF(("p"."address_line1")::"text", ''::"text"), NULLIF(("p"."locality")::"text", ''::"text"), "p"."city") AS "formatted_address",
+        CASE
+            WHEN (("p"."category" = 'residential'::"public"."property_category") AND ("p"."bedrooms" > 0)) THEN "concat"("p"."bedrooms", ' BHK')
+            WHEN (("p"."category" = 'residential'::"public"."property_category") AND ("p"."bedrooms" = 0)) THEN 'Studio'::"text"
+            ELSE NULL::"text"
+        END AS "bhk_label",
+    ((((((((COALESCE("p"."bedrooms", 0) + COALESCE("p"."bathrooms", 0)) + COALESCE("p"."living_rooms", 0)) + COALESCE("p"."dining_rooms", 0)) + COALESCE("p"."kitchens", 0)) + COALESCE("p"."study_rooms", 0)) + COALESCE("p"."servant_rooms", 0)) + COALESCE("p"."pooja_rooms", 0)) + COALESCE("p"."store_rooms", 0)) AS "total_rooms",
+    ("creator"."raw_user_meta_data" ->> 'full_name'::"text") AS "created_by_name"
+   FROM ("public"."properties" "p"
+     LEFT JOIN "auth"."users" "creator" ON (("p"."created_by" = "creator"."id")));
+
+
+ALTER VIEW "public"."property_details" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."quotation_activities" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "quotation_id" "uuid" NOT NULL,
+    "activity_type" character varying(50) NOT NULL,
+    "title" character varying(255) NOT NULL,
+    "description" "text",
+    "metadata" "jsonb" DEFAULT '{}'::"jsonb",
+    "performed_by" "uuid",
+    "performed_at" timestamp with time zone DEFAULT "now"(),
+    "ip_address" "inet",
+    "user_agent" "text"
+);
+
+
+ALTER TABLE "public"."quotation_activities" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."quotation_activities" IS 'Activity log for quotation lifecycle events';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."quotation_changes" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "quotation_id" "uuid" NOT NULL,
@@ -7259,15 +8582,14 @@ CREATE TABLE IF NOT EXISTS "public"."quotation_components" (
     "metadata" "jsonb",
     "created_at" timestamp with time zone DEFAULT "now"(),
     "updated_at" timestamp with time zone DEFAULT "now"(),
-    "variant_type_id" "uuid",
-    "component_variant_id" "uuid"
+    "variant_type_id" "uuid"
 );
 
 
 ALTER TABLE "public"."quotation_components" OWNER TO "postgres";
 
 
-COMMENT ON TABLE "public"."quotation_components" IS 'Level 2: Components/Work items within each space';
+COMMENT ON TABLE "public"."quotation_components" IS 'Components within a quotation space. Simplified structure: Space > Component > Cost Items (variants removed)';
 
 
 
@@ -7303,9 +8625,8 @@ CREATE TABLE IF NOT EXISTS "public"."quotation_line_items" (
     "quotation_id" "uuid" NOT NULL,
     "quotation_space_id" "uuid",
     "quotation_component_id" "uuid",
-    "cost_item_id" "uuid",
+    "quotation_cost_item_id" "uuid",
     "name" character varying(200) NOT NULL,
-    "group_name" character varying(100),
     "length" numeric(10,2),
     "width" numeric(10,2),
     "quantity" numeric(10,2),
@@ -7317,18 +8638,46 @@ CREATE TABLE IF NOT EXISTS "public"."quotation_line_items" (
     "metadata" "jsonb",
     "created_at" timestamp with time zone DEFAULT "now"(),
     "updated_at" timestamp with time zone DEFAULT "now"(),
-    "measurement_unit" character varying(10) DEFAULT 'ft'::character varying
+    "measurement_unit" character varying(10) DEFAULT 'mm'::character varying,
+    "company_cost" numeric(12,2),
+    "vendor_cost" numeric(12,2),
+    "margin_amount" numeric(14,2) GENERATED ALWAYS AS (
+CASE
+    WHEN ("company_cost" > (0)::numeric) THEN (("rate" - "company_cost") * COALESCE(
+    CASE
+        WHEN (("unit_code")::"text" = ANY ((ARRAY['sqft'::character varying, 'sft'::character varying])::"text"[])) THEN ((COALESCE("length", (1)::numeric) * COALESCE("width", (1)::numeric)) / (144)::numeric)
+        WHEN (("unit_code")::"text" = ANY ((ARRAY['rft'::character varying, 'ft'::character varying])::"text"[])) THEN COALESCE("length", (1)::numeric)
+        ELSE COALESCE("quantity", (1)::numeric)
+    END, (1)::numeric))
+    ELSE NULL::numeric
+END) STORED
 );
 
 
 ALTER TABLE "public"."quotation_line_items" OWNER TO "postgres";
 
 
-COMMENT ON TABLE "public"."quotation_line_items" IS 'Actual line items in a quotation with measurements and pricing';
+COMMENT ON TABLE "public"."quotation_line_items" IS 'Line items in a quotation. Each line item references a quotation_cost_item and has dimensions/quantity for pricing.';
 
 
 
-COMMENT ON COLUMN "public"."quotation_line_items"."group_name" IS 'Grouping label for display (e.g., Carcass, Shutter, Hardware)';
+COMMENT ON COLUMN "public"."quotation_line_items"."quotation_cost_item_id" IS 'Reference to the quotation cost item. Can be NULL if the cost item was deleted - the line item preserves name, rate, and amount for historical accuracy.';
+
+
+
+COMMENT ON COLUMN "public"."quotation_line_items"."name" IS 'Name of the line item. Stored directly so quotation remains intact even if cost item is deleted.';
+
+
+
+COMMENT ON COLUMN "public"."quotation_line_items"."company_cost" IS 'Company cost at time of quotation (for profit calculation)';
+
+
+
+COMMENT ON COLUMN "public"."quotation_line_items"."vendor_cost" IS 'Vendor cost at time of quotation';
+
+
+
+COMMENT ON COLUMN "public"."quotation_line_items"."margin_amount" IS 'Calculated margin amount (rate - company_cost) × quantity';
 
 
 
@@ -7391,6 +8740,34 @@ COMMENT ON TABLE "public"."quotation_spaces" IS 'Level 1: Spaces/Rooms in the qu
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."quotation_template_line_items" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "template_id" "uuid" NOT NULL,
+    "space_type_id" "uuid",
+    "component_type_id" "uuid",
+    "cost_item_id" "uuid",
+    "rate" numeric(12,2),
+    "display_order" integer DEFAULT 0,
+    "notes" "text",
+    "metadata" "jsonb",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    "measurement_unit" character varying(10) DEFAULT 'mm'::character varying,
+    "template_space_id" "uuid"
+);
+
+
+ALTER TABLE "public"."quotation_template_line_items" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."quotation_template_line_items" IS 'Line items in a quotation template. These are pre-defined cost items that will be copied when creating a quotation from the template.';
+
+
+
+COMMENT ON COLUMN "public"."quotation_template_line_items"."cost_item_id" IS 'Reference to the cost item. Can be NULL if the cost item was deleted.';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."quotation_templates" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "tenant_id" "uuid" NOT NULL,
@@ -7417,7 +8794,7 @@ CREATE TABLE IF NOT EXISTS "public"."quotations" (
     "quotation_number" character varying(50) NOT NULL,
     "version" integer DEFAULT 1,
     "parent_quotation_id" "uuid",
-    "lead_id" "uuid" NOT NULL,
+    "lead_id" "uuid",
     "client_id" "uuid",
     "project_id" "uuid",
     "client_name" character varying(200),
@@ -7457,7 +8834,24 @@ CREATE TABLE IF NOT EXISTS "public"."quotations" (
     "auto_created" boolean DEFAULT false,
     "presentation_level" character varying(30) DEFAULT 'space_component'::character varying,
     "hide_dimensions" boolean DEFAULT true,
-    "assigned_to" "uuid"
+    "assigned_to" "uuid",
+    "quotation_type" "public"."quotation_type_enum" DEFAULT 'sales'::"public"."quotation_type_enum",
+    "baseline_quotation_id" "uuid",
+    "change_reason" "text",
+    "company_logo_url" "text",
+    "header_color" character varying(20) DEFAULT '#1e40af'::character varying,
+    "show_company_details" boolean DEFAULT true,
+    "show_bank_details" boolean DEFAULT true,
+    "custom_footer_text" "text",
+    "client_access_token" character varying(64),
+    "client_access_expires_at" timestamp with time zone,
+    "client_view_count" integer DEFAULT 0,
+    "last_client_view_at" timestamp with time zone,
+    "internal_approval_status" "text" DEFAULT 'not_required'::"text",
+    "internal_approved_by" "uuid",
+    "internal_approved_at" timestamp with time zone,
+    "internal_approval_notes" "text",
+    "template_id" "uuid"
 );
 
 
@@ -7512,6 +8906,22 @@ COMMENT ON COLUMN "public"."quotations"."hide_dimensions" IS 'Hide length/width 
 
 
 
+COMMENT ON COLUMN "public"."quotations"."quotation_type" IS 'Type: sales (initial), revision (same scope), change_order (project scope change), supplementary (additional work)';
+
+
+
+COMMENT ON COLUMN "public"."quotations"."client_access_token" IS 'Secure token for client portal access';
+
+
+
+COMMENT ON COLUMN "public"."quotations"."internal_approval_status" IS 'Internal approval status before sending to client';
+
+
+
+COMMENT ON COLUMN "public"."quotations"."template_id" IS 'Reference to the template used to create this quotation. NULL if created from scratch.';
+
+
+
 CREATE OR REPLACE VIEW "public"."quotations_with_lead" AS
  SELECT "q"."id",
     "q"."tenant_id",
@@ -7549,16 +8959,16 @@ CREATE OR REPLACE VIEW "public"."quotations_with_lead" AS
     "q"."updated_by",
     "q"."created_at",
     "q"."updated_at",
-    COALESCE("l"."client_name", "q"."client_name") AS "client_name",
-    COALESCE("l"."email", "q"."client_email") AS "client_email",
-    COALESCE("l"."phone", "q"."client_phone") AS "client_phone",
-    COALESCE("l"."property_name", "q"."property_name") AS "property_name",
-    COALESCE("l"."property_address", "q"."property_address") AS "property_address",
-    "l"."property_city",
-    "l"."property_pincode",
-    "l"."flat_number",
-    "l"."carpet_area_sqft",
-    COALESCE(("l"."property_type")::"text", ("q"."property_type")::"text") AS "property_type",
+    COALESCE("q"."client_name", "c"."name") AS "client_name",
+    COALESCE("q"."client_email", "c"."email") AS "client_email",
+    COALESCE("q"."client_phone", "c"."phone") AS "client_phone",
+    COALESCE("q"."property_name", "p"."property_name") AS "property_name",
+    COALESCE("q"."property_address", ("p"."address_line1")::"text") AS "property_address",
+    "p"."city" AS "property_city",
+    "p"."pincode" AS "property_pincode",
+    "p"."unit_number" AS "flat_number",
+    "p"."carpet_area" AS "carpet_area_sqft",
+    ("p"."property_type")::"text" AS "property_type",
     "l"."service_type",
     "l"."budget_range",
     "l"."estimated_value",
@@ -7567,9 +8977,11 @@ CREATE OR REPLACE VIEW "public"."quotations_with_lead" AS
     "au"."name" AS "assigned_to_name",
     "au"."email" AS "assigned_to_email",
     "au"."avatar_url" AS "assigned_to_avatar"
-   FROM (("public"."quotations" "q"
+   FROM (((("public"."quotations" "q"
      LEFT JOIN "public"."leads" "l" ON (("l"."id" = "q"."lead_id")))
-     LEFT JOIN "public"."users" "au" ON (("au"."id" = "q"."assigned_to")));
+     LEFT JOIN "public"."users" "au" ON (("au"."id" = "q"."assigned_to")))
+     LEFT JOIN "public"."clients" "c" ON (("l"."client_id" = "c"."id")))
+     LEFT JOIN "public"."properties" "p" ON (("l"."property_id" = "p"."id")));
 
 
 ALTER VIEW "public"."quotations_with_lead" OWNER TO "postgres";
@@ -8336,31 +9748,6 @@ CREATE OR REPLACE VIEW "public"."tasks_with_details" AS
 ALTER VIEW "public"."tasks_with_details" OWNER TO "postgres";
 
 
-CREATE TABLE IF NOT EXISTS "public"."template_line_items" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "template_id" "uuid" NOT NULL,
-    "space_type_id" "uuid",
-    "component_type_id" "uuid",
-    "component_variant_id" "uuid",
-    "cost_item_id" "uuid" NOT NULL,
-    "group_name" character varying(100),
-    "rate" numeric(12,2),
-    "display_order" integer DEFAULT 0,
-    "notes" "text",
-    "metadata" "jsonb",
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "updated_at" timestamp with time zone DEFAULT "now"(),
-    "measurement_unit" character varying(10) DEFAULT 'ft'::character varying
-);
-
-
-ALTER TABLE "public"."template_line_items" OWNER TO "postgres";
-
-
-COMMENT ON TABLE "public"."template_line_items" IS 'Cost items in a template with optional hierarchy context';
-
-
-
 CREATE TABLE IF NOT EXISTS "public"."template_spaces" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "template_id" "uuid" NOT NULL,
@@ -8390,7 +9777,8 @@ CREATE TABLE IF NOT EXISTS "public"."tenant_lead_settings" (
     "stage_colors" "jsonb" DEFAULT '{"new": "#8B5CF6", "won": "#10B981", "lost": "#EF4444", "qualified": "#3B82F6", "negotiation": "#F97316", "disqualified": "#6B7280", "proposal_discussion": "#F59E0B", "requirement_discussion": "#06B6D4"}'::"jsonb",
     "auto_followup_days" integer DEFAULT 3,
     "created_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+    "updated_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    "lead_number_month" character varying(6) DEFAULT "to_char"((CURRENT_DATE)::timestamp with time zone, 'YYYYMM'::"text")
 );
 
 
@@ -8398,6 +9786,10 @@ ALTER TABLE "public"."tenant_lead_settings" OWNER TO "postgres";
 
 
 COMMENT ON TABLE "public"."tenant_lead_settings" IS 'Per-tenant configuration for leads module';
+
+
+
+COMMENT ON COLUMN "public"."tenant_lead_settings"."lead_number_month" IS 'Tracks the current month for lead number counter reset (YYYYMM format)';
 
 
 
@@ -8427,6 +9819,45 @@ CREATE TABLE IF NOT EXISTS "public"."tenant_payment_methods" (
 
 
 ALTER TABLE "public"."tenant_payment_methods" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."tenant_quotation_settings" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "tenant_id" "uuid" NOT NULL,
+    "quotation_number_prefix" character varying(10) DEFAULT 'QT'::character varying,
+    "quotation_number_next" integer DEFAULT 1,
+    "company_name" character varying(255),
+    "company_address" "text",
+    "company_phone" character varying(50),
+    "company_email" character varying(255),
+    "company_website" character varying(255),
+    "company_gstin" character varying(20),
+    "company_logo_url" "text",
+    "bank_name" character varying(255),
+    "bank_account_name" character varying(255),
+    "bank_account_number" character varying(50),
+    "bank_ifsc_code" character varying(20),
+    "bank_branch" character varying(255),
+    "default_validity_days" integer DEFAULT 30,
+    "default_tax_percent" numeric(5,2) DEFAULT 18.00,
+    "default_payment_terms" "jsonb" DEFAULT '[{"percent": 10, "milestone": "Booking", "description": "On order confirmation"}, {"percent": 40, "milestone": "Design Approval", "description": "After design finalization"}, {"percent": 40, "milestone": "Installation Start", "description": "Before material dispatch"}, {"percent": 10, "milestone": "Handover", "description": "On completion"}]'::"jsonb",
+    "default_terms_and_conditions" "text" DEFAULT 'Standard terms and conditions apply.'::"text",
+    "require_internal_approval" boolean DEFAULT false,
+    "approval_threshold_amount" numeric(14,2) DEFAULT 0,
+    "approver_user_ids" "uuid"[] DEFAULT '{}'::"uuid"[],
+    "default_presentation_level" character varying(30) DEFAULT 'space_component'::character varying,
+    "default_hide_dimensions" boolean DEFAULT true,
+    "default_header_color" character varying(20) DEFAULT '#1e40af'::character varying,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."tenant_quotation_settings" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."tenant_quotation_settings" IS 'Per-tenant configuration for quotation module including branding, bank details, and defaults';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."tenant_settings" (
@@ -8670,7 +10101,7 @@ CREATE OR REPLACE VIEW "public"."v_project_lead_activities" AS
     "u"."name" AS "created_by_name",
     "u"."avatar_url" AS "created_by_avatar"
    FROM ((("public"."projects" "p"
-     JOIN "public"."leads" "l" ON (("p"."converted_from_lead_id" = "l"."id")))
+     JOIN "public"."leads" "l" ON (("p"."lead_id" = "l"."id")))
      JOIN "public"."lead_activities" "la" ON (("la"."lead_id" = "l"."id")))
      LEFT JOIN "public"."users" "u" ON (("la"."created_by" = "u"."id")))
   ORDER BY "la"."created_at" DESC;
@@ -8687,22 +10118,22 @@ CREATE OR REPLACE VIEW "public"."v_project_lead_details" AS
  SELECT "p"."id" AS "project_id",
     "p"."project_number",
     "p"."name" AS "project_name",
-    "p"."converted_from_lead_id",
+    "p"."lead_id" AS "converted_from_lead_id",
     "l"."lead_number",
-    "l"."client_name" AS "lead_client_name",
-    "l"."phone" AS "lead_phone",
-    "l"."email" AS "lead_email",
+    "c"."name" AS "lead_client_name",
+    "c"."phone" AS "lead_phone",
+    "c"."email" AS "lead_email",
     "l"."lead_source",
     "l"."lead_source_detail",
     "l"."assigned_to" AS "lead_sales_rep_id",
     "sales_rep"."name" AS "lead_sales_rep_name",
-    "l"."property_type",
-    "l"."property_name" AS "lead_property_name",
-    "l"."flat_number" AS "lead_flat_number",
-    "l"."property_address" AS "lead_property_address",
-    "l"."property_city" AS "lead_property_city",
-    "l"."property_pincode" AS "lead_property_pincode",
-    "l"."carpet_area_sqft" AS "lead_carpet_area",
+    ("prop"."property_type")::"text" AS "property_type",
+    "prop"."property_name" AS "lead_property_name",
+    "prop"."unit_number" AS "lead_flat_number",
+    "prop"."address_line1" AS "lead_property_address",
+    "prop"."city" AS "lead_property_city",
+    "prop"."pincode" AS "lead_property_pincode",
+    "prop"."carpet_area" AS "lead_carpet_area",
     "l"."budget_range" AS "lead_budget_range",
     "l"."estimated_value" AS "lead_estimated_value",
     "l"."won_amount" AS "lead_won_amount",
@@ -8720,16 +10151,14 @@ CREATE OR REPLACE VIEW "public"."v_project_lead_details" AS
             WHEN (("l"."won_at" IS NOT NULL) AND ("l"."created_at" IS NOT NULL)) THEN (EXTRACT(day FROM ("l"."won_at" - "l"."created_at")))::integer
             ELSE NULL::integer
         END AS "lead_duration_days"
-   FROM (("public"."projects" "p"
-     LEFT JOIN "public"."leads" "l" ON (("p"."converted_from_lead_id" = "l"."id")))
+   FROM (((("public"."projects" "p"
+     LEFT JOIN "public"."leads" "l" ON (("p"."lead_id" = "l"."id")))
+     LEFT JOIN "public"."clients" "c" ON (("l"."client_id" = "c"."id")))
+     LEFT JOIN "public"."properties" "prop" ON (("l"."property_id" = "prop"."id")))
      LEFT JOIN "public"."users" "sales_rep" ON (("l"."assigned_to" = "sales_rep"."id")));
 
 
 ALTER VIEW "public"."v_project_lead_details" OWNER TO "postgres";
-
-
-COMMENT ON VIEW "public"."v_project_lead_details" IS 'View combining project with its original lead details for reporting';
-
 
 
 CREATE OR REPLACE VIEW "public"."vendors" AS
@@ -8790,6 +10219,16 @@ ALTER TABLE ONLY "public"."audit_logs"
 
 
 
+ALTER TABLE ONLY "public"."calendar_events"
+    ADD CONSTRAINT "calendar_events_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."clients"
+    ADD CONSTRAINT "clients_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."commission_items"
     ADD CONSTRAINT "commission_items_pkey" PRIMARY KEY ("id");
 
@@ -8840,23 +10279,28 @@ ALTER TABLE ONLY "public"."cost_attribute_types"
 
 
 
-ALTER TABLE ONLY "public"."cost_item_categories"
+ALTER TABLE ONLY "public"."quotation_cost_item_categories"
     ADD CONSTRAINT "cost_item_categories_pkey" PRIMARY KEY ("id");
 
 
 
-ALTER TABLE ONLY "public"."cost_item_categories"
+ALTER TABLE ONLY "public"."quotation_cost_item_categories"
     ADD CONSTRAINT "cost_item_categories_tenant_id_slug_key" UNIQUE ("tenant_id", "slug");
 
 
 
-ALTER TABLE ONLY "public"."cost_items"
+ALTER TABLE ONLY "public"."quotation_cost_items"
     ADD CONSTRAINT "cost_items_pkey" PRIMARY KEY ("id");
 
 
 
-ALTER TABLE ONLY "public"."cost_items"
+ALTER TABLE ONLY "public"."quotation_cost_items"
     ADD CONSTRAINT "cost_items_tenant_id_slug_key" UNIQUE ("tenant_id", "slug");
+
+
+
+ALTER TABLE ONLY "public"."documents"
+    ADD CONSTRAINT "documents_pkey" PRIMARY KEY ("id");
 
 
 
@@ -9120,6 +10564,16 @@ ALTER TABLE ONLY "public"."projects"
 
 
 
+ALTER TABLE ONLY "public"."properties"
+    ADD CONSTRAINT "properties_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."quotation_activities"
+    ADD CONSTRAINT "quotation_activities_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."quotation_changes"
     ADD CONSTRAINT "quotation_changes_pkey" PRIMARY KEY ("id");
 
@@ -9152,6 +10606,11 @@ ALTER TABLE ONLY "public"."quotation_snapshots"
 
 ALTER TABLE ONLY "public"."quotation_spaces"
     ADD CONSTRAINT "quotation_spaces_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."quotation_template_line_items"
+    ADD CONSTRAINT "quotation_template_line_items_pkey" PRIMARY KEY ("id");
 
 
 
@@ -9420,11 +10879,6 @@ ALTER TABLE ONLY "public"."tasks"
 
 
 
-ALTER TABLE ONLY "public"."template_line_items"
-    ADD CONSTRAINT "template_line_items_pkey" PRIMARY KEY ("id");
-
-
-
 ALTER TABLE ONLY "public"."template_spaces"
     ADD CONSTRAINT "template_spaces_pkey" PRIMARY KEY ("id");
 
@@ -9442,6 +10896,16 @@ ALTER TABLE ONLY "public"."tenant_lead_settings"
 
 ALTER TABLE ONLY "public"."tenant_payment_methods"
     ADD CONSTRAINT "tenant_payment_methods_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."tenant_quotation_settings"
+    ADD CONSTRAINT "tenant_quotation_settings_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."tenant_quotation_settings"
+    ADD CONSTRAINT "tenant_quotation_settings_tenant_id_key" UNIQUE ("tenant_id");
 
 
 
@@ -9643,7 +11107,59 @@ CREATE INDEX "idx_audit_logs_tenant_id" ON "public"."audit_logs" USING "btree" (
 
 
 
+CREATE INDEX "idx_calendar_events_created_by" ON "public"."calendar_events" USING "btree" ("created_by");
+
+
+
+CREATE INDEX "idx_calendar_events_linked" ON "public"."calendar_events" USING "btree" ("linked_type", "linked_id");
+
+
+
+CREATE INDEX "idx_calendar_events_scheduled" ON "public"."calendar_events" USING "btree" ("scheduled_at");
+
+
+
+CREATE INDEX "idx_calendar_events_tenant" ON "public"."calendar_events" USING "btree" ("tenant_id");
+
+
+
+CREATE INDEX "idx_calendar_events_type" ON "public"."calendar_events" USING "btree" ("event_type");
+
+
+
 CREATE INDEX "idx_checklist_items_sub_phase" ON "public"."project_checklist_items" USING "btree" ("project_sub_phase_id");
+
+
+
+CREATE INDEX "idx_clients_city" ON "public"."clients" USING "btree" ("city");
+
+
+
+CREATE INDEX "idx_clients_created_at" ON "public"."clients" USING "btree" ("created_at" DESC);
+
+
+
+CREATE INDEX "idx_clients_email" ON "public"."clients" USING "btree" ("email");
+
+
+
+CREATE INDEX "idx_clients_name" ON "public"."clients" USING "btree" ("name");
+
+
+
+CREATE INDEX "idx_clients_phone" ON "public"."clients" USING "btree" ("phone");
+
+
+
+CREATE INDEX "idx_clients_status" ON "public"."clients" USING "btree" ("status");
+
+
+
+CREATE INDEX "idx_clients_tenant" ON "public"."clients" USING "btree" ("tenant_id");
+
+
+
+CREATE INDEX "idx_clients_type" ON "public"."clients" USING "btree" ("client_type");
 
 
 
@@ -9691,19 +11207,43 @@ CREATE INDEX "idx_component_variants_tenant" ON "public"."component_variants" US
 
 
 
-CREATE INDEX "idx_cost_item_categories_tenant" ON "public"."cost_item_categories" USING "btree" ("tenant_id", "is_active");
+CREATE INDEX "idx_cost_item_categories_tenant" ON "public"."quotation_cost_item_categories" USING "btree" ("tenant_id", "is_active");
 
 
 
-CREATE INDEX "idx_cost_items_category" ON "public"."cost_items" USING "btree" ("category_id");
+CREATE INDEX "idx_cost_items_category" ON "public"."quotation_cost_items" USING "btree" ("category_id");
 
 
 
-CREATE INDEX "idx_cost_items_tenant" ON "public"."cost_items" USING "btree" ("tenant_id", "is_active");
+CREATE INDEX "idx_cost_items_tenant" ON "public"."quotation_cost_items" USING "btree" ("tenant_id", "is_active");
 
 
 
-CREATE INDEX "idx_cost_items_unit" ON "public"."cost_items" USING "btree" ("unit_code");
+CREATE INDEX "idx_cost_items_unit" ON "public"."quotation_cost_items" USING "btree" ("unit_code");
+
+
+
+CREATE INDEX "idx_documents_category" ON "public"."documents" USING "btree" ("category");
+
+
+
+CREATE INDEX "idx_documents_created_at" ON "public"."documents" USING "btree" ("created_at" DESC);
+
+
+
+CREATE INDEX "idx_documents_linked" ON "public"."documents" USING "btree" ("linked_type", "linked_id");
+
+
+
+CREATE INDEX "idx_documents_tags" ON "public"."documents" USING "gin" ("tags");
+
+
+
+CREATE INDEX "idx_documents_tenant_id" ON "public"."documents" USING "btree" ("tenant_id");
+
+
+
+CREATE INDEX "idx_documents_uploaded_by" ON "public"."documents" USING "btree" ("uploaded_by");
 
 
 
@@ -9755,6 +11295,14 @@ CREATE INDEX "idx_lead_activities_lead_id" ON "public"."lead_activities" USING "
 
 
 
+CREATE INDEX "idx_lead_activities_meeting_scheduled_at" ON "public"."lead_activities" USING "btree" ("meeting_scheduled_at") WHERE ("meeting_scheduled_at" IS NOT NULL);
+
+
+
+CREATE INDEX "idx_lead_activities_tenant_meeting" ON "public"."lead_activities" USING "btree" ("tenant_id", "meeting_scheduled_at") WHERE ("meeting_scheduled_at" IS NOT NULL);
+
+
+
 CREATE INDEX "idx_lead_activities_type" ON "public"."lead_activities" USING "btree" ("activity_type");
 
 
@@ -9763,11 +11311,19 @@ CREATE INDEX "idx_lead_documents_lead_id" ON "public"."lead_documents" USING "bt
 
 
 
+CREATE INDEX "idx_lead_documents_project_id" ON "public"."lead_documents" USING "btree" ("project_id");
+
+
+
 CREATE INDEX "idx_lead_family_members_lead_id" ON "public"."lead_family_members" USING "btree" ("lead_id");
 
 
 
 CREATE INDEX "idx_lead_notes_lead_id" ON "public"."lead_notes" USING "btree" ("lead_id");
+
+
+
+CREATE INDEX "idx_lead_notes_project_id" ON "public"."lead_notes" USING "btree" ("project_id");
 
 
 
@@ -9795,7 +11351,15 @@ CREATE INDEX "idx_lead_tasks_status" ON "public"."lead_tasks" USING "btree" ("st
 
 
 
+CREATE INDEX "idx_leads_activity_score" ON "public"."leads" USING "btree" ("activity_score" DESC);
+
+
+
 CREATE INDEX "idx_leads_assigned_to" ON "public"."leads" USING "btree" ("assigned_to");
+
+
+
+CREATE INDEX "idx_leads_client" ON "public"."leads" USING "btree" ("client_id");
 
 
 
@@ -9807,7 +11371,11 @@ CREATE INDEX "idx_leads_created_by" ON "public"."leads" USING "btree" ("created_
 
 
 
-CREATE INDEX "idx_leads_email" ON "public"."leads" USING "btree" ("tenant_id", "email");
+CREATE INDEX "idx_leads_days_inactive" ON "public"."leads" USING "btree" ("days_since_last_activity");
+
+
+
+CREATE INDEX "idx_leads_engagement_level" ON "public"."leads" USING "btree" ("engagement_level");
 
 
 
@@ -9815,11 +11383,15 @@ CREATE INDEX "idx_leads_last_activity" ON "public"."leads" USING "btree" ("tenan
 
 
 
-CREATE INDEX "idx_leads_phone" ON "public"."leads" USING "btree" ("tenant_id", "phone");
+CREATE INDEX "idx_leads_lead_score" ON "public"."leads" USING "btree" ("lead_score");
 
 
 
 CREATE INDEX "idx_leads_project_id" ON "public"."leads" USING "btree" ("project_id");
+
+
+
+CREATE INDEX "idx_leads_property" ON "public"."leads" USING "btree" ("property_id");
 
 
 
@@ -10067,11 +11639,7 @@ CREATE INDEX "idx_projects_active" ON "public"."projects" USING "btree" ("tenant
 
 
 
-CREATE INDEX "idx_projects_converted_from_lead" ON "public"."projects" USING "btree" ("converted_from_lead_id");
-
-
-
-CREATE INDEX "idx_projects_lead_source" ON "public"."projects" USING "btree" ("lead_source") WHERE ("lead_source" IS NOT NULL);
+CREATE INDEX "idx_projects_lead_id" ON "public"."projects" USING "btree" ("lead_id") WHERE ("lead_id" IS NOT NULL);
 
 
 
@@ -10083,19 +11651,47 @@ CREATE INDEX "idx_projects_project_category" ON "public"."projects" USING "btree
 
 
 
-CREATE INDEX "idx_projects_property_type" ON "public"."projects" USING "btree" ("property_type");
-
-
-
-CREATE INDEX "idx_projects_sales_rep" ON "public"."projects" USING "btree" ("sales_rep_id") WHERE ("sales_rep_id" IS NOT NULL);
-
-
-
 CREATE INDEX "idx_projects_status" ON "public"."projects" USING "btree" ("tenant_id", "status");
 
 
 
 CREATE INDEX "idx_projects_tenant" ON "public"."projects" USING "btree" ("tenant_id");
+
+
+
+CREATE INDEX "idx_properties_category" ON "public"."properties" USING "btree" ("category");
+
+
+
+CREATE INDEX "idx_properties_city" ON "public"."properties" USING "btree" ("city");
+
+
+
+CREATE INDEX "idx_properties_created_at" ON "public"."properties" USING "btree" ("created_at" DESC);
+
+
+
+CREATE INDEX "idx_properties_pincode" ON "public"."properties" USING "btree" ("pincode");
+
+
+
+CREATE INDEX "idx_properties_tenant" ON "public"."properties" USING "btree" ("tenant_id");
+
+
+
+CREATE INDEX "idx_properties_type" ON "public"."properties" USING "btree" ("property_type");
+
+
+
+CREATE INDEX "idx_quotation_activities_date" ON "public"."quotation_activities" USING "btree" ("performed_at" DESC);
+
+
+
+CREATE INDEX "idx_quotation_activities_quotation" ON "public"."quotation_activities" USING "btree" ("quotation_id");
+
+
+
+CREATE INDEX "idx_quotation_activities_type" ON "public"."quotation_activities" USING "btree" ("activity_type");
 
 
 
@@ -10123,7 +11719,31 @@ CREATE INDEX "idx_quotation_cost_attrs_quotation" ON "public"."quotation_cost_at
 
 
 
+CREATE INDEX "idx_quotation_cost_item_categories_slug" ON "public"."quotation_cost_item_categories" USING "btree" ("tenant_id", "slug");
+
+
+
+CREATE INDEX "idx_quotation_cost_item_categories_tenant_id" ON "public"."quotation_cost_item_categories" USING "btree" ("tenant_id");
+
+
+
+CREATE INDEX "idx_quotation_cost_items_category_id" ON "public"."quotation_cost_items" USING "btree" ("category_id");
+
+
+
+CREATE INDEX "idx_quotation_cost_items_slug" ON "public"."quotation_cost_items" USING "btree" ("tenant_id", "slug");
+
+
+
+CREATE INDEX "idx_quotation_cost_items_tenant_id" ON "public"."quotation_cost_items" USING "btree" ("tenant_id");
+
+
+
 CREATE INDEX "idx_quotation_line_items_component" ON "public"."quotation_line_items" USING "btree" ("quotation_component_id");
+
+
+
+CREATE INDEX "idx_quotation_line_items_cost_item" ON "public"."quotation_line_items" USING "btree" ("quotation_cost_item_id");
 
 
 
@@ -10151,6 +11771,22 @@ CREATE INDEX "idx_quotation_spaces_quotation" ON "public"."quotation_spaces" USI
 
 
 
+CREATE INDEX "idx_quotation_template_line_items_component" ON "public"."quotation_template_line_items" USING "btree" ("component_type_id");
+
+
+
+CREATE INDEX "idx_quotation_template_line_items_space" ON "public"."quotation_template_line_items" USING "btree" ("space_type_id");
+
+
+
+CREATE INDEX "idx_quotation_template_line_items_template" ON "public"."quotation_template_line_items" USING "btree" ("template_id");
+
+
+
+CREATE INDEX "idx_quotation_template_line_items_template_space" ON "public"."quotation_template_line_items" USING "btree" ("template_space_id");
+
+
+
 CREATE INDEX "idx_quotation_templates_tenant" ON "public"."quotation_templates" USING "btree" ("tenant_id", "is_active");
 
 
@@ -10159,7 +11795,19 @@ CREATE INDEX "idx_quotations_assigned_to" ON "public"."quotations" USING "btree"
 
 
 
+CREATE INDEX "idx_quotations_client_id" ON "public"."quotations" USING "btree" ("client_id");
+
+
+
+CREATE INDEX "idx_quotations_client_token" ON "public"."quotations" USING "btree" ("client_access_token") WHERE ("client_access_token" IS NOT NULL);
+
+
+
 CREATE INDEX "idx_quotations_created" ON "public"."quotations" USING "btree" ("tenant_id", "created_at" DESC);
+
+
+
+CREATE INDEX "idx_quotations_internal_approval" ON "public"."quotations" USING "btree" ("internal_approval_status") WHERE ("internal_approval_status" <> 'not_required'::"text");
 
 
 
@@ -10179,7 +11827,15 @@ CREATE INDEX "idx_quotations_status" ON "public"."quotations" USING "btree" ("te
 
 
 
+CREATE INDEX "idx_quotations_template_id" ON "public"."quotations" USING "btree" ("template_id") WHERE ("template_id" IS NOT NULL);
+
+
+
 CREATE INDEX "idx_quotations_tenant" ON "public"."quotations" USING "btree" ("tenant_id");
+
+
+
+CREATE INDEX "idx_quotations_type" ON "public"."quotations" USING "btree" ("quotation_type");
 
 
 
@@ -10280,6 +11936,10 @@ CREATE INDEX "idx_stock_materials_category" ON "public"."stock_materials" USING 
 
 
 CREATE INDEX "idx_stock_materials_company" ON "public"."stock_materials" USING "btree" ("company_id");
+
+
+
+CREATE INDEX "idx_stock_materials_cost_item_id" ON "public"."stock_materials" USING "btree" ("cost_item_id");
 
 
 
@@ -10539,18 +12199,6 @@ CREATE INDEX "idx_tasks_tenant_status_due" ON "public"."tasks" USING "btree" ("t
 
 
 
-CREATE INDEX "idx_template_line_items_component" ON "public"."template_line_items" USING "btree" ("component_type_id");
-
-
-
-CREATE INDEX "idx_template_line_items_space" ON "public"."template_line_items" USING "btree" ("space_type_id");
-
-
-
-CREATE INDEX "idx_template_line_items_template" ON "public"."template_line_items" USING "btree" ("template_id");
-
-
-
 CREATE INDEX "idx_template_spaces_template" ON "public"."template_spaces" USING "btree" ("template_id");
 
 
@@ -10715,6 +12363,10 @@ CREATE OR REPLACE TRIGGER "task_status_change" BEFORE UPDATE ON "public"."tasks"
 
 
 
+CREATE OR REPLACE TRIGGER "trg_carry_forward_on_lead_won" AFTER UPDATE ON "public"."leads" FOR EACH ROW EXECUTE FUNCTION "public"."trigger_carry_forward_on_lead_won"();
+
+
+
 CREATE OR REPLACE TRIGGER "trg_checklist_progress" AFTER INSERT OR DELETE OR UPDATE ON "public"."project_checklist_items" FOR EACH ROW EXECUTE FUNCTION "public"."trg_update_sub_phase_progress"();
 
 
@@ -10767,7 +12419,23 @@ CREATE OR REPLACE TRIGGER "trg_update_stock_on_grn" AFTER UPDATE ON "public"."go
 
 
 
+CREATE OR REPLACE TRIGGER "trigger_calendar_events_updated_at" BEFORE UPDATE ON "public"."calendar_events" FOR EACH ROW EXECUTE FUNCTION "public"."update_calendar_events_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "trigger_clients_updated_at" BEFORE UPDATE ON "public"."clients" FOR EACH ROW EXECUTE FUNCTION "public"."update_clients_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "trigger_documents_updated_at" BEFORE UPDATE ON "public"."documents" FOR EACH ROW EXECUTE FUNCTION "public"."update_documents_updated_at"();
+
+
+
 CREATE OR REPLACE TRIGGER "trigger_notify_lead_won" AFTER UPDATE ON "public"."leads" FOR EACH ROW EXECUTE FUNCTION "public"."notify_lead_won"();
+
+
+
+CREATE OR REPLACE TRIGGER "trigger_properties_updated_at" BEFORE UPDATE ON "public"."properties" FOR EACH ROW EXECUTE FUNCTION "public"."update_properties_updated_at"();
 
 
 
@@ -10788,6 +12456,10 @@ CREATE OR REPLACE TRIGGER "update_lead_last_activity" AFTER INSERT ON "public"."
 
 
 CREATE OR REPLACE TRIGGER "update_lead_notes_updated_at" BEFORE UPDATE ON "public"."lead_notes" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at_column"();
+
+
+
+CREATE OR REPLACE TRIGGER "update_lead_score_on_activity" AFTER INSERT ON "public"."lead_activities" FOR EACH ROW EXECUTE FUNCTION "public"."trigger_update_lead_score"();
 
 
 
@@ -10924,6 +12596,46 @@ ALTER TABLE ONLY "public"."audit_logs"
 
 
 
+ALTER TABLE ONLY "public"."calendar_events"
+    ADD CONSTRAINT "calendar_events_completed_by_fkey" FOREIGN KEY ("completed_by") REFERENCES "public"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."calendar_events"
+    ADD CONSTRAINT "calendar_events_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."calendar_events"
+    ADD CONSTRAINT "calendar_events_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."calendar_events"
+    ADD CONSTRAINT "calendar_events_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "public"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."clients"
+    ADD CONSTRAINT "clients_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."clients"
+    ADD CONSTRAINT "clients_referred_by_client_id_fkey" FOREIGN KEY ("referred_by_client_id") REFERENCES "public"."clients"("id");
+
+
+
+ALTER TABLE ONLY "public"."clients"
+    ADD CONSTRAINT "clients_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."clients"
+    ADD CONSTRAINT "clients_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "auth"."users"("id");
+
+
+
 ALTER TABLE ONLY "public"."commission_items"
     ADD CONSTRAINT "commission_items_brand_id_fkey" FOREIGN KEY ("brand_id") REFERENCES "public"."stock_brands"("id") ON DELETE SET NULL;
 
@@ -10964,11 +12676,6 @@ ALTER TABLE ONLY "public"."component_templates"
 
 
 
-ALTER TABLE ONLY "public"."component_templates"
-    ADD CONSTRAINT "component_templates_variant_type_id_fkey" FOREIGN KEY ("variant_type_id") REFERENCES "public"."component_variant_types"("id") ON DELETE SET NULL;
-
-
-
 ALTER TABLE ONLY "public"."component_types"
     ADD CONSTRAINT "component_types_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE CASCADE;
 
@@ -10999,23 +12706,38 @@ ALTER TABLE ONLY "public"."cost_attribute_types"
 
 
 
-ALTER TABLE ONLY "public"."cost_item_categories"
+ALTER TABLE ONLY "public"."quotation_cost_item_categories"
     ADD CONSTRAINT "cost_item_categories_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE CASCADE;
 
 
 
-ALTER TABLE ONLY "public"."cost_items"
-    ADD CONSTRAINT "cost_items_category_id_fkey" FOREIGN KEY ("category_id") REFERENCES "public"."cost_item_categories"("id") ON DELETE SET NULL;
+ALTER TABLE ONLY "public"."quotation_cost_items"
+    ADD CONSTRAINT "cost_items_last_vendor_id_fkey" FOREIGN KEY ("last_vendor_id") REFERENCES "public"."stock_vendors"("id");
 
 
 
-ALTER TABLE ONLY "public"."cost_items"
+ALTER TABLE ONLY "public"."quotation_cost_items"
     ADD CONSTRAINT "cost_items_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE CASCADE;
 
 
 
-ALTER TABLE ONLY "public"."cost_items"
+ALTER TABLE ONLY "public"."quotation_cost_items"
     ADD CONSTRAINT "cost_items_unit_code_fkey" FOREIGN KEY ("unit_code") REFERENCES "public"."units"("code");
+
+
+
+ALTER TABLE ONLY "public"."documents"
+    ADD CONSTRAINT "documents_parent_id_fkey" FOREIGN KEY ("parent_id") REFERENCES "public"."documents"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."documents"
+    ADD CONSTRAINT "documents_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."documents"
+    ADD CONSTRAINT "documents_uploaded_by_fkey" FOREIGN KEY ("uploaded_by") REFERENCES "public"."users"("id");
 
 
 
@@ -11040,7 +12762,7 @@ ALTER TABLE ONLY "public"."user_invitations"
 
 
 ALTER TABLE ONLY "public"."goods_receipt_items"
-    ADD CONSTRAINT "goods_receipt_items_cost_item_id_fkey" FOREIGN KEY ("cost_item_id") REFERENCES "public"."cost_items"("id") ON DELETE RESTRICT;
+    ADD CONSTRAINT "goods_receipt_items_cost_item_id_fkey" FOREIGN KEY ("cost_item_id") REFERENCES "public"."quotation_cost_items"("id") ON DELETE RESTRICT;
 
 
 
@@ -11084,8 +12806,23 @@ ALTER TABLE ONLY "public"."lead_activities"
 
 
 
+ALTER TABLE ONLY "public"."lead_activities"
+    ADD CONSTRAINT "lead_activities_linked_note_id_fkey" FOREIGN KEY ("linked_note_id") REFERENCES "public"."lead_notes"("id");
+
+
+
+ALTER TABLE ONLY "public"."lead_activities"
+    ADD CONSTRAINT "lead_activities_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id");
+
+
+
 ALTER TABLE ONLY "public"."lead_documents"
     ADD CONSTRAINT "lead_documents_lead_id_fkey" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."lead_documents"
+    ADD CONSTRAINT "lead_documents_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE SET NULL;
 
 
 
@@ -11106,6 +12843,11 @@ ALTER TABLE ONLY "public"."lead_notes"
 
 ALTER TABLE ONLY "public"."lead_notes"
     ADD CONSTRAINT "lead_notes_lead_id_fkey" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."lead_notes"
+    ADD CONSTRAINT "lead_notes_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE SET NULL;
 
 
 
@@ -11170,12 +12912,22 @@ ALTER TABLE ONLY "public"."leads"
 
 
 ALTER TABLE ONLY "public"."leads"
+    ADD CONSTRAINT "leads_client_id_fkey" FOREIGN KEY ("client_id") REFERENCES "public"."clients"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."leads"
     ADD CONSTRAINT "leads_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE SET NULL;
 
 
 
 ALTER TABLE ONLY "public"."leads"
     ADD CONSTRAINT "leads_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."leads"
+    ADD CONSTRAINT "leads_property_id_fkey" FOREIGN KEY ("property_id") REFERENCES "public"."properties"("id") ON DELETE SET NULL;
 
 
 
@@ -11555,7 +13307,21 @@ ALTER TABLE ONLY "public"."project_sub_phases"
 
 
 ALTER TABLE ONLY "public"."projects"
+    ADD CONSTRAINT "projects_client_id_fkey" FOREIGN KEY ("client_id") REFERENCES "public"."clients"("id");
+
+
+
+ALTER TABLE ONLY "public"."projects"
     ADD CONSTRAINT "projects_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."projects"
+    ADD CONSTRAINT "projects_lead_id_fkey" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE SET NULL;
+
+
+
+COMMENT ON CONSTRAINT "projects_lead_id_fkey" ON "public"."projects" IS 'Links project to the lead it was converted from, enabling proper relationship queries';
 
 
 
@@ -11565,12 +13331,32 @@ ALTER TABLE ONLY "public"."projects"
 
 
 ALTER TABLE ONLY "public"."projects"
-    ADD CONSTRAINT "projects_sales_rep_id_fkey" FOREIGN KEY ("sales_rep_id") REFERENCES "public"."users"("id") ON DELETE SET NULL;
+    ADD CONSTRAINT "projects_property_id_fkey" FOREIGN KEY ("property_id") REFERENCES "public"."properties"("id");
 
 
 
 ALTER TABLE ONLY "public"."projects"
     ADD CONSTRAINT "projects_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."properties"
+    ADD CONSTRAINT "properties_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."properties"
+    ADD CONSTRAINT "properties_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."quotation_activities"
+    ADD CONSTRAINT "quotation_activities_performed_by_fkey" FOREIGN KEY ("performed_by") REFERENCES "public"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."quotation_activities"
+    ADD CONSTRAINT "quotation_activities_quotation_id_fkey" FOREIGN KEY ("quotation_id") REFERENCES "public"."quotations"("id") ON DELETE CASCADE;
 
 
 
@@ -11586,11 +13372,6 @@ ALTER TABLE ONLY "public"."quotation_changes"
 
 ALTER TABLE ONLY "public"."quotation_components"
     ADD CONSTRAINT "quotation_components_component_type_id_fkey" FOREIGN KEY ("component_type_id") REFERENCES "public"."component_types"("id") ON DELETE SET NULL;
-
-
-
-ALTER TABLE ONLY "public"."quotation_components"
-    ADD CONSTRAINT "quotation_components_component_variant_id_fkey" FOREIGN KEY ("component_variant_id") REFERENCES "public"."component_variants"("id") ON DELETE SET NULL;
 
 
 
@@ -11629,13 +13410,18 @@ ALTER TABLE ONLY "public"."quotation_cost_attributes"
 
 
 
-ALTER TABLE ONLY "public"."quotation_line_items"
-    ADD CONSTRAINT "quotation_line_items_cost_item_id_fkey" FOREIGN KEY ("cost_item_id") REFERENCES "public"."cost_items"("id") ON DELETE SET NULL;
+ALTER TABLE ONLY "public"."quotation_cost_items"
+    ADD CONSTRAINT "quotation_cost_items_category_id_fkey" FOREIGN KEY ("category_id") REFERENCES "public"."quotation_cost_item_categories"("id");
 
 
 
 ALTER TABLE ONLY "public"."quotation_line_items"
     ADD CONSTRAINT "quotation_line_items_quotation_component_id_fkey" FOREIGN KEY ("quotation_component_id") REFERENCES "public"."quotation_components"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."quotation_line_items"
+    ADD CONSTRAINT "quotation_line_items_quotation_cost_item_id_fkey" FOREIGN KEY ("quotation_cost_item_id") REFERENCES "public"."quotation_cost_items"("id") ON DELETE SET NULL;
 
 
 
@@ -11694,6 +13480,31 @@ ALTER TABLE ONLY "public"."quotation_spaces"
 
 
 
+ALTER TABLE ONLY "public"."quotation_template_line_items"
+    ADD CONSTRAINT "quotation_template_line_items_component_type_id_fkey" FOREIGN KEY ("component_type_id") REFERENCES "public"."component_types"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."quotation_template_line_items"
+    ADD CONSTRAINT "quotation_template_line_items_cost_item_id_fkey" FOREIGN KEY ("cost_item_id") REFERENCES "public"."quotation_cost_items"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."quotation_template_line_items"
+    ADD CONSTRAINT "quotation_template_line_items_space_type_id_fkey" FOREIGN KEY ("space_type_id") REFERENCES "public"."space_types"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."quotation_template_line_items"
+    ADD CONSTRAINT "quotation_template_line_items_template_id_fkey" FOREIGN KEY ("template_id") REFERENCES "public"."quotation_templates"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."quotation_template_line_items"
+    ADD CONSTRAINT "quotation_template_line_items_template_space_id_fkey" FOREIGN KEY ("template_space_id") REFERENCES "public"."template_spaces"("id") ON DELETE CASCADE;
+
+
+
 ALTER TABLE ONLY "public"."quotation_templates"
     ADD CONSTRAINT "quotation_templates_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id");
 
@@ -11710,12 +13521,22 @@ ALTER TABLE ONLY "public"."quotations"
 
 
 ALTER TABLE ONLY "public"."quotations"
-    ADD CONSTRAINT "quotations_client_id_fkey" FOREIGN KEY ("client_id") REFERENCES "public"."users"("id") ON DELETE SET NULL;
+    ADD CONSTRAINT "quotations_baseline_quotation_id_fkey" FOREIGN KEY ("baseline_quotation_id") REFERENCES "public"."quotations"("id");
+
+
+
+ALTER TABLE ONLY "public"."quotations"
+    ADD CONSTRAINT "quotations_client_id_fkey" FOREIGN KEY ("client_id") REFERENCES "public"."clients"("id") ON DELETE SET NULL;
 
 
 
 ALTER TABLE ONLY "public"."quotations"
     ADD CONSTRAINT "quotations_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."quotations"
+    ADD CONSTRAINT "quotations_internal_approved_by_fkey" FOREIGN KEY ("internal_approved_by") REFERENCES "public"."users"("id");
 
 
 
@@ -11726,6 +13547,11 @@ ALTER TABLE ONLY "public"."quotations"
 
 ALTER TABLE ONLY "public"."quotations"
     ADD CONSTRAINT "quotations_parent_quotation_id_fkey" FOREIGN KEY ("parent_quotation_id") REFERENCES "public"."quotations"("id");
+
+
+
+ALTER TABLE ONLY "public"."quotations"
+    ADD CONSTRAINT "quotations_template_id_fkey" FOREIGN KEY ("template_id") REFERENCES "public"."quotation_templates"("id") ON DELETE SET NULL;
 
 
 
@@ -11785,7 +13611,7 @@ ALTER TABLE ONLY "public"."stock_adjustment_items"
 
 
 ALTER TABLE ONLY "public"."stock_adjustment_items"
-    ADD CONSTRAINT "stock_adjustment_items_cost_item_id_fkey" FOREIGN KEY ("cost_item_id") REFERENCES "public"."cost_items"("id") ON DELETE RESTRICT;
+    ADD CONSTRAINT "stock_adjustment_items_cost_item_id_fkey" FOREIGN KEY ("cost_item_id") REFERENCES "public"."quotation_cost_items"("id") ON DELETE RESTRICT;
 
 
 
@@ -11840,7 +13666,7 @@ ALTER TABLE ONLY "public"."stock_goods_receipts"
 
 
 ALTER TABLE ONLY "public"."stock_issue_items"
-    ADD CONSTRAINT "stock_issue_items_cost_item_id_fkey" FOREIGN KEY ("cost_item_id") REFERENCES "public"."cost_items"("id") ON DELETE RESTRICT;
+    ADD CONSTRAINT "stock_issue_items_cost_item_id_fkey" FOREIGN KEY ("cost_item_id") REFERENCES "public"."quotation_cost_items"("id") ON DELETE RESTRICT;
 
 
 
@@ -11901,6 +13727,11 @@ ALTER TABLE ONLY "public"."stock_material_requisitions"
 
 ALTER TABLE ONLY "public"."stock_materials"
     ADD CONSTRAINT "stock_materials_company_id_fkey" FOREIGN KEY ("company_id") REFERENCES "public"."tenants"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."stock_materials"
+    ADD CONSTRAINT "stock_materials_cost_item_id_fkey" FOREIGN KEY ("cost_item_id") REFERENCES "public"."quotation_cost_items"("id") ON DELETE SET NULL;
 
 
 
@@ -12199,31 +14030,6 @@ ALTER TABLE ONLY "public"."tasks"
 
 
 
-ALTER TABLE ONLY "public"."template_line_items"
-    ADD CONSTRAINT "template_line_items_component_type_id_fkey" FOREIGN KEY ("component_type_id") REFERENCES "public"."component_types"("id") ON DELETE SET NULL;
-
-
-
-ALTER TABLE ONLY "public"."template_line_items"
-    ADD CONSTRAINT "template_line_items_component_variant_id_fkey" FOREIGN KEY ("component_variant_id") REFERENCES "public"."component_variants"("id") ON DELETE SET NULL;
-
-
-
-ALTER TABLE ONLY "public"."template_line_items"
-    ADD CONSTRAINT "template_line_items_cost_item_id_fkey" FOREIGN KEY ("cost_item_id") REFERENCES "public"."cost_items"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."template_line_items"
-    ADD CONSTRAINT "template_line_items_space_type_id_fkey" FOREIGN KEY ("space_type_id") REFERENCES "public"."space_types"("id") ON DELETE SET NULL;
-
-
-
-ALTER TABLE ONLY "public"."template_line_items"
-    ADD CONSTRAINT "template_line_items_template_id_fkey" FOREIGN KEY ("template_id") REFERENCES "public"."quotation_templates"("id") ON DELETE CASCADE;
-
-
-
 ALTER TABLE ONLY "public"."template_spaces"
     ADD CONSTRAINT "template_spaces_space_type_id_fkey" FOREIGN KEY ("space_type_id") REFERENCES "public"."space_types"("id") ON DELETE CASCADE;
 
@@ -12241,6 +14047,11 @@ ALTER TABLE ONLY "public"."tenant_lead_settings"
 
 ALTER TABLE ONLY "public"."tenant_payment_methods"
     ADD CONSTRAINT "tenant_payment_methods_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."tenant_quotation_settings"
+    ADD CONSTRAINT "tenant_quotation_settings_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE CASCADE;
 
 
 
@@ -12349,9 +14160,45 @@ ALTER TABLE ONLY "public"."users"
 
 
 
+CREATE POLICY "Admins can delete quotation_cost_item_categories" ON "public"."quotation_cost_item_categories" FOR DELETE TO "authenticated" USING ((("tenant_id" = ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))) AND (EXISTS ( SELECT 1
+   FROM ("public"."user_roles" "ur"
+     JOIN "public"."roles" "r" ON (("ur"."role_id" = "r"."id")))
+  WHERE (("ur"."user_id" = "auth"."uid"()) AND ("r"."hierarchy_level" <= 20))))));
+
+
+
+CREATE POLICY "Admins can delete quotation_cost_items" ON "public"."quotation_cost_items" FOR DELETE TO "authenticated" USING ((("tenant_id" = ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))) AND (EXISTS ( SELECT 1
+   FROM ("public"."user_roles" "ur"
+     JOIN "public"."roles" "r" ON (("ur"."role_id" = "r"."id")))
+  WHERE (("ur"."user_id" = "auth"."uid"()) AND ("r"."hierarchy_level" <= 20))))));
+
+
+
 CREATE POLICY "Admins can delete tenant roles" ON "public"."roles" FOR DELETE USING (("public"."is_admin_or_higher"() AND ("tenant_id" = ( SELECT "users"."tenant_id"
    FROM "public"."users"
   WHERE ("users"."id" = "auth"."uid"()))) AND ("is_system_role" = false)));
+
+
+
+CREATE POLICY "Admins can insert quotation_cost_item_categories" ON "public"."quotation_cost_item_categories" FOR INSERT TO "authenticated" WITH CHECK ((("tenant_id" = ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))) AND (EXISTS ( SELECT 1
+   FROM ("public"."user_roles" "ur"
+     JOIN "public"."roles" "r" ON (("ur"."role_id" = "r"."id")))
+  WHERE (("ur"."user_id" = "auth"."uid"()) AND ("r"."hierarchy_level" <= 20))))));
+
+
+
+CREATE POLICY "Admins can insert quotation_cost_items" ON "public"."quotation_cost_items" FOR INSERT TO "authenticated" WITH CHECK ((("tenant_id" = ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))) AND (EXISTS ( SELECT 1
+   FROM ("public"."user_roles" "ur"
+     JOIN "public"."roles" "r" ON (("ur"."role_id" = "r"."id")))
+  WHERE (("ur"."user_id" = "auth"."uid"()) AND ("r"."hierarchy_level" <= 20))))));
 
 
 
@@ -12372,6 +14219,24 @@ CREATE POLICY "Admins can manage tenant settings" ON "public"."tenant_settings" 
      JOIN "public"."user_roles" "ur" ON (("ur"."user_id" = "u"."id")))
      JOIN "public"."roles" "r" ON (("r"."id" = "ur"."role_id")))
   WHERE (("u"."id" = "auth"."uid"()) AND (("u"."is_super_admin" = true) OR (("r"."slug")::"text" = ANY ((ARRAY['admin'::character varying, 'super-admin'::character varying])::"text"[])))))));
+
+
+
+CREATE POLICY "Admins can update quotation_cost_item_categories" ON "public"."quotation_cost_item_categories" FOR UPDATE TO "authenticated" USING ((("tenant_id" = ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))) AND (EXISTS ( SELECT 1
+   FROM ("public"."user_roles" "ur"
+     JOIN "public"."roles" "r" ON (("ur"."role_id" = "r"."id")))
+  WHERE (("ur"."user_id" = "auth"."uid"()) AND ("r"."hierarchy_level" <= 20))))));
+
+
+
+CREATE POLICY "Admins can update quotation_cost_items" ON "public"."quotation_cost_items" FOR UPDATE TO "authenticated" USING ((("tenant_id" = ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))) AND (EXISTS ( SELECT 1
+   FROM ("public"."user_roles" "ur"
+     JOIN "public"."roles" "r" ON (("ur"."role_id" = "r"."id")))
+  WHERE (("ur"."user_id" = "auth"."uid"()) AND ("r"."hierarchy_level" <= 20))))));
 
 
 
@@ -12581,6 +14446,12 @@ CREATE POLICY "Users can add PO history in their tenant" ON "public"."po_approva
 
 
 
+CREATE POLICY "Users can create calendar events in their tenant" ON "public"."calendar_events" FOR INSERT WITH CHECK (("tenant_id" IN ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))));
+
+
+
 CREATE POLICY "Users can create invitations" ON "public"."user_invitations" FOR INSERT WITH CHECK (("tenant_id" = ( SELECT "users"."tenant_id"
    FROM "public"."users"
   WHERE ("users"."id" = "auth"."uid"()))));
@@ -12593,19 +14464,28 @@ CREATE POLICY "Users can create tenant variant types" ON "public"."component_var
 
 
 
+CREATE POLICY "Users can delete calendar events" ON "public"."calendar_events" FOR DELETE USING ((("tenant_id" IN ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))) AND (("created_by" = "auth"."uid"()) OR (EXISTS ( SELECT 1
+   FROM ("public"."user_roles" "ur"
+     JOIN "public"."roles" "r" ON (("ur"."role_id" = "r"."id")))
+  WHERE (("ur"."user_id" = "auth"."uid"()) AND ("r"."hierarchy_level" <= 1)))))));
+
+
+
 CREATE POLICY "Users can delete component variants of their tenant" ON "public"."component_variants" FOR DELETE USING (("tenant_id" IN ( SELECT "users"."tenant_id"
    FROM "public"."users"
   WHERE ("users"."id" = "auth"."uid"()))));
 
 
 
-CREATE POLICY "Users can delete cost item categories of their tenant" ON "public"."cost_item_categories" FOR DELETE USING (("tenant_id" IN ( SELECT "users"."tenant_id"
+CREATE POLICY "Users can delete cost item categories of their tenant" ON "public"."quotation_cost_item_categories" FOR DELETE USING (("tenant_id" IN ( SELECT "users"."tenant_id"
    FROM "public"."users"
   WHERE ("users"."id" = "auth"."uid"()))));
 
 
 
-CREATE POLICY "Users can delete cost items of their tenant" ON "public"."cost_items" FOR DELETE USING (("tenant_id" IN ( SELECT "users"."tenant_id"
+CREATE POLICY "Users can delete cost items of their tenant" ON "public"."quotation_cost_items" FOR DELETE USING (("tenant_id" IN ( SELECT "users"."tenant_id"
    FROM "public"."users"
   WHERE ("users"."id" = "auth"."uid"()))));
 
@@ -12625,11 +14505,9 @@ CREATE POLICY "Users can delete quotation line items of their tenant" ON "public
 
 
 
-CREATE POLICY "Users can delete template line items of their tenant" ON "public"."template_line_items" FOR DELETE USING (("template_id" IN ( SELECT "quotation_templates"."id"
+CREATE POLICY "Users can delete quotation template line items of their tenant" ON "public"."quotation_template_line_items" FOR DELETE USING (("template_id" IN ( SELECT "quotation_templates"."id"
    FROM "public"."quotation_templates"
-  WHERE ("quotation_templates"."tenant_id" IN ( SELECT "users"."tenant_id"
-           FROM "public"."users"
-          WHERE ("users"."id" = "auth"."uid"()))))));
+  WHERE ("quotation_templates"."tenant_id" = "public"."get_user_tenant_id"()))));
 
 
 
@@ -12665,13 +14543,13 @@ CREATE POLICY "Users can insert component variants for their tenant" ON "public"
 
 
 
-CREATE POLICY "Users can insert cost item categories for their tenant" ON "public"."cost_item_categories" FOR INSERT WITH CHECK (("tenant_id" IN ( SELECT "users"."tenant_id"
+CREATE POLICY "Users can insert cost item categories for their tenant" ON "public"."quotation_cost_item_categories" FOR INSERT WITH CHECK (("tenant_id" IN ( SELECT "users"."tenant_id"
    FROM "public"."users"
   WHERE ("users"."id" = "auth"."uid"()))));
 
 
 
-CREATE POLICY "Users can insert cost items for their tenant" ON "public"."cost_items" FOR INSERT WITH CHECK (("tenant_id" IN ( SELECT "users"."tenant_id"
+CREATE POLICY "Users can insert cost items for their tenant" ON "public"."quotation_cost_items" FOR INSERT WITH CHECK (("tenant_id" IN ( SELECT "users"."tenant_id"
    FROM "public"."users"
   WHERE ("users"."id" = "auth"."uid"()))));
 
@@ -12691,11 +14569,9 @@ CREATE POLICY "Users can insert quotation line items for their tenant" ON "publi
 
 
 
-CREATE POLICY "Users can insert template line items for their tenant" ON "public"."template_line_items" FOR INSERT WITH CHECK (("template_id" IN ( SELECT "quotation_templates"."id"
+CREATE POLICY "Users can insert quotation template line items for their tenant" ON "public"."quotation_template_line_items" FOR INSERT WITH CHECK (("template_id" IN ( SELECT "quotation_templates"."id"
    FROM "public"."quotation_templates"
-  WHERE ("quotation_templates"."tenant_id" IN ( SELECT "users"."tenant_id"
-           FROM "public"."users"
-          WHERE ("users"."id" = "auth"."uid"()))))));
+  WHERE ("quotation_templates"."tenant_id" = "public"."get_user_tenant_id"()))));
 
 
 
@@ -12827,19 +14703,28 @@ CREATE POLICY "Users can read tenant invitations" ON "public"."user_invitations"
 
 
 
+CREATE POLICY "Users can update calendar events" ON "public"."calendar_events" FOR UPDATE USING ((("tenant_id" IN ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))) AND (("created_by" = "auth"."uid"()) OR (EXISTS ( SELECT 1
+   FROM ("public"."user_roles" "ur"
+     JOIN "public"."roles" "r" ON (("ur"."role_id" = "r"."id")))
+  WHERE (("ur"."user_id" = "auth"."uid"()) AND ("r"."hierarchy_level" <= 1)))))));
+
+
+
 CREATE POLICY "Users can update component variants of their tenant" ON "public"."component_variants" FOR UPDATE USING (("tenant_id" IN ( SELECT "users"."tenant_id"
    FROM "public"."users"
   WHERE ("users"."id" = "auth"."uid"()))));
 
 
 
-CREATE POLICY "Users can update cost item categories of their tenant" ON "public"."cost_item_categories" FOR UPDATE USING (("tenant_id" IN ( SELECT "users"."tenant_id"
+CREATE POLICY "Users can update cost item categories of their tenant" ON "public"."quotation_cost_item_categories" FOR UPDATE USING (("tenant_id" IN ( SELECT "users"."tenant_id"
    FROM "public"."users"
   WHERE ("users"."id" = "auth"."uid"()))));
 
 
 
-CREATE POLICY "Users can update cost items of their tenant" ON "public"."cost_items" FOR UPDATE USING (("tenant_id" IN ( SELECT "users"."tenant_id"
+CREATE POLICY "Users can update cost items of their tenant" ON "public"."quotation_cost_items" FOR UPDATE USING (("tenant_id" IN ( SELECT "users"."tenant_id"
    FROM "public"."users"
   WHERE ("users"."id" = "auth"."uid"()))));
 
@@ -12875,11 +14760,9 @@ CREATE POLICY "Users can update quotation line items of their tenant" ON "public
 
 
 
-CREATE POLICY "Users can update template line items of their tenant" ON "public"."template_line_items" FOR UPDATE USING (("template_id" IN ( SELECT "quotation_templates"."id"
+CREATE POLICY "Users can update quotation template line items of their tenant" ON "public"."quotation_template_line_items" FOR UPDATE USING (("template_id" IN ( SELECT "quotation_templates"."id"
    FROM "public"."quotation_templates"
-  WHERE ("quotation_templates"."tenant_id" IN ( SELECT "users"."tenant_id"
-           FROM "public"."users"
-          WHERE ("users"."id" = "auth"."uid"()))))));
+  WHERE ("quotation_templates"."tenant_id" = "public"."get_user_tenant_id"()))));
 
 
 
@@ -12981,6 +14864,12 @@ CREATE POLICY "Users can view brands in their tenant" ON "public"."stock_brands"
 
 
 
+CREATE POLICY "Users can view calendar events in their tenant" ON "public"."calendar_events" FOR SELECT USING (("tenant_id" IN ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))));
+
+
+
 CREATE POLICY "Users can view commission items in their tenant" ON "public"."commission_items" FOR SELECT USING (("tenant_id" IN ( SELECT "users"."tenant_id"
    FROM "public"."users"
   WHERE ("users"."id" = "auth"."uid"()))));
@@ -12993,13 +14882,13 @@ CREATE POLICY "Users can view component variants of their tenant" ON "public"."c
 
 
 
-CREATE POLICY "Users can view cost item categories of their tenant" ON "public"."cost_item_categories" FOR SELECT USING (("tenant_id" IN ( SELECT "users"."tenant_id"
+CREATE POLICY "Users can view cost item categories of their tenant" ON "public"."quotation_cost_item_categories" FOR SELECT USING (("tenant_id" IN ( SELECT "users"."tenant_id"
    FROM "public"."users"
   WHERE ("users"."id" = "auth"."uid"()))));
 
 
 
-CREATE POLICY "Users can view cost items of their tenant" ON "public"."cost_items" FOR SELECT USING (("tenant_id" IN ( SELECT "users"."tenant_id"
+CREATE POLICY "Users can view cost items of their tenant" ON "public"."quotation_cost_items" FOR SELECT USING (("tenant_id" IN ( SELECT "users"."tenant_id"
    FROM "public"."users"
   WHERE ("users"."id" = "auth"."uid"()))));
 
@@ -13053,6 +14942,24 @@ CREATE POLICY "Users can view quotation line items of their tenant" ON "public".
 
 
 
+CREATE POLICY "Users can view quotation template line items of their tenant" ON "public"."quotation_template_line_items" FOR SELECT USING (("template_id" IN ( SELECT "quotation_templates"."id"
+   FROM "public"."quotation_templates"
+  WHERE ("quotation_templates"."tenant_id" = "public"."get_user_tenant_id"()))));
+
+
+
+CREATE POLICY "Users can view quotation_cost_item_categories for their tenant" ON "public"."quotation_cost_item_categories" FOR SELECT TO "authenticated" USING (("tenant_id" = ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))));
+
+
+
+CREATE POLICY "Users can view quotation_cost_items for their tenant" ON "public"."quotation_cost_items" FOR SELECT TO "authenticated" USING (("tenant_id" = ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))));
+
+
+
 CREATE POLICY "Users can view requisitions in their tenant" ON "public"."stock_material_requisitions" FOR SELECT USING (("tenant_id" IN ( SELECT "users"."tenant_id"
    FROM "public"."users"
   WHERE ("users"."id" = "auth"."uid"()))));
@@ -13062,14 +14969,6 @@ CREATE POLICY "Users can view requisitions in their tenant" ON "public"."stock_m
 CREATE POLICY "Users can view revenue heads in their tenant" ON "public"."revenue_heads" FOR SELECT USING (("tenant_id" IN ( SELECT "users"."tenant_id"
    FROM "public"."users"
   WHERE ("users"."id" = "auth"."uid"()))));
-
-
-
-CREATE POLICY "Users can view template line items of their tenant" ON "public"."template_line_items" FOR SELECT USING (("template_id" IN ( SELECT "quotation_templates"."id"
-   FROM "public"."quotation_templates"
-  WHERE ("quotation_templates"."tenant_id" IN ( SELECT "users"."tenant_id"
-           FROM "public"."users"
-          WHERE ("users"."id" = "auth"."uid"()))))));
 
 
 
@@ -13277,6 +15176,41 @@ ALTER TABLE "public"."approval_configs" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."audit_logs" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."calendar_events" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."clients" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "clients_delete_policy" ON "public"."clients" FOR DELETE USING ((("tenant_id" IN ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))) AND (EXISTS ( SELECT 1
+   FROM ("public"."user_roles" "ur"
+     JOIN "public"."roles" "r" ON (("ur"."role_id" = "r"."id")))
+  WHERE (("ur"."user_id" = "auth"."uid"()) AND ("r"."hierarchy_level" <= 20))))));
+
+
+
+CREATE POLICY "clients_insert_policy" ON "public"."clients" FOR INSERT WITH CHECK (("tenant_id" IN ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))));
+
+
+
+CREATE POLICY "clients_select_policy" ON "public"."clients" FOR SELECT USING (("tenant_id" IN ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))));
+
+
+
+CREATE POLICY "clients_update_policy" ON "public"."clients" FOR UPDATE USING (("tenant_id" IN ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"())))) WITH CHECK (("tenant_id" IN ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))));
+
+
+
 ALTER TABLE "public"."commission_items" ENABLE ROW LEVEL SECURITY;
 
 
@@ -13286,10 +15220,13 @@ ALTER TABLE "public"."component_variant_types" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."component_variants" ENABLE ROW LEVEL SECURITY;
 
 
-ALTER TABLE "public"."cost_item_categories" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."documents" ENABLE ROW LEVEL SECURITY;
 
 
-ALTER TABLE "public"."cost_items" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "documents_tenant_isolation" ON "public"."documents" USING (("tenant_id" IN ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))));
+
 
 
 ALTER TABLE "public"."email_verification_tokens" ENABLE ROW LEVEL SECURITY;
@@ -13453,6 +15390,49 @@ ALTER TABLE "public"."project_sub_phases" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."projects" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."properties" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "properties_delete_policy" ON "public"."properties" FOR DELETE USING ((("tenant_id" IN ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))) AND (EXISTS ( SELECT 1
+   FROM ("public"."user_roles" "ur"
+     JOIN "public"."roles" "r" ON (("ur"."role_id" = "r"."id")))
+  WHERE (("ur"."user_id" = "auth"."uid"()) AND ("r"."hierarchy_level" <= 20))))));
+
+
+
+CREATE POLICY "properties_insert_policy" ON "public"."properties" FOR INSERT WITH CHECK (("tenant_id" IN ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))));
+
+
+
+CREATE POLICY "properties_select_policy" ON "public"."properties" FOR SELECT USING (("tenant_id" IN ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))));
+
+
+
+CREATE POLICY "properties_update_policy" ON "public"."properties" FOR UPDATE USING (("tenant_id" IN ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"())))) WITH CHECK (("tenant_id" IN ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))));
+
+
+
+ALTER TABLE "public"."quotation_activities" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "quotation_activities_access" ON "public"."quotation_activities" USING ((EXISTS ( SELECT 1
+   FROM "public"."quotations" "q"
+  WHERE (("q"."id" = "quotation_activities"."quotation_id") AND ("q"."tenant_id" IN ( SELECT "users"."tenant_id"
+           FROM "public"."users"
+          WHERE ("users"."id" = "auth"."uid"())))))));
+
+
+
 ALTER TABLE "public"."quotation_components" ENABLE ROW LEVEL SECURITY;
 
 
@@ -13469,6 +15449,12 @@ CREATE POLICY "quotation_cost_attributes_tenant_isolation" ON "public"."quotatio
    FROM "public"."quotations"
   WHERE ("quotations"."tenant_id" = "public"."get_user_tenant_id"()))));
 
+
+
+ALTER TABLE "public"."quotation_cost_item_categories" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."quotation_cost_items" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."quotation_line_items" ENABLE ROW LEVEL SECURITY;
@@ -13490,6 +15476,9 @@ CREATE POLICY "quotation_spaces_tenant_isolation" ON "public"."quotation_spaces"
    FROM "public"."quotations"
   WHERE ("quotations"."tenant_id" = "public"."get_user_tenant_id"()))));
 
+
+
+ALTER TABLE "public"."quotation_template_line_items" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."quotations" ENABLE ROW LEVEL SECURITY;
@@ -13667,9 +15656,6 @@ CREATE POLICY "tasks_tenant_isolation" ON "public"."tasks" USING (("tenant_id" =
 
 
 
-ALTER TABLE "public"."template_line_items" ENABLE ROW LEVEL SECURITY;
-
-
 ALTER TABLE "public"."template_spaces" ENABLE ROW LEVEL SECURITY;
 
 
@@ -13696,6 +15682,15 @@ CREATE POLICY "tenant_payment_methods_select" ON "public"."tenant_payment_method
 
 
 CREATE POLICY "tenant_payment_methods_update" ON "public"."tenant_payment_methods" FOR UPDATE USING (("tenant_id" = "public"."get_user_tenant_id"()));
+
+
+
+ALTER TABLE "public"."tenant_quotation_settings" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "tenant_quotation_settings_tenant_isolation" ON "public"."tenant_quotation_settings" USING (("tenant_id" IN ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = "auth"."uid"()))));
 
 
 
@@ -13785,6 +15780,12 @@ GRANT ALL ON FUNCTION "public"."calculate_component_subtotal_v2"() TO "service_r
 
 
 
+GRANT ALL ON FUNCTION "public"."calculate_lead_score"("p_lead_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."calculate_lead_score"("p_lead_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."calculate_lead_score"("p_lead_id" "uuid") TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."calculate_line_item_amount"() TO "anon";
 GRANT ALL ON FUNCTION "public"."calculate_line_item_amount"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."calculate_line_item_amount"() TO "service_role";
@@ -13869,6 +15870,12 @@ GRANT ALL ON FUNCTION "public"."can_start_sub_phase"("p_sub_phase_id" "uuid") TO
 
 
 
+GRANT ALL ON FUNCTION "public"."carry_forward_lead_data_to_project"("p_lead_id" "uuid", "p_project_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."carry_forward_lead_data_to_project"("p_lead_id" "uuid", "p_project_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."carry_forward_lead_data_to_project"("p_lead_id" "uuid", "p_project_id" "uuid") TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."cleanup_old_notifications"("days_to_keep" integer) TO "anon";
 GRANT ALL ON FUNCTION "public"."cleanup_old_notifications"("days_to_keep" integer) TO "authenticated";
 GRANT ALL ON FUNCTION "public"."cleanup_old_notifications"("days_to_keep" integer) TO "service_role";
@@ -13893,6 +15900,12 @@ GRANT ALL ON FUNCTION "public"."create_project_from_lead"("p_lead_id" "uuid", "p
 
 
 
+GRANT ALL ON FUNCTION "public"."create_project_from_lead"("p_lead_id" "uuid", "p_created_by" "uuid", "p_project_category" "text", "p_initialize_phases" boolean, "p_quotation_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."create_project_from_lead"("p_lead_id" "uuid", "p_created_by" "uuid", "p_project_category" "text", "p_initialize_phases" boolean, "p_quotation_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."create_project_from_lead"("p_lead_id" "uuid", "p_created_by" "uuid", "p_project_category" "text", "p_initialize_phases" boolean, "p_quotation_id" "uuid") TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."create_quotation_for_lead"("p_lead_id" "uuid", "p_user_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."create_quotation_for_lead"("p_lead_id" "uuid", "p_user_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."create_quotation_for_lead"("p_lead_id" "uuid", "p_user_id" "uuid") TO "service_role";
@@ -13914,6 +15927,12 @@ GRANT ALL ON FUNCTION "public"."create_tasks_from_template"("p_template_id" "uui
 GRANT ALL ON FUNCTION "public"."duplicate_quotation"("p_quotation_id" "uuid", "p_user_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."duplicate_quotation"("p_quotation_id" "uuid", "p_user_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."duplicate_quotation"("p_quotation_id" "uuid", "p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."generate_client_access_token"() TO "anon";
+GRANT ALL ON FUNCTION "public"."generate_client_access_token"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."generate_client_access_token"() TO "service_role";
 
 
 
@@ -13956,6 +15975,12 @@ GRANT ALL ON FUNCTION "public"."generate_po_number"("p_tenant_id" "uuid") TO "se
 GRANT ALL ON FUNCTION "public"."generate_project_number"("p_tenant_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."generate_project_number"("p_tenant_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."generate_project_number"("p_tenant_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."generate_quotation_client_link"("p_quotation_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."generate_quotation_client_link"("p_quotation_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."generate_quotation_client_link"("p_quotation_id" "uuid") TO "service_role";
 
 
 
@@ -14205,9 +16230,21 @@ GRANT ALL ON FUNCTION "public"."start_sub_phase"("p_sub_phase_id" "uuid", "p_use
 
 
 
+GRANT ALL ON FUNCTION "public"."sync_cost_item_from_po"() TO "anon";
+GRANT ALL ON FUNCTION "public"."sync_cost_item_from_po"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."sync_cost_item_from_po"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."sync_user_email_verification"() TO "anon";
 GRANT ALL ON FUNCTION "public"."sync_user_email_verification"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."sync_user_email_verification"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."track_quotation_view"("p_token" "text", "p_ip_address" "inet", "p_user_agent" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."track_quotation_view"("p_token" "text", "p_ip_address" "inet", "p_user_agent" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."track_quotation_view"("p_token" "text", "p_ip_address" "inet", "p_user_agent" "text") TO "service_role";
 
 
 
@@ -14232,6 +16269,12 @@ GRANT ALL ON FUNCTION "public"."trg_update_project_progress"() TO "service_role"
 GRANT ALL ON FUNCTION "public"."trg_update_sub_phase_progress"() TO "anon";
 GRANT ALL ON FUNCTION "public"."trg_update_sub_phase_progress"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."trg_update_sub_phase_progress"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trigger_carry_forward_on_lead_won"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trigger_carry_forward_on_lead_won"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trigger_carry_forward_on_lead_won"() TO "service_role";
 
 
 
@@ -14283,9 +16326,39 @@ GRANT ALL ON FUNCTION "public"."trigger_update_lead_last_activity"() TO "service
 
 
 
+GRANT ALL ON FUNCTION "public"."trigger_update_lead_score"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trigger_update_lead_score"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trigger_update_lead_score"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."trigger_update_user_count"() TO "anon";
 GRANT ALL ON FUNCTION "public"."trigger_update_user_count"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."trigger_update_user_count"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."update_calendar_events_updated_at"() TO "anon";
+GRANT ALL ON FUNCTION "public"."update_calendar_events_updated_at"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_calendar_events_updated_at"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."update_clients_updated_at"() TO "anon";
+GRANT ALL ON FUNCTION "public"."update_clients_updated_at"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_clients_updated_at"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."update_documents_updated_at"() TO "anon";
+GRANT ALL ON FUNCTION "public"."update_documents_updated_at"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_documents_updated_at"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."update_lead_scores"() TO "anon";
+GRANT ALL ON FUNCTION "public"."update_lead_scores"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_lead_scores"() TO "service_role";
 
 
 
@@ -14316,6 +16389,12 @@ GRANT ALL ON FUNCTION "public"."update_project_progress"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."update_projects_updated_at"() TO "anon";
 GRANT ALL ON FUNCTION "public"."update_projects_updated_at"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."update_projects_updated_at"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."update_properties_updated_at"() TO "anon";
+GRANT ALL ON FUNCTION "public"."update_properties_updated_at"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_properties_updated_at"() TO "service_role";
 
 
 
@@ -14373,6 +16452,30 @@ GRANT ALL ON TABLE "public"."audit_logs" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."calendar_events" TO "anon";
+GRANT ALL ON TABLE "public"."calendar_events" TO "authenticated";
+GRANT ALL ON TABLE "public"."calendar_events" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."clients" TO "anon";
+GRANT ALL ON TABLE "public"."clients" TO "authenticated";
+GRANT ALL ON TABLE "public"."clients" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."leads" TO "anon";
+GRANT ALL ON TABLE "public"."leads" TO "authenticated";
+GRANT ALL ON TABLE "public"."leads" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."client_details" TO "anon";
+GRANT ALL ON TABLE "public"."client_details" TO "authenticated";
+GRANT ALL ON TABLE "public"."client_details" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."commission_items" TO "anon";
 GRANT ALL ON TABLE "public"."commission_items" TO "authenticated";
 GRANT ALL ON TABLE "public"."commission_items" TO "service_role";
@@ -14409,15 +16512,39 @@ GRANT ALL ON TABLE "public"."cost_attribute_types" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."cost_item_categories" TO "anon";
-GRANT ALL ON TABLE "public"."cost_item_categories" TO "authenticated";
-GRANT ALL ON TABLE "public"."cost_item_categories" TO "service_role";
+GRANT ALL ON TABLE "public"."quotation_cost_item_categories" TO "anon";
+GRANT ALL ON TABLE "public"."quotation_cost_item_categories" TO "authenticated";
+GRANT ALL ON TABLE "public"."quotation_cost_item_categories" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."cost_items" TO "anon";
-GRANT ALL ON TABLE "public"."cost_items" TO "authenticated";
-GRANT ALL ON TABLE "public"."cost_items" TO "service_role";
+GRANT ALL ON TABLE "public"."quotation_cost_items" TO "anon";
+GRANT ALL ON TABLE "public"."quotation_cost_items" TO "authenticated";
+GRANT ALL ON TABLE "public"."quotation_cost_items" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."stock_materials" TO "anon";
+GRANT ALL ON TABLE "public"."stock_materials" TO "authenticated";
+GRANT ALL ON TABLE "public"."stock_materials" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."stock_vendors" TO "anon";
+GRANT ALL ON TABLE "public"."stock_vendors" TO "authenticated";
+GRANT ALL ON TABLE "public"."stock_vendors" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."cost_items_with_stock" TO "anon";
+GRANT ALL ON TABLE "public"."cost_items_with_stock" TO "authenticated";
+GRANT ALL ON TABLE "public"."cost_items_with_stock" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."documents" TO "anon";
+GRANT ALL ON TABLE "public"."documents" TO "authenticated";
+GRANT ALL ON TABLE "public"."documents" TO "service_role";
 
 
 
@@ -14481,15 +16608,15 @@ GRANT ALL ON TABLE "public"."lead_won_requests" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."leads" TO "anon";
-GRANT ALL ON TABLE "public"."leads" TO "authenticated";
-GRANT ALL ON TABLE "public"."leads" TO "service_role";
-
-
-
 GRANT ALL ON TABLE "public"."projects" TO "anon";
 GRANT ALL ON TABLE "public"."projects" TO "authenticated";
 GRANT ALL ON TABLE "public"."projects" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."properties" TO "anon";
+GRANT ALL ON TABLE "public"."properties" TO "authenticated";
+GRANT ALL ON TABLE "public"."properties" TO "service_role";
 
 
 
@@ -14571,9 +16698,15 @@ GRANT ALL ON TABLE "public"."project_checklist_items" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."stock_materials" TO "anon";
-GRANT ALL ON TABLE "public"."stock_materials" TO "authenticated";
-GRANT ALL ON TABLE "public"."stock_materials" TO "service_role";
+GRANT ALL ON TABLE "public"."users" TO "anon";
+GRANT ALL ON TABLE "public"."users" TO "authenticated";
+GRANT ALL ON TABLE "public"."users" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."project_documents_combined" TO "anon";
+GRANT ALL ON TABLE "public"."project_documents_combined" TO "authenticated";
+GRANT ALL ON TABLE "public"."project_documents_combined" TO "service_role";
 
 
 
@@ -14589,15 +16722,15 @@ GRANT ALL ON TABLE "public"."stock_purchase_orders" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."stock_vendors" TO "anon";
-GRANT ALL ON TABLE "public"."stock_vendors" TO "authenticated";
-GRANT ALL ON TABLE "public"."stock_vendors" TO "service_role";
-
-
-
 GRANT ALL ON TABLE "public"."project_material_costs" TO "anon";
 GRANT ALL ON TABLE "public"."project_material_costs" TO "authenticated";
 GRANT ALL ON TABLE "public"."project_material_costs" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."project_notes_combined" TO "anon";
+GRANT ALL ON TABLE "public"."project_notes_combined" TO "authenticated";
+GRANT ALL ON TABLE "public"."project_notes_combined" TO "service_role";
 
 
 
@@ -14691,12 +16824,6 @@ GRANT ALL ON TABLE "public"."project_sub_phases" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."users" TO "anon";
-GRANT ALL ON TABLE "public"."users" TO "authenticated";
-GRANT ALL ON TABLE "public"."users" TO "service_role";
-
-
-
 GRANT ALL ON TABLE "public"."project_phases_summary" TO "anon";
 GRANT ALL ON TABLE "public"."project_phases_summary" TO "authenticated";
 GRANT ALL ON TABLE "public"."project_phases_summary" TO "service_role";
@@ -14712,6 +16839,18 @@ GRANT ALL ON TABLE "public"."project_sub_phase_assignees" TO "service_role";
 GRANT ALL ON TABLE "public"."project_sub_phase_templates" TO "anon";
 GRANT ALL ON TABLE "public"."project_sub_phase_templates" TO "authenticated";
 GRANT ALL ON TABLE "public"."project_sub_phase_templates" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."property_details" TO "anon";
+GRANT ALL ON TABLE "public"."property_details" TO "authenticated";
+GRANT ALL ON TABLE "public"."property_details" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."quotation_activities" TO "anon";
+GRANT ALL ON TABLE "public"."quotation_activities" TO "authenticated";
+GRANT ALL ON TABLE "public"."quotation_activities" TO "service_role";
 
 
 
@@ -14754,6 +16893,12 @@ GRANT ALL ON TABLE "public"."quotation_snapshots" TO "service_role";
 GRANT ALL ON TABLE "public"."quotation_spaces" TO "anon";
 GRANT ALL ON TABLE "public"."quotation_spaces" TO "authenticated";
 GRANT ALL ON TABLE "public"."quotation_spaces" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."quotation_template_line_items" TO "anon";
+GRANT ALL ON TABLE "public"."quotation_template_line_items" TO "authenticated";
+GRANT ALL ON TABLE "public"."quotation_template_line_items" TO "service_role";
 
 
 
@@ -14979,12 +17124,6 @@ GRANT ALL ON TABLE "public"."tasks_with_details" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."template_line_items" TO "anon";
-GRANT ALL ON TABLE "public"."template_line_items" TO "authenticated";
-GRANT ALL ON TABLE "public"."template_line_items" TO "service_role";
-
-
-
 GRANT ALL ON TABLE "public"."template_spaces" TO "anon";
 GRANT ALL ON TABLE "public"."template_spaces" TO "authenticated";
 GRANT ALL ON TABLE "public"."template_spaces" TO "service_role";
@@ -15000,6 +17139,12 @@ GRANT ALL ON TABLE "public"."tenant_lead_settings" TO "service_role";
 GRANT ALL ON TABLE "public"."tenant_payment_methods" TO "anon";
 GRANT ALL ON TABLE "public"."tenant_payment_methods" TO "authenticated";
 GRANT ALL ON TABLE "public"."tenant_payment_methods" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."tenant_quotation_settings" TO "anon";
+GRANT ALL ON TABLE "public"."tenant_quotation_settings" TO "authenticated";
+GRANT ALL ON TABLE "public"."tenant_quotation_settings" TO "service_role";
 
 
 

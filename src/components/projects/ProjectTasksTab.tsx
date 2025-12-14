@@ -14,7 +14,7 @@ import { ProjectPhase, ProjectSubPhase } from "@/types/projects";
 interface ProjectTasksTabProps {
   projectId: string;
   phases: ProjectPhase[];
-  onCreateTask: (phaseId?: string, subPhaseId?: string) => void;
+  onCountChange?: (count: number) => void;
 }
 
 interface Task {
@@ -68,7 +68,7 @@ const StatusLabels = {
 export default function ProjectTasksTab({
   projectId,
   phases,
-  onCreateTask,
+  onCountChange,
 }: ProjectTasksTabProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,7 +90,9 @@ export default function ProjectTasksTab({
       );
       if (!response.ok) throw new Error("Failed to fetch tasks");
       const data = await response.json();
-      setTasks(data.tasks || []);
+      const tasksList = data.tasks || [];
+      setTasks(tasksList);
+      onCountChange?.(tasksList.length);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
