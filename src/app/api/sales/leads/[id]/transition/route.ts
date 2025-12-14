@@ -373,11 +373,45 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           const projectCategory =
             lead.service_type === "modular" ? "modular" : "turnkey";
 
+          // Use selected quotation if provided, otherwise auto-find
+          let winningQuotationId = body.selected_quotation_id || null;
+          
+          // If no quotation selected, try to find one automatically
+          if (!winningQuotationId) {
+            const { data: winningQuotation } = await supabase
+              .from("quotations")
+              .select("id")
+              .eq("lead_id", id)
+              .in("status", ["approved", "signed", "accepted"]) 
+              .order("updated_at", { ascending: false })
+              .limit(1)
+              .single();
+              
+            if (winningQuotation) {
+              winningQuotationId = winningQuotation.id;
+            } else {
+               // Fallback: Try to find latest sent quotation if no approved/signed one exists
+               const { data: latestQuotation } = await supabase
+                  .from("quotations")
+                  .select("id")
+                  .eq("lead_id", id)
+                  .order("created_at", { ascending: false })
+                  .limit(1)
+                  .single();
+                  
+               if (latestQuotation) {
+                 winningQuotationId = latestQuotation.id;
+               }
+            }
+          }
+
           console.log(
             "Creating project with category:",
             projectCategory,
             "for lead:",
-            id
+            id,
+            "linked quotation:", 
+            winningQuotationId
           );
 
           // Call the function to create project from lead
@@ -387,6 +421,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               p_created_by: user.id,
               p_project_category: projectCategory,
               p_initialize_phases: true,
+              p_quotation_id: winningQuotationId
             });
 
           if (projectError) {

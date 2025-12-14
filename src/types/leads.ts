@@ -395,7 +395,6 @@ export interface Lead {
   tenant_id: string;
   lead_number: string;
 
-  // Linked Client (FK to clients table)
   client_id: string;
   
   // Linked Property (FK to properties table) - optional
@@ -436,12 +435,9 @@ export interface Lead {
   expected_project_start: string | null;
 
   // Handover Details (for Won stage)
-  payment_terms: string | null;
-  token_amount: number | null;
-  token_received_date: string | null;
-  handover_notes: string | null;
-  handover_completed: boolean;
-  handover_completed_at: string | null;
+  // Handover Details (MOVED TO SEPARATE TABLE/PROCESS)
+  // payment_terms, token_amount, token_received_date, handover_notes, handover_completed... removed
+
 
   // Assignment
   assigned_to: string | null;
@@ -596,6 +592,7 @@ export interface StageTransitionInput {
   expected_project_start?: string;
   won_notes?: string;
   skip_project_creation?: boolean;
+  selected_quotation_id?: string;
 
   // General
   change_reason?: string;

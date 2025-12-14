@@ -20,6 +20,9 @@ interface CostItem {
   name: string;
   slug: string;
   description?: string;
+  default_rate?: number;
+  company_cost?: number;
+  vendor_cost?: number;
   category?: CostItemCategory;
 }
 
@@ -30,7 +33,6 @@ interface QuotationLineItem {
   quotation_component_id?: string;
   cost_item_id: string;
   name: string;
-  group_name?: string;
   length?: number;
   width?: number;
   measurement_unit?: string;
@@ -48,7 +50,6 @@ interface QuotationComponent {
   quotation_id: string;
   space_id?: string;
   component_type_id: string;
-  component_variant_id?: string;
   name: string;
   description?: string;
   length?: number;
@@ -57,7 +58,6 @@ interface QuotationComponent {
   subtotal: number;
   sort_order: number;
   component_type?: { id: string; name: string; slug: string; icon?: string };
-  component_variant?: { id: string; name: string; slug: string };
   lineItems: QuotationLineItem[];
 }
 
@@ -121,6 +121,10 @@ interface Quotation {
   created_user?: User;
   updated_user?: User;
   assigned_user?: User;
+  lead?: {
+    id: string;
+    stage: string;
+  };
 }
 
 // ============================================================================
@@ -130,18 +134,7 @@ interface Quotation {
 const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> =
   {
     draft: { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-500" },
-    pending: {
-      bg: "bg-yellow-100",
-      text: "text-yellow-700",
-      dot: "bg-yellow-500",
-    },
-    sent: { bg: "bg-blue-100", text: "text-blue-700", dot: "bg-blue-500" },
-    approved: {
-      bg: "bg-green-100",
-      text: "text-green-700",
-      dot: "bg-green-500",
-    },
-    rejected: { bg: "bg-red-100", text: "text-red-700", dot: "bg-red-500" },
+    sent: { bg: "bg-green-100", text: "text-green-700", dot: "bg-green-500" },
   };
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -177,6 +170,58 @@ const formatDate = (dateString: string | undefined | null) => {
     month: "short",
     day: "numeric",
   });
+};
+
+// Measurement unit conversion factors to feet
+const UNIT_TO_FEET: Record<string, number> = {
+  mm: 0.00328084,
+  cm: 0.0328084,
+  inch: 0.0833333,
+  ft: 1,
+};
+
+// Calculate sqft from length and width
+const calculateSqft = (
+  length: number | null | undefined,
+  width: number | null | undefined,
+  unit: string = "mm"
+): number => {
+  const toFeet = UNIT_TO_FEET[unit] || UNIT_TO_FEET.mm;
+  const lengthInFeet = (length || 0) * toFeet;
+  const widthInFeet = (width || 0) * toFeet;
+  return lengthInFeet * widthInFeet;
+};
+
+// Convert length to feet
+const convertToFeet = (value: number, unit: string = "mm"): number => {
+  const toFeet = UNIT_TO_FEET[unit] || UNIT_TO_FEET.mm;
+  return value * toFeet;
+};
+
+// Get display value for qty/area based on unit_code and dimensions
+const getDisplayQtyArea = (
+  item: QuotationLineItem
+): { value: string; unit: string } => {
+  const unitCode = item.unit_code?.toLowerCase() || "";
+  const measureUnit = item.measurement_unit || "mm"; // Default to mm as that's most common input
+
+  // Area-based items (sqft)
+  if (unitCode === "sqft" && item.length && item.width) {
+    const sqft = calculateSqft(item.length, item.width, measureUnit);
+    return { value: sqft.toFixed(2), unit: "sqft" };
+  }
+
+  // Length-based items (rft)
+  if (unitCode === "rft" && item.length) {
+    const rft = convertToFeet(item.length, measureUnit);
+    return { value: rft.toFixed(2), unit: "rft" };
+  }
+
+  // Quantity-based items (nos, set, etc.)
+  return {
+    value: item.quantity?.toFixed(2) || "0.00",
+    unit: item.unit_code || "",
+  };
 };
 
 // ============================================================================
@@ -269,21 +314,79 @@ export default function QuotationDetailPage() {
     return subtotal;
   }, [spaces, orphanComponents, orphanLineItems]);
 
-  // Space totals for summary
+  // Helper function to convert dimensions to feet
+  const convertToFeet = (value: number, unit: string): number => {
+    const unitLower = (unit || "mm").toLowerCase();
+    switch (unitLower) {
+      case "mm":
+        return value * 0.00328084;
+      case "cm":
+        return value * 0.0328084;
+      case "inch":
+        return value * 0.0833333;
+      case "ft":
+        return value;
+      default:
+        return value;
+    }
+  };
+
+  // Helper to calculate sqft from length × width
+  const calculateSqftFromItem = (item: QuotationLineItem): number => {
+    const unitLower = (item.unit_code || "").toLowerCase();
+
+    // Only calculate sqft for area-based units
+    if (
+      unitLower === "sqft" ||
+      unitLower === "sft" ||
+      unitLower === "sq.ft" ||
+      unitLower === "sq ft"
+    ) {
+      // If item has length and width, calculate from dimensions
+      if (item.length && item.width) {
+        const measureUnit = item.measurement_unit || "mm";
+        const lengthInFeet = convertToFeet(item.length, measureUnit);
+        const widthInFeet = convertToFeet(item.width, measureUnit);
+        return lengthInFeet * widthInFeet;
+      }
+      // Otherwise use the quantity as the sqft value
+      return item.quantity || 0;
+    }
+    return 0;
+  };
+
+  // Space totals for summary (including area calculation from line items)
   const spaceTotals = useMemo(() => {
     return spaces.map((space) => {
       let total = 0;
+      let totalSqft = 0;
+
       space.lineItems?.forEach((item) => {
         total += item.amount || 0;
+        totalSqft += calculateSqftFromItem(item);
       });
       space.components?.forEach((comp) => {
         comp.lineItems?.forEach((item) => {
           total += item.amount || 0;
+          totalSqft += calculateSqftFromItem(item);
         });
       });
-      return { id: space.id, name: space.name, total };
+      return { id: space.id, name: space.name, total, sqft: totalSqft };
     });
   }, [spaces]);
+
+  // Component totals with area calculation
+  const getComponentTotals = useCallback((component: QuotationComponent) => {
+    let total = 0;
+    let totalSqft = 0;
+
+    component.lineItems?.forEach((item) => {
+      total += item.amount || 0;
+      totalSqft += calculateSqftFromItem(item);
+    });
+
+    return { total, sqft: totalSqft };
+  }, []);
 
   const toggleSpace = (spaceId: string) => {
     setExpandedSpaces((prev) => {
@@ -302,6 +405,45 @@ export default function QuotationDetailPage() {
       return next;
     });
   };
+
+  // Collapse/Expand all spaces and components
+  const collapseAll = () => {
+    setExpandedSpaces(new Set());
+    setExpandedComponents(new Set());
+  };
+
+  const expandAll = () => {
+    const allSpaceIds = spaces.map((s) => s.id);
+    setExpandedSpaces(new Set(allSpaceIds));
+
+    const allComponentIds: string[] = [];
+    spaces.forEach((space) => {
+      space.components?.forEach((comp) => {
+        allComponentIds.push(comp.id);
+      });
+    });
+    orphanComponents.forEach((comp) => {
+      allComponentIds.push(comp.id);
+    });
+    setExpandedComponents(new Set(allComponentIds));
+  };
+
+  // Check if any spaces or components are collapsed
+  const hasCollapsedItems = useMemo(() => {
+    // Check if any spaces are collapsed
+    if (spaces.length > 0 && expandedSpaces.size < spaces.length) return true;
+
+    // Check if any components are collapsed
+    let totalComponents = 0;
+    spaces.forEach((space) => {
+      totalComponents += space.components?.length || 0;
+    });
+    totalComponents += orphanComponents.length;
+    if (totalComponents > 0 && expandedComponents.size < totalComponents)
+      return true;
+
+    return false;
+  }, [spaces, orphanComponents, expandedSpaces, expandedComponents]);
 
   // Revision state
   const [isCreatingRevision, setIsCreatingRevision] = useState(false);
@@ -614,49 +756,57 @@ export default function QuotationDetailPage() {
                 View Lead
               </Link>
             )}
-            <Link
-              href={`/dashboard/quotations/${params.id}/edit`}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                />
-              </svg>
-              Edit
-            </Link>
-            <button
-              onClick={handleCreateRevision}
-              disabled={isCreatingRevision}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-amber-300 text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isCreatingRevision ? (
-                <div className="w-4 h-4 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+            {/* Only show Edit and Revise buttons if lead is not closed (won/lost/disqualified) */}
+            {(!quotation.lead ||
+              !["won", "lost", "disqualified"].includes(
+                quotation.lead.stage
+              )) && (
+              <>
+                <Link
+                  href={`/dashboard/quotations/${params.id}/edit`}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-              )}
-              {isCreatingRevision ? "Creating..." : "Revise"}
-            </button>
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    />
+                  </svg>
+                  Edit
+                </Link>
+                <button
+                  onClick={handleCreateRevision}
+                  disabled={isCreatingRevision}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm border border-amber-300 text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isCreatingRevision ? (
+                    <div className="w-4 h-4 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                      />
+                    </svg>
+                  )}
+                  {isCreatingRevision ? "Creating..." : "Revise"}
+                </button>
+              </>
+            )}
             <button
               onClick={handleDownloadPDF}
               disabled={isDownloadingPDF}
@@ -731,31 +881,45 @@ export default function QuotationDetailPage() {
       <div className="flex gap-4">
         {/* Main Content */}
         <div className="flex-1 space-y-4">
-          {/* Quotation Info */}
-          <div className="bg-white rounded-lg border border-slate-200 p-5">
-            <h3 className="text-sm font-semibold text-slate-900 mb-4">
-              Quotation Details
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+          {/* Quotation Info - Compact */}
+          <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">
+                <label className="block text-xs font-medium text-slate-500 mb-0.5">
                   Client
                 </label>
-                <p className="text-sm text-slate-900 font-medium">
+                <p className="text-sm text-slate-900 font-medium truncate">
                   {quotation.client_name || "—"}
                 </p>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">
+                <label className="block text-xs font-medium text-slate-500 mb-0.5">
                   Property
                 </label>
-                <p className="text-sm text-slate-900">
+                <p className="text-sm text-slate-900 truncate">
                   {quotation.property_name || "—"}
-                  {quotation.property_city && `, ${quotation.property_city}`}
                 </p>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">
+                <label className="block text-xs font-medium text-slate-500 mb-0.5">
+                  Address
+                </label>
+                <p className="text-sm text-slate-900 truncate">
+                  {quotation.property_address || quotation.property_city || "—"}
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-0.5">
+                  Carpet Area
+                </label>
+                <p className="text-sm text-slate-900">
+                  {quotation.carpet_area_sqft
+                    ? `${quotation.carpet_area_sqft} sqft`
+                    : "—"}
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-0.5">
                   Created
                 </label>
                 <p className="text-sm text-slate-900">
@@ -763,7 +927,7 @@ export default function QuotationDetailPage() {
                 </p>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">
+                <label className="block text-xs font-medium text-slate-500 mb-0.5">
                   Valid Until
                 </label>
                 <p className="text-sm text-slate-900">
@@ -771,35 +935,57 @@ export default function QuotationDetailPage() {
                 </p>
               </div>
             </div>
-            {(quotation.property_address || quotation.carpet_area_sqft) && (
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mt-4 pt-4 border-t border-slate-100">
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-medium text-slate-500 mb-1">
-                    Property Address
-                  </label>
-                  <p className="text-sm text-slate-900">
-                    {quotation.property_address || "—"}
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">
-                    Carpet Area
-                  </label>
-                  <p className="text-sm text-slate-900">
-                    {quotation.carpet_area_sqft
-                      ? `${quotation.carpet_area_sqft} sqft`
-                      : "—"}
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Cost Breakdown - V2 Structure */}
           <div className="bg-white rounded-lg border border-slate-200 p-5">
-            <h3 className="text-sm font-semibold text-slate-900 mb-4">
-              Cost Breakdown
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-slate-900">
+                Cost Breakdown
+              </h3>
+              {spaces.length > 0 && (
+                <button
+                  onClick={hasCollapsedItems ? expandAll : collapseAll}
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
+                >
+                  {hasCollapsedItems ? (
+                    <>
+                      <svg
+                        className="w-3.5 h-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                        />
+                      </svg>
+                      Expand All
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        className="w-3.5 h-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"
+                        />
+                      </svg>
+                      Collapse All
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
 
             {spaces.length === 0 &&
             orphanComponents.length === 0 &&
@@ -921,15 +1107,40 @@ export default function QuotationDetailPage() {
                           <p className="text-xs text-slate-500">
                             {space.space_type?.name || "Space"} •{" "}
                             {space.components?.length || 0} components
-                            {space.area && ` • ${space.area} sqft`}
+                            {(() => {
+                              const spaceData = spaceTotals.find(
+                                (t) => t.id === space.id
+                              );
+                              return spaceData?.sqft
+                                ? ` • ${spaceData.sqft.toFixed(2)} sqft`
+                                : "";
+                            })()}
                           </p>
                         </div>
                       </div>
-                      <span className="text-sm font-bold text-blue-600">
-                        {formatCurrency(
-                          spaceTotals.find((t) => t.id === space.id)?.total || 0
-                        )}
-                      </span>
+                      <div className="flex items-center gap-4">
+                        {(() => {
+                          const spaceData = spaceTotals.find(
+                            (t) => t.id === space.id
+                          );
+                          const spaceTotal = spaceData?.total || 0;
+                          const spaceSqft = spaceData?.sqft || 0;
+                          const costPerSqft =
+                            spaceSqft > 0 ? spaceTotal / spaceSqft : 0;
+                          return (
+                            <>
+                              {spaceSqft > 0 && costPerSqft > 0 && (
+                                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                                  {formatCurrency(costPerSqft)}/sqft
+                                </span>
+                              )}
+                              <span className="text-sm font-bold text-blue-600">
+                                {formatCurrency(spaceTotal)}
+                              </span>
+                            </>
+                          );
+                        })()}
+                      </div>
                     </div>
 
                     {/* Space Content */}
@@ -985,29 +1196,42 @@ export default function QuotationDetailPage() {
                                   <h5 className="text-sm font-medium text-slate-900">
                                     {component.name ||
                                       component.component_type?.name}
-                                    {component.component_variant && (
-                                      <span className="text-slate-500 font-normal">
-                                        {" "}
-                                        - {component.component_variant.name}
-                                      </span>
-                                    )}
                                   </h5>
                                   <p className="text-xs text-slate-500">
                                     {component.lineItems?.length || 0} cost
                                     items
-                                    {component.area &&
-                                      ` • ${component.area} sqft`}
+                                    {(() => {
+                                      const compData =
+                                        getComponentTotals(component);
+                                      return compData.sqft > 0
+                                        ? ` • ${compData.sqft.toFixed(2)} sqft`
+                                        : "";
+                                    })()}
                                   </p>
                                 </div>
                               </div>
-                              <span className="text-sm font-semibold text-purple-600">
-                                {formatCurrency(
-                                  component.lineItems?.reduce(
-                                    (sum, item) => sum + (item.amount || 0),
-                                    0
-                                  ) || 0
-                                )}
-                              </span>
+                              <div className="flex items-center gap-3">
+                                {(() => {
+                                  const compData =
+                                    getComponentTotals(component);
+                                  const costPerSqft =
+                                    compData.sqft > 0
+                                      ? compData.total / compData.sqft
+                                      : 0;
+                                  return (
+                                    <>
+                                      {compData.sqft > 0 && costPerSqft > 0 && (
+                                        <span className="text-xs text-slate-500 bg-purple-50 px-2 py-0.5 rounded">
+                                          {formatCurrency(costPerSqft)}/sqft
+                                        </span>
+                                      )}
+                                      <span className="text-sm font-semibold text-purple-600">
+                                        {formatCurrency(compData.total)}
+                                      </span>
+                                    </>
+                                  );
+                                })()}
+                              </div>
                             </div>
 
                             {/* Component Line Items */}
@@ -1030,80 +1254,114 @@ export default function QuotationDetailPage() {
                                     No cost items in this component
                                   </p>
                                 ) : (
-                                  <table className="w-full text-sm">
-                                    <thead className="bg-slate-50">
-                                      <tr>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">
-                                          Cost Item
-                                        </th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">
-                                          Dimensions
-                                        </th>
-                                        <th className="px-3 py-2 text-center text-xs font-medium text-slate-500 uppercase">
-                                          Qty
-                                        </th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase">
-                                          Rate
-                                        </th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase">
-                                          Amount
-                                        </th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                      {component.lineItems?.map((item) => (
-                                        <tr
-                                          key={item.id}
-                                          className="hover:bg-slate-50"
-                                        >
-                                          <td className="px-3 py-2">
-                                            <span className="font-medium text-slate-900">
-                                              {item.name ||
-                                                item.cost_item?.name}
+                                  <div className="space-y-2">
+                                    {/* Header Row */}
+                                    <div className="grid grid-cols-[1fr_80px_20px_80px_45px_90px_1fr_100px_100px_130px] gap-2 px-3 py-2 bg-slate-100 rounded-lg text-xs font-medium text-slate-500 uppercase">
+                                      <div>Cost Item</div>
+                                      <div className="text-center">Height</div>
+                                      <div></div>
+                                      <div className="text-center">Width</div>
+                                      <div className="text-center">Unit</div>
+                                      <div className="text-center">
+                                        Qty/Area
+                                      </div>
+                                      <div></div>
+                                      <div className="text-right">
+                                        Base Cost
+                                      </div>
+                                      <div className="text-right">Rate</div>
+                                      <div className="text-right">Amount</div>
+                                    </div>
+                                    {/* Data Rows */}
+                                    {component.lineItems?.map((item) => (
+                                      <div
+                                        key={item.id}
+                                        className="grid grid-cols-[1fr_80px_20px_80px_45px_90px_1fr_100px_100px_130px] gap-2 px-3 py-2 bg-slate-50 rounded-lg items-center hover:bg-slate-100 transition-colors"
+                                      >
+                                        <div>
+                                          <span className="font-medium text-slate-900 text-sm">
+                                            {item.name || item.cost_item?.name}
+                                          </span>
+                                          {item.cost_item?.category && (
+                                            <span
+                                              className={`ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${getCategoryColor(
+                                                item.cost_item.category.slug
+                                              )}`}
+                                            >
+                                              {item.cost_item.category.name}
                                             </span>
-                                            {item.group_name && (
-                                              <span className="ml-2 text-xs text-slate-500">
-                                                ({item.group_name})
+                                          )}
+                                        </div>
+                                        <div className="text-center text-sm text-slate-600">
+                                          {item.length ? (
+                                            <span className="px-2 py-1 bg-white rounded border border-slate-200">
+                                              {item.length}
+                                            </span>
+                                          ) : (
+                                            <span className="text-slate-400">
+                                              —
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-center text-slate-400">
+                                          {item.length && item.width ? "×" : ""}
+                                        </div>
+                                        <div className="text-center text-sm text-slate-600">
+                                          {item.width ? (
+                                            <span className="px-2 py-1 bg-white rounded border border-slate-200">
+                                              {item.width}
+                                            </span>
+                                          ) : (
+                                            <span className="text-slate-400">
+                                              —
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-center text-xs text-slate-500 uppercase">
+                                          {item.length || item.width
+                                            ? item.measurement_unit || "mm"
+                                            : "—"}
+                                        </div>
+                                        <div className="text-center">
+                                          {(() => {
+                                            const qtyArea =
+                                              getDisplayQtyArea(item);
+                                            return (
+                                              <span className="px-2 py-1 text-sm bg-blue-50 text-blue-700 font-medium rounded">
+                                                {qtyArea.value} {qtyArea.unit}
                                               </span>
-                                            )}
-                                            {item.cost_item?.category && (
-                                              <span
-                                                className={`ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${getCategoryColor(
-                                                  item.cost_item.category.slug
-                                                )}`}
-                                              >
-                                                {item.cost_item.category.name}
-                                              </span>
-                                            )}
-                                          </td>
-                                          <td className="px-3 py-2 text-slate-600">
-                                            {item.length && item.width
-                                              ? `${item.length} × ${
-                                                  item.width
-                                                } ${
-                                                  item.measurement_unit || "ft"
-                                                }`
-                                              : item.length
-                                              ? `${item.length} ${
-                                                  item.measurement_unit || "ft"
-                                                }`
-                                              : "—"}
-                                          </td>
-                                          <td className="px-3 py-2 text-center text-slate-600">
-                                            {item.quantity?.toFixed(2)}{" "}
-                                            {item.unit_code}
-                                          </td>
-                                          <td className="px-3 py-2 text-right text-slate-600">
+                                            );
+                                          })()}
+                                        </div>
+                                        <div></div>
+                                        <div className="text-right">
+                                          {item.cost_item?.default_rate ? (
+                                            <span className="text-sm text-amber-600">
+                                              {formatCurrency(
+                                                item.cost_item.default_rate
+                                              )}
+                                              /{item.unit_code}
+                                            </span>
+                                          ) : (
+                                            <span className="text-slate-400 text-sm">
+                                              —
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-right">
+                                          <span className="text-sm text-slate-700 font-medium">
                                             {formatCurrency(item.rate)}/
                                             {item.unit_code}
-                                          </td>
-                                          <td className="px-3 py-2 text-right font-medium text-green-600">
+                                          </span>
+                                        </div>
+                                        <div className="text-right">
+                                          <span className="px-3 py-1 text-sm font-semibold bg-green-50 text-green-700 rounded">
                                             {formatCurrency(item.amount)}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
+                                          </span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
                                 )}
                               </div>
                             )}
@@ -1116,31 +1374,82 @@ export default function QuotationDetailPage() {
                             <h5 className="text-xs font-medium text-slate-500 uppercase mb-2">
                               Other Cost Items
                             </h5>
-                            <table className="w-full text-sm">
-                              <tbody className="divide-y divide-slate-100">
-                                {space.lineItems.map((item) => (
-                                  <tr
-                                    key={item.id}
-                                    className="hover:bg-slate-50"
-                                  >
-                                    <td className="px-3 py-2 font-medium text-slate-900">
+                            <div className="space-y-2">
+                              {space.lineItems.map((item) => (
+                                <div
+                                  key={item.id}
+                                  className="grid grid-cols-[1fr_80px_20px_80px_45px_90px_1fr_100px_100px_130px] gap-2 px-3 py-2 bg-slate-50 rounded-lg items-center hover:bg-slate-100 transition-colors"
+                                >
+                                  <div>
+                                    <span className="font-medium text-slate-900 text-sm">
                                       {item.name || item.cost_item?.name}
-                                    </td>
-                                    <td className="px-3 py-2 text-slate-600">
-                                      {item.quantity?.toFixed(2)}{" "}
-                                      {item.unit_code}
-                                    </td>
-                                    <td className="px-3 py-2 text-right text-slate-600">
+                                    </span>
+                                  </div>
+                                  <div className="text-center text-sm text-slate-600">
+                                    {item.length ? (
+                                      <span className="px-2 py-1 bg-white rounded border border-slate-200">
+                                        {item.length}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400">—</span>
+                                    )}
+                                  </div>
+                                  <div className="text-center text-slate-400">
+                                    {item.length && item.width ? "×" : ""}
+                                  </div>
+                                  <div className="text-center text-sm text-slate-600">
+                                    {item.width ? (
+                                      <span className="px-2 py-1 bg-white rounded border border-slate-200">
+                                        {item.width}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400">—</span>
+                                    )}
+                                  </div>
+                                  <div className="text-center text-xs text-slate-500 uppercase">
+                                    {item.length || item.width
+                                      ? item.measurement_unit || "mm"
+                                      : "—"}
+                                  </div>
+                                  <div className="text-center">
+                                    {(() => {
+                                      const qtyArea = getDisplayQtyArea(item);
+                                      return (
+                                        <span className="px-2 py-1 text-sm bg-blue-50 text-blue-700 font-medium rounded">
+                                          {qtyArea.value} {qtyArea.unit}
+                                        </span>
+                                      );
+                                    })()}
+                                  </div>
+                                  <div></div>
+                                  <div className="text-right">
+                                    {item.cost_item?.default_rate ? (
+                                      <span className="text-sm text-amber-600">
+                                        {formatCurrency(
+                                          item.cost_item.default_rate
+                                        )}
+                                        /{item.unit_code}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400 text-sm">
+                                        —
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="text-sm text-slate-700 font-medium">
                                       {formatCurrency(item.rate)}/
                                       {item.unit_code}
-                                    </td>
-                                    <td className="px-3 py-2 text-right font-medium text-green-600">
+                                    </span>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="px-3 py-1 text-sm font-semibold bg-green-50 text-green-700 rounded">
                                       {formatCurrency(item.amount)}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
 
@@ -1191,42 +1500,91 @@ export default function QuotationDetailPage() {
                     <h4 className="text-sm font-medium text-slate-700 mb-3">
                       Additional Cost Items
                     </h4>
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">
-                            Cost Item
-                          </th>
-                          <th className="px-3 py-2 text-center text-xs font-medium text-slate-500 uppercase">
-                            Qty
-                          </th>
-                          <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase">
-                            Rate
-                          </th>
-                          <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase">
-                            Amount
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {orphanLineItems.map((item) => (
-                          <tr key={item.id} className="hover:bg-slate-50">
-                            <td className="px-3 py-2 font-medium text-slate-900">
+                    <div className="space-y-2">
+                      {/* Header Row */}
+                      <div className="grid grid-cols-[1fr_80px_20px_80px_45px_90px_1fr_100px_100px_130px] gap-2 px-3 py-2 bg-slate-100 rounded-lg text-xs font-medium text-slate-500 uppercase">
+                        <div>Cost Item</div>
+                        <div className="text-center">Height</div>
+                        <div></div>
+                        <div className="text-center">Width</div>
+                        <div className="text-center">Unit</div>
+                        <div className="text-center">Qty/Area</div>
+                        <div></div>
+                        <div className="text-right">Base Cost</div>
+                        <div className="text-right">Rate</div>
+                        <div className="text-right">Amount</div>
+                      </div>
+                      {/* Data Rows */}
+                      {orphanLineItems.map((item) => (
+                        <div
+                          key={item.id}
+                          className="grid grid-cols-[1fr_80px_20px_80px_45px_90px_1fr_100px_100px_130px] gap-2 px-3 py-2 bg-slate-50 rounded-lg items-center hover:bg-slate-100 transition-colors"
+                        >
+                          <div>
+                            <span className="font-medium text-slate-900 text-sm">
                               {item.name || item.cost_item?.name}
-                            </td>
-                            <td className="px-3 py-2 text-center text-slate-600">
-                              {item.quantity?.toFixed(2)} {item.unit_code}
-                            </td>
-                            <td className="px-3 py-2 text-right text-slate-600">
+                            </span>
+                          </div>
+                          <div className="text-center text-sm text-slate-600">
+                            {item.length ? (
+                              <span className="px-2 py-1 bg-white rounded border border-slate-200">
+                                {item.length}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </div>
+                          <div className="text-center text-slate-400">
+                            {item.length && item.width ? "×" : ""}
+                          </div>
+                          <div className="text-center text-sm text-slate-600">
+                            {item.width ? (
+                              <span className="px-2 py-1 bg-white rounded border border-slate-200">
+                                {item.width}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </div>
+                          <div className="text-center text-xs text-slate-500 uppercase">
+                            {item.length || item.width
+                              ? item.measurement_unit || "mm"
+                              : "—"}
+                          </div>
+                          <div className="text-center">
+                            {(() => {
+                              const qtyArea = getDisplayQtyArea(item);
+                              return (
+                                <span className="px-2 py-1 text-sm bg-blue-50 text-blue-700 font-medium rounded">
+                                  {qtyArea.value} {qtyArea.unit}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                          <div></div>
+                          <div className="text-right">
+                            {item.cost_item?.default_rate ? (
+                              <span className="text-sm text-amber-600">
+                                {formatCurrency(item.cost_item.default_rate)}/
+                                {item.unit_code}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-sm">—</span>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <span className="text-sm text-slate-700 font-medium">
                               {formatCurrency(item.rate)}/{item.unit_code}
-                            </td>
-                            <td className="px-3 py-2 text-right font-medium text-green-600">
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="px-3 py-1 text-sm font-semibold bg-green-50 text-green-700 rounded">
                               {formatCurrency(item.amount)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

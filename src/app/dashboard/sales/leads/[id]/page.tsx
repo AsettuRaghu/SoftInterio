@@ -127,6 +127,11 @@ export default function LeadDetailPage() {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Check if lead is in terminal (closed) stage - won, lost, or disqualified
+  const isLeadClosed = lead
+    ? ["won", "lost", "disqualified"].includes(lead.stage)
+    : false;
+
   // Edit form state
   const [editForm, setEditForm] = useState({
     // Client data (from linked client record)
@@ -696,25 +701,11 @@ export default function LeadDetailPage() {
                             </span>
                             Client Details
                           </h3>
-                          <button
-                            onClick={() => setShowEditModal(true)}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Edit"
-                          >
-                            <svg
-                              className="w-4 h-4"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                              />
-                            </svg>
-                          </button>
+                          {isLeadClosed && (
+                            <span className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-600 rounded-md">
+                              Read Only
+                            </span>
+                          )}
                         </div>
                         <div className="space-y-3">
                           <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-100">
@@ -803,25 +794,11 @@ export default function LeadDetailPage() {
                             </span>
                             Lead Attributes
                           </h3>
-                          <button
-                            onClick={() => setShowEditModal(true)}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Edit"
-                          >
-                            <svg
-                              className="w-4 h-4"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                              />
-                            </svg>
-                          </button>
+                          {isLeadClosed && (
+                            <span className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-600 rounded-md">
+                              Read Only
+                            </span>
+                          )}
                         </div>
                         <dl className="space-y-3">
                           <div className="flex justify-between items-center py-2 border-b border-slate-100">
@@ -901,25 +878,11 @@ export default function LeadDetailPage() {
                             </span>
                             Property Details
                           </h3>
-                          <button
-                            onClick={() => setShowEditModal(true)}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Edit"
-                          >
-                            <svg
-                              className="w-4 h-4"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                              />
-                            </svg>
-                          </button>
+                          {isLeadClosed && (
+                            <span className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-600 rounded-md">
+                              Read Only
+                            </span>
+                          )}
                         </div>
                         <dl className="space-y-3">
                           <div className="flex justify-between items-center py-2 border-b border-slate-100">
@@ -1083,25 +1046,11 @@ export default function LeadDetailPage() {
                             </span>
                             Budget & Value
                           </h3>
-                          <button
-                            onClick={() => setShowEditModal(true)}
-                            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Edit"
-                          >
-                            <svg
-                              className="w-3.5 h-3.5"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                              />
-                            </svg>
-                          </button>
+                          {isLeadClosed && (
+                            <span className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-600 rounded-md">
+                              Read Only
+                            </span>
+                          )}
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="bg-white rounded-lg p-3 border border-emerald-100">
@@ -1156,25 +1105,11 @@ export default function LeadDetailPage() {
                             </span>
                             Timeline
                           </h3>
-                          <button
-                            onClick={() => setShowEditModal(true)}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Edit"
-                          >
-                            <svg
-                              className="w-4 h-4"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                              />
-                            </svg>
-                          </button>
+                          {isLeadClosed && (
+                            <span className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-600 rounded-md">
+                              Read Only
+                            </span>
+                          )}
                         </div>
                         <dl className="space-y-3">
                           <div className="flex justify-between items-center py-2 border-b border-slate-100">
@@ -1267,25 +1202,6 @@ export default function LeadDetailPage() {
                               </span>
                               Project Scope
                             </h3>
-                            <button
-                              onClick={() => setShowEditModal(true)}
-                              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Edit"
-                            >
-                              <svg
-                                className="w-4 h-4"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                                />
-                              </svg>
-                            </button>
                           </div>
                           <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-lg p-3">
                             {lead.project_scope}
@@ -1313,25 +1229,6 @@ export default function LeadDetailPage() {
                               </span>
                               Special Requirements
                             </h3>
-                            <button
-                              onClick={() => setShowEditModal(true)}
-                              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Edit"
-                            >
-                              <svg
-                                className="w-4 h-4"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                                />
-                              </svg>
-                            </button>
                           </div>
                           <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-lg p-3">
                             {lead.special_requirements}
@@ -1465,28 +1362,30 @@ export default function LeadDetailPage() {
                     <h3 className="text-base font-bold text-slate-900">
                       Meetings & Site Visits
                     </h3>
-                    <button
-                      onClick={() => {
-                        setEditingMeeting(null);
-                        setShowMeetingModal(true);
-                      }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
+                    {!isLeadClosed && (
+                      <button
+                        onClick={() => {
+                          setEditingMeeting(null);
+                          setShowMeetingModal(true);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                       >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 4v16m8-8H4"
-                        />
-                      </svg>
-                      Schedule Meeting
-                    </button>
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 4v16m8-8H4"
+                          />
+                        </svg>
+                        Schedule Meeting
+                      </button>
+                    )}
                   </div>
 
                   {(() => {
@@ -1636,12 +1535,14 @@ export default function LeadDetailPage() {
                     <h3 className="text-base font-bold text-slate-900">
                       Notes
                     </h3>
-                    <button
-                      onClick={() => setShowNoteModal(true)}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                    >
-                      + Add Note
-                    </button>
+                    {!isLeadClosed && (
+                      <button
+                        onClick={() => setShowNoteModal(true)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                      >
+                        + Add Note
+                      </button>
+                    )}
                   </div>
                   {notes.length === 0 ? (
                     <div className="text-center py-8 text-sm text-slate-500">
@@ -1687,25 +1588,27 @@ export default function LeadDetailPage() {
                     <h3 className="text-base font-bold text-slate-900">
                       Tasks
                     </h3>
-                    <button
-                      onClick={() => setShowTaskModal(true)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
+                    {!isLeadClosed && (
+                      <button
+                        onClick={() => setShowTaskModal(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                       >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 4v16m8-8H4"
-                        />
-                      </svg>
-                      Add Task
-                    </button>
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 4v16m8-8H4"
+                          />
+                        </svg>
+                        Add Task
+                      </button>
+                    )}
                   </div>
                   {tasks.length === 0 ? (
                     <div className="text-center py-12">
@@ -1865,25 +1768,27 @@ export default function LeadDetailPage() {
                     <h3 className="text-base font-bold text-slate-900">
                       Documents
                     </h3>
-                    <button
-                      onClick={() => setShowDocumentModal(true)}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
+                    {!isLeadClosed && (
+                      <button
+                        onClick={() => setShowDocumentModal(true)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
                       >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 4v16m8-8H4"
-                        />
-                      </svg>
-                      Add Document
-                    </button>
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 4v16m8-8H4"
+                          />
+                        </svg>
+                        Add Document
+                      </button>
+                    )}
                   </div>
 
                   {/* Document List */}
@@ -2105,52 +2010,58 @@ export default function LeadDetailPage() {
                                       </svg>
                                       View
                                     </Link>
-                                    <Link
-                                      href={`/dashboard/quotations/${quote.id}/edit`}
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                      title="Edit quotation"
-                                    >
-                                      <svg
-                                        className="w-3.5 h-3.5"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                      >
-                                        <path
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          strokeWidth={2}
-                                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                        />
-                                      </svg>
-                                      Edit
-                                    </Link>
-                                    <button
-                                      onClick={(e) => handleRevise(quote.id, e)}
-                                      disabled={revisingId === quote.id}
-                                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 rounded transition-colors disabled:opacity-50"
-                                      title="Create new revision"
-                                    >
-                                      {revisingId === quote.id ? (
-                                        <div className="w-3.5 h-3.5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
-                                      ) : (
-                                        <svg
-                                          className="w-3.5 h-3.5"
-                                          fill="none"
-                                          viewBox="0 0 24 24"
-                                          stroke="currentColor"
+                                    {!isLeadClosed && (
+                                      <>
+                                        <Link
+                                          href={`/dashboard/quotations/${quote.id}/edit`}
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                          title="Edit quotation"
                                         >
-                                          <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                                          />
-                                        </svg>
-                                      )}
-                                      Revise
-                                    </button>
+                                          <svg
+                                            className="w-3.5 h-3.5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                          >
+                                            <path
+                                              strokeLinecap="round"
+                                              strokeLinejoin="round"
+                                              strokeWidth={2}
+                                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                            />
+                                          </svg>
+                                          Edit
+                                        </Link>
+                                        <button
+                                          onClick={(e) =>
+                                            handleRevise(quote.id, e)
+                                          }
+                                          disabled={revisingId === quote.id}
+                                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 rounded transition-colors disabled:opacity-50"
+                                          title="Create new revision"
+                                        >
+                                          {revisingId === quote.id ? (
+                                            <div className="w-3.5 h-3.5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
+                                          ) : (
+                                            <svg
+                                              className="w-3.5 h-3.5"
+                                              fill="none"
+                                              viewBox="0 0 24 24"
+                                              stroke="currentColor"
+                                            >
+                                              <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                              />
+                                            </svg>
+                                          )}
+                                          Revise
+                                        </button>
+                                      </>
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -2314,6 +2225,7 @@ function StageTransitionModal({
     contract_signed_date: "",
     expected_project_start: "",
     change_reason: "",
+    selected_quotation_id: "",
   });
 
   // Get available property types based on selected category
@@ -2396,6 +2308,7 @@ function StageTransitionModal({
           won_amount: formData.won_amount
             ? parseFloat(formData.won_amount)
             : undefined,
+          selected_quotation_id: formData.selected_quotation_id || undefined,
         }),
       });
 
@@ -3169,6 +3082,75 @@ function StageTransitionModal({
                       className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
+
+                  {/* Quotation Selection */}
+                  {quotations.length > 0 ? (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Select Winning Quotation{" "}
+                        <span className="text-red-500">*</span>
+                      </label>
+                      <p className="text-xs text-slate-500 mb-2">
+                        Choose the quotation to attach to the new project
+                      </p>
+                      <select
+                        required
+                        value={formData.selected_quotation_id}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            selected_quotation_id: e.target.value,
+                          })
+                        }
+                        className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        <option value="">Select a quotation</option>
+                        {quotations
+                          .sort((a, b) => {
+                            // Sort by status priority: approved > sent > draft
+                            const statusPriority = {
+                              approved: 3,
+                              signed: 3,
+                              sent: 2,
+                              draft: 1,
+                            };
+                            return (
+                              (statusPriority[
+                                b.status as keyof typeof statusPriority
+                              ] || 0) -
+                              (statusPriority[
+                                a.status as keyof typeof statusPriority
+                              ] || 0)
+                            );
+                          })
+                          .map((quote) => (
+                            <option key={quote.id} value={quote.id}>
+                              {quote.quotation_number ||
+                                `#${quote.id.slice(0, 8)}`}{" "}
+                              v{quote.version} - ₹
+                              {new Intl.NumberFormat("en-IN", {
+                                maximumFractionDigits: 0,
+                              }).format(
+                                quote.grand_total || quote.total_amount || 0
+                              )}{" "}
+                              (
+                              {quote.status?.charAt(0).toUpperCase() +
+                                quote.status?.slice(1) || "Draft"}
+                              )
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                      <p className="text-sm text-amber-800">
+                        <strong>No quotations available:</strong> You must
+                        create at least one quotation before marking this lead
+                        as won.
+                      </p>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">
                       Notes <span className="text-red-500">*</span>

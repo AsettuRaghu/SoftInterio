@@ -1,7 +1,7 @@
 /**
  * Quotation Module Types V2
  * Flexible Hierarchical Costing Structure:
- * Space (optional) > Component (optional) > Variant (optional) > Cost Item (required)
+ * Space (optional) > Component (optional) > Cost Item (required)
  */
 
 // ============================================================================
@@ -15,7 +15,8 @@ export type QuotationStatus =
   | "negotiating"
   | "approved"
   | "rejected"
-  | "expired";
+  | "expired"
+  | "cancelled";
 
 export type QualityTier = "budget" | "standard" | "premium" | "luxury";
 
@@ -32,7 +33,7 @@ export type PropertyType =
   | "retail"
   | "office";
 
-export type CalculationType = "area" | "length" | "quantity" | "fixed";
+export type CalculationType = "area" | "height" | "quantity" | "fixed";
 
 export type PresentationLevel =
   | "space_only"
@@ -99,36 +100,16 @@ export interface ComponentType {
   is_system: boolean;
   created_at: string;
   updated_at: string;
-  // Joined data
-  variants?: ComponentVariant[];
 }
 
-/**
- * Component Variant (Optional - Types/Variants of components)
- * Examples: Sliding, Openable, L-Shape, U-Shape
- */
-export interface ComponentVariant {
-  id: string;
-  tenant_id: string;
-  component_type_id: string;
-  name: string;
-  slug: string;
-  description?: string;
-  icon?: string;
-  display_order: number;
-  is_active: boolean;
-  is_system: boolean;
-  created_at: string;
-  updated_at: string;
-  // Joined data
-  component_type?: ComponentType;
-}
+
 
 /**
- * Cost Item Category
- * Examples: Material, Hardware, Finish, Labour, Service
+ * Quotation Cost Item Category
+ * Examples: Carcass, Shutter, Hardware, Finish, Labour
+ * Note: These are separate from stock/procurement categories
  */
-export interface CostItemCategory {
+export interface QuotationCostItemCategory {
   id: string;
   tenant_id: string;
   name: string;
@@ -143,76 +124,39 @@ export interface CostItemCategory {
   updated_at: string;
 }
 
+/** @deprecated Use QuotationCostItemCategory instead */
+export type CostItemCategory = QuotationCostItemCategory;
+
 /**
- * Cost Item (Anything with a price)
- * Examples: HDHMR PreLam, German Hinges, PU Finish, Carpentry Labour
+ * Quotation Cost Item (Tenant-defined items for quotations)
+ * Examples: PreLam_Carcass_18MM_HDHMR, Kitchen_Drawer_Tanden, Hinge_Soft_Close
+ * Note: These are separate from stock/procurement items
  */
-export interface CostItem {
+export interface QuotationCostItem {
   id: string;
   tenant_id: string;
   category_id?: string;
   name: string;
   slug: string;
   description?: string;
-  unit_code: string; // "sqft", "nos", "job"
-  default_rate: number;
+  unit_code: string; // "sqft", "nos", "rft", "set", "lot"
+  vendor_cost?: number; // What we pay vendor
+  company_cost?: number; // Internal cost to company
+  default_rate: number; // Default customer-facing rate (base rate with margin)
   specifications?: Record<string, unknown>;
-  quality_tier: QualityTier;
+  quality_tier?: QualityTier;
   display_order: number;
   is_active: boolean;
   is_system: boolean;
   created_at: string;
   updated_at: string;
   // Joined data
-  category?: CostItemCategory;
+  category?: QuotationCostItemCategory;
   unit?: Unit;
 }
 
-// ============================================================================
-// LEGACY TYPES (for backward compatibility)
-// ============================================================================
-
-/** @deprecated Use CostItemCategory instead */
-export type MaterialCategory = CostItemCategory;
-
-/** @deprecated Use CostItem instead */
-export interface Material {
-  id: string;
-  tenant_id: string;
-  category_id?: string;
-  name: string;
-  code?: string;
-  description?: string;
-  specifications?: Record<string, unknown>;
-  unit: string;
-  base_rate: number;
-  labour_rate: number;
-  wastage_percent: number;
-  alternatives?: string[];
-  quality_tier: QualityTier;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-  category?: MaterialCategory;
-}
-
-/** @deprecated Use ComponentVariant instead */
-export interface CostAttributeType {
-  id: string;
-  tenant_id: string;
-  name: string;
-  slug: string;
-  description?: string;
-  data_type: string;
-  unit?: string;
-  is_calculated: boolean;
-  calculation_formula?: string;
-  applicable_categories?: string[];
-  display_order: number;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
+/** @deprecated Use QuotationCostItem instead */
+export type CostItem = QuotationCostItem;
 
 // ============================================================================
 // TEMPLATE TYPES
@@ -263,9 +207,7 @@ export interface TemplateLineItem {
   template_id: string;
   space_type_id?: string; // Optional - for organization
   component_type_id?: string; // Optional - for organization
-  component_variant_id?: string; // Optional - for organization
   cost_item_id: string; // Required - the actual cost item
-  group_name?: string; // "Carcass", "Shutter", "Hardware" (for display grouping)
   rate?: number; // Override cost_item default_rate, NULL = use default
   display_order: number;
   notes?: string;
@@ -275,7 +217,6 @@ export interface TemplateLineItem {
   // Joined data
   space_type?: SpaceType;
   component_type?: ComponentType;
-  component_variant?: ComponentVariant;
   cost_item?: CostItem;
 }
 
@@ -307,16 +248,7 @@ export interface Quotation {
   client_id?: string;
   project_id?: string;
 
-  // Client details (snapshot)
-  client_name?: string;
-  client_email?: string;
-  client_phone?: string;
-
-  // Property details
-  property_name?: string;
-  property_address?: string;
-  property_type?: PropertyType;
-  carpet_area?: number;
+  // Property details (retained fields)
   flat_number?: string;
 
   // Lead details (from quotations_with_lead view)
@@ -369,8 +301,42 @@ export interface Quotation {
   // Joined data
   spaces?: QuotationSpace[];
   line_items?: QuotationLineItem[];
-  lead?: { id: string; lead_number: string; client_name: string };
+  lead?: { 
+    id: string; 
+    lead_number: string; 
+    client_name: string;
+    property?: {
+      id: string;
+      property_name: string;
+      address_line1?: string;
+      city?: string;
+      pincode?: string;
+      carpet_area?: number;
+      property_type?: PropertyType;
+    };
+  };
+  client?: {
+    id: string;
+    name: string;
+    email?: string;
+    phone?: string;
+  };
   created_user?: { id: string; name: string };
+
+  // Computed counts (from API)
+  spaces_count?: number;
+  components_count?: number;
+  
+  // Computed fields for backward compatibility (from API)
+  client_name?: string;
+  client_email?: string;
+  client_phone?: string;
+  property_name?: string;
+  property_address?: string;
+  property_type?: PropertyType;
+  carpet_area?: number;
+  carpet_area_sqft?: number;
+  property_city?: string;
 }
 
 /**
@@ -402,7 +368,6 @@ export interface QuotationComponent {
   quotation_id: string;
   space_id: string;
   component_type_id?: string;
-  component_variant_id?: string; // New in V2
   name: string;
   description?: string;
   width?: number;
@@ -417,10 +382,7 @@ export interface QuotationComponent {
 
   // Joined data
   component_type?: ComponentType;
-  component_variant?: ComponentVariant;
   line_items?: QuotationLineItem[]; // Line items under this component
-  // Legacy
-  materials?: QuotationMaterial[];
 }
 
 /**
@@ -431,21 +393,21 @@ export interface QuotationLineItem {
   quotation_id: string;
   quotation_space_id?: string;
   quotation_component_id?: string;
-  cost_item_id?: string;
+  quotation_cost_item_id?: string;
 
   // Display
   name: string;
-  group_name?: string; // "Carcass", "Shutter", "Hardware"
 
   // Measurements (based on unit type)
-  length?: number; // For area or length calculations
+  height?: number; // For area or height calculations
   width?: number; // For area calculations
+  measurement_unit?: string; // "mm", "cm", "inch", "ft"
   quantity?: number; // For quantity-based items
 
   // Pricing
-  unit_code: string; // "sqft", "nos", "job"
-  rate: number;
-  amount: number; // Calculated: (L×W) or Qty × Rate
+  unit_code: string; // "sqft", "nos", "rft", "set", "lot"
+  rate: number; // Actual rate for this line item
+  amount: number; // Calculated: (H×W) or Qty × Rate
 
   display_order: number;
   notes?: string;
@@ -454,52 +416,8 @@ export interface QuotationLineItem {
   updated_at: string;
 
   // Joined data
-  cost_item?: CostItem;
+  quotation_cost_item?: QuotationCostItem;
   unit?: Unit;
-}
-
-// ============================================================================
-// LEGACY QUOTATION TYPES (for backward compatibility)
-// ============================================================================
-
-/** @deprecated Use QuotationLineItem instead */
-export interface QuotationMaterial {
-  id: string;
-  quotation_id: string;
-  component_id: string;
-  material_id?: string;
-  category_id?: string;
-  name: string;
-  category_name?: string;
-  specifications?: Record<string, unknown>;
-  display_order: number;
-  subtotal: number;
-  metadata?: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
-  material?: Material;
-  category?: MaterialCategory;
-  cost_attributes?: QuotationCostAttribute[];
-}
-
-/** @deprecated Use QuotationLineItem instead */
-export interface QuotationCostAttribute {
-  id: string;
-  quotation_id: string;
-  material_id: string;
-  attribute_type_id?: string;
-  name: string;
-  quantity: number;
-  unit?: string;
-  rate: number;
-  amount: number;
-  is_auto_calculated: boolean;
-  calculation_source?: string;
-  display_order: number;
-  metadata?: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
-  attribute_type?: CostAttributeType;
 }
 
 // ============================================================================
@@ -519,12 +437,7 @@ export interface QuotationSnapshot {
 export interface QuotationChange {
   id: string;
   quotation_id: string;
-  entity_type:
-    | "space"
-    | "component"
-    | "material"
-    | "cost_attribute"
-    | "line_item";
+  entity_type: "space" | "component" | "line_item";
   entity_id: string;
   change_type: "create" | "update" | "delete";
   field_name?: string;
@@ -557,7 +470,6 @@ export interface SpaceTemplateData {
 
 export interface ComponentTemplateData {
   component_type_id?: string;
-  component_variant_id?: string;
   name: string;
   description?: string;
   width?: number;
@@ -565,37 +477,13 @@ export interface ComponentTemplateData {
   depth?: number;
   configuration?: Record<string, unknown>;
   line_items: LineItemTemplateData[];
-  // Legacy
-  materials?: MaterialTemplateData[];
 }
 
 export interface LineItemTemplateData {
   cost_item_id?: string;
   name: string;
-  group_name?: string;
   unit_code: string;
   rate?: number;
-}
-
-/** @deprecated Use LineItemTemplateData instead */
-export interface MaterialTemplateData {
-  material_id?: string;
-  category_id?: string;
-  name: string;
-  category_name?: string;
-  specifications?: Record<string, unknown>;
-  cost_attributes: CostAttributeTemplateData[];
-}
-
-/** @deprecated Use LineItemTemplateData instead */
-export interface CostAttributeTemplateData {
-  attribute_type_id?: string;
-  name: string;
-  quantity?: number;
-  unit?: string;
-  rate?: number;
-  is_auto_calculated?: boolean;
-  calculation_source?: string;
 }
 
 // ============================================================================
@@ -653,7 +541,6 @@ export interface SpaceFormData {
 
 export interface ComponentFormData {
   component_type_id?: string;
-  component_variant_id?: string;
   name: string;
   description?: string;
   width?: number;
@@ -665,31 +552,11 @@ export interface ComponentFormData {
 export interface LineItemFormData {
   cost_item_id?: string;
   name: string;
-  group_name?: string;
   length?: number;
   width?: number;
   quantity?: number;
   unit_code: string;
   rate: number;
-}
-
-/** @deprecated Use LineItemFormData instead */
-export interface MaterialFormData {
-  material_id?: string;
-  category_id?: string;
-  name: string;
-  category_name?: string;
-  specifications?: Record<string, unknown>;
-}
-
-/** @deprecated Use LineItemFormData instead */
-export interface CostAttributeFormData {
-  attribute_type_id?: string;
-  name: string;
-  quantity: number;
-  unit?: string;
-  rate: number;
-  is_auto_calculated?: boolean;
 }
 
 // ============================================================================
@@ -738,7 +605,6 @@ export interface MasterDataResponse {
     units: Unit[];
     space_types: SpaceType[];
     component_types: ComponentType[];
-    component_variants: ComponentVariant[];
     cost_item_categories: CostItemCategory[];
     cost_items: CostItem[];
   };
@@ -756,6 +622,7 @@ export const QuotationStatusLabels: Record<QuotationStatus, string> = {
   approved: "Approved",
   rejected: "Rejected",
   expired: "Expired",
+  cancelled: "Cancelled",
 };
 
 export const QuotationStatusColors: Record<
@@ -797,6 +664,11 @@ export const QuotationStatusColors: Record<
     text: "text-gray-700",
     dot: "bg-gray-500",
   },
+  cancelled: {
+    bg: "bg-orange-100",
+    text: "text-orange-700",
+    dot: "bg-orange-500",
+  },
 };
 
 export const QualityTierLabels: Record<QualityTier, string> = {
@@ -826,8 +698,8 @@ export const PresentationLevelLabels: Record<PresentationLevel, string> = {
 };
 
 export const CalculationTypeLabels: Record<CalculationType, string> = {
-  area: "Area (L × W)",
-  length: "Length",
+  area: "Area (H × W)",
+  height: "Height",
   quantity: "Quantity",
   fixed: "Fixed/Lump Sum",
 };
