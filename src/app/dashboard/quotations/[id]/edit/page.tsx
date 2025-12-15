@@ -26,6 +26,7 @@ import { BuilderSidebar } from "@/components/quotations/BuilderSidebar";
 import { PricingScenariosModal } from "@/components/quotations/PricingScenariosModal";
 import { TemplateModal } from "@/components/quotations/TemplateModal";
 import { NewVersionModal } from "@/components/quotations/NewVersionModal";
+import { DEFAULT_TAX_PERCENT } from "@/utils/quotations";
 
 export default function EditQuotationPage() {
   const router = useRouter();
@@ -55,7 +56,7 @@ export default function EditQuotationPage() {
   const [version, setVersion] = useState(1);
   const [validUntil, setValidUntil] = useState("");
   const [notes, setNotes] = useState("");
-  const [taxPercent, setTaxPercent] = useState(18); // Default 18% GST
+  const [taxPercent, setTaxPercent] = useState(DEFAULT_TAX_PERCENT);
   const [spaces, setSpaces] = useState<BuilderSpace[]>([]);
 
   // Master data

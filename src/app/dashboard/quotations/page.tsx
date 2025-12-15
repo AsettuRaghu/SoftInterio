@@ -27,6 +27,10 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { CreateQuotationModal } from "@/components/quotations/CreateQuotationModal";
+import {
+  QUOTATION_STATUS_OPTIONS,
+  ACTIVE_QUOTATION_STATUSES,
+} from "@/utils/quotations";
 
 // Types for modal
 interface Lead {
@@ -68,23 +72,10 @@ interface Template {
 }
 
 // Status options for filtering and bulk updates
-const STATUS_OPTIONS: Array<{
-  value: QuotationStatus;
-  label: string;
-  color: string;
-}> = [
-  { value: "draft", label: "Draft", color: "#94a3b8" },
-  { value: "sent", label: "Sent", color: "#3b82f6" },
-  { value: "viewed", label: "Viewed", color: "#06b6d4" },
-  { value: "negotiating", label: "Negotiating", color: "#f59e0b" },
-  { value: "approved", label: "Approved", color: "#22c55e" },
-  { value: "rejected", label: "Rejected", color: "#ef4444" },
-  { value: "cancelled", label: "Cancelled", color: "#f97316" },
-  { value: "expired", label: "Expired", color: "#6b7280" },
-];
+const STATUS_OPTIONS = QUOTATION_STATUS_OPTIONS;
 
 // Active statuses constant
-const ACTIVE_STATUSES: QuotationStatus[] = ["draft", "sent"];
+const ACTIVE_STATUSES = ACTIVE_QUOTATION_STATUSES;
 
 export default function QuotationsListPage() {
   const router = useRouter();
