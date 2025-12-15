@@ -34,6 +34,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .order("created_at", { ascending: false });
 
     if (error) {
+      // If table doesn't exist, return gracefully
+      if (error.code === "PGRST205" || error.message?.includes("Could not find the table")) {
+        return NextResponse.json({ notes: [] });
+      }
       console.error("Error fetching notes:", error);
       return NextResponse.json(
         { error: "Failed to fetch notes" },
@@ -111,6 +115,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (error) {
+      // If table doesn't exist, return gracefully
+      if (error.code === "PGRST205" || error.message?.includes("Could not find the table")) {
+        return NextResponse.json(
+          { error: "Notes feature not available" },
+          { status: 500 }
+        );
+      }
       console.error("Error creating note:", error);
       return NextResponse.json(
         { error: "Failed to create note" },

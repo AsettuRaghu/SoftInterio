@@ -32,6 +32,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (error || !note) {
+      // If table doesn't exist, return gracefully
+      if (error?.code === "PGRST205" || error?.message?.includes("Could not find the table")) {
+        return NextResponse.json({ error: "Note not found" }, { status: 404 });
+      }
       return NextResponse.json({ error: "Note not found" }, { status: 404 });
     }
 
