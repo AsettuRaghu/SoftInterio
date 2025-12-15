@@ -243,20 +243,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       effectiveSalesRep = leadData?.assigned_user;
       assignedByUser = leadData?.created_by_user;
     }
-
-    // Log what we found for debugging
-    console.log("Project data fetched:", {
-      project_id: fullProject.id,
-      project_number: fullProject.project_number,
-      has_client_id: !!fullProject.client_id,
-      has_property_id: !!fullProject.property_id,
-      has_lead_id: !!fullProject.lead_id,
-      lead_id_value: fullProject.lead_id,
-      client_found: !!pClient,
-      property_found: !!pProperty,
-      lead_found: !!pLead,
-      lead_data: pLead,
-    });
     
     const flattenedProject = {
       ...project,

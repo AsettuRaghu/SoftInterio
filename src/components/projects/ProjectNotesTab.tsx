@@ -53,14 +53,26 @@ export default function ProjectNotesTab({
   const fetchNotes = async () => {
     try {
       setLoading(true);
+      setError(null);
       const response = await fetch(`/api/projects/${projectId}/notes`);
-      if (!response.ok) throw new Error("Failed to fetch notes");
+      if (!response.ok) {
+        if (response.status === 500) {
+          setError("Notes feature is not available");
+          setNotes([]);
+          onCountChange?.(0);
+          return;
+        }
+        throw new Error("Failed to fetch notes");
+      }
       const data = await response.json();
       const notesList = data.notes || [];
       setNotes(notesList);
       onCountChange?.(notesList.length);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      console.error("Error fetching notes:", err);
+      setError("Could not load notes");
+      setNotes([]);
+      onCountChange?.(0);
     } finally {
       setLoading(false);
     }
@@ -124,6 +136,16 @@ export default function ProjectNotesTab({
     );
   }
 
+  if (error) {
+    return (
+      <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+        <p className="text-sm text-amber-800">
+          <strong>Notes feature unavailable:</strong> {error}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       {/* Header */}
@@ -136,13 +158,16 @@ export default function ProjectNotesTab({
             Track meetings, decisions, and important information
           </p>
         </div>
-        <button
-          onClick={onCreateNote}
-          className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 text-white rounded-md text-xs hover:bg-blue-700"
-        >
-          <PlusIcon className="w-3.5 h-3.5" />
-          Add Note
-        </button>
+        {!error && (
+          <button
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-400 text-white rounded-md text-xs cursor-not-allowed opacity-60"
+            disabled
+            title="Add note feature coming soon"
+          >
+            <PlusIcon className="w-3.5 h-3.5" />
+            Add Note
+          </button>
+        )}
       </div>
 
       {/* Filters */}
