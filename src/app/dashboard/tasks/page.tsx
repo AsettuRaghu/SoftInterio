@@ -75,9 +75,61 @@ export default function TasksPage() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<TabType>("my-tasks");
+  const [defaultLinkedEntity, setDefaultLinkedEntity] = useState<
+    | {
+        type: string;
+        id: string;
+        name: string;
+      }
+    | undefined
+  >(undefined);
 
   // Get current user
   const { user: currentUser } = useCurrentUser();
+
+  // Check URL parameters on mount to auto-open create modal
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const shouldCreate = params.get("create") === "true";
+    const relatedType = params.get("related_type");
+    const relatedId = params.get("related_id");
+
+    if (shouldCreate && relatedType && relatedId) {
+      // Fetch related entity name
+      const fetchEntityName = async () => {
+        try {
+          let name = "Unknown";
+          if (relatedType === "project") {
+            const response = await fetch(`/api/projects/${relatedId}`);
+            if (response.ok) {
+              const data = await response.json();
+              name = data.project?.name || "Unknown Project";
+            }
+          } else if (relatedType === "lead") {
+            const response = await fetch(`/api/sales/leads/${relatedId}`);
+            if (response.ok) {
+              const data = await response.json();
+              name = data.lead?.name || "Unknown Lead";
+            }
+          }
+
+          setDefaultLinkedEntity({
+            type: relatedType,
+            id: relatedId,
+            name,
+          });
+          setIsCreateModalOpen(true);
+
+          // Clean up URL
+          window.history.replaceState({}, "", "/dashboard/tasks");
+        } catch (err) {
+          console.error("Error fetching entity name:", err);
+        }
+      };
+
+      fetchEntityName();
+    }
+  }, []);
 
   // Inline subtask creation
   const [inlineSubtaskFor, setInlineSubtaskFor] = useState<string | null>(null);
@@ -183,6 +235,20 @@ export default function TasksPage() {
     fetchTasks();
     fetchTeamMembers();
   }, [fetchTasks, fetchTeamMembers]);
+
+  // Refetch tasks when page becomes visible (e.g., after navigating back from project page)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        fetchTasks();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [fetchTasks]);
 
   // Focus inline input when it appears
   useEffect(() => {
@@ -1504,11 +1570,16 @@ export default function TasksPage() {
       {/* Modals */}
       <CreateTaskModal
         isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
+        onClose={() => {
+          setIsCreateModalOpen(false);
+          setDefaultLinkedEntity(undefined);
+        }}
         onSuccess={() => {
           fetchTasks();
           setIsCreateModalOpen(false);
+          setDefaultLinkedEntity(undefined);
         }}
+        defaultLinkedEntity={defaultLinkedEntity}
       />
 
       <EditTaskModal

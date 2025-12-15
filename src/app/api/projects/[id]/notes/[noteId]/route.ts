@@ -20,13 +20,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const { data: note, error } = await supabase
       .from("project_notes")
-      .select(
-        `
-        *,
-        created_by_user:profiles!project_notes_created_by_fkey(id, name, avatar_url),
-        phase:project_phases!project_notes_phase_id_fkey(id, name)
-      `
-      )
+      .select("*")
       .eq("id", noteId)
       .eq("project_id", projectId)
       .single();
@@ -63,19 +57,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const supabase = await createClient();
 
     const body = await request.json();
-    const { title, content, phase_id, sub_phase_id, category, is_pinned } =
-      body;
+    const { title, content, category, is_pinned } = body;
 
     // Build update object
-    const updateData: Record<string, unknown> = {
-      updated_by: user.id,
-      updated_at: new Date().toISOString(),
-    };
+    const updateData: Record<string, unknown> = {};
 
     if (title !== undefined) updateData.title = title;
     if (content !== undefined) updateData.content = content;
-    if (phase_id !== undefined) updateData.phase_id = phase_id;
-    if (sub_phase_id !== undefined) updateData.sub_phase_id = sub_phase_id;
     if (category !== undefined) updateData.category = category;
     if (is_pinned !== undefined) updateData.is_pinned = is_pinned;
 
@@ -84,13 +72,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .update(updateData)
       .eq("id", noteId)
       .eq("project_id", projectId)
-      .select(
-        `
-        *,
-        created_by_user:profiles!project_notes_created_by_fkey(id, name, avatar_url),
-        phase:project_phases!project_notes_phase_id_fkey(id, name)
-      `
-      )
+      .select("*")
       .single();
 
     if (error) {

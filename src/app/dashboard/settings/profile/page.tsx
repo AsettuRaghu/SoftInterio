@@ -9,16 +9,37 @@ import { Alert } from "@/components/ui/Alert";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import {
-  SettingsPageLayout,
-  SettingsPageHeader,
-  SettingsPageContent,
-} from "@/components/ui/SettingsPageLayout";
+  PageLayout,
+  PageHeader,
+  PageContent,
+} from "@/components/ui/PageLayout";
 import {
   UserIcon,
   PencilIcon,
   XMarkIcon,
   LockClosedIcon,
 } from "@heroicons/react/24/outline";
+
+// =====================================================
+// CONSTANTS
+// =====================================================
+
+const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MIN_LENGTH_MESSAGE = `Password must be at least ${PASSWORD_MIN_LENGTH} characters long`;
+const ALERT_AUTO_DISMISS_MS = 3000;
+const DATE_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+};
+const DATETIME_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+};
 
 // =====================================================
 // TYPES
@@ -58,27 +79,35 @@ const getInitials = (name: string): string => {
     .slice(0, 2);
 };
 
+const validatePassword = (
+  newPassword: string,
+  confirmPassword: string
+): { isValid: boolean; error: string | null } => {
+  if (!newPassword || !confirmPassword) {
+    return { isValid: false, error: "Please fill in all password fields" };
+  }
+
+  if (newPassword.length < PASSWORD_MIN_LENGTH) {
+    return { isValid: false, error: PASSWORD_MIN_LENGTH_MESSAGE };
+  }
+
+  if (newPassword !== confirmPassword) {
+    return { isValid: false, error: "New passwords do not match" };
+  }
+
+  return { isValid: true, error: null };
+};
+
 const formatDateTime = (
   dateString: string | null | undefined
 ): string | null => {
   if (!dateString) return null;
-  return new Date(dateString).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
+  return new Date(dateString).toLocaleString("en-US", DATETIME_FORMAT_OPTIONS);
 };
 
 const formatDate = (dateString: string | null | undefined): string | null => {
   if (!dateString) return null;
-  return new Date(dateString).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return new Date(dateString).toLocaleDateString("en-US", DATE_FORMAT_OPTIONS);
 };
 
 // =====================================================
@@ -104,22 +133,24 @@ function RoleBadge({ role, isOwner }: { role: UserRole; isOwner?: boolean }) {
 // PROFILE AVATAR COMPONENT
 // =====================================================
 
+const AVATAR_SIZE_CLASSES = {
+  sm: "w-10 h-10 text-sm",
+  md: "w-14 h-14 text-base",
+  lg: "w-20 h-20 text-xl",
+} as const;
+
 function ProfileAvatar({
   name,
   size = "md",
 }: {
   name: string;
-  size?: "sm" | "md" | "lg";
+  size?: keyof typeof AVATAR_SIZE_CLASSES;
 }) {
-  const sizeClasses = {
-    sm: "w-10 h-10 text-sm",
-    md: "w-14 h-14 text-base",
-    lg: "w-20 h-20 text-xl",
-  };
-
   return (
     <div
-      className={`${sizeClasses[size]} shrink-0 bg-linear-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold shadow-lg shadow-blue-500/20`}
+      className={`${AVATAR_SIZE_CLASSES[size]} shrink-0 bg-linear-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold shadow-lg shadow-blue-500/20`}
+      role="img"
+      aria-label={`Avatar for ${name}`}
     >
       {getInitials(name || "U")}
     </div>
@@ -161,18 +192,13 @@ function PasswordChangeModal({ isOpen, onClose }: PasswordModalProps) {
     setError(null);
     setSuccess(null);
 
-    if (!formData.newPassword || !formData.confirmPassword) {
-      setError("Please fill in all password fields");
-      return;
-    }
-
-    if (formData.newPassword.length < 8) {
-      setError("Password must be at least 8 characters long");
-      return;
-    }
-
-    if (formData.newPassword !== formData.confirmPassword) {
-      setError("New passwords do not match");
+    // Validate passwords using utility function
+    const validation = validatePassword(
+      formData.newPassword,
+      formData.confirmPassword
+    );
+    if (!validation.isValid) {
+      setError(validation.error);
       return;
     }
 
@@ -188,7 +214,8 @@ function PasswordChangeModal({ isOpen, onClose }: PasswordModalProps) {
       }
 
       setSuccess("Password changed successfully!");
-      setTimeout(handleClose, 2000);
+      // Auto-dismiss after alert shows
+      setTimeout(handleClose, ALERT_AUTO_DISMISS_MS);
     } catch (err) {
       setError("An unexpected error occurred");
       console.error(err);
@@ -208,6 +235,7 @@ function PasswordChangeModal({ isOpen, onClose }: PasswordModalProps) {
         <>
           <button
             onClick={handleClose}
+            aria-label="Cancel password change"
             className="flex-1 border border-slate-300 text-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-50 text-xs font-medium"
           >
             Cancel
@@ -215,6 +243,9 @@ function PasswordChangeModal({ isOpen, onClose }: PasswordModalProps) {
           <button
             onClick={handleSubmit}
             disabled={isChanging}
+            aria-label={
+              isChanging ? "Changing password" : "Confirm password change"
+            }
             className="flex-1 bg-linear-to-r from-blue-600 to-blue-500 text-white px-3 py-1.5 rounded-lg hover:from-blue-700 hover:to-blue-600 text-xs font-medium disabled:opacity-50"
           >
             {isChanging ? "Changing..." : "Change Password"}
@@ -229,7 +260,7 @@ function PasswordChangeModal({ isOpen, onClose }: PasswordModalProps) {
           label="New Password"
           value={formData.newPassword}
           onChange={(v) => setFormData((prev) => ({ ...prev, newPassword: v }))}
-          placeholder="Enter new password (min 8 characters)"
+          placeholder={`Enter new password (min ${PASSWORD_MIN_LENGTH} characters)`}
           type="password"
           required
         />
@@ -416,6 +447,7 @@ function SecuritySection({ onChangePassword }: SecuritySectionProps) {
         </div>
         <button
           onClick={onChangePassword}
+          aria-label="Open password change dialog"
           className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-100 rounded-lg hover:bg-blue-100 transition-colors"
         >
           Change Password
@@ -447,7 +479,8 @@ export default function ProfileSettingsPage() {
     phone: "",
   });
 
-  const supabase = createClient();
+  // Create supabase client once and reuse it
+  const supabase = useMemo(() => createClient(), []);
 
   const hasChanges = useMemo(() => {
     return JSON.stringify(formData) !== JSON.stringify(originalFormData);
@@ -478,12 +511,19 @@ export default function ProfileSettingsPage() {
         return;
       }
 
+      interface UserRoleResponse {
+        roles: UserRole | null;
+      }
+
       const { data: userRoles } = await supabase
         .from("user_roles")
         .select("roles(id, name, slug, hierarchy_level)")
         .eq("user_id", authUser.id);
 
-      const roles = userRoles?.map((ur: any) => ur.roles).filter(Boolean) || [];
+      const roles =
+        (userRoles as UserRoleResponse[] | null)
+          ?.map((ur) => ur.roles)
+          .filter((role): role is UserRole => role !== null) || [];
 
       setProfile({ ...userData, roles });
       const formValues = {
@@ -555,7 +595,7 @@ export default function ProfileSettingsPage() {
       setOriginalFormData({ ...formData });
       setIsEditing(false);
       setSuccess("Profile updated successfully!");
-      setTimeout(() => setSuccess(null), 3000);
+      setTimeout(() => setSuccess(null), ALERT_AUTO_DISMISS_MS);
     } catch (err) {
       setError("An unexpected error occurred");
       console.error(err);
@@ -576,18 +616,25 @@ export default function ProfileSettingsPage() {
       <button
         onClick={handleCancel}
         disabled={isSaving}
+        aria-label="Cancel profile editing"
         className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 text-slate-700 text-xs font-medium rounded-lg hover:bg-slate-50 transition-all disabled:opacity-50"
       >
-        <XMarkIcon className="w-3.5 h-3.5" />
+        <XMarkIcon className="w-3.5 h-3.5" aria-hidden="true" />
         Cancel
       </button>
       <button
         onClick={handleSave}
         disabled={isSaving || !hasChanges}
+        aria-label={
+          isSaving ? "Saving profile changes" : "Save profile changes"
+        }
         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-linear-to-r from-blue-600 to-blue-500 text-white text-xs font-medium rounded-lg hover:from-blue-700 hover:to-blue-600 transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {hasChanges && (
-          <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+          <span
+            className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"
+            aria-hidden="true"
+          />
         )}
         Save Changes
       </button>
@@ -595,22 +642,24 @@ export default function ProfileSettingsPage() {
   ) : (
     <button
       onClick={() => setIsEditing(true)}
+      aria-label="Edit your profile"
       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-linear-to-r from-blue-600 to-blue-500 text-white text-xs font-medium rounded-lg hover:from-blue-700 hover:to-blue-600 transition-all shadow-sm hover:shadow-md"
     >
-      <PencilIcon className="w-3.5 h-3.5" />
+      <PencilIcon className="w-3.5 h-3.5" aria-hidden="true" />
       Edit Profile
     </button>
   );
 
   return (
-    <SettingsPageLayout
+    <PageLayout
       isLoading={isLoading}
       loadingText="Loading profile..."
       isSaving={isSaving}
     >
-      <SettingsPageHeader
+      <PageHeader
         title="My Profile"
         subtitle="Manage your personal information"
+        basePath={{ label: "Settings", href: "/dashboard/settings" }}
         breadcrumbs={[{ label: "My Profile" }]}
         icon={<UserIcon className="w-4 h-4 text-white" />}
         status={profile?.status}
@@ -631,21 +680,25 @@ export default function ProfileSettingsPage() {
         </div>
       )}
 
-      <SettingsPageContent>
-        <ProfileCard profile={profile} />
-        <PersonalInfoSection
-          profile={profile}
-          isEditing={isEditing}
-          formData={formData}
-          onFormChange={setFormData}
-        />
-        <SecuritySection onChangePassword={() => setShowPasswordModal(true)} />
-      </SettingsPageContent>
+      <PageContent>
+        <div className="space-y-4">
+          <ProfileCard profile={profile} />
+          <PersonalInfoSection
+            profile={profile}
+            isEditing={isEditing}
+            formData={formData}
+            onFormChange={setFormData}
+          />
+          <SecuritySection
+            onChangePassword={() => setShowPasswordModal(true)}
+          />
+        </div>
+      </PageContent>
 
       <PasswordChangeModal
         isOpen={showPasswordModal}
         onClose={() => setShowPasswordModal(false)}
       />
-    </SettingsPageLayout>
+    </PageLayout>
   );
 }

@@ -10,9 +10,11 @@ import {
   ChevronRightIcon,
 } from "@heroicons/react/24/outline";
 import { ProjectPhase, ProjectSubPhase } from "@/types/projects";
+import { CreateTaskModal } from "@/components/tasks";
 
 interface ProjectTasksTabProps {
   projectId: string;
+  projectName: string;
   phases: ProjectPhase[];
   onCountChange?: (count: number) => void;
 }
@@ -67,6 +69,7 @@ const StatusLabels = {
 
 export default function ProjectTasksTab({
   projectId,
+  projectName,
   phases,
   onCountChange,
 }: ProjectTasksTabProps) {
@@ -77,6 +80,7 @@ export default function ProjectTasksTab({
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [phaseFilter, setPhaseFilter] = useState<string>("all");
   const [groupBy, setGroupBy] = useState<"none" | "phase" | "status">("phase");
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   useEffect(() => {
     fetchTasks();
@@ -163,136 +167,159 @@ export default function ProjectTasksTab({
   }
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-medium text-slate-900">Project Tasks</h3>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Tasks linked to this project from the Tasks module
-          </p>
-        </div>
-        <button
-          onClick={() => onCreateTask()}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
-        >
-          <PlusIcon className="w-4 h-4" />
-          Create Task
-        </button>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-4 gap-3">
-        <div className="bg-slate-50 rounded-lg p-3">
-          <p className="text-xs text-slate-500">Total</p>
-          <p className="text-lg font-bold text-slate-900">{stats.total}</p>
-        </div>
-        <div className="bg-green-50 rounded-lg p-3">
-          <p className="text-xs text-slate-500">Completed</p>
-          <p className="text-lg font-bold text-green-600">{stats.completed}</p>
-        </div>
-        <div className="bg-blue-50 rounded-lg p-3">
-          <p className="text-xs text-slate-500">In Progress</p>
-          <p className="text-lg font-bold text-blue-600">{stats.inProgress}</p>
-        </div>
-        <div className="bg-slate-50 rounded-lg p-3">
-          <p className="text-xs text-slate-500">To Do</p>
-          <p className="text-lg font-bold text-slate-900">{stats.todo}</p>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        {/* Search */}
-        <div className="relative flex-1 min-w-[200px]">
-          <MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search tasks..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
+    <>
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-medium text-slate-900">
+              Project Tasks
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Manage tasks for this project
+            </p>
+          </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+          >
+            <PlusIcon className="w-4 h-4" />
+            Create Task
+          </button>
         </div>
 
-        {/* Status Filter */}
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-1.5 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="all">All Status</option>
-          <option value="todo">To Do</option>
-          <option value="in_progress">In Progress</option>
-          <option value="on_hold">On Hold</option>
-          <option value="completed">Completed</option>
-        </select>
-
-        {/* Phase Filter */}
-        <select
-          value={phaseFilter}
-          onChange={(e) => setPhaseFilter(e.target.value)}
-          className="px-3 py-1.5 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="all">All Phases</option>
-          <option value="unassigned">Unassigned</option>
-          {phases
-            .filter((p) => p.is_enabled)
-            .map((phase) => (
-              <option key={phase.id} value={phase.id}>
-                {phase.name}
-              </option>
-            ))}
-        </select>
-
-        {/* Group By */}
-        <select
-          value={groupBy}
-          onChange={(e) =>
-            setGroupBy(e.target.value as "none" | "phase" | "status")
-          }
-          className="px-3 py-1.5 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="none">No Grouping</option>
-          <option value="phase">Group by Phase</option>
-          <option value="status">Group by Status</option>
-        </select>
-      </div>
-
-      {/* Task List */}
-      {filteredTasks.length === 0 ? (
-        <div className="text-center py-12">
-          <ClockIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-600 font-medium">No tasks found</p>
-          <p className="text-slate-500 text-sm mt-1">
-            {tasks.length === 0
-              ? "Create your first task for this project"
-              : "Try adjusting your filters"}
-          </p>
+        {/* Stats */}
+        <div className="grid grid-cols-4 gap-3">
+          <div className="bg-slate-50 rounded-lg p-3">
+            <p className="text-xs text-slate-500">Total</p>
+            <p className="text-lg font-bold text-slate-900">{stats.total}</p>
+          </div>
+          <div className="bg-green-50 rounded-lg p-3">
+            <p className="text-xs text-slate-500">Completed</p>
+            <p className="text-lg font-bold text-green-600">
+              {stats.completed}
+            </p>
+          </div>
+          <div className="bg-blue-50 rounded-lg p-3">
+            <p className="text-xs text-slate-500">In Progress</p>
+            <p className="text-lg font-bold text-blue-600">
+              {stats.inProgress}
+            </p>
+          </div>
+          <div className="bg-slate-50 rounded-lg p-3">
+            <p className="text-xs text-slate-500">To Do</p>
+            <p className="text-lg font-bold text-slate-900">{stats.todo}</p>
+          </div>
         </div>
-      ) : (
-        <div className="space-y-4">
-          {Object.entries(groupedTasks).map(([groupName, groupTasks]) => (
-            <div key={groupName}>
-              {groupBy !== "none" && (
-                <h4 className="text-xs font-medium text-slate-700 uppercase tracking-wide mb-2">
-                  {groupName} ({groupTasks.length})
-                </h4>
-              )}
-              <div className="space-y-2">
-                {groupTasks.map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    showPhase={groupBy !== "phase"}
-                  />
-                ))}
+
+        {/* Filters */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[200px]">
+            <MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search tasks..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* Status Filter */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-1.5 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All Status</option>
+            <option value="todo">To Do</option>
+            <option value="in_progress">In Progress</option>
+            <option value="on_hold">On Hold</option>
+            <option value="completed">Completed</option>
+          </select>
+
+          {/* Phase Filter */}
+          <select
+            value={phaseFilter}
+            onChange={(e) => setPhaseFilter(e.target.value)}
+            className="px-3 py-1.5 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All Phases</option>
+            <option value="unassigned">Unassigned</option>
+            {phases
+              .filter((p) => p.is_enabled)
+              .map((phase) => (
+                <option key={phase.id} value={phase.id}>
+                  {phase.name}
+                </option>
+              ))}
+          </select>
+
+          {/* Group By */}
+          <select
+            value={groupBy}
+            onChange={(e) =>
+              setGroupBy(e.target.value as "none" | "phase" | "status")
+            }
+            className="px-3 py-1.5 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="none">No Grouping</option>
+            <option value="phase">Group by Phase</option>
+            <option value="status">Group by Status</option>
+          </select>
+        </div>
+
+        {/* Task List */}
+        {filteredTasks.length === 0 ? (
+          <div className="text-center py-12">
+            <ClockIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-600 font-medium">No tasks found</p>
+            <p className="text-slate-500 text-sm mt-1">
+              {tasks.length === 0
+                ? "Create your first task for this project"
+                : "Try adjusting your filters"}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {Object.entries(groupedTasks).map(([groupName, groupTasks]) => (
+              <div key={groupName}>
+                {groupBy !== "none" && (
+                  <h4 className="text-xs font-medium text-slate-700 uppercase tracking-wide mb-2">
+                    {groupName} ({groupTasks.length})
+                  </h4>
+                )}
+                <div className="space-y-2">
+                  {groupTasks.map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      showPhase={groupBy !== "phase"}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Create Task Modal */}
+      <CreateTaskModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSuccess={() => {
+          fetchTasks();
+          setShowCreateModal(false);
+        }}
+        defaultLinkedEntity={{
+          type: "project",
+          id: projectId,
+          name: projectName,
+        }}
+      />
+    </>
   );
 }
 
@@ -306,64 +333,65 @@ function TaskCard({ task, showPhase = true }: TaskCardProps) {
   return (
     <a
       href={`/dashboard/tasks/${task.id}`}
-      className="block p-3 bg-white border border-slate-200 rounded-lg hover:border-slate-300 hover:shadow-sm transition-all"
+      className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-mono text-slate-500">
-              {task.task_number}
-            </span>
-            <span
-              className={`px-1.5 py-0.5 text-xs font-medium rounded ${
-                PriorityColors[task.priority].bg
-              } ${PriorityColors[task.priority].text}`}
-            >
-              {task.priority}
-            </span>
-          </div>
+      {/* Status Indicator Dot */}
+      <div
+        className={`w-2 h-2 rounded-full shrink-0 ${
+          task.status === "completed"
+            ? "bg-green-500"
+            : task.status === "in_progress"
+            ? "bg-blue-500"
+            : "bg-slate-300"
+        }`}
+      />
+
+      {/* Task Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-mono text-slate-500">
+            {task.task_number}
+          </span>
           <h4 className="text-sm font-medium text-slate-900 truncate">
             {task.title}
           </h4>
-          {showPhase && task.phase_name && (
-            <p className="text-xs text-slate-500 mt-1">
-              {task.phase_name}
-              {task.sub_phase_name && ` → ${task.sub_phase_name}`}
-            </p>
-          )}
         </div>
-
-        <div className="flex flex-col items-end gap-1">
+        <div className="flex items-center gap-2 mt-0.5">
           <span
-            className={`px-2 py-0.5 text-xs font-medium rounded ${
-              StatusColors[task.status].bg
-            } ${StatusColors[task.status].text}`}
+            className={`px-1.5 py-0.5 text-xs font-medium rounded ${
+              StatusColors[task.status]?.bg || "bg-slate-100"
+            } ${StatusColors[task.status]?.text || "text-slate-700"}`}
           >
-            {StatusLabels[task.status]}
+            {StatusLabels[task.status] || task.status}
           </span>
-          {task.due_date && (
+          {task.priority && PriorityColors[task.priority] && (
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                PriorityColors[task.priority].dot
+              }`}
+            />
+          )}
+          {showPhase && task.phase_name && (
+            <span className="text-xs text-slate-500">{task.phase_name}</span>
+          )}
+          {task.assigned_to_name && (
             <span className="text-xs text-slate-500">
-              {new Date(task.due_date).toLocaleDateString()}
+              → {task.assigned_to_name}
             </span>
           )}
-          {task.subtask_count > 0 && (
-            <span className="text-xs text-slate-400">
-              {task.completed_subtask_count}/{task.subtask_count} subtasks
+          {task.due_date && (
+            <span className="text-xs text-slate-500">
+              Due:{" "}
+              {new Date(task.due_date).toLocaleDateString("en-IN", {
+                month: "short",
+                day: "numeric",
+              })}
             </span>
           )}
         </div>
       </div>
 
-      {task.assigned_to_name && (
-        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100">
-          <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-xs text-slate-600">
-            {task.assigned_to_name.charAt(0).toUpperCase()}
-          </div>
-          <span className="text-xs text-slate-600">
-            {task.assigned_to_name}
-          </span>
-        </div>
-      )}
+      <ChevronRightIcon className="w-4 h-4 text-slate-400 shrink-0" />
     </a>
   );
 }

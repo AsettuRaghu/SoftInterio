@@ -358,7 +358,7 @@ export async function POST(request: NextRequest) {
         start_date: body.start_date || null,
         due_date: body.due_date || null,
         estimated_hours: body.estimated_hours || null,
-        assigned_to: body.assigned_to || null,
+        assigned_to: body.assigned_to || user!.id,
         related_type: body.related_type || null,
         related_id: body.related_id || null,
         created_by: user!.id,
@@ -423,6 +423,25 @@ export async function POST(request: NextRequest) {
       description: "Task created",
       created_by: user!.id,
     });
+
+    // Create activity in related entity's timeline (lead or project)
+    if (body.related_type === "lead" && body.related_id) {
+      await supabase.from("lead_activities").insert({
+        lead_id: body.related_id,
+        activity_type: "task_created",
+        title: "Task created",
+        description: `Task "${body.title.trim()}" was created`,
+        created_by: user!.id,
+      });
+    } else if (body.related_type === "project" && body.related_id) {
+      await supabase.from("project_activities").insert({
+        project_id: body.related_id,
+        activity_type: "task_created",
+        title: "Task created",
+        description: `Task "${body.title.trim()}" was created`,
+        created_by: user!.id,
+      });
+    }
 
     // Fetch full task with details
     const { data: fullTask } = await supabase

@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { 
-  CalendarIcon, 
-  MapPinIcon, 
+import {
+  CalendarIcon,
+  MapPinIcon,
   ChatBubbleLeftRightIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
 } from "@heroicons/react/24/outline";
 
 // Define simplified types locally to avoid dependency issues
@@ -29,27 +29,52 @@ interface ProjectTimelineTabProps {
   leadId?: string;
 }
 
-export default function ProjectTimelineTab({ projectId, leadId }: ProjectTimelineTabProps) {
+export default function ProjectTimelineTab({
+  projectId,
+  leadId,
+}: ProjectTimelineTabProps) {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (leadId) {
-      fetchActivities();
-    } else {
-      setLoading(false);
-    }
-  }, [leadId]);
+    fetchActivities();
+  }, [projectId, leadId]);
 
   const fetchActivities = async () => {
     try {
       setLoading(true);
-      // Fetch lead activities
-      const response = await fetch(`/api/sales/leads/${leadId}/activities`);
-      if (!response.ok) throw new Error("Failed to fetch timeline");
-      const data = await response.json();
-      setActivities(data.activities || []);
+
+      // Fetch both project activities and lead activities (if linked)
+      const requests = [fetch(`/api/projects/${projectId}/activities`)];
+
+      if (leadId) {
+        requests.push(fetch(`/api/sales/leads/${leadId}/activities`));
+      }
+
+      const responses = await Promise.all(requests);
+
+      let allActivities: Activity[] = [];
+
+      // Process project activities
+      if (responses[0].ok) {
+        const projectData = await responses[0].json();
+        allActivities = [...(projectData.activities || [])];
+      }
+
+      // Process lead activities if available
+      if (leadId && responses[1]?.ok) {
+        const leadData = await responses[1].json();
+        allActivities = [...allActivities, ...(leadData.activities || [])];
+      }
+
+      // Sort all activities by created_at descending
+      allActivities.sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      setActivities(allActivities);
     } catch (err) {
       console.error("Error fetching activities:", err);
       setError("Failed to load timeline");
@@ -61,24 +86,16 @@ export default function ProjectTimelineTab({ projectId, leadId }: ProjectTimelin
   const formatDateTime = (dateStr: string) => {
     try {
       return new Date(dateStr).toLocaleString("en-IN", {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
       });
     } catch (e) {
       return dateStr;
     }
   };
-
-  if (!leadId) {
-    return (
-      <div className="text-center py-12 text-slate-500">
-        No lead history linked to this project.
-      </div>
-    );
-  }
 
   if (loading) {
     return (
@@ -99,85 +116,75 @@ export default function ProjectTimelineTab({ projectId, leadId }: ProjectTimelin
   if (activities.length === 0) {
     return (
       <div className="text-center py-12 text-slate-500">
-        No activities found in lead history.
+        No activities yet. Activities will appear here when notes are added,
+        status changes, etc.
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <h3 className="text-lg font-medium text-slate-900 mb-4">Lead History & Timeline</h3>
-      
-      <div className="relative border-l-2 border-slate-200 ml-4 space-y-8 pl-8 pb-4">
-        {activities.map((activity) => (
-          <div key={activity.id} className="relative">
-            {/* Timeline simplified marker */}
-            <div className={`absolute -left-[41px] top-0 w-5 h-5 rounded-full border-2 border-white 
-              ${activity.activity_type.includes('meeting') ? 'bg-blue-500' : 
-                activity.activity_type === 'stage_changed' ? 'bg-green-500' : 'bg-slate-400'}`} 
-            />
-            
-            <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm hover:shadow-md transition-shadow">
-               <div className="flex justify-between items-start mb-2">
-                 <div>
-                   <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium mb-1
-                     ${activity.activity_type.includes('meeting') ? 'bg-blue-100 text-blue-700' : 
-                       activity.activity_type === 'stage_changed' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
-                     {activity.activity_type.replace('_', ' ')}
-                   </span>
-                   <h4 className="font-semibold text-slate-900">{activity.title}</h4>
-                 </div>
-                 <span className="text-xs text-slate-500 whitespace-nowrap">
-                   {formatDateTime(activity.created_at)}
-                 </span>
-               </div>
-               
-               {activity.description && (
-                 <p className="text-sm text-slate-600 mb-3 whitespace-pre-line">{activity.description}</p>
-               )}
-
-               {/* Meeting Details */}
-               {(activity.activity_type.includes('meeting') || activity.meeting_scheduled_at) && (
-                 <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                   {activity.meeting_scheduled_at && (
-                     <div className="flex items-center gap-2 text-slate-600">
-                       <CalendarIcon className="w-4 h-4 text-slate-400" />
-                       <span>Scheduled: {formatDateTime(activity.meeting_scheduled_at)}</span>
-                     </div>
-                   )}
-                   {activity.meeting_location && (
-                     <div className="flex items-center gap-2 text-slate-600">
-                       <MapPinIcon className="w-4 h-4 text-slate-400" />
-                       <span>{activity.meeting_location}</span>
-                     </div>
-                   )}
-                   {activity.meeting_completed && (
-                      <div className="flex items-center gap-2 text-green-600 md:col-span-2">
-                        <CheckCircleIcon className="w-4 h-4" />
-                        <span className="font-medium">Meeting Completed</span>
-                      </div>
-                   )}
-                   {activity.meeting_notes && (
-                     <div className="md:col-span-2 bg-slate-50 p-3 rounded text-slate-700">
-                       <div className="flex items-center gap-2 font-medium mb-1 text-xs text-slate-500">
-                         <ChatBubbleLeftRightIcon className="w-3 h-3" />
-                         MEETING NOTES
-                       </div>
-                       {activity.meeting_notes}
-                     </div>
-                   )}
-                 </div>
-               )}
-               
-               {activity.created_user && (
-                 <div className="mt-2 text-xs text-slate-400 text-right">
-                   by {activity.created_user.name}
-                 </div>
-               )}
-            </div>
+    <div className="space-y-3">
+      {activities.map((activity) => (
+        <div
+          key={activity.id}
+          className="flex gap-4 p-4 bg-slate-50 rounded-lg"
+        >
+          <div
+            className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+              activity.activity_type.includes("meeting")
+                ? "bg-blue-100 text-blue-600"
+                : activity.activity_type === "note_added"
+                ? "bg-amber-100 text-amber-600"
+                : activity.activity_type.includes("task")
+                ? "bg-green-100 text-green-600"
+                : "bg-slate-100 text-slate-600"
+            }`}
+          >
+            {activity.activity_type.includes("meeting") ? (
+              <CalendarIcon className="w-4 h-4" />
+            ) : activity.activity_type === "note_added" ? (
+              <ChatBubbleLeftRightIcon className="w-4 h-4" />
+            ) : activity.activity_type.includes("task") ? (
+              <CheckCircleIcon className="w-4 h-4" />
+            ) : (
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                />
+              </svg>
+            )}
           </div>
-        ))}
-      </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-slate-900">
+              {activity.title}
+            </p>
+            {activity.description && (
+              <p className="text-xs text-slate-600 mt-1 line-clamp-2">
+                {activity.description}
+              </p>
+            )}
+            {activity.meeting_scheduled_at && (
+              <p className="text-xs text-slate-500 mt-1">
+                <CalendarIcon className="w-3 h-3 inline mr-1" />
+                Scheduled: {formatDateTime(activity.meeting_scheduled_at)}
+                {activity.meeting_location && ` • ${activity.meeting_location}`}
+              </p>
+            )}
+            <p className="text-xs text-slate-400 mt-1.5">
+              {formatDateTime(activity.created_at)}
+              {activity.created_user && <> by {activity.created_user.name}</>}
+            </p>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

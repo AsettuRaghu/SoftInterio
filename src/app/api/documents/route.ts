@@ -257,6 +257,30 @@ export async function POST(request: NextRequest) {
       .from(STORAGE_BUCKET)
       .createSignedUrl(storagePath, 3600);
 
+    // Create activity in related entity's timeline (lead or project)
+    try {
+      if (linkedType === "lead") {
+        await supabaseAdmin.from("lead_activities").insert({
+          lead_id: linkedId,
+          activity_type: "document_uploaded",
+          title: "Document uploaded",
+          description: `Document "${title || file.name}" was uploaded`,
+          created_by: user.id,
+        });
+      } else if (linkedType === "project") {
+        await supabaseAdmin.from("project_activities").insert({
+          project_id: linkedId,
+          activity_type: "document_uploaded",
+          title: "Document uploaded",
+          description: `Document "${title || file.name}" was uploaded`,
+          created_by: user.id,
+        });
+      }
+    } catch (activityError) {
+      // Don't fail the upload if activity creation fails, just log it
+      console.error("Failed to create document upload activity:", activityError);
+    }
+
     return NextResponse.json({
       document: {
         ...document,

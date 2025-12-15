@@ -237,11 +237,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const body: UpdateTaskInput = await request.json();
 
-    // Check task exists
+    // Check task exists and get related entity info
     const { data: existingTask, error: fetchError } = await supabase
       .from("tasks")
       .select(
-        "id, status, is_from_template, template_id, assigned_to, created_by"
+        "id, title, status, is_from_template, template_id, assigned_to, created_by, related_type, related_id"
       )
       .eq("id", id)
       .single();
@@ -289,6 +289,28 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         { error: "Failed to update task" },
         { status: 500 }
       );
+    }
+
+    // Create activity in related entity's timeline if status changed or significant update
+    if (body.status && body.status !== existingTask.status) {
+      const statusChanged = `Task status changed to ${body.status}`;
+      if (existingTask.related_type === "lead" && existingTask.related_id) {
+        await supabase.from("lead_activities").insert({
+          lead_id: existingTask.related_id,
+          activity_type: "task_completed",
+          title: body.status === "completed" ? "Task completed" : "Task updated",
+          description: `Task "${existingTask.title}": ${statusChanged}`,
+          created_by: user.id,
+        });
+      } else if (existingTask.related_type === "project" && existingTask.related_id) {
+        await supabase.from("project_activities").insert({
+          project_id: existingTask.related_id,
+          activity_type: "task_completed",
+          title: body.status === "completed" ? "Task completed" : "Task updated",
+          description: `Task "${existingTask.title}": ${statusChanged}`,
+          created_by: user.id,
+        });
+      }
     }
 
     // Fetch updated task with details
@@ -339,15 +361,34 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const supabase = await createClient();
 
-    // Check task exists
+    // Check task exists and get related entity info
     const { data: existingTask, error: fetchError } = await supabase
       .from("tasks")
-      .select("id, is_from_template, created_by")
+      .select("id, title, is_from_template, created_by, related_type, related_id")
       .eq("id", id)
       .single();
 
     if (fetchError || !existingTask) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    // Create activity in related entity's timeline before deletion
+    if (existingTask.related_type === "lead" && existingTask.related_id) {
+      await supabase.from("lead_activities").insert({
+        lead_id: existingTask.related_id,
+        activity_type: "other",
+        title: "Task deleted",
+        description: `Task "${existingTask.title}" was deleted`,
+        created_by: user.id,
+      });
+    } else if (existingTask.related_type === "project" && existingTask.related_id) {
+      await supabase.from("project_activities").insert({
+        project_id: existingTask.related_id,
+        activity_type: "other",
+        title: "Task deleted",
+        description: `Task "${existingTask.title}" was deleted`,
+        created_by: user.id,
+      });
     }
 
     // Delete task (cascade will handle subtasks, comments, attachments, etc.)

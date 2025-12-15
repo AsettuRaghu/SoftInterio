@@ -1,12 +1,12 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-// GET - List all notes for a project
+// GET /api/projects/[id]/notes - Get project notes
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     // Protect API route
@@ -15,26 +15,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
-    const { id: projectId } = await params;
+    const { id } = await params;
     const supabase = await createClient();
 
-    // Fetch notes with related data
     const { data: notes, error } = await supabase
       .from("project_notes")
-      .select(
-        `
-        *,
-        created_by_user:profiles!project_notes_created_by_fkey(id, name, avatar_url),
-        phase:project_phases!project_notes_phase_id_fkey(id, name),
-        sub_phase:project_subphases!project_notes_sub_phase_id_fkey(id, name)
-      `
-      )
-      .eq("project_id", projectId)
+      .select("*")
+      .eq("project_id", id)
       .order("is_pinned", { ascending: false })
       .order("created_at", { ascending: false });
 
     if (error) {
-      // If table doesn't exist, return gracefully
+      // If table doesn't exist, return empty array gracefully
       if (error.code === "PGRST205" || error.message?.includes("Could not find the table")) {
         return NextResponse.json({ notes: [] });
       }
@@ -45,9 +37,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    return NextResponse.json({ notes });
+    return NextResponse.json({ notes: notes || [] });
   } catch (error) {
-    console.error("Error in GET /api/projects/[id]/notes:", error);
+    console.error("Get notes API error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -55,7 +47,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-// POST - Create a new note
+// POST /api/projects/[id]/notes - Add a note
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     // Protect API route
@@ -65,105 +57,77 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const { user } = guard;
-    const { id: projectId } = await params;
+    const { id } = await params;
     const supabase = await createClient();
 
-    const body = await request.json();
-    const { title, content, phase_id, sub_phase_id, category, is_pinned } =
-      body;
+    const { title, content, category, is_pinned } = await request.json();
 
-    console.log("POST /api/projects/[id]/notes - Request body:", {
-      userId: user.id,
-      projectId,
-      title,
-      content: content?.substring(0, 50),
-      category,
-    });
-
-    // Validate required fields
-    if (!content) {
+    if (!content?.trim()) {
       return NextResponse.json(
         { error: "Content is required" },
         { status: 400 }
       );
     }
 
-    // Get tenant_id from user profile
-    const { data: profile, error: profileError } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
+    // Verify project exists and get tenant_id
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("id, tenant_id")
+      .eq("id", id)
       .single();
 
-    if (profileError) {
-      console.error("Error fetching user profile:", {
-        userId: user.id,
-        error: profileError,
-      });
-      return NextResponse.json(
-        { error: "Failed to get user profile" },
-        { status: 400 }
-      );
+    if (projectError || !project) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    if (!profile?.tenant_id) {
-      console.error("Tenant not found for user:", {
-        userId: user.id,
-        profile,
-      });
-      return NextResponse.json({ error: "Tenant not found" }, { status: 400 });
-    }
-
-    console.log("Creating note with tenant:", profile.tenant_id);
-
-    // Create the note
-    const { data: note, error } = await supabase
+    // Create note
+    const { data: note, error: createError } = await supabase
       .from("project_notes")
       .insert({
-        tenant_id: profile.tenant_id,
-        project_id: projectId,
-        title: title || null,
-        content,
-        phase_id: phase_id || null,
-        sub_phase_id: sub_phase_id || null,
+        tenant_id: project.tenant_id,
+        project_id: id,
+        title: title?.trim() || null,
+        content: content.trim(),
         category: category || "general",
         is_pinned: is_pinned || false,
         created_by: user.id,
       })
-      .select(
-        `
-        *,
-        created_by_user:profiles!project_notes_created_by_fkey(id, name, avatar_url),
-        phase:project_phases!project_notes_phase_id_fkey(id, name)
-      `
-      )
+      .select("*")
       .single();
 
-    if (error) {
-      // If table doesn't exist, return gracefully
-      if (error.code === "PGRST205" || error.message?.includes("Could not find the table")) {
-        console.warn("project_notes table not found, returning empty response");
+    if (createError) {
+      // If table doesn't exist, return graceful error
+      if (createError.code === "PGRST205" || createError.message?.includes("Could not find the table")) {
         return NextResponse.json(
           { error: "Notes feature not available" },
           { status: 500 }
         );
       }
-      console.error("Error creating note:", {
-        error,
-        code: error.code,
-        message: error.message,
-        details: error.details,
-      });
+      console.error("Error creating note:", createError);
       return NextResponse.json(
         { error: "Failed to create note" },
         { status: 500 }
       );
     }
 
-    console.log("Note created successfully:", note.id);
+    // Create activity for the note
+    const { error: activityError } = await supabase.from("project_activities").insert({
+      project_id: id,
+      activity_type: "note_added",
+      title: title?.trim() || "Note added",
+      description:
+        content.trim().slice(0, 100) + (content.length > 100 ? "..." : ""),
+      created_by: user.id,
+    });
+
+    if (activityError) {
+      console.error("Error creating activity for note:", activityError);
+      // Don't fail the whole request, note was created successfully
+    }
+
     return NextResponse.json({ note }, { status: 201 });
   } catch (error) {
-    console.error("Error in POST /api/projects/[id]/notes:", error);
+    console.error("Create note API error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

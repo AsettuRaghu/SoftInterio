@@ -55,12 +55,9 @@ export async function GET(
     }
 
     // Fetch activities
-    const { data: activities, error: activitiesError } = await supabaseAdmin
+    const { data: activities, error: activitiesError } = await supabase
       .from("project_activities")
-      .select(`
-        *,
-        created_user:users!project_activities_created_by_fkey(name, email)
-      `)
+      .select("*")
       .eq("project_id", projectId)
       .order("created_at", { ascending: false });
 
@@ -137,7 +134,6 @@ export async function POST(
       title: body.title,
       description: body.description,
       created_by: user.id,
-      tenant_id: tenantId,
     };
 
     // Add meeting-specific fields if this is a meeting

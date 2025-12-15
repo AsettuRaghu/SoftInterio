@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import {
   StatusBadge,
   PriorityBadge,
@@ -50,6 +51,7 @@ export function CreateTaskModal({
   parentTaskTitle,
   defaultLinkedEntity,
 }: CreateTaskModalProps) {
+  const { user: currentUser } = useCurrentUser();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -81,7 +83,7 @@ export function CreateTaskModal({
       setTitle("");
       setStatus("todo");
       setPriority(null);
-      setAssignedTo(null);
+      setAssignedTo(currentUser?.id || null);
       setStartDate("");
       setDueDate("");
       // Use default linked entity if provided
@@ -92,7 +94,7 @@ export function CreateTaskModal({
       setShowSubtaskForm(false);
       setError(null);
     }
-  }, [isOpen, defaultLinkedEntity]);
+  }, [isOpen, defaultLinkedEntity, currentUser]);
 
   const fetchTeamMembers = async () => {
     try {
@@ -117,7 +119,7 @@ export function CreateTaskModal({
     setTitle("");
     setStatus("todo");
     setPriority(null);
-    setAssignedTo(null);
+    setAssignedTo(currentUser?.id || null);
     setStartDate("");
     setDueDate("");
     // Use default linked entity if provided
@@ -127,7 +129,7 @@ export function CreateTaskModal({
     setNewSubtaskTitle("");
     setShowSubtaskForm(false);
     setError(null);
-  }, [defaultLinkedEntity]);
+  }, [defaultLinkedEntity, currentUser]);
 
   const addSubtask = useCallback(() => {
     if (!newSubtaskTitle.trim()) return;

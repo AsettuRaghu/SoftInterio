@@ -597,6 +597,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
           {activeTab === "tasks" && (
             <ProjectTasksTab
               projectId={project.id}
+              projectName={project.name}
               phases={project.phases || []}
               onCountChange={(count) => setTasksCount(count)}
             />
