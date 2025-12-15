@@ -9,6 +9,7 @@ import {
   ChatBubbleLeftIcon,
   CalendarIcon,
   FunnelIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import {
   ProjectNote,
@@ -45,6 +46,8 @@ export default function ProjectNotesTab({
   const [error, setError] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [phaseFilter, setPhaseFilter] = useState<string>("all");
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingNote, setEditingNote] = useState<ProjectNote | null>(null);
 
   useEffect(() => {
     fetchNotes();
@@ -112,6 +115,16 @@ export default function ProjectNotesTab({
     }
   };
 
+  const handleEditNote = (note: ProjectNote) => {
+    setEditingNote(note);
+    setShowAddModal(true);
+  };
+
+  const handleCloseModal = () => {
+    setShowAddModal(false);
+    setEditingNote(null);
+  };
+
   // Filter notes
   const filteredNotes = notes.filter((note) => {
     const matchesCategory =
@@ -160,9 +173,9 @@ export default function ProjectNotesTab({
         </div>
         {!error && (
           <button
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-400 text-white rounded-md text-xs cursor-not-allowed opacity-60"
-            disabled
-            title="Add note feature coming soon"
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 text-white rounded-md text-xs hover:bg-blue-700 transition-colors"
+            title="Add a new note"
           >
             <PlusIcon className="w-3.5 h-3.5" />
             Add Note
@@ -229,7 +242,7 @@ export default function ProjectNotesTab({
                   <NoteCard
                     key={note.id}
                     note={note}
-                    onEdit={onEditNote}
+                    onEdit={handleEditNote}
                     onDelete={deleteNote}
                     onTogglePin={togglePin}
                   />
@@ -251,7 +264,7 @@ export default function ProjectNotesTab({
                   <NoteCard
                     key={note.id}
                     note={note}
-                    onEdit={onEditNote}
+                    onEdit={handleEditNote}
                     onDelete={deleteNote}
                     onTogglePin={togglePin}
                   />
@@ -260,6 +273,20 @@ export default function ProjectNotesTab({
             </div>
           )}
         </div>
+      )}
+
+      {/* Add/Edit Note Modal */}
+      {showAddModal && (
+        <AddNoteModal
+          projectId={projectId}
+          phases={phases}
+          note={editingNote}
+          onClose={handleCloseModal}
+          onSave={() => {
+            handleCloseModal();
+            fetchNotes();
+          }}
+        />
       )}
     </div>
   );
@@ -373,5 +400,204 @@ function PinIcon({ className }: { className?: string }) {
       <line x1="12" y1="17" x2="12" y2="22" />
       <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
     </svg>
+  );
+}
+
+// Add/Edit Note Modal
+interface AddNoteModalProps {
+  projectId: string;
+  phases: ProjectPhase[];
+  note?: ProjectNote | null;
+  onClose: () => void;
+  onSave: () => void;
+}
+
+function AddNoteModal({
+  projectId,
+  phases,
+  note,
+  onClose,
+  onSave,
+}: AddNoteModalProps) {
+  const [title, setTitle] = useState(note?.title || "");
+  const [content, setContent] = useState(note?.content || "");
+  const [category, setCategory] = useState<ProjectNoteCategory>(
+    note?.category || "general"
+  );
+  const [phaseId, setPhaseId] = useState(note?.phase_id || "");
+  const [isPinned, setIsPinned] = useState(note?.is_pinned || false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!content.trim()) {
+      setError("Content is required");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const method = note ? "PATCH" : "POST";
+      const url = note
+        ? `/api/projects/${projectId}/notes/${note.id}`
+        : `/api/projects/${projectId}/notes`;
+
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title || null,
+          content,
+          category,
+          phase_id: phaseId || null,
+          is_pinned: isPinned,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to save note");
+      }
+
+      onSave();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-900">
+            {note ? "Edit Note" : "Add Note"}
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600"
+          >
+            <XMarkIcon className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {/* Title */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Title (optional)
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Note title"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+          </div>
+
+          {/* Content */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Content <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Write your note here..."
+              rows={5}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
+            />
+          </div>
+
+          {/* Category */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Category
+            </label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value as ProjectNoteCategory)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            >
+              {Object.entries(ProjectNoteCategoryLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Phase */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Phase (optional)
+            </label>
+            <select
+              value={phaseId}
+              onChange={(e) => setPhaseId(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            >
+              <option value="">No Phase</option>
+              {phases
+                .filter((p) => p.is_enabled)
+                .map((phase) => (
+                  <option key={phase.id} value={phase.id}>
+                    {phase.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {/* Pin Checkbox */}
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="isPinned"
+              checked={isPinned}
+              onChange={(e) => setIsPinned(e.target.checked)}
+              className="w-4 h-4 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+            />
+            <label
+              htmlFor="isPinned"
+              className="ml-2 text-sm font-medium text-slate-700"
+            >
+              Pin this note
+            </label>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2 justify-end pt-4 border-t border-slate-200">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 rounded-lg transition-colors"
+            >
+              {saving ? "Saving..." : "Save Note"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
