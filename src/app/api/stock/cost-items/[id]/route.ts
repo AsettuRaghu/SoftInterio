@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 // GET /api/stock/cost-items/[id] - Get a single cost item
 export async function GET(
@@ -7,18 +8,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
     const supabase = await createClient();
     const { id } = await params;
-
-    // Get current user's tenant
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     // Get user's tenant_id from users table
     const { data: userData } = await supabase
@@ -28,10 +26,7 @@ export async function GET(
       .single();
 
     if (!userData?.tenant_id) {
-      return NextResponse.json(
-        { error: "No tenant associated with user" },
-        { status: 400 }
-      );
+      return createErrorResponse("No tenant associated with user", 400);
     }
 
     // Fetch cost item with related data
@@ -111,19 +106,16 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
     const supabase = await createClient();
     const { id } = await params;
     const body = await request.json();
-
-    // Get current user's tenant
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     // Get user's tenant_id from users table
     const { data: userData } = await supabase
@@ -133,10 +125,7 @@ export async function PUT(
       .single();
 
     if (!userData?.tenant_id) {
-      return NextResponse.json(
-        { error: "No tenant associated with user" },
-        { status: 400 }
-      );
+      return createErrorResponse("No tenant associated with user", 400);
     }
 
     // Build update object with only provided fields

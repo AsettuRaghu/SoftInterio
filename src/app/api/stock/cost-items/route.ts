@@ -1,22 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 // GET /api/stock/cost-items - List all cost items with pricing
 export async function GET(request: NextRequest) {
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
     const supabase = await createClient();
     const { searchParams } = new URL(request.url);
-
-    // Get current user's tenant
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      console.error("Cost items API - Auth error:", authError);
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     // Get user's tenant_id from users table
     const { data: userData, error: userDataError } = await supabase
@@ -25,23 +22,9 @@ export async function GET(request: NextRequest) {
       .eq("id", user.id)
       .single();
 
-    if (userDataError) {
-      console.error("Cost items API - User data error:", userDataError);
-      return NextResponse.json(
-        { error: "Failed to get user data" },
-        { status: 500 }
-      );
+    if (userDataError || !userData?.tenant_id) {
+      return createErrorResponse("No tenant associated with user", 400);
     }
-
-    if (!userData?.tenant_id) {
-      console.error("Cost items API - No tenant_id for user:", user.id);
-      return NextResponse.json(
-        { error: "No tenant associated with user" },
-        { status: 400 }
-      );
-    }
-
-    console.log("Cost items API - Fetching for tenant:", userData.tenant_id);
 
     // Parse query params
     const page = parseInt(searchParams.get("page") || "1");
@@ -135,18 +118,15 @@ export async function GET(request: NextRequest) {
 // POST /api/stock/cost-items - Create a new cost item
 export async function POST(request: NextRequest) {
   try {
+    // Protect API route
+    const guard = await protectApiRoute(request);
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
     const supabase = await createClient();
     const body = await request.json();
-
-    // Get current user's tenant
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     // Get user's tenant_id from users table
     const { data: userData } = await supabase
@@ -156,10 +136,8 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!userData?.tenant_id) {
-      return NextResponse.json(
-        { error: "No tenant associated with user" },
-        { status: 400 }
-      );
+      return createErrorResponse("No tenant associated with user", 400);
+    }
     }
 
     // Validate required fields

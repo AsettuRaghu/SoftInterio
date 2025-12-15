@@ -32,6 +32,7 @@ const EXCLUDED_ROUTES = [
   "auth/debug-invite",
   "billing/plans",
   "debug",
+  "quotations/client", // Client-facing endpoints with token-based auth
 ];
 
 // Patterns to check
