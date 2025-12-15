@@ -90,7 +90,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Get tenant_id from user profile
     const { data: profile, error: profileError } = await supabase
-      .from("profiles")
+      .from("users")
       .select("tenant_id")
       .eq("id", user.id)
       .single();
