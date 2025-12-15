@@ -57,10 +57,7 @@ export function CreateLeadModal({
   if (!isOpen) return null;
 
   // Helper to update individual fields
-  const updateField = (
-    field: keyof typeof formData,
-    value: string
-  ) => {
+  const updateField = (field: keyof typeof formData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     // Clear category-dependent fields when category changes
     if (field === "property_category") {
@@ -330,7 +327,9 @@ export function CreateLeadModal({
                   />
                 </svg>
               </div>
-              <h3 className="font-semibold text-slate-900">Property Classification</h3>
+              <h3 className="font-semibold text-slate-900">
+                Property Classification
+              </h3>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

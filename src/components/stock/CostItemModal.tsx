@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { QUALITY_TIER_OPTIONS } from '@/utils/stock';
+import { useState } from "react";
+import { QUALITY_TIER_OPTIONS } from "@/utils/stock";
 
 interface CostItem {
   id: string;
@@ -47,15 +47,15 @@ export function CostItemModal({
 }: CostItemModalProps) {
   const isEditing = !!item;
   const [formData, setFormData] = useState({
-    name: item?.name || '',
-    description: item?.description || '',
-    category_id: item?.category_id || '',
-    unit_code: item?.unit_code || 'sqft',
+    name: item?.name || "",
+    description: item?.description || "",
+    category_id: item?.category_id || "",
+    unit_code: item?.unit_code || "sqft",
     vendor_cost: item?.vendor_cost || 0,
     company_cost: item?.company_cost || 0,
     default_rate: item?.default_rate || 0,
     retail_price: item?.retail_price || null,
-    quality_tier: item?.quality_tier || 'standard',
+    quality_tier: item?.quality_tier || "standard",
     is_stockable: item?.is_stockable || false,
     is_active: item?.is_active !== false,
     reorder_level: item?.reorder_level || 0,
@@ -84,24 +84,24 @@ export function CostItemModal({
     try {
       const url = isEditing
         ? `/api/stock/cost-items/${item?.id}`
-        : '/api/stock/cost-items';
-      const method = isEditing ? 'PUT' : 'POST';
+        : "/api/stock/cost-items";
+      const method = isEditing ? "PUT" : "POST";
 
       const response = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to save cost item');
+        throw new Error(data.error || "Failed to save cost item");
       }
 
       onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save cost item');
+      setError(err instanceof Error ? err.message : "Failed to save cost item");
     } finally {
       setIsSubmitting(false);
     }
@@ -119,7 +119,7 @@ export function CostItemModal({
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 rounded-t-xl">
           <h2 className="text-lg font-semibold text-slate-900">
-            {isEditing ? 'Edit Cost Item' : 'Create Cost Item'}
+            {isEditing ? "Edit Cost Item" : "Create Cost Item"}
           </h2>
         </div>
 
@@ -344,8 +344,8 @@ export function CostItemModal({
                     <span
                       className={`font-medium ${
                         calculatedMargin >= 20
-                          ? 'text-green-600'
-                          : 'text-amber-600'
+                          ? "text-green-600"
+                          : "text-amber-600"
                       }`}
                     >
                       {calculatedMargin}%
@@ -441,10 +441,10 @@ export function CostItemModal({
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting
-                ? 'Saving...'
+                ? "Saving..."
                 : isEditing
-                ? 'Save Changes'
-                : 'Create Cost Item'}
+                ? "Save Changes"
+                : "Create Cost Item"}
             </button>
           </div>
         </form>
