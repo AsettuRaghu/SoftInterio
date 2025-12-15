@@ -72,6 +72,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { title, content, phase_id, sub_phase_id, category, is_pinned } =
       body;
 
+    console.log("POST /api/projects/[id]/notes - Request body:", {
+      userId: user.id,
+      projectId,
+      title,
+      content: content?.substring(0, 50),
+      category,
+    });
+
     // Validate required fields
     if (!content) {
       return NextResponse.json(
@@ -81,15 +89,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Get tenant_id from user profile
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("tenant_id")
       .eq("id", user.id)
       .single();
 
+    if (profileError) {
+      console.error("Error fetching user profile:", {
+        userId: user.id,
+        error: profileError,
+      });
+      return NextResponse.json(
+        { error: "Failed to get user profile" },
+        { status: 400 }
+      );
+    }
+
     if (!profile?.tenant_id) {
+      console.error("Tenant not found for user:", {
+        userId: user.id,
+        profile,
+      });
       return NextResponse.json({ error: "Tenant not found" }, { status: 400 });
     }
+
+    console.log("Creating note with tenant:", profile.tenant_id);
 
     // Create the note
     const { data: note, error } = await supabase
@@ -117,18 +142,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (error) {
       // If table doesn't exist, return gracefully
       if (error.code === "PGRST205" || error.message?.includes("Could not find the table")) {
+        console.warn("project_notes table not found, returning empty response");
         return NextResponse.json(
           { error: "Notes feature not available" },
           { status: 500 }
         );
       }
-      console.error("Error creating note:", error);
+      console.error("Error creating note:", {
+        error,
+        code: error.code,
+        message: error.message,
+        details: error.details,
+      });
       return NextResponse.json(
         { error: "Failed to create note" },
         { status: 500 }
       );
     }
 
+    console.log("Note created successfully:", note.id);
     return NextResponse.json({ note }, { status: 201 });
   } catch (error) {
     console.error("Error in POST /api/projects/[id]/notes:", error);
