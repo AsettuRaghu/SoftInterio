@@ -16,18 +16,32 @@ export type ProjectCategory =
   | "hybrid"
   | "other";
 
-// Property Type - aligned with leads.property_type
+// Property Type - aligned with database property_type_v2 enum
 export type ProjectPropertyType =
-  | "apartment_gated"
-  | "apartment_non_gated"
-  | "villa_gated"
-  | "villa_non_gated"
+  | "apartment"
+  | "villa"
   | "independent_house"
-  | "commercial_office"
-  | "commercial_retail"
-  | "commercial_restaurant"
-  | "commercial_other"
-  | "unknown";
+  | "penthouse"
+  | "duplex"
+  | "row_house"
+  | "farmhouse"
+  | "office"
+  | "retail_shop"
+  | "showroom"
+  | "restaurant_cafe"
+  | "clinic_hospital"
+  | "hotel"
+  | "warehouse"
+  | "co_working"
+  | "other";
+
+export type ProjectPhaseName =
+  | "Project Kickoff"
+  | "Design"
+  | "Procurement"
+  | "Site Work"
+  | "Installation"
+  | "Handover";
 
 export type ProjectPhaseStatus =
   | "not_started"
@@ -53,6 +67,16 @@ export type PaymentMilestoneStatus =
   | "paid"
   | "waived";
 
+export type ProjectPaymentStatus =
+  | "not_started"
+  | "pending"
+  | "partial"
+  | "due"
+  | "overdue"
+  | "paid"
+  | "waived"
+  | "disputed";
+
 export type ProgressMode = "auto" | "manual";
 
 export type ProjectType =
@@ -66,15 +90,13 @@ export type ProjectType =
   | "other";
 
 export type ProjectStatus =
-  | "planning"
-  | "design"
-  | "procurement"
-  | "execution"
-  | "finishing"
-  | "handover"
-  | "completed"
+  | "new"
+  | "in_progress"
   | "on_hold"
-  | "cancelled";
+  | "cancelled"
+  | "completed";
+
+export type ProjectPriority = "Low" | "Medium" | "High" | "Urgent";
 
 // =====================================================
 // DISPLAY LABELS
@@ -91,18 +113,31 @@ export const ProjectCategoryLabels: Record<ProjectCategory, string> = {
   other: "Other",
 };
 
-// Property Type Labels - aligned with leads.property_type labels
+// Property Type Labels - aligned with database property_type_v2 enum
 export const ProjectPropertyTypeLabels: Record<ProjectPropertyType, string> = {
-  apartment_gated: "Apartment - Gated Community",
-  apartment_non_gated: "Apartment - Non Gated",
-  villa_gated: "Villa - Gated Community",
-  villa_non_gated: "Villa - Non Gated",
+  apartment: "Apartment",
+  villa: "Villa",
   independent_house: "Independent House",
-  commercial_office: "Commercial - Office",
-  commercial_retail: "Commercial - Retail",
-  commercial_restaurant: "Commercial - Restaurant/Cafe",
-  commercial_other: "Commercial - Other",
-  unknown: "Unknown",
+  penthouse: "Penthouse",
+  duplex: "Duplex",
+  row_house: "Row House",
+  farmhouse: "Farmhouse",
+  office: "Office",
+  retail_shop: "Retail Shop",
+  showroom: "Showroom",
+  restaurant_cafe: "Restaurant/Cafe",
+  clinic_hospital: "Clinic/Hospital",
+  hotel: "Hotel",
+  warehouse: "Warehouse",
+  co_working: "Co-working Space",
+  other: "Other",
+};
+
+export const ProjectPriorityLabels: Record<ProjectPriority, string> = {
+  Low: "Low",
+  Medium: "Medium",
+  High: "High",
+  Urgent: "Urgent",
 };
 
 export const ProjectPhaseStatusLabels: Record<ProjectPhaseStatus, string> = {
@@ -147,16 +182,32 @@ export const ProjectTypeLabels: Record<ProjectType, string> = {
   other: "Other",
 };
 
+export const ProjectPhaseLabels: Record<ProjectPhaseName, string> = {
+  "Project Kickoff": "Project Kickoff",
+  "Design": "Design",
+  "Procurement": "Procurement",
+  "Site Work": "Site Work",
+  "Installation": "Installation",
+  "Handover": "Handover",
+};
+
 export const ProjectStatusLabels: Record<ProjectStatus, string> = {
-  planning: "Planning",
-  design: "Design",
-  procurement: "Procurement",
-  execution: "Execution",
-  finishing: "Finishing",
-  handover: "Handover",
-  completed: "Completed",
+  new: "New",
+  in_progress: "In Progress",
   on_hold: "On Hold",
   cancelled: "Cancelled",
+  completed: "Completed",
+};
+
+export const ProjectPaymentStatusLabels: Record<ProjectPaymentStatus, string> = {
+  not_started: "Not Started",
+  pending: "Pending",
+  partial: "Partial",
+  due: "Due",
+  overdue: "Overdue",
+  paid: "Paid",
+  waived: "Waived",
+  disputed: "Disputed",
 };
 
 // Status colors for UI
@@ -282,14 +333,20 @@ export interface Project {
   property_type?: ProjectPropertyType; // NEW: Type of property (aligned with leads)
   project_category: ProjectCategory; // Service category (aligned with leads.service_type)
   status: ProjectStatus;
+  priority?: ProjectPriority;
+  current_phase?: ProjectPhaseName;
+  current_phase_id?: string;
 
   // Dates
-  start_date?: string;
+  expected_start_date?: string;
   expected_end_date?: string;
   actual_end_date?: string;
 
-  // Progress
+  // Progress & Cost
   overall_progress: number;
+  quoted_amount?: number;
+  actual_cost?: number;
+  won_amount?: number; // From linked lead
 
   // References
   project_manager_id?: string;
@@ -376,7 +433,6 @@ export interface ProjectLeadData {
   
   // Source info
   lead_source?: string;
-  lead_source_detail?: string;
 
   // Assignment info
   assigned_to?: string;
@@ -408,7 +464,6 @@ export interface ProjectLeadData {
   budget_range?: string;
 
   // Financials
-  estimated_value?: number;
   won_amount?: number;
 
   // Dates
@@ -618,7 +673,7 @@ export interface CreateProjectRequest {
   client_id?: string;
   project_type: ProjectType;
   project_category: ProjectCategory;
-  start_date?: string;
+  expected_start_date?: string;
   expected_end_date?: string;
   project_manager_id?: string;
   lead_id?: string;
@@ -710,14 +765,25 @@ export interface ProjectSummary {
   project_number: string;
   name: string;
   client_name?: string;
+  service_type?: string;
+  property_name?: string;
+  property_type?: string;
+  carpet_area?: number;
+  city?: string;
   project_type: ProjectType;
   project_category: ProjectCategory;
   status: ProjectStatus;
+  priority?: ProjectPriority;
+  current_phase?: ProjectPhaseName;
+  current_phase_id?: string;
+  payment_status?: ProjectPaymentStatus;
   overall_progress: number;
-  start_date?: string;
+  expected_start_date?: string;
   expected_end_date?: string;
-  quoted_amount: number;
+  actual_end_date?: string;
   created_at?: string;
+  updated_at?: string;
+  quoted_amount: number;
   project_manager?: {
     id: string;
     name: string;

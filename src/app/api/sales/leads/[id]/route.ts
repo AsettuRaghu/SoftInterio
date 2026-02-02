@@ -132,17 +132,141 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           created_user:users!tasks_created_by_fkey(id, name, avatar_url, email)
         `
         )
+        .eq("tenant_id", userData.tenant_id)
         .eq("related_type", "lead")
         .eq("related_id", id)
         .is("parent_task_id", null)
         .order("created_at", { ascending: false }),
-      // Fetch quotations using the view (pulls client data from lead)
+      // Fetch quotations with relationships
       supabaseAdmin
-        .from("quotations_with_lead")
-        .select("*")
+        .from("quotations")
+        .select(`
+          *,
+          lead:leads!quotations_lead_id_fkey(
+            id,
+            lead_number,
+            client:clients!leads_client_id_fkey(id, name, phone, email)
+          ),
+          client:clients!quotations_client_id_fkey(id, name, phone, email),
+          assigned_user:users!quotations_assigned_to_fkey(id, name, avatar_url),
+          created_user:users!quotations_created_by_fkey(id, name, avatar_url)
+        `)
         .eq("lead_id", id)
         .order("version", { ascending: false }),
     ]);
+
+    // Fetch subtasks for parent tasks
+    if (tasks && tasks.length > 0) {
+      const parentTaskIds = tasks.map((t) => t.id);
+      const { data: allSubtasks } = await supabaseAdmin
+        .from("tasks")
+        .select(
+          `
+          *,
+          assigned_user:users!tasks_assigned_to_fkey(id, name, avatar_url, email)
+        `
+        )
+        .in("parent_task_id", parentTaskIds)
+        .order("created_at", { ascending: true });
+
+      if (allSubtasks && allSubtasks.length > 0) {
+        // Group subtasks by parent
+        const subtaskMap = new Map<string, any[]>();
+        const countMap = new Map<
+          string,
+          { total: number; completed: number }
+        >();
+
+        allSubtasks.forEach((st) => {
+          if (!subtaskMap.has(st.parent_task_id)) {
+            subtaskMap.set(st.parent_task_id, []);
+          }
+          subtaskMap.get(st.parent_task_id)!.push(st);
+
+          // Count for parent
+          if (!countMap.has(st.parent_task_id)) {
+            countMap.set(st.parent_task_id, { total: 0, completed: 0 });
+          }
+          const counts = countMap.get(st.parent_task_id)!;
+          counts.total++;
+          if (st.status === "completed") {
+            counts.completed++;
+          }
+        });
+
+        // Attach subtasks and counts to parent tasks
+        tasks.forEach((task: any) => {
+          const counts = countMap.get(task.id);
+          if (counts) {
+            task.subtask_count = counts.total;
+            task.completed_subtask_count = counts.completed;
+          } else {
+            task.subtask_count = 0;
+            task.completed_subtask_count = 0;
+          }
+          task.subtasks = subtaskMap.get(task.id) || [];
+        });
+      } else {
+        // No subtasks, set counts to 0
+        tasks.forEach((task: any) => {
+          task.subtask_count = 0;
+          task.completed_subtask_count = 0;
+          task.subtasks = [];
+        });
+      }
+
+      // Add related_name for each task (all are linked to this lead)
+      const leadClientName = (lead.client as { name?: string } | null)?.name || "Unknown Client";
+      const relatedName = lead.lead_number 
+        ? `${lead.lead_number} • ${leadClientName}` 
+        : leadClientName;
+      
+      tasks.forEach((task: any) => {
+        task.related_name = relatedName;
+      });
+    }
+
+    // Debug: Log tasks being fetched
+    console.log(`[Lead API] Fetched ${tasks?.length || 0} tasks for lead ${id}`);
+
+    // Add spaces and components counts to quotations
+    if (quotations && quotations.length > 0) {
+      const quotationIds = quotations.map((q: any) => q.id);
+
+      // Fetch spaces counts
+      const { data: spaceCounts } = await supabaseAdmin
+        .from("quotation_spaces")
+        .select("quotation_id")
+        .in("quotation_id", quotationIds);
+
+      // Fetch components counts
+      const { data: componentCounts } = await supabaseAdmin
+        .from("quotation_components")
+        .select("quotation_id")
+        .in("quotation_id", quotationIds);
+
+      // Create count maps
+      const spacesCountMap: { [key: string]: number } = {};
+      const componentsCountMap: { [key: string]: number } = {};
+
+      if (spaceCounts) {
+        spaceCounts.forEach((item: any) => {
+          spacesCountMap[item.quotation_id] = (spacesCountMap[item.quotation_id] || 0) + 1;
+        });
+      }
+
+      if (componentCounts) {
+        componentCounts.forEach((item: any) => {
+          componentsCountMap[item.quotation_id] = (componentsCountMap[item.quotation_id] || 0) + 1;
+        });
+      }
+
+      // Add counts to each quotation
+      quotations.forEach((q: any) => {
+        q.spaces_count = spacesCountMap[q.id] || 0;
+        q.components_count = componentsCountMap[q.id] || 0;
+      });
+    }
 
     return NextResponse.json({
       lead,
@@ -181,7 +305,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // Check lead exists and get current state with linked records
     const { data: existingLead, error: fetchError } = await supabase
       .from("leads")
-      .select("id, stage, assigned_to, client_id, property_id")
+      .select("id, stage, assigned_to, client_id, property_id, tenant_id")
       .eq("id", id)
       .single();
 
@@ -260,39 +384,41 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           
           if (propertyError) {
             console.error("Error updating property:", propertyError);
-            // Don't fail - property update is non-critical
+            return NextResponse.json(
+              { error: `Failed to update property: ${propertyError.message}` },
+              { status: 500 }
+            );
           }
         } else {
           // Create new property if one doesn't exist
-          const { data: userData } = await supabase
-            .from("users")
-            .select("tenant_id")
-            .eq("id", user.id)
+          const { data: newProperty, error: createPropertyError } = await supabase
+            .from("properties")
+            .insert({
+              tenant_id: existingLead.tenant_id,
+              property_name: body.property_name || null,
+              unit_number: body.unit_number || null,
+              category: body.property_category || "residential",
+              property_type: body.property_type || "apartment",
+              property_subtype: body.property_subtype || null,
+              carpet_area: body.carpet_area || null,
+              address_line1: body.property_address || null,
+              city: body.property_city || "Unknown",
+              pincode: body.property_pincode || null,
+            })
+            .select("id")
             .single();
           
-          if (userData?.tenant_id) {
-            const { data: newProperty, error: createPropertyError } = await supabase
-              .from("properties")
-              .insert({
-                tenant_id: userData.tenant_id,
-                property_name: body.property_name || null,
-                unit_number: body.unit_number || null,
-                category: body.property_category || "residential",
-                property_type: body.property_type || "apartment",
-                property_subtype: body.property_subtype || null,
-                carpet_area: body.carpet_area || null,
-                address_line1: body.property_address || null,
-                city: body.property_city || "Unknown",
-                pincode: body.property_pincode || null,
-                created_by: user.id,
-              })
-              .select("id")
-              .single();
-            
-            if (!createPropertyError && newProperty) {
-              // Link the new property to the lead - use leadUpdateData directly
-              leadUpdateData.property_id = newProperty.id;
-            }
+          if (createPropertyError) {
+            console.error("Error creating property:", createPropertyError);
+            return NextResponse.json(
+              { error: `Failed to create property: ${createPropertyError.message}` },
+              { status: 500 }
+            );
+          }
+          
+          if (newProperty) {
+            // Link the new property to the lead - use leadUpdateData directly
+            leadUpdateData.property_id = newProperty.id;
           }
         }
       }
@@ -302,17 +428,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const leadAllowedFields = [
       "service_type",
       "lead_source",
-      "lead_source_detail",
       "target_start_date",
       "target_end_date",
       "budget_range",
-      "estimated_value",
-      "project_scope",
-      "special_requirements",
-      "lead_score",
-      "next_followup_date",
-      "next_followup_notes",
       "assigned_to",
+      "won_amount",
+      "contract_signed_date",
+      "expected_project_start",
+      "priority",
       "property_id", // In case we created a new property
     ];
 
@@ -346,7 +469,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         `
         *,
         client:clients!leads_client_id_fkey(id, name, phone, email, city),
-        property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, city),
+        property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, address_line1, city, pincode),
         assigned_user:users!leads_assigned_to_fkey(id, name, avatar_url),
         created_user:users!leads_created_by_fkey(id, name, avatar_url)
       `

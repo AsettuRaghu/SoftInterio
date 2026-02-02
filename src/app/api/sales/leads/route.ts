@@ -2,12 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { generateUniqueLeadNumber } from "@/utils/lead-number-generator";
 import type { CreateLeadInput, LeadStage } from "@/types/leads";
 
 // GET /api/sales/leads - List leads with filters
 export async function GET(request: NextRequest) {
-  console.log("[GET /api/sales/leads] Starting request");
-
   try {
     // Protect API route
     const guard = await protectApiRoute(request);
@@ -17,7 +16,6 @@ export async function GET(request: NextRequest) {
 
     const { user } = guard;
     const supabase = await createClient();
-    console.log("[GET /api/sales/leads] User authenticated:", user!.id);
 
     // Get user's tenant
     const { data: userData, error: userError } = await supabase
@@ -27,10 +25,6 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (userError) {
-      console.error(
-        "[GET /api/sales/leads] Error fetching user data:",
-        userError
-      );
       return NextResponse.json(
         { error: "Failed to fetch user data" },
         { status: 500 }
@@ -38,13 +32,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (!userData?.tenant_id) {
-      console.log("[GET /api/sales/leads] User has no tenant");
       return NextResponse.json(
         { error: "User not found or no tenant" },
         { status: 404 }
       );
     }
-    console.log("[GET /api/sales/leads] Tenant ID:", userData.tenant_id);
 
     // Parse query params
     const searchParams = request.nextUrl.searchParams;
@@ -69,7 +61,7 @@ export async function GET(request: NextRequest) {
         `
         *,
         client:clients!leads_client_id_fkey(id, name, phone, email, city),
-        property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, city),
+        property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, address_line1, city, pincode),
         assigned_user:users!leads_assigned_to_fkey(id, name, avatar_url),
         created_user:users!leads_created_by_fkey(id, name, avatar_url)
       `,
@@ -120,8 +112,6 @@ export async function GET(request: NextRequest) {
       "stage",
       "priority",
       "last_activity_at",
-      "lead_number",
-      "estimated_value",
       "property_name",
     ];
     const sortColumn = validSortColumns.includes(sortBy)
@@ -137,49 +127,13 @@ export async function GET(request: NextRequest) {
     const { data: leads, error: leadsError, count } = await query;
 
     if (leadsError) {
-      console.error(
-        "[GET /api/sales/leads] Error fetching leads:",
-        JSON.stringify(leadsError, null, 2)
-      );
-      console.error("[GET /api/sales/leads] Error code:", leadsError.code);
-      console.error(
-        "[GET /api/sales/leads] Error message:",
-        leadsError.message
-      );
-
-      // Check if the error is because the table doesn't exist or RLS issue
-      const isTableMissing =
-        leadsError.code === "42P01" ||
-        leadsError.code === "PGRST116" ||
-        leadsError.message?.includes("does not exist") ||
-        leadsError.message?.includes("relation") ||
-        leadsError.message?.includes("permission denied");
-
-      if (isTableMissing) {
-        console.log(
-          "[GET /api/sales/leads] Leads table issue - migration may not be run or RLS issue"
-        );
-        return NextResponse.json({
-          leads: [],
-          pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-          warning:
-            "Leads module not initialized. Please run the database migration.",
-        });
-      }
-
+      console.error("[GET /api/sales/leads] Error fetching leads:", leadsError);
       return NextResponse.json(
         { error: "Failed to fetch leads", details: leadsError.message },
         { status: 500 }
       );
     }
 
-    console.log(
-      "[GET /api/sales/leads] Successfully fetched",
-      leads?.length || 0,
-      "leads"
-    );
-
-    // Success - no warning
     return NextResponse.json({
       leads: leads || [],
       pagination: {
@@ -192,10 +146,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("[GET /api/sales/leads] Unexpected error:", error);
     return NextResponse.json(
-      {
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
+      { success: false, error: error instanceof Error ? error.message : "Failed to get leads" },
       { status: 500 }
     );
   }
@@ -316,7 +267,6 @@ export async function POST(request: NextRequest) {
           address_line1: body.property_address || null,
           city: body.property_city || "Unknown",
           pincode: body.property_pincode || null,
-          created_by: user.id,
         })
         .select("id")
         .single();
@@ -334,27 +284,28 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // STEP 3: Create Lead record with linked client and property
+    // STEP 3: Generate lead number based on tenant_lead_config
+    console.log("[POST /api/sales/leads] Generating lead number");
+    const leadNumber = await generateUniqueLeadNumber(userData.tenant_id);
+    console.log("[POST /api/sales/leads] Generated lead number:", leadNumber);
+
+    // STEP 4: Create Lead record with linked client and property
     console.log("[POST /api/sales/leads] Creating lead in database");
     const { data: lead, error: createError } = await supabase
       .from("leads")
       .insert({
         tenant_id: userData.tenant_id,
+        lead_number: leadNumber,
         client_id: client.id,
         property_id: propertyId,
         service_type: body.service_type || null,
         lead_source: body.lead_source || null,
-        lead_source_detail: body.lead_source_detail || null,
         target_start_date: body.target_start_date || null,
         target_end_date: body.target_end_date || null,
         budget_range: body.budget_range || null,
-        estimated_value: body.estimated_value || null,
-        project_scope: body.project_scope || null,
-        special_requirements: body.special_requirements || null,
-        lead_score: body.lead_score || "warm",
         stage: "new",
         created_by: user.id,
-        assigned_to: user.id, // Auto-assign to creator
+        assigned_to: body.assigned_to || user.id, // Use provided assignee or default to creator
         assigned_at: new Date().toISOString(),
         assigned_by: user.id,
       })
@@ -362,7 +313,7 @@ export async function POST(request: NextRequest) {
         `
         *,
         client:clients!leads_client_id_fkey(id, name, phone, email, city),
-        property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, city),
+        property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, address_line1, city, pincode),
         assigned_user:users!leads_assigned_to_fkey(id, name, avatar_url),
         created_user:users!leads_created_by_fkey(id, name, avatar_url)
       `

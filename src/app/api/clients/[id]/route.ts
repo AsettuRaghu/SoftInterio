@@ -60,7 +60,7 @@ export async function GET(
     // Get additional stats
     const { data: leadStats } = await supabase
       .from("leads")
-      .select("id, stage, estimated_value")
+      .select("id, stage, won_amount")
       .eq("client_id", id)
       .eq("tenant_id", userData.tenant_id);
 
@@ -70,7 +70,7 @@ export async function GET(
       total_business_value:
         leadStats
           ?.filter((l) => l.stage === "won")
-          .reduce((sum, l) => sum + (l.estimated_value || 0), 0) || 0,
+          .reduce((sum, l) => sum + (l.won_amount || 0), 0) || 0,
     };
 
     return NextResponse.json({ client: { ...client, ...stats } });

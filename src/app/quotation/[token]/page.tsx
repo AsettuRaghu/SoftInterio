@@ -83,13 +83,15 @@ export default async function ClientQuotationPage({ params }: PageProps) {
   // Flatten data for component compatibility
   const quotation = {
     ...rawQuotation,
-    client_name: client?.name || null,
-    client_email: client?.email || null,
-    client_phone: client?.phone || null,
-    property_name: property?.property_name as string | null | undefined,
-    property_address: property?.address_line1 as string | null | undefined,
-    property_type: property?.property_type as string | null | undefined,
-    carpet_area: property?.carpet_area as number | null | undefined,
+    client_name: client?.name,
+    client_email: client?.email,
+    client_phone: client?.phone,
+    property_name: (property?.property_name || undefined) as string | undefined,
+    property_address: (property?.address_line1 || undefined) as
+      | string
+      | undefined,
+    property_type: (property?.property_type || undefined) as string | undefined,
+    carpet_area: (property?.carpet_area || undefined) as number | undefined,
   };
 
   // Check if expired

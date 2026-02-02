@@ -1267,7 +1267,7 @@ export default function QuotationDetailPage() {
                                       </div>
                                       <div></div>
                                       <div className="text-right">
-                                        Base Cost
+                                        Base Rate
                                       </div>
                                       <div className="text-right">Rate</div>
                                       <div className="text-right">Amount</div>
@@ -1510,7 +1510,7 @@ export default function QuotationDetailPage() {
                         <div className="text-center">Unit</div>
                         <div className="text-center">Qty/Area</div>
                         <div></div>
-                        <div className="text-right">Base Cost</div>
+                        <div className="text-right">Base Rate</div>
                         <div className="text-right">Rate</div>
                         <div className="text-right">Amount</div>
                       </div>

@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Prepare property data - mapping to database columns
+    // Prepare property data - mapping to database columns (only using CreatePropertyInput fields)
     const propertyData = {
       tenant_id: userData.tenant_id,
       created_by: user.id,
@@ -175,70 +175,19 @@ export async function POST(request: NextRequest) {
       // Identification
       property_name: body.property_name || null,
       unit_number: body.unit_number || null,
-      block_tower: body.block_tower || null,
 
       // Category and Type
       category: body.category || "residential",
       property_type: body.property_type || "apartment",
       property_subtype: body.property_subtype || null,
-      ownership: body.ownership || null,
-      status: body.status || "ready_to_move",
 
       // Address
       address_line1: body.address_line1 || null,
-      address_line2: body.address_line2 || null,
-      landmark: body.landmark || null,
-      locality: body.locality || null,
       city: body.city || "Unknown",  // city is NOT NULL in database
-      state: body.state || null,
       pincode: body.pincode || null,
-      country: body.country || "India",
-
-      // Floor
-      floor_number: body.floor_number || null,
-      total_floors: body.total_floors || null,
 
       // Area Details
       carpet_area: body.carpet_area || null,
-      built_up_area: body.built_up_area || null,
-      super_built_up_area: body.super_built_up_area || null,
-      area_unit: body.area_unit || "sqft",
-      plot_area: body.plot_area || null,
-
-      // Room Configuration
-      bedrooms: body.bedrooms || null,
-      bathrooms: body.bathrooms || null,
-      balconies: body.balconies || null,
-      kitchens: body.kitchens || null,
-      living_rooms: body.living_rooms || null,
-      dining_rooms: body.dining_rooms || null,
-      study_rooms: body.study_rooms || null,
-      servant_rooms: body.servant_rooms || null,
-      pooja_rooms: body.pooja_rooms || null,
-      store_rooms: body.store_rooms || null,
-
-      // Features
-      facing: body.facing || null,
-      furnishing_status: body.furnishing_status || null,
-      age_of_property: body.age_of_property || null,
-
-      // Parking & Amenities
-      parking_slots: body.parking_slots || null,
-      has_lift: body.has_lift || null,
-      has_power_backup: body.has_power_backup || null,
-      has_security: body.has_security || null,
-      has_gym: body.has_gym || null,
-      has_swimming_pool: body.has_swimming_pool || null,
-      has_clubhouse: body.has_clubhouse || null,
-      amenities: body.amenities || null,
-
-      // Location
-      latitude: body.latitude || null,
-      longitude: body.longitude || null,
-
-      // Notes
-      description: body.description || null,
-      internal_notes: body.internal_notes || null,
     };
 
     // Insert property

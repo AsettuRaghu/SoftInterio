@@ -51,6 +51,8 @@ interface SpaceCardProps {
   canMoveDown?: boolean;
   onMoveComponentUp?: (componentId: string) => void;
   onMoveComponentDown?: (componentId: string) => void;
+  onMoveLineItemUp?: (componentId: string, lineItemId: string) => void;
+  onMoveLineItemDown?: (componentId: string, lineItemId: string) => void;
   // Validation
   showValidation?: boolean;
 }
@@ -86,6 +88,8 @@ export function SpaceCard({
   canMoveDown,
   onMoveComponentUp,
   onMoveComponentDown,
+  onMoveLineItemUp,
+  onMoveLineItemDown,
   showValidation = false,
 }: SpaceCardProps) {
   // Calculate space total and sqft
@@ -359,6 +363,16 @@ export function SpaceCard({
               onMoveDown={
                 onMoveComponentDown && index < space.components.length - 1
                   ? () => onMoveComponentDown(component.id)
+                  : undefined
+              }
+              onMoveLineItemUp={
+                onMoveLineItemUp
+                  ? (lineItemId) => onMoveLineItemUp(component.id, lineItemId)
+                  : undefined
+              }
+              onMoveLineItemDown={
+                onMoveLineItemDown
+                  ? (lineItemId) => onMoveLineItemDown(component.id, lineItemId)
                   : undefined
               }
               showValidation={showValidation}

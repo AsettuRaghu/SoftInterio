@@ -31,14 +31,14 @@ export const TaskPriorityColors: Record<
   TaskPriority,
   { bg: string; text: string; dot: string }
 > = {
-  critical: { bg: "bg-red-100", text: "text-red-700", dot: "bg-red-500" },
-  high: { bg: "bg-orange-100", text: "text-orange-700", dot: "bg-orange-500" },
+  critical: { bg: "bg-red-100", text: "text-red-900", dot: "bg-red-600" },
+  high: { bg: "bg-orange-100", text: "text-orange-900", dot: "bg-orange-600" },
   medium: {
-    bg: "bg-yellow-100",
-    text: "text-yellow-700",
-    dot: "bg-yellow-500",
+    bg: "bg-blue-100",
+    text: "text-blue-900",
+    dot: "bg-blue-600",
   },
-  low: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
+  low: { bg: "bg-green-100", text: "text-green-700", dot: "bg-green-500" },
 };
 
 export const TaskStatusLabels: Record<TaskStatus, string> = {

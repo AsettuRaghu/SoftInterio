@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { data: documents, error } = await query;
+    const { data: documents, error } = await query.limit(100);
 
     if (error) {
       console.error("Error fetching documents:", error);
@@ -80,44 +80,59 @@ export async function GET(request: NextRequest) {
     }
 
     // Generate signed URLs and fetch linked entity names
+    // Limit concurrent operations to prevent socket errors
     const documentsWithUrls = await Promise.all(
-      (documents || []).map(async (doc) => {
-        const { data: urlData } = await supabaseAdmin.storage
-          .from(STORAGE_BUCKET)
-          .createSignedUrl(doc.storage_path, 3600); // 1 hour expiry
+      (documents || []).slice(0, 50).map(async (doc) => {
+        try {
+          const { data: urlData } = await supabaseAdmin.storage
+            .from(STORAGE_BUCKET)
+            .createSignedUrl(doc.storage_path, 3600); // 1 hour expiry
 
-        // Fetch linked entity name based on linked_type
-        let linked_name: string | null = null;
-        if (doc.linked_id) {
-          if (doc.linked_type === 'lead') {
-            const { data: leadData } = await supabaseAdmin
-              .from('leads')
-              .select('lead_number, client:clients!leads_client_id_fkey(name)')
-              .eq('id', doc.linked_id)
-              .single();
-            if (leadData) {
-              const clientName = (leadData.client as any)?.name || 'Unknown';
-              linked_name = leadData.lead_number ? `${leadData.lead_number} - ${clientName}` : clientName;
-            }
-          } else if (doc.linked_type === 'project') {
-            const { data: projectData } = await supabaseAdmin
-              .from('projects')
-              .select('project_number, name')
-              .eq('id', doc.linked_id)
-              .single();
-            if (projectData) {
-              linked_name = projectData.project_number 
-                ? `${projectData.project_number} - ${projectData.name}` 
-                : projectData.name;
+          // Fetch linked entity name based on linked_type
+          let linked_name: string | null = null;
+          if (doc.linked_id) {
+            try {
+              if (doc.linked_type === 'lead') {
+                const { data: leadData } = await supabaseAdmin
+                  .from('leads')
+                  .select('lead_number, client:clients!leads_client_id_fkey(name)')
+                  .eq('id', doc.linked_id)
+                  .single();
+                if (leadData) {
+                  const clientName = (leadData.client as any)?.name || 'Unknown';
+                  linked_name = leadData.lead_number ? `${leadData.lead_number} - ${clientName}` : clientName;
+                }
+              } else if (doc.linked_type === 'project') {
+                const { data: projectData } = await supabaseAdmin
+                  .from('projects')
+                  .select('project_number, name')
+                  .eq('id', doc.linked_id)
+                  .single();
+                if (projectData) {
+                  linked_name = projectData.project_number 
+                    ? `${projectData.project_number} - ${projectData.name}` 
+                    : projectData.name;
+                }
+              }
+            } catch (err) {
+              console.error("Error fetching linked entity:", err);
+              linked_name = null;
             }
           }
-        }
 
-        return {
-          ...doc,
-          signed_url: urlData?.signedUrl || null,
-          linked_name,
-        };
+          return {
+            ...doc,
+            signed_url: urlData?.signedUrl || null,
+            linked_name,
+          };
+        } catch (err) {
+          console.error("Error processing document:", err);
+          return {
+            ...doc,
+            signed_url: null,
+            linked_name: null,
+          };
+        }
       })
     );
 

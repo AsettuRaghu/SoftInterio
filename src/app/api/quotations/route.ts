@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { getQuotationNumberAndVersion } from "@/utils/quotation-number-generator";
 
 // GET /api/quotations - List all quotations with lead data
 export async function GET(request: NextRequest) {
@@ -26,14 +27,15 @@ export async function GET(request: NextRequest) {
       .from("quotations")
       .select(`
         *,
-        lead:leads!quotations_lead_id_fkey(
+        lead:leads(
           id,
+          lead_number,
           stage,
           service_type,
           budget_range,
-          estimated_value,
           lead_source,
-          
+          client_id,
+          property_id,
           client:clients(
              id,
              name,
@@ -51,13 +53,19 @@ export async function GET(request: NextRequest) {
              property_type
           )
         ),
-        client:clients!client_id(
+        client:clients(
           id,
           name,
           email,
           phone
         ),
         assigned_user:users!quotations_assigned_to_fkey(
+          id,
+          name,
+          email,
+          avatar_url
+        ),
+        created_user:users!quotations_created_by_fkey(
           id,
           name,
           email,
@@ -132,6 +140,7 @@ export async function GET(request: NextRequest) {
 
       return {
         ...q,
+        lead_number: q.lead?.lead_number || "",
         client_name: clientName,
         client_email: clientEmail,
         client_phone: clientPhone,
@@ -143,6 +152,7 @@ export async function GET(request: NextRequest) {
         assigned_to_name: q.assigned_user?.name,
         assigned_to_email: q.assigned_user?.email,
         assigned_to_avatar: q.assigned_user?.avatar_url,
+        created_by_name: q.created_user?.name,
         lead_stage: q.lead?.stage
       };
     }); 
@@ -235,22 +245,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate quotation number - format: QT-YYYYMM-XXXX
-    // Only count version=1 quotations to avoid gaps from revisions
+    // Generate or retrieve quotation number
+    // For a given lead/project, all quotations share the same number with version incrementing
+    const { quotationNumber, nextVersion } = await getQuotationNumberAndVersion(
+      userData.tenant_id,
+      lead_id,
+      project_id
+    );
+
+    console.log(`[QUOTATION API] Generated quotation number: ${quotationNumber}, version: ${nextVersion}`);
+
     const today = new Date();
-    const datePrefix = `QT-${today.getFullYear()}${String(
-      today.getMonth() + 1
-    ).padStart(2, "0")}-`;
-
-    const { count } = await supabase
-      .from("quotations")
-      .select("*", { count: "exact", head: true })
-      .eq("tenant_id", userData.tenant_id)
-      .eq("version", 1)
-      .like("quotation_number", `${datePrefix}%`);
-
-    const sequentialNumber = String((count || 0) + 1).padStart(4, "0");
-    const quotationNumber = `${datePrefix}${sequentialNumber}`;
 
     // Get lead/project details for client info
     let clientName = "";
@@ -336,27 +341,26 @@ export async function POST(request: NextRequest) {
       .insert({
         tenant_id: userData.tenant_id,
         quotation_number: quotationNumber,
-        version: 1,
+        version: nextVersion,
         lead_id: lead_id || null,
         project_id: project_id || null,
-        client_id: clientId,
-        client_name: clientName || null,
-        client_email: clientEmail || null,
-        client_phone: clientPhone || null,
-        property_name: propertyName || null,
-        property_address: propertyAddress || null,
-        property_type: propertyType,
-        carpet_area: carpetArea,
+        client_id: clientId || null,
         status: "draft",
         title: quotationTitle,
         presentation_level: "space_component",
         hide_dimensions: true,
         valid_from: today.toISOString(),
         valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        template_id,
-        auto_created: false,
         created_by: user!.id,
-        assigned_to: user!.id,
+        subtotal: 0,
+        discount_value: 0,
+        discount_amount: 0,
+        taxable_amount: 0,
+        tax_percent: 0,
+        tax_amount: 0,
+        overhead_percent: 0,
+        overhead_amount: 0,
+        grand_total: 0,
       })
       .select()
       .single();

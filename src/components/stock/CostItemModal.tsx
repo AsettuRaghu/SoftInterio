@@ -6,13 +6,13 @@ import { QUALITY_TIER_OPTIONS } from "@/utils/stock";
 interface CostItem {
   id: string;
   name: string;
-  description?: string;
-  category_id?: string;
+  description: string | null;
+  category_id: string | null;
   unit_code: string;
   vendor_cost: number;
   company_cost: number;
   default_rate: number;
-  retail_price?: number | null;
+  retail_price: number | null;
   quality_tier: string;
   is_stockable: boolean;
   is_active: boolean;
@@ -315,7 +315,7 @@ export function CostItemModal({
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Base Cost (Default)
+                  Base Rate (Default)
                 </label>
                 <input
                   type="number"

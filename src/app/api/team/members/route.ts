@@ -1,17 +1,9 @@
-/**
- * Team Members API Route
- * GET /api/team/members - Get all team members for the current tenant
- * DELETE /api/team/members - Soft delete (disable) a team member
- */
-
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 export async function GET(request: NextRequest) {
-  console.log("[TEAM API] GET /api/team/members - Request received");
-
   try {
     // Protect API route
     const guard = await protectApiRoute(request);
@@ -23,8 +15,6 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
     const adminClient = createAdminClient();
 
-    console.log("[TEAM API] Auth user ID:", authUser!.id);
-
     // Get user's tenant - use admin client to bypass RLS
     const { data: currentUser, error: userError } = await adminClient
       .from("users")
@@ -33,7 +23,6 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (userError) {
-      console.error("[TEAM API] Failed to get user:", userError);
       return NextResponse.json(
         { success: false, error: "User not found", details: userError.message },
         { status: 404 }
@@ -41,14 +30,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (!currentUser) {
-      console.error("[TEAM API] No user record found");
       return NextResponse.json(
         { success: false, error: "User record not found" },
         { status: 404 }
       );
     }
-
-    console.log("[TEAM API] Current user tenant:", currentUser.tenant_id);
 
     // Get all team members using tenant_users for membership status
     // First try with tenant_users, fallback to users.status for backwards compatibility
@@ -118,8 +104,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log("[TEAM API] Found", members?.length, "active members");
-
     // Now get roles for each member separately - use admin client
     const memberIds = members?.map((m) => m.id) || [];
 
@@ -133,7 +117,6 @@ export async function GET(request: NextRequest) {
         .in("user_id", memberIds);
 
       if (userRolesError) {
-        console.error("[TEAM API] Failed to get user roles:", userRolesError);
         // Continue without roles rather than failing
       } else if (userRoles && userRoles.length > 0) {
         // Get all role IDs
@@ -145,12 +128,10 @@ export async function GET(request: NextRequest) {
           .select("id, name, slug, hierarchy_level")
           .in("id", roleIds);
 
-        if (rolesError) {
-          console.error("[TEAM API] Failed to get roles:", rolesError);
-        } else {
+        if (!rolesError && roles) {
           // Build a map of role_id -> role
           const rolesById: Record<string, any> = {};
-          roles?.forEach((role) => {
+          roles.forEach((role) => {
             rolesById[role.id] = role;
           });
 
@@ -174,20 +155,18 @@ export async function GET(request: NextRequest) {
       roles: userRolesMap[member.id] || [],
     }));
 
-    console.log(
-      "[TEAM API] Returning",
-      transformedMembers?.length,
-      "team members"
-    );
-
     return NextResponse.json({
       success: true,
       data: transformedMembers,
     });
-  } catch (error: any) {
-    console.error("[TEAM API] Error:", error);
+  } catch (error) {
+    console.error("[GET /api/team/members] Error:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to get team members" },
+      {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to get team members",
+      },
       { status: 500 }
     );
   }

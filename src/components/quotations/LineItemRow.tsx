@@ -20,6 +20,8 @@ interface LineItemRowProps {
   onUpdateMeasurementUnit?: (unit: MeasurementUnit) => void;
   onUpdateQuantity?: (quantity: number) => void;
   onDelete: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
   showValidation?: boolean; // Show validation errors
 }
 
@@ -32,6 +34,8 @@ export function LineItemRow({
   onUpdateMeasurementUnit,
   onUpdateQuantity,
   onDelete,
+  onMoveUp,
+  onMoveDown,
   showValidation = false,
 }: LineItemRowProps) {
   // Local state for input fields to allow empty values while typing
@@ -86,12 +90,11 @@ export function LineItemRow({
 
   const amount = calculateAmount();
 
-  // Handle rate input change - allow empty or positive numbers only
+  // Handle rate input change - allow empty or positive whole numbers only
   const handleRateChange = (value: string) => {
-    // Allow empty or positive numbers only
-    if (value === "" || (parseFloat(value) >= 0 && !value.startsWith("-"))) {
-      setRateInput(value);
-    }
+    // Only allow digits or empty
+    const filtered = value === "" ? "" : value.replace(/[^0-9]/g, "");
+    setRateInput(filtered);
   };
 
   const handleRateBlur = () => {
@@ -99,7 +102,7 @@ export function LineItemRow({
       // Keep empty - will be validated before save
       onUpdateRate(0);
     } else {
-      const numValue = parseFloat(rateInput);
+      const numValue = parseInt(rateInput, 10);
       if (isNaN(numValue) || numValue < 0) {
         setRateInput("");
         onUpdateRate(0);
@@ -110,11 +113,11 @@ export function LineItemRow({
     }
   };
 
-  // Handle quantity input change - allow empty or positive numbers only
+  // Handle quantity input change - allow empty or positive whole numbers only
   const handleQuantityChange = (value: string) => {
-    if (value === "" || (parseFloat(value) >= 0 && !value.startsWith("-"))) {
-      setQuantityInput(value);
-    }
+    // Only allow digits or empty
+    const filtered = value === "" ? "" : value.replace(/[^0-9]/g, "");
+    setQuantityInput(filtered);
   };
 
   const handleQuantityBlur = () => {
@@ -122,7 +125,7 @@ export function LineItemRow({
       // Keep empty - will be validated before save
       onUpdateQuantity?.(0);
     } else {
-      const numValue = parseFloat(quantityInput);
+      const numValue = parseInt(quantityInput, 10);
       if (isNaN(numValue) || numValue < 0) {
         setQuantityInput("");
         onUpdateQuantity?.(0);
@@ -133,18 +136,18 @@ export function LineItemRow({
     }
   };
 
-  // Handle length input change - allow empty or positive numbers only
+  // Handle length input change - allow empty or positive whole numbers only
   const handleLengthChange = (value: string) => {
-    if (value === "" || (parseFloat(value) >= 0 && !value.startsWith("-"))) {
-      setLengthInput(value);
-    }
+    // Only allow digits or empty
+    const filtered = value === "" ? "" : value.replace(/[^0-9]/g, "");
+    setLengthInput(filtered);
   };
 
   const handleLengthBlur = () => {
     if (lengthInput === "") {
       onUpdateLength?.(null);
     } else {
-      const numValue = parseFloat(lengthInput);
+      const numValue = parseInt(lengthInput, 10);
       if (isNaN(numValue) || numValue < 0) {
         setLengthInput("");
         onUpdateLength?.(null);
@@ -155,18 +158,18 @@ export function LineItemRow({
     }
   };
 
-  // Handle width input change - allow empty or positive numbers only
+  // Handle width input change - allow empty or positive whole numbers only
   const handleWidthChange = (value: string) => {
-    if (value === "" || (parseFloat(value) >= 0 && !value.startsWith("-"))) {
-      setWidthInput(value);
-    }
+    // Only allow digits or empty
+    const filtered = value === "" ? "" : value.replace(/[^0-9]/g, "");
+    setWidthInput(filtered);
   };
 
   const handleWidthBlur = () => {
     if (widthInput === "") {
       onUpdateWidth?.(null);
     } else {
-      const numValue = parseFloat(widthInput);
+      const numValue = parseInt(widthInput, 10);
       if (isNaN(numValue) || numValue < 0) {
         setWidthInput("");
         onUpdateWidth?.(null);
@@ -222,31 +225,75 @@ export function LineItemRow({
         </div>
         <input
           type="number"
-          step="0.01"
+          step="1"
           value={rateInput}
           onChange={(e) => handleRateChange(e.target.value)}
           onBlur={handleRateBlur}
           onFocus={(e) => e.target.select()}
           className="col-span-2 text-sm border border-slate-200 rounded px-2 py-1 w-full"
         />
-        <button
-          onClick={onDelete}
-          className="col-span-1 text-slate-400 hover:text-red-600"
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+        <div className="col-span-1 flex items-center gap-1">
+          {onMoveUp && (
+            <button
+              onClick={onMoveUp}
+              className="text-slate-400 hover:text-slate-600"
+              title="Move up"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 15l7-7 7 7"
+                />
+              </svg>
+            </button>
+          )}
+          {onMoveDown && (
+            <button
+              onClick={onMoveDown}
+              className="text-slate-400 hover:text-slate-600"
+              title="Move down"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+          )}
+          <button
+            onClick={onDelete}
+            className="text-slate-400 hover:text-red-600"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
-        </button>
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
     );
   }
@@ -275,29 +322,73 @@ export function LineItemRow({
             {measureInfo.label}
           </span>
         </div>
-        <button
-          onClick={onDelete}
-          className="text-slate-400 hover:text-red-600 p-1"
-          title="Remove item"
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+        <div className="flex items-center gap-1">
+          {onMoveUp && (
+            <button
+              onClick={onMoveUp}
+              className="text-slate-400 hover:text-slate-600 p-1"
+              title="Move up"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 15l7-7 7 7"
+                />
+              </svg>
+            </button>
+          )}
+          {onMoveDown && (
+            <button
+              onClick={onMoveDown}
+              className="text-slate-400 hover:text-slate-600 p-1"
+              title="Move down"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+          )}
+          <button
+            onClick={onDelete}
+            className="text-slate-400 hover:text-red-600 p-1"
+            title="Remove item"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
-        </button>
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Row 2: All input fields with consistent grid layout - 9 columns */}
-      {/* Unit | Height | × | Width | Area/Value | Spacer | Base Cost | Rate | Amount */}
+      {/* Unit | Height | × | Width | Area/Value | Spacer | Base Rate | Rate | Amount */}
       <div className="grid grid-cols-[90px_100px_20px_100px_110px_1fr_120px_120px_140px] gap-3 items-end">
         {/* Column 1: Unit (for area/length) or Qty */}
         {measureInfo.type === "area" || measureInfo.type === "length" ? (
@@ -330,12 +421,27 @@ export function LineItemRow({
             </label>
             <input
               type="number"
-              step="0.01"
+              inputMode="numeric"
+              step="1"
               min="0"
               value={quantityInput}
               onChange={(e) => handleQuantityChange(e.target.value)}
               onBlur={handleQuantityBlur}
               onFocus={(e) => e.target.select()}
+              onKeyDown={(e) => {
+                // Prevent decimal point, minus, plus
+                if ([".", "-", "+", "e", "E"].includes(e.key)) {
+                  e.preventDefault();
+                }
+              }}
+              onPaste={(e) => {
+                e.preventDefault();
+                const pasted = (e.clipboardData?.getData("text") || "").replace(
+                  /[^0-9]/g,
+                  ""
+                );
+                handleQuantityChange(pasted);
+              }}
               placeholder="Qty"
               className={`w-full px-3 py-1.5 text-sm border rounded focus:ring-1 ${
                 isQuantityMissing
@@ -366,12 +472,33 @@ export function LineItemRow({
             </label>
             <input
               type="number"
-              step="0.01"
+              inputMode="numeric"
+              step="1"
               min="0"
               value={lengthInput}
               onChange={(e) => handleLengthChange(e.target.value)}
               onBlur={handleLengthBlur}
               onFocus={(e) => e.target.select()}
+              onKeyDown={(e) => {
+                // Prevent decimal point, minus, plus
+                if ([".", "-", "+", "e", "E"].includes(e.key)) {
+                  e.preventDefault();
+                }
+              }}
+              onKeyDown={(e) => {
+                // Prevent decimal point, minus, plus
+                if ([".", "-", "+", "e", "E"].includes(e.key)) {
+                  e.preventDefault();
+                }
+              }}
+              onPaste={(e) => {
+                e.preventDefault();
+                const pasted = (e.clipboardData?.getData("text") || "").replace(
+                  /[^0-9]/g,
+                  ""
+                );
+                handleLengthChange(pasted);
+              }}
               placeholder="H"
               className={`w-full px-3 py-1.5 text-sm border rounded focus:ring-1 ${
                 isLengthMissing
@@ -392,12 +519,20 @@ export function LineItemRow({
             </label>
             <input
               type="number"
-              step="0.01"
+              step="1"
               min="0"
               value={lengthInput}
               onChange={(e) => handleLengthChange(e.target.value)}
               onBlur={handleLengthBlur}
               onFocus={(e) => e.target.select()}
+              onPaste={(e) => {
+                e.preventDefault();
+                const pasted = (e.clipboardData?.getData("text") || "").replace(
+                  /[^0-9]/g,
+                  ""
+                );
+                handleLengthChange(pasted);
+              }}
               placeholder="H"
               className={`w-full px-3 py-1.5 text-sm border rounded focus:ring-1 ${
                 isLengthMissing
@@ -429,12 +564,27 @@ export function LineItemRow({
             </label>
             <input
               type="number"
-              step="0.01"
+              inputMode="numeric"
+              step="1"
               min="0"
               value={widthInput}
               onChange={(e) => handleWidthChange(e.target.value)}
               onBlur={handleWidthBlur}
               onFocus={(e) => e.target.select()}
+              onKeyDown={(e) => {
+                // Prevent decimal point, minus, plus
+                if ([".", "-", "+", "e", "E"].includes(e.key)) {
+                  e.preventDefault();
+                }
+              }}
+              onPaste={(e) => {
+                e.preventDefault();
+                const pasted = (e.clipboardData?.getData("text") || "").replace(
+                  /[^0-9]/g,
+                  ""
+                );
+                handleWidthChange(pasted);
+              }}
               placeholder="W"
               className={`w-full px-3 py-1.5 text-sm border rounded focus:ring-1 ${
                 isWidthMissing
@@ -471,9 +621,9 @@ export function LineItemRow({
         {/* Column 6: Spacer - 1fr to push remaining columns to the right */}
         <div />
 
-        {/* Column 7: Base Cost - always in same position */}
+        {/* Column 7: Base Rate - always in same position */}
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Base Cost</label>
+          <label className="block text-xs text-slate-500 mb-1">Base Rate</label>
           {item.defaultRate > 0 ? (
             <div className="px-3 py-1.5 text-sm bg-amber-50 text-amber-700 font-medium rounded whitespace-nowrap text-center">
               ₹{item.defaultRate.toLocaleString("en-IN")}
@@ -496,12 +646,27 @@ export function LineItemRow({
           </label>
           <input
             type="number"
-            step="0.01"
+            inputMode="numeric"
+            step="1"
             min="0"
             value={rateInput}
             onChange={(e) => handleRateChange(e.target.value)}
             onBlur={handleRateBlur}
             onFocus={(e) => e.target.select()}
+            onKeyDown={(e) => {
+              // Prevent decimal point, minus, plus
+              if ([".", "-", "+", "e", "E"].includes(e.key)) {
+                e.preventDefault();
+              }
+            }}
+            onPaste={(e) => {
+              e.preventDefault();
+              const pasted = (e.clipboardData?.getData("text") || "").replace(
+                /[^0-9]/g,
+                ""
+              );
+              handleRateChange(pasted);
+            }}
             placeholder="Rate"
             className={`w-full px-3 py-1.5 text-sm border rounded focus:ring-1 ${
               isRateMissing

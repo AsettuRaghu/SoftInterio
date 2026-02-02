@@ -11,12 +11,13 @@
 export type QuotationStatus =
   | "draft"
   | "sent"
-  | "viewed"
   | "negotiating"
   | "approved"
   | "rejected"
   | "expired"
-  | "cancelled";
+  | "cancelled"
+  | "linked_to_project"
+  | "project_baseline";
 
 export type QualityTier = "budget" | "standard" | "premium" | "luxury";
 
@@ -251,7 +252,7 @@ export interface Quotation {
   // Property details (retained fields)
   flat_number?: string;
 
-  // Lead details (from quotations_with_lead view)
+  // Lead details (from foreign key relationship)
   lead_number?: string;
   lead_stage?: string;
 

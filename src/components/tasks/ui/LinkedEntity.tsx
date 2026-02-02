@@ -149,17 +149,38 @@ export function LinkedEntity({
       );
 
       const combined: ProjectLead[] = [
-        ...(projects.projects || []).map((p: any) => ({
-          id: p.id,
-          name: p.name || p.title || "Unnamed Project",
-          type: "project" as const,
-        })),
-        ...activeLeads.map((l: any) => ({
-          id: l.id,
-          name:
-            l.client_name || l.company_name || l.contact_name || "Unnamed Lead",
-          type: "lead" as const,
-        })),
+        ...(projects.projects || []).map((p: any) => {
+          // Extract client name from nested object or flat property
+          const clientName =
+            p.client?.name || p.client_name || "Unknown Client";
+          // Format: "PROJ-001 • Client Name" or just client name if no project number
+          const displayName = p.project_number
+            ? `${p.project_number} • ${clientName}`
+            : clientName;
+          return {
+            id: p.id,
+            name: displayName,
+            type: "project" as const,
+          };
+        }),
+        ...activeLeads.map((l: any) => {
+          // Extract client name from nested object or flat property
+          const clientName =
+            l.client?.name ||
+            l.client_name ||
+            l.company_name ||
+            l.contact_name ||
+            "Unknown Client";
+          // Format: "LEAD-001 • Client Name" or just client name if no lead number
+          const displayName = l.lead_number
+            ? `${l.lead_number} • ${clientName}`
+            : clientName;
+          return {
+            id: l.id,
+            name: displayName,
+            type: "lead" as const,
+          };
+        }),
       ];
 
       setItems(combined);

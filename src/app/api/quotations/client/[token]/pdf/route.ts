@@ -199,14 +199,14 @@ export async function GET(
       valid_from: quotation.valid_from,
       valid_until: quotation.valid_until,
 
-      client_name: client?.name || null,
-      client_email: client?.email || null,
-      client_phone: client?.phone || null,
+      client_name: (client?.name || undefined) as string | undefined,
+      client_email: (client?.email || undefined) as string | undefined,
+      client_phone: (client?.phone || undefined) as string | undefined,
 
-      property_name: property?.property_name as string | null | undefined,
-      property_address: property?.address_line1 as string | null | undefined,
-      property_type: property?.property_type as string | null | undefined,
-      carpet_area: property?.carpet_area as number | null | undefined,
+      property_name: property?.property_name as string | undefined,
+      property_address: property?.address_line1 as string | undefined,
+      property_type: property?.property_type as string | undefined,
+      carpet_area: property?.carpet_area as number | undefined,
 
       subtotal: subtotal,
       discount_type: quotation.discount_type,

@@ -155,8 +155,11 @@ export async function GET(request: NextRequest) {
 
           if (subtaskLeads) {
             subtaskLeads.forEach((lead: any) => {
-              const clientName = (lead.client as { name?: string } | null)?.name;
-              const name = clientName || lead.lead_number || "Unnamed Lead";
+              const clientName = (lead.client as { name?: string } | null)?.name || "Unknown Client";
+              // Format: "LEAD-001 • Client Name"
+              const name = lead.lead_number 
+                ? `${lead.lead_number} • ${clientName}` 
+                : clientName;
               subtaskLeadMap.set(lead.id, name);
             });
           }
@@ -257,8 +260,11 @@ export async function GET(request: NextRequest) {
         if (leads) {
           const leadMap = new Map<string, string>();
           leads.forEach((lead: any) => {
-            const clientName = (lead.client as { name?: string } | null)?.name;
-            const name = clientName || lead.lead_number || "Unnamed Lead";
+            const clientName = (lead.client as { name?: string } | null)?.name || "Unknown Client";
+            // Format: "LEAD-001 • Client Name"
+            const name = lead.lead_number 
+              ? `${lead.lead_number} • ${clientName}` 
+              : clientName;
             leadMap.set(lead.id, name);
           });
 
@@ -279,13 +285,17 @@ export async function GET(request: NextRequest) {
         try {
           const { data: projects } = await supabase
             .from("projects")
-            .select("id, name, title")
+            .select("id, project_number, client:clients(name)")
             .in("id", projectIds);
 
           if (projects) {
             const projectMap = new Map<string, string>();
             projects.forEach((project: any) => {
-              const name = project.name || project.title || "Unnamed Project";
+              const clientName = (project.client as { name?: string } | null)?.name || "Unknown Client";
+              // Format: "PROJ-001 • Client Name"
+              const name = project.project_number 
+                ? `${project.project_number} • ${clientName}` 
+                : clientName;
               projectMap.set(project.id, name);
             });
 

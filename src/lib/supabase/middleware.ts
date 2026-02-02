@@ -150,9 +150,17 @@ export async function updateSession(request: NextRequest) {
   // supabase.auth.getUser(). A simple mistake could make it very hard to debug
   // issues with users being randomly logged out.
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
+    user = authUser;
+  } catch (error) {
+    // Handle network errors gracefully - allow request to proceed
+    // User will be checked on the client side
+    console.log("[MIDDLEWARE] Error getting user session:", error);
+  }
 
   // Protected routes logic
   if (
@@ -168,161 +176,168 @@ export async function updateSession(request: NextRequest) {
 
   // For authenticated users accessing dashboard, verify their membership is active
   if (user && request.nextUrl.pathname.startsWith("/dashboard")) {
-    // Check if user has active membership in their tenant
-    const { data: userData } = await supabase
-      .from("users")
-      .select("id, tenant_id, status")
-      .eq("id", user.id)
-      .single();
-
-    // If user status is disabled/deleted, sign them out
-    if (userData?.status === "disabled" || userData?.status === "deleted") {
-      console.log("[MIDDLEWARE] User account disabled, signing out:", user.id);
-      await supabase.auth.signOut();
-      const url = request.nextUrl.clone();
-      url.pathname = "/auth/signin";
-      url.searchParams.set("error", "account_deactivated");
-      return NextResponse.redirect(url);
-    }
-
-    // Check tenant_users for active membership (if table exists and user has tenant)
-    if (userData?.tenant_id) {
-      const { data: membership, error: membershipError } = await supabase
-        .from("tenant_users")
-        .select("is_active")
-        .eq("user_id", user.id)
-        .eq("tenant_id", userData.tenant_id)
+    try {
+      // Check if user has active membership in their tenant
+      const { data: userData } = await supabase
+        .from("users")
+        .select("id, tenant_id, status")
+        .eq("id", user.id)
         .single();
 
-      // If tenant_users exists and membership is inactive, sign them out
-      if (!membershipError && membership && !membership.is_active) {
-        console.log(
-          "[MIDDLEWARE] User membership inactive, signing out:",
-          user.id
-        );
+      // If user status is disabled/deleted, sign them out
+      if (userData?.status === "disabled" || userData?.status === "deleted") {
+        console.log("[MIDDLEWARE] User account disabled, signing out:", user.id);
         await supabase.auth.signOut();
         const url = request.nextUrl.clone();
         url.pathname = "/auth/signin";
-        url.searchParams.set("error", "access_revoked");
+        url.searchParams.set("error", "account_deactivated");
         return NextResponse.redirect(url);
       }
 
-      // Check subscription status - ensure tenant has active subscription or valid trial
-      const { data: subscription, error: subscriptionError } = await supabase
-        .from("tenant_subscriptions")
-        .select("id, status, is_trial, trial_end_date, current_period_end, grace_period_end")
-        .eq("tenant_id", userData.tenant_id)
-        .single();
-
-      if (!subscriptionError && subscription) {
-        const now = new Date();
-        const isTrialExpired = subscription.is_trial && subscription.trial_end_date && new Date(subscription.trial_end_date) < now;
-        const isSubscriptionExpired = subscription.current_period_end && new Date(subscription.current_period_end) < now;
-        const isGracePeriodExpired = subscription.grace_period_end && new Date(subscription.grace_period_end) < now;
-        
-        // Check if subscription is cancelled, expired, or suspended
-        const inactiveStatuses = ['cancelled', 'expired', 'suspended'];
-        const isInactiveStatus = inactiveStatuses.includes(subscription.status);
-
-        // Block access if:
-        // 1. On trial and trial has expired, OR
-        // 2. Subscription status is inactive AND grace period has passed
-        if (subscription.is_trial && isTrialExpired) {
-          console.log(
-            "[MIDDLEWARE] Trial expired for tenant:",
-            userData.tenant_id
-          );
-          await supabase.auth.signOut();
-          const url = request.nextUrl.clone();
-          url.pathname = "/auth/signin";
-          url.searchParams.set("error", "trial_expired");
-          return NextResponse.redirect(url);
-        }
-
-        if (isInactiveStatus && (isGracePeriodExpired || (!subscription.grace_period_end && isSubscriptionExpired))) {
-          console.log(
-            "[MIDDLEWARE] Subscription expired for tenant:",
-            userData.tenant_id
-          );
-          await supabase.auth.signOut();
-          const url = request.nextUrl.clone();
-          url.pathname = "/auth/signin";
-          url.searchParams.set("error", "subscription_expired");
-          return NextResponse.redirect(url);
-        }
-      }
-
-      // ============================================
-      // ROUTE-LEVEL PERMISSION CHECK
-      // ============================================
-      const pathname = request.nextUrl.pathname;
-      
-      // Get route permission requirement
-      const routePermission = getRoutePermissionForPath(pathname);
-      
-      if (routePermission) {
-        // Fetch user's permissions from database
-        const { data: userRolesData } = await supabase
-          .from("user_roles")
-          .select(`
-            roles (
-              slug,
-              role_permissions (
-                granted,
-                permissions (
-                  key
-                )
-              )
-            )
-          `)
-          .eq("user_id", user.id);
-
-        // Check if user is super admin
-        const { data: userRecord } = await supabase
-          .from("users")
-          .select("is_super_admin")
-          .eq("id", user.id)
+      // Check tenant_users for active membership (if table exists and user has tenant)
+      if (userData?.tenant_id) {
+        const { data: membership, error: membershipError } = await supabase
+          .from("tenant_users")
+          .select("is_active")
+          .eq("user_id", user.id)
+          .eq("tenant_id", userData.tenant_id)
           .single();
 
-        const isSuperAdmin = userRecord?.is_super_admin === true;
+        // If tenant_users exists and membership is inactive, sign them out
+        if (!membershipError && membership && !membership.is_active) {
+          console.log(
+            "[MIDDLEWARE] User membership inactive, signing out:",
+            user.id
+          );
+          await supabase.auth.signOut();
+          const url = request.nextUrl.clone();
+          url.pathname = "/auth/signin";
+          url.searchParams.set("error", "access_revoked");
+          return NextResponse.redirect(url);
+        }
 
-        // Super admins have access to everything
-        if (!isSuperAdmin) {
-          // Extract permission keys from user's roles
-          const userPermissions = new Set<string>();
-          userRolesData?.forEach((ur: any) => {
-            ur.roles?.role_permissions?.forEach((rp: any) => {
-              if (rp.granted && rp.permissions?.key) {
-                userPermissions.add(rp.permissions.key);
-              }
-            });
-          });
+        // Check subscription status - ensure tenant has active subscription or valid trial
+        const { data: subscription, error: subscriptionError } = await supabase
+          .from("tenant_subscriptions")
+          .select("id, status, is_trial, trial_end_date, current_period_end, grace_period_end")
+          .eq("tenant_id", userData.tenant_id)
+          .single();
 
-          // Check if user has required permissions
-          const { permissions, requireAll } = routePermission;
-          const hasAccess = requireAll
-            ? permissions.every((p) => userPermissions.has(p))
-            : permissions.some((p) => userPermissions.has(p));
+        if (!subscriptionError && subscription) {
+          const now = new Date();
+          const isTrialExpired = subscription.is_trial && subscription.trial_end_date && new Date(subscription.trial_end_date) < now;
+          const isSubscriptionExpired = subscription.current_period_end && new Date(subscription.current_period_end) < now;
+          const isGracePeriodExpired = subscription.grace_period_end && new Date(subscription.grace_period_end) < now;
+          
+          // Check if subscription is cancelled, expired, or suspended
+          const inactiveStatuses = ['cancelled', 'expired', 'suspended'];
+          const isInactiveStatus = inactiveStatuses.includes(subscription.status);
 
-          if (!hasAccess) {
+          // Block access if:
+          // 1. On trial and trial has expired, OR
+          // 2. Subscription status is inactive AND grace period has passed
+          if (subscription.is_trial && isTrialExpired) {
             console.log(
-              "[MIDDLEWARE] Access denied for route:",
-              pathname,
-              "User:",
-              user.id,
-              "Required:",
-              permissions,
-              "Has:",
-              Array.from(userPermissions)
+              "[MIDDLEWARE] Trial expired for tenant:",
+              userData.tenant_id
             );
-            // Redirect to dashboard with access denied error
+            await supabase.auth.signOut();
             const url = request.nextUrl.clone();
-            url.pathname = "/dashboard";
-            url.searchParams.set("error", "access_denied");
+            url.pathname = "/auth/signin";
+            url.searchParams.set("error", "trial_expired");
+            return NextResponse.redirect(url);
+          }
+
+          if (isInactiveStatus && (isGracePeriodExpired || (!subscription.grace_period_end && isSubscriptionExpired))) {
+            console.log(
+              "[MIDDLEWARE] Subscription expired for tenant:",
+              userData.tenant_id
+            );
+            await supabase.auth.signOut();
+            const url = request.nextUrl.clone();
+            url.pathname = "/auth/signin";
+            url.searchParams.set("error", "subscription_expired");
             return NextResponse.redirect(url);
           }
         }
+
+        // ============================================
+        // ROUTE-LEVEL PERMISSION CHECK
+        // ============================================
+        const pathname = request.nextUrl.pathname;
+        
+        // Get route permission requirement
+        const routePermission = getRoutePermissionForPath(pathname);
+        
+        if (routePermission) {
+          // Fetch user's permissions from database
+          const { data: userRolesData } = await supabase
+            .from("user_roles")
+            .select(`
+              roles (
+                slug,
+                role_permissions (
+                  granted,
+                  permissions (
+                    key
+                  )
+                )
+              )
+            `)
+            .eq("user_id", user.id);
+
+          // Check if user is super admin
+          const { data: userRecord } = await supabase
+            .from("users")
+            .select("is_super_admin")
+            .eq("id", user.id)
+            .single();
+
+          const isSuperAdmin = userRecord?.is_super_admin === true;
+
+          // Super admins have access to everything
+          if (!isSuperAdmin) {
+            // Extract permission keys from user's roles
+            const userPermissions = new Set<string>();
+            userRolesData?.forEach((ur: any) => {
+              ur.roles?.role_permissions?.forEach((rp: any) => {
+                if (rp.granted && rp.permissions?.key) {
+                  userPermissions.add(rp.permissions.key);
+                }
+              });
+            });
+
+            // Check if user has required permissions
+            const { permissions, requireAll } = routePermission;
+            const hasAccess = requireAll
+              ? permissions.every((p) => userPermissions.has(p))
+              : permissions.some((p) => userPermissions.has(p));
+
+            if (!hasAccess) {
+              console.log(
+                "[MIDDLEWARE] Access denied for route:",
+                pathname,
+                "User:",
+                user.id,
+                "Required:",
+                permissions,
+                "Has:",
+                Array.from(userPermissions)
+              );
+              // Redirect to dashboard with access denied error
+              const url = request.nextUrl.clone();
+              url.pathname = "/dashboard";
+              url.searchParams.set("error", "access_denied");
+              return NextResponse.redirect(url);
+            }
+          }
+        }
       }
+    } catch (error) {
+      // Handle database query errors gracefully
+      console.log("[MIDDLEWARE] Error checking user permissions:", error);
+      // Allow request to proceed - user will see limited functionality
+      // but won't be completely blocked due to network issues
     }
   }
 

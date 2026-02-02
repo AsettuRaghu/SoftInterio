@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { generateUniqueProjectNumber } from "@/utils/project-number-generator";
 
 // GET /api/projects - List projects with phase summary
 export async function GET(request: NextRequest) {
@@ -42,9 +43,26 @@ export async function GET(request: NextRequest) {
       .from("projects")
       .select(
         `
-        *,
+        id,
+        project_number,
+        name,
+        description,
+        status,
+        priority,
+        expected_start_date,
+        expected_end_date,
+        actual_end_date,
+        actual_cost,
+        overall_progress,
+        created_at,
+        updated_at,
+        project_category,
+        is_active,
+        current_phase_id,
         client:clients!client_id(name),
-        project_manager:users!project_manager_id(id, name, email, avatar_url)
+        project_manager:users!project_manager_id(id, name, email, avatar_url),
+        property:properties!property_id(property_name, property_type, carpet_area, city),
+        lead:leads!lead_id(service_type)
       `,
         { count: "exact" }
       )
@@ -93,55 +111,47 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Get phase summaries for each project
-    const projectIds = projects?.map((p) => p.id) || [];
-
-    let phaseSummaries: Record<
-      string,
-      { total: number; completed: number; in_progress: number }
-    > = {};
-
-    if (projectIds.length > 0) {
-      const { data: phases } = await supabase
-        .from("project_phases")
-        .select("project_id, status")
-        .in("project_id", projectIds);
-
-      if (phases) {
-        for (const phase of phases) {
-          if (!phaseSummaries[phase.project_id]) {
-            phaseSummaries[phase.project_id] = {
-              total: 0,
-              completed: 0,
-              in_progress: 0,
-            };
-          }
-          phaseSummaries[phase.project_id].total++;
-          if (phase.status === "completed") {
-            phaseSummaries[phase.project_id].completed++;
-          } else if (phase.status === "in_progress") {
-            phaseSummaries[phase.project_id].in_progress++;
-          }
-        }
-      }
-    }
-
-    // Attach phase summaries and flat client_name to projects
-    const projectsWithSummary = projects?.map((p: any) => {
+    // Attach flat client_name and property/service data to projects
+    let projectsWithClientName = projects?.map((p: any) => {
       const pClient = Array.isArray(p.client) ? p.client[0] : p.client;
+      const pProperty = Array.isArray(p.property) ? p.property[0] : p.property;
+      const pLead = Array.isArray(p.lead) ? p.lead[0] : p.lead;
       return {
         ...p,
         client_name: pClient?.name || "Unknown Client",
-        phase_summary: phaseSummaries[p.id] || {
-          total: 0,
-          completed: 0,
-          in_progress: 0,
-        },
+        service_type: pLead?.service_type,
+        property_name: pProperty?.property_name || "Unknown Property",
+        property_type: pProperty?.property_type,
+        carpet_area: pProperty?.carpet_area,
+        city: pProperty?.city,
+        quoted_amount: p.actual_cost || 0, // Map actual_cost to quoted_amount for frontend
+        project_type: p.project_category, // Use project_category as project_type
+        priority: p.priority || "Medium", // Default to Medium if not set
+        current_phase: null, // Will be populated if current_phase_id exists
       };
-    });
+    }) || [];
+
+    // Fetch phase names for projects that have current_phase_id
+    const phaseIds = projectsWithClientName
+      .filter((p: any) => p.current_phase_id)
+      .map((p: any) => p.current_phase_id);
+
+    if (phaseIds.length > 0) {
+      const { data: phases } = await supabase
+        .from("project_phases")
+        .select("id, name")
+        .in("id", phaseIds);
+
+      const phaseMap = new Map(phases?.map((phase: any) => [phase.id, phase.name]) || []);
+
+      projectsWithClientName = projectsWithClientName.map((p: any) => ({
+        ...p,
+        current_phase: p.current_phase_id ? phaseMap.get(p.current_phase_id) : null,
+      }));
+    }
 
     return NextResponse.json({
-      projects: projectsWithSummary,
+      projects: projectsWithClientName,
       total: count || 0,
       limit,
       offset,
@@ -194,7 +204,7 @@ export async function POST(request: NextRequest) {
       pincode,
       project_type,
       project_category = "turnkey",
-      start_date,
+      expected_start_date,
       expected_end_date,
       quoted_amount,
       budget_amount,
@@ -212,18 +222,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate project number
-    const { data: projectNumber } = await supabase.rpc(
-      "generate_project_number",
-      { p_tenant_id: userData.tenant_id }
-    );
+    // Generate project number with retry logic to handle duplicates
+    let projectNumber: string;
+    try {
+      projectNumber = await generateUniqueProjectNumber(userData.tenant_id);
+    } catch (err) {
+      console.error("Error generating project number:", err);
+      return NextResponse.json(
+        { error: "Failed to generate project number" },
+        { status: 500 }
+      );
+    }
 
     // Create project
     const { data: project, error } = await supabase
       .from("projects")
       .insert({
         tenant_id: userData.tenant_id,
-        project_number: projectNumber || `PRJ-${Date.now()}`,
+        project_number: projectNumber,
         name,
         description,
         client_name,
@@ -235,7 +251,7 @@ export async function POST(request: NextRequest) {
         pincode,
         project_type: project_type || "residential",
         project_category: project_category || "turnkey",
-        start_date,
+        expected_start_date,
         expected_end_date,
         quoted_amount: quoted_amount || 0,
         budget_amount: budget_amount || 0,

@@ -199,7 +199,7 @@ export function QuotationClientView({ quotation, company, token }: Props) {
 
   if (actionComplete) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-linear-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md text-center">
           <div
             className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ${
@@ -229,7 +229,7 @@ export function QuotationClientView({ quotation, company, token }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-linear-to-br from-slate-50 to-blue-50">
       {/* Header */}
       <header className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 py-4">
@@ -261,7 +261,7 @@ export function QuotationClientView({ quotation, company, token }: Props) {
       <main className="max-w-5xl mx-auto px-4 py-8">
         {/* Quotation Header Card */}
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden mb-6">
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-8 text-white">
+          <div className="bg-linear-to-r from-blue-600 to-blue-700 px-6 py-8 text-white">
             <div className="flex items-start justify-between">
               <div>
                 <h1 className="text-3xl font-bold mb-2">Quotation</h1>

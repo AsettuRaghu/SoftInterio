@@ -351,7 +351,7 @@ export default function CostItemsPage() {
     },
     {
       key: "default_rate",
-      header: "Base Cost",
+      header: "Base Rate",
       width: "10%",
       sortable: true,
       render: (item) => (

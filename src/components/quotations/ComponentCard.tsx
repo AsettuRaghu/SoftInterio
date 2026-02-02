@@ -23,6 +23,8 @@ interface ComponentCardProps {
   onUpdateName?: (name: string) => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  onMoveLineItemUp?: (lineItemId: string) => void;
+  onMoveLineItemDown?: (lineItemId: string) => void;
   showValidation?: boolean; // Show validation errors on line items
 }
 
@@ -40,6 +42,8 @@ export function ComponentCard({
   onUpdateName,
   onMoveUp,
   onMoveDown,
+  onMoveLineItemUp,
+  onMoveLineItemDown,
   showValidation = false,
 }: ComponentCardProps) {
   // Calculate component total and sqft
@@ -286,7 +290,7 @@ export function ComponentCard({
                   <span className="col-span-1"></span>
                 </div>
               )}
-              {component.lineItems.map((item) => (
+              {component.lineItems.map((item, index) => (
                 <LineItemRow
                   key={item.id}
                   item={item}
@@ -305,6 +309,16 @@ export function ComponentCard({
                     onUpdateLineItem(item.id, { quantity })
                   }
                   onDelete={() => onDeleteLineItem(item.id)}
+                  onMoveUp={
+                    onMoveLineItemUp && index > 0
+                      ? () => onMoveLineItemUp(item.id)
+                      : undefined
+                  }
+                  onMoveDown={
+                    onMoveLineItemDown && index < component.lineItems.length - 1
+                      ? () => onMoveLineItemDown(item.id)
+                      : undefined
+                  }
                   showValidation={showValidation}
                 />
               ))}

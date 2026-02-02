@@ -37,19 +37,24 @@ import {
   PageContent,
   StatusBadge,
 } from "@/components/ui/PageLayout";
-import SubPhaseDetailPanel from "@/components/projects/SubPhaseDetailPanel";
-import ProjectMgmtTab from "@/components/projects/ProjectMgmtTab";
-import ProjectTasksTab from "@/components/projects/ProjectTasksTab";
-import ProjectRoomsTab from "@/components/projects/ProjectRoomsTab";
-import ProjectNotesTab from "@/components/projects/ProjectNotesTab";
-import ProjectOverviewTab from "@/components/projects/ProjectOverviewTab";
-import ProjectDocumentsTab from "@/components/projects/ProjectDocumentsTab";
-import ProjectCalendarTab from "@/components/projects/ProjectCalendarTab";
-import PhaseEditModal from "@/components/projects/PhaseEditModal";
-import SubPhaseEditModal from "@/components/projects/SubPhaseEditModal";
-import ProjectTimelineTab from "@/components/projects/ProjectTimelineTab";
-import ProjectQuotationsTab from "@/components/projects/ProjectQuotationsTab";
+import {
+  SubPhaseDetailPanel,
+  ManagementTab,
+  TasksTab,
+  RoomsTab,
+  NotesTab,
+  OverviewTab,
+  DocumentsTab,
+  CalendarTab,
+  TimelineTab,
+  QuotationsTab,
+  PhaseEditModal,
+  SubPhaseEditModal,
+  EditProjectModal,
+  type EditProjectFormData,
+} from "@/modules/projects/components";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { formatCurrency as formatCurrencyUtil } from "@/modules/projects/utils";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -57,26 +62,8 @@ interface PageProps {
 
 type TabKey = ProjectDetailTab;
 
-// Format currency
-const formatCurrency = (amount: number | undefined) => {
-  if (!amount) return "₹0";
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(amount);
-};
-
 // Status workflow for visual stepper
-const STATUS_WORKFLOW = [
-  "planning",
-  "design",
-  "procurement",
-  "execution",
-  "finishing",
-  "handover",
-  "completed",
-];
+const STATUS_WORKFLOW = ["new", "in_progress", "completed"];
 
 export default function ProjectDetailPage({ params }: PageProps) {
   const { id } = use(params);
@@ -92,6 +79,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
     subPhaseId: string;
   } | null>(null);
   const [showSubPhasePanel, setShowSubPhasePanel] = useState(false);
+  const [showEditDetailsModal, setShowEditDetailsModal] = useState(false);
 
   // Phase/Sub-phase editing state
   const [editingPhase, setEditingPhase] = useState<ProjectPhase | null>(null);
@@ -103,18 +91,49 @@ export default function ProjectDetailPage({ params }: PageProps) {
   } | null>(null);
   const [showSubPhaseEditModal, setShowSubPhaseEditModal] = useState(false);
 
-  // Tab counts
+  // Project editing state
+  const [showEditProjectModal, setShowEditProjectModal] = useState(false);
+  const [editProjectForm, setEditProjectForm] = useState<EditProjectFormData>({
+    name: "",
+    description: "",
+    status: "",
+    project_category: "",
+    expected_start_date: "",
+    expected_end_date: "",
+    actual_start_date: "",
+    actual_end_date: "",
+    notes: "",
+  });
+  const [isSavingProject, setIsSavingProject] = useState(false);
+  const [projectValidationError, setProjectValidationError] = useState<
+    string | null
+  >(null);
+
+  // Tab counts and data
   const [documentsCount, setDocumentsCount] = useState(0);
+  const [documents, setDocuments] = useState<any[]>([]);
   const [tasksCount, setTasksCount] = useState(0);
+  const [tasks, setTasks] = useState<any[]>([]);
   const [notesCount, setNotesCount] = useState(0);
+  const [notes, setNotes] = useState<any[]>([]);
   const [calendarCount, setCalendarCount] = useState(0);
+  const [activities, setActivities] = useState<any[]>([]);
   const [quotationsCount, setQuotationsCount] = useState(0);
+  const [quotations, setQuotations] = useState<any[]>([]);
+
+  // Tab loading states
+  const [tabsLoading, setTabsLoading] = useState(true);
+  const [documentLoading, setDocumentLoading] = useState(true);
+  const [taskLoading, setTaskLoading] = useState(true);
+  const [noteLoading, setNoteLoading] = useState(true);
+  const [calendarLoading, setCalendarLoading] = useState(true);
+  const [quotationLoading, setQuotationLoading] = useState(true);
 
   // Check user role
   const isFinanceUser =
-    user?.roles.includes("finance") ||
-    user?.roles.includes("admin") ||
-    user?.roles.includes("owner");
+    user?.roles?.includes("finance") ||
+    user?.roles?.includes("admin") ||
+    user?.roles?.includes("owner");
 
   useEffect(() => {
     fetchProject();
@@ -143,6 +162,13 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
   const fetchCounts = useCallback(async () => {
     try {
+      setTabsLoading(true);
+      setDocumentLoading(true);
+      setTaskLoading(true);
+      setNoteLoading(true);
+      setCalendarLoading(true);
+      setQuotationLoading(true);
+
       // First fetch project to get quotation_id (the linked lead quotation)
       const projectRes = await fetch(`/api/projects/${id}`);
       let quotationId = null;
@@ -159,60 +185,109 @@ export default function ProjectDetailPage({ params }: PageProps) {
       }
 
       // Fetch counts in parallel
-      const [documentsRes, tasksRes, notesRes, ...quotationsResults] =
-        await Promise.all([
-          fetch(`/api/documents?linked_type=project&linked_id=${id}`),
-          fetch(`/api/tasks?project_id=${id}`),
-          fetch(`/api/projects/${id}/notes`),
-          ...quotationsPromises,
-        ]);
+      const [
+        documentsRes,
+        tasksRes,
+        notesRes,
+        activitiesRes,
+        ...quotationsResults
+      ] = await Promise.all([
+        fetch(`/api/documents?linked_type=project&linked_id=${id}`),
+        fetch(`/api/tasks?related_type=project&related_id=${id}`),
+        fetch(`/api/projects/${id}/notes`),
+        fetch(`/api/projects/${id}/activities`),
+        ...quotationsPromises,
+      ]);
 
       if (documentsRes.ok) {
         const data = await documentsRes.json();
+        setDocuments(data.documents || []);
         setDocumentsCount(data.documents?.length || 0);
       }
+      setDocumentLoading(false);
 
       if (tasksRes.ok) {
         const data = await tasksRes.json();
-        setTasksCount(data.tasks?.length || 0);
+        const tasksList = data.tasks || [];
+        setTasks(tasksList);
+        setTasksCount(tasksList.length);
       }
+      setTaskLoading(false);
 
       if (notesRes.ok) {
         const data = await notesRes.json();
-        setNotesCount(data.notes?.length || 0);
+        const notesList = data.notes || [];
+        setNotes(notesList);
+        setNotesCount(notesList.length);
       }
+      setNoteLoading(false);
+
+      if (activitiesRes.ok) {
+        const data = await activitiesRes.json();
+        const activitiesList = data.activities || [];
+        setActivities(activitiesList);
+        setCalendarCount(
+          activitiesList.filter(
+            (a: any) =>
+              a.activity_type === "meeting_scheduled" ||
+              a.activity_type === "client_meeting" ||
+              a.activity_type === "internal_meeting" ||
+              a.activity_type === "site_visit" ||
+              (a.meeting_scheduled_at && a.meeting_scheduled_at !== null)
+          ).length
+        );
+      }
+      setCalendarLoading(false);
 
       // Count quotations: project quotations + linked lead quotation (if exists and not duplicate)
       let totalQuotations = 0;
+      let allQuotations: any[] = [];
       let projectQuotationsData = null;
 
       const projectQuotationsRes = quotationsResults[0];
       if (projectQuotationsRes.ok) {
         projectQuotationsData = await projectQuotationsRes.json();
-        totalQuotations = projectQuotationsData.quotations?.length || 0;
+        allQuotations =
+          projectQuotationsData.quotations?.map((q: any) => ({
+            ...q,
+            _source: "project",
+          })) || [];
+        totalQuotations = allQuotations.length;
       }
 
-      // Add 1 for the linked lead quotation if it exists and is not already in project quotations
+      // Add the linked lead quotation if it exists and is not already in project quotations
       if (quotationId && quotationsResults[1] && quotationsResults[1].ok) {
         const leadQuotData = await quotationsResults[1].json();
-        const leadQuotId = leadQuotData.quotation?.id || leadQuotData.id;
-        // Check if this quotation is not already counted in project quotations
-        if (projectQuotationsData) {
-          const alreadyCounted = projectQuotationsData.quotations?.some(
-            (q: any) => q.id === leadQuotId
-          );
-          if (!alreadyCounted) {
-            totalQuotations += 1;
-          }
-        } else {
-          // If no project quotations data, just add the lead quotation
+        const leadQuot = leadQuotData.quotation || leadQuotData;
+        const leadQuotId = leadQuot.id;
+        // Check if this quotation is not already in the list
+        if (!allQuotations.find((q) => q.id === leadQuotId)) {
+          allQuotations.push({
+            ...leadQuot,
+            _source: "lead",
+          });
           totalQuotations += 1;
         }
       }
 
+      // Sort by created_at descending
+      allQuotations.sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      setQuotations(allQuotations);
       setQuotationsCount(totalQuotations);
+      setQuotationLoading(false);
+      setTabsLoading(false);
     } catch (err) {
       console.error("Error fetching counts:", err);
+      setTabsLoading(false);
+      setDocumentLoading(false);
+      setTaskLoading(false);
+      setNoteLoading(false);
+      setCalendarLoading(false);
+      setQuotationLoading(false);
     }
   }, [id]);
 
@@ -377,6 +452,68 @@ export default function ProjectDetailPage({ params }: PageProps) {
     setShowSubPhaseEditModal(true);
   };
 
+  const handleEditProject = () => {
+    if (project) {
+      setEditProjectForm({
+        name: project.name || "",
+        description: project.description || "",
+        status: project.status || "",
+        project_category: project.project_category || "",
+        expected_start_date: project.expected_start_date?.split("T")[0] || "",
+        expected_end_date: project.expected_end_date?.split("T")[0] || "",
+        actual_start_date:
+          (project as any).actual_start_date?.split("T")[0] || "",
+        actual_end_date: project.actual_end_date?.split("T")[0] || "",
+        notes: project.notes || "",
+      });
+      setShowEditProjectModal(true);
+    }
+  };
+
+  const handleSaveProjectEdit = async () => {
+    try {
+      setProjectValidationError(null);
+
+      if (!editProjectForm.name.trim()) {
+        setProjectValidationError("Project name is required");
+        return;
+      }
+
+      setIsSavingProject(true);
+
+      const response = await fetch(`/api/projects/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editProjectForm.name.trim(),
+          description: editProjectForm.description.trim() || null,
+          status: editProjectForm.status || null,
+          project_category: editProjectForm.project_category || null,
+          expected_start_date: editProjectForm.expected_start_date || null,
+          expected_end_date: editProjectForm.expected_end_date || null,
+          actual_start_date: editProjectForm.actual_start_date || null,
+          actual_end_date: editProjectForm.actual_end_date || null,
+          notes: editProjectForm.notes.trim() || null,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to update project");
+      }
+
+      await fetchProject();
+      setShowEditProjectModal(false);
+    } catch (err) {
+      console.error("Error saving project edit:", err);
+      setProjectValidationError(
+        err instanceof Error ? err.message : "Failed to update project"
+      );
+    } finally {
+      setIsSavingProject(false);
+    }
+  };
+
   if (loading) {
     return (
       <PageLayout isLoading loadingText="Loading project details...">
@@ -420,10 +557,21 @@ export default function ProjectDetailPage({ params }: PageProps) {
       label: "Overview",
       icon: <InformationCircleIcon className="w-4 h-4" />,
     },
+    ...(project.lead
+      ? [
+          {
+            key: "quotations" as TabKey,
+            label: `Quotations${
+              quotationsCount > 0 ? ` (${quotationsCount})` : ""
+            }`,
+            icon: <DocumentTextIcon className="w-4 h-4" />,
+          },
+        ]
+      : []),
     {
-      key: "documents",
-      label: `Documents${documentsCount > 0 ? ` (${documentsCount})` : ""}`,
-      icon: <DocumentTextIcon className="w-4 h-4" />,
+      key: "tasks",
+      label: `Tasks${tasksCount > 0 ? ` (${tasksCount})` : ""}`,
+      icon: <ClipboardDocumentListIcon className="w-4 h-4" />,
     },
     {
       key: "notes",
@@ -431,10 +579,24 @@ export default function ProjectDetailPage({ params }: PageProps) {
       icon: <ChatBubbleLeftRightIcon className="w-4 h-4" />,
     },
     {
-      key: "tasks",
-      label: `Tasks${tasksCount > 0 ? ` (${tasksCount})` : ""}`,
-      icon: <ClipboardDocumentListIcon className="w-4 h-4" />,
+      key: "documents",
+      label: `Documents${documentsCount > 0 ? ` (${documentsCount})` : ""}`,
+      icon: <DocumentTextIcon className="w-4 h-4" />,
     },
+    ...(project.lead
+      ? [
+          {
+            key: "calendar" as TabKey,
+            label: `Calendar${calendarCount > 0 ? ` (${calendarCount})` : ""}`,
+            icon: <CalendarDaysIcon className="w-4 h-4" />,
+          },
+          {
+            key: "lead-history" as TabKey,
+            label: "Timeline",
+            icon: <ClockIcon className="w-4 h-4" />,
+          },
+        ]
+      : []),
     {
       key: "procurement",
       label: "Procurement",
@@ -450,27 +612,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
           },
         ]
       : []),
-    ...(project.lead
-      ? [
-          {
-            key: "lead-history" as TabKey,
-            label: "Timeline",
-            icon: <ClockIcon className="w-4 h-4" />,
-          },
-          {
-            key: "calendar" as TabKey,
-            label: `Calendar${calendarCount > 0 ? ` (${calendarCount})` : ""}`,
-            icon: <CalendarDaysIcon className="w-4 h-4" />,
-          },
-          {
-            key: "quotations" as TabKey,
-            label: `Quotations${
-              quotationsCount > 0 ? ` (${quotationsCount})` : ""
-            }`,
-            icon: <DocumentTextIcon className="w-4 h-4" />,
-          },
-        ]
-      : []),
   ];
 
   return (
@@ -479,7 +620,9 @@ export default function ProjectDetailPage({ params }: PageProps) {
         title={project.name}
         subtitle={`${project.project_number} • ${
           ProjectCategoryLabels[project.project_category]
-        } • ${project.client_name || "Unknown Client"}`}
+        } • ${project.client_name || "Unknown Client"} • ${
+          project.property_name || "Unknown Property"
+        }`}
         breadcrumbs={[
           { label: "Projects", href: "/dashboard/projects" },
           { label: project.project_number },
@@ -493,7 +636,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
             <div className="flex items-center gap-1">
               {STATUS_WORKFLOW.map((step, index) => {
                 const currentIndex = STATUS_WORKFLOW.indexOf(
-                  project.status || "planning"
+                  project.status || "new"
                 );
                 const isCompleted = index < currentIndex;
                 const isCurrent = index === currentIndex;
@@ -519,7 +662,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
               className={`px-2.5 py-1 text-xs font-medium rounded-full ${
                 project.status === "completed"
                   ? "bg-green-100 text-green-700"
-                  : project.status === "execution"
+                  : project.status === "in_progress"
                   ? "bg-blue-100 text-blue-700"
                   : project.status === "on_hold"
                   ? "bg-amber-100 text-amber-700"
@@ -539,7 +682,12 @@ export default function ProjectDetailPage({ params }: PageProps) {
         }
         actions={
           <div className="flex items-center gap-2">
-            {/* Add global actions here if needed */}
+            <button
+              onClick={() => setShowEditDetailsModal(true)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+            >
+              Edit
+            </button>
           </div>
         }
       />
@@ -572,7 +720,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
         <div className="p-6">
           {activeTab === "project-mgmt" && (
-            <ProjectMgmtTab
+            <ManagementTab
               projectId={project.id}
               phases={project.phases || []}
               onInitializePhases={initializePhases}
@@ -584,63 +732,113 @@ export default function ProjectDetailPage({ params }: PageProps) {
             />
           )}
 
-          {activeTab === "rooms" && <ProjectRoomsTab projectId={project.id} />}
+          {activeTab === "rooms" && <RoomsTab projectId={project.id} />}
 
           {activeTab === "overview" && (
-            <ProjectOverviewTab
+            <OverviewTab
               project={project}
               onUpdate={updateProject}
-              isFinanceUser={isFinanceUser}
+              isModalOpen={showEditDetailsModal}
+              onModalClose={() => setShowEditDetailsModal(false)}
             />
           )}
 
-          {activeTab === "tasks" && (
-            <ProjectTasksTab
+          {activeTab === "tasks" && taskLoading ? (
+            <div className="space-y-4 animate-pulse">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-12 bg-slate-200 rounded" />
+              ))}
+            </div>
+          ) : activeTab === "tasks" ? (
+            <TasksTab
               projectId={project.id}
-              projectName={project.name}
-              phases={project.phases || []}
+              tasks={tasks}
+              projectClosed={project.status === "completed"}
+              teamMembers={undefined}
               onCountChange={(count) => setTasksCount(count)}
+              onRefresh={fetchCounts}
             />
-          )}
+          ) : null}
 
-          {activeTab === "documents" && (
-            <ProjectDocumentsTab
+          {activeTab === "documents" && documentLoading ? (
+            <div className="space-y-4 animate-pulse">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-12 bg-slate-200 rounded" />
+              ))}
+            </div>
+          ) : activeTab === "documents" ? (
+            <DocumentsTab
               projectId={project.id}
-              leadId={project.lead?.id}
+              documents={documents}
+              projectClosed={project.status === "completed"}
               onCountChange={(count) => setDocumentsCount(count)}
+              onRefresh={fetchCounts}
             />
-          )}
+          ) : null}
 
-          {activeTab === "notes" && (
-            <ProjectNotesTab
+          {activeTab === "notes" && noteLoading ? (
+            <div className="space-y-4 animate-pulse">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-12 bg-slate-200 rounded" />
+              ))}
+            </div>
+          ) : activeTab === "notes" ? (
+            <NotesTab
               projectId={project.id}
-              phases={project.phases || []}
+              notes={notes}
+              projectClosed={project.status === "completed"}
               onCountChange={(count) => setNotesCount(count)}
             />
-          )}
+          ) : null}
 
-          {activeTab === "lead-history" && project.lead && (
-            <ProjectTimelineTab
+          {activeTab === "lead-history" && calendarLoading ? (
+            <div className="space-y-4 animate-pulse">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-12 bg-slate-200 rounded" />
+              ))}
+            </div>
+          ) : activeTab === "lead-history" ? (
+            <TimelineTab
               projectId={project.id}
-              leadId={project.lead.id}
-            />
-          )}
-
-          {activeTab === "calendar" && project.lead && (
-            <ProjectCalendarTab
-              projectId={project.id}
-              leadId={project.lead.id}
+              activities={activities}
+              projectClosed={project.status === "completed"}
+              onRefresh={fetchCounts}
               onCountChange={(count) => setCalendarCount(count)}
             />
-          )}
+          ) : null}
 
-          {activeTab === "quotations" && (
-            <ProjectQuotationsTab
-              leadId={project.lead?.id || ""}
+          {activeTab === "calendar" && calendarLoading ? (
+            <div className="space-y-4 animate-pulse">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-12 bg-slate-200 rounded" />
+              ))}
+            </div>
+          ) : activeTab === "calendar" ? (
+            <CalendarTab
               projectId={project.id}
-              onCountChange={(count) => setQuotationsCount(count)}
+              activities={activities}
+              projectClosed={project.status === "completed"}
+              onCountChange={(count) => setCalendarCount(count)}
+              onRefresh={fetchCounts}
             />
-          )}
+          ) : null}
+
+          {activeTab === "quotations" && quotationLoading ? (
+            <div className="space-y-4 animate-pulse">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-12 bg-slate-200 rounded" />
+              ))}
+            </div>
+          ) : activeTab === "quotations" ? (
+            <QuotationsTab
+              quotations={quotations}
+              onCountChange={(count) => setQuotationsCount(count)}
+              onViewQuotation={(quotation) => {
+                // Navigate to quotation view page
+                router.push(`/dashboard/quotations/${quotation.id}`);
+              }}
+            />
+          ) : null}
 
           {activeTab === "payments" && (
             <div className="space-y-6">
@@ -650,7 +848,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                     Total Due
                   </p>
                   <p className="text-xl font-bold text-slate-900">
-                    {formatCurrency(project.lead?.estimated_value)}
+                    {formatCurrencyUtil(project.lead?.won_amount)}
                   </p>
                 </div>
                 {/* Add other summary cards as needed */}
@@ -700,6 +898,22 @@ export default function ProjectDetailPage({ params }: PageProps) {
               fetchProject();
               setShowSubPhaseEditModal(false);
             }}
+          />
+        )}
+
+        {/* Edit Project Modal */}
+        {showEditProjectModal && project && (
+          <EditProjectModal
+            project={project}
+            editForm={editProjectForm}
+            setEditForm={setEditProjectForm}
+            onClose={() => {
+              setShowEditProjectModal(false);
+              setProjectValidationError(null);
+            }}
+            onSave={handleSaveProjectEdit}
+            isSaving={isSavingProject}
+            validationError={projectValidationError}
           />
         )}
       </PageContent>

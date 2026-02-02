@@ -39,7 +39,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .select(
         `
         *,
-        project_manager:users!project_manager_id(id, name, email, avatar_url)
+        project_manager:users!project_manager_id(id, name, email, avatar_url),
+        client:clients!client_id(id, name, email, phone),
+        property:properties!property_id(id, property_name, property_type, unit_number, address_line1, city, pincode, carpet_area),
+        lead:leads!lead_id(id, lead_number, service_type, lead_source, budget_range, won_amount)
       `
       )
       .eq("id", id)
@@ -175,30 +178,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const { data: propertyData } = await supabase
         .from("properties")
         .select(`
+          id,
           property_name,
-          unit_number,
-          block_tower,
           property_type,
           property_subtype,
+          unit_number,
           address_line1,
           city,
           pincode,
-          carpet_area,
-          built_up_area,
-          super_built_up_area,
-          bedrooms,
-          bathrooms,
-          balconies,
-          floor_number,
-          total_floors,
-          facing,
-          furnishing_status,
-          age_of_property,
-          parking_slots,
-          has_lift,
-          has_gym,
-          has_power_backup,
-          has_security
+          carpet_area
         `)
         .eq("id", fullProject.property_id)
         .single();
@@ -216,11 +204,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           id,
           lead_number,
           lead_source,
-          lead_source_detail,
           service_type,
           stage,
           budget_range,
-          estimated_value,
           won_amount,
           won_at,
           contract_signed_date,
@@ -315,14 +301,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           project_scope,
           special_requirements,
           budget_range,
-          estimated_value,
           won_amount,
           contract_signed_date,
           expected_project_start,
           target_start_date,
           target_end_date,
           lead_source,
-          lead_source_detail,
           assigned_to,
           created_at,
           updated_at,
@@ -384,10 +368,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({
       project: {
         ...flattenedProject,
+        // Flatten client and property info for frontend convenience
+        client_name: pClient?.name || flattenedProject.client_name || "Unknown Client",
+        client_email: pClient?.email || flattenedProject.client_email,
+        client_phone: pClient?.phone || flattenedProject.client_phone,
+        property_name: pProperty?.property_name || project.property?.property_name || flattenedProject.property_name || "Unknown Property",
+        property: pProperty || project.property, // Use pProperty if available, fallback to initial query result
+        priority: fullProject?.priority,
+        current_phase: fullProject?.current_phase,
+        current_phase_id: fullProject?.current_phase_id,
+        quoted_amount: fullProject?.actual_cost, // Map to quoted_amount for display
+        actual_cost: fullProject?.actual_cost,
+        lead_id: fullProject?.lead_id, // Include lead_id for navigation
+        won_amount: pLead?.won_amount, // Include won amount from lead
         phases: phasesWithDeps || [],
         payment_milestones: paymentMilestones || [],
-        // Use lead from flattenedProject (pLead) which has all the comprehensive fields
-        // Don't overwrite with leadData which is less complete
         lead_activities: leadActivities,
       },
     });
@@ -456,14 +451,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         site_address, // maps to address_line1
         city,
         pincode,
-        // Project specific fields
+        // Client updates
+        client_name,
+        client_email,
+        client_phone,
+        // Project specific fields that shouldn't be forwarded
         phases,
         payment_milestones,
         project_manager,
         phase_summary,
-        client_name, // These might be flattened but belong to project or client
-        client_email,
-        client_phone,
         ...projectUpdateData
     } = body;
 
@@ -507,40 +503,71 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     // 2. Update Property Table if property_id exists
     if (existingProject?.property_id) {
-        const propertyUpdates: any = {};
+      const propertyUpdates: any = {};
+      
+      // Map fields
+      if (property_name !== undefined) propertyUpdates.property_name = property_name;
+      if (property_type !== undefined) propertyUpdates.property_type = property_type;
+      if (flat_number !== undefined) propertyUpdates.unit_number = flat_number;
+      if (carpet_area_sqft !== undefined) propertyUpdates.carpet_area = carpet_area_sqft;
+      if (site_address !== undefined) propertyUpdates.address_line1 = site_address;
+      if (city !== undefined) propertyUpdates.city = city;
+      if (pincode !== undefined) propertyUpdates.pincode = pincode;
+
+      // Extended fields
+      if (block_tower !== undefined) propertyUpdates.block_tower = block_tower;
+      if (built_up_area !== undefined) propertyUpdates.built_up_area = built_up_area;
+      if (super_built_up_area !== undefined) propertyUpdates.super_built_up_area = super_built_up_area;
+      if (bedrooms !== undefined) propertyUpdates.bedrooms = bedrooms;
+      if (bathrooms !== undefined) propertyUpdates.bathrooms = bathrooms;
+      if (balconies !== undefined) propertyUpdates.balconies = balconies;
+      if (floor_number !== undefined) propertyUpdates.floor_number = floor_number;
+      if (total_floors !== undefined) propertyUpdates.total_floors = total_floors;
+      if (facing !== undefined) propertyUpdates.facing = facing;
+      if (furnishing_status !== undefined) propertyUpdates.furnishing_status = furnishing_status;
+
+      if (Object.keys(propertyUpdates).length > 0) {
+        const { error: propError } = await supabase
+          .from("properties")
+          .update(propertyUpdates)
+          .eq("id", existingProject.property_id);
         
-        // Map fields
-        if (property_name !== undefined) propertyUpdates.property_name = property_name;
-        if (property_type !== undefined) propertyUpdates.property_type = property_type;
-        if (flat_number !== undefined) propertyUpdates.unit_number = flat_number;
-        if (carpet_area_sqft !== undefined) propertyUpdates.carpet_area = carpet_area_sqft;
-        if (site_address !== undefined) propertyUpdates.address_line1 = site_address;
-        if (city !== undefined) propertyUpdates.city = city;
-        if (pincode !== undefined) propertyUpdates.pincode = pincode;
-
-        // Extended fields
-        if (block_tower !== undefined) propertyUpdates.block_tower = block_tower;
-        if (built_up_area !== undefined) propertyUpdates.built_up_area = built_up_area;
-        if (super_built_up_area !== undefined) propertyUpdates.super_built_up_area = super_built_up_area;
-        if (bedrooms !== undefined) propertyUpdates.bedrooms = bedrooms;
-        if (bathrooms !== undefined) propertyUpdates.bathrooms = bathrooms;
-        if (balconies !== undefined) propertyUpdates.balconies = balconies;
-        if (floor_number !== undefined) propertyUpdates.floor_number = floor_number;
-        if (total_floors !== undefined) propertyUpdates.total_floors = total_floors;
-        if (facing !== undefined) propertyUpdates.facing = facing;
-        if (furnishing_status !== undefined) propertyUpdates.furnishing_status = furnishing_status;
-
-        if (Object.keys(propertyUpdates).length > 0) {
-            const { error: propError } = await supabase
-                .from("properties")
-                .update(propertyUpdates)
-                .eq("id", existingProject.property_id);
-            
-            if (propError) {
-                console.error("Error updating property:", propError);
-                // We don't fail the whole request, but log it
-            }
+        if (propError) {
+          console.error("Error updating property:", propError);
+          // We don't fail the whole request, but log it
         }
+      }
+    }
+
+    // 3. Update Client Table if client information is provided
+    if (client_name !== undefined || client_email !== undefined || client_phone !== undefined) {
+      // First, fetch the current project to get client_id
+      const { data: currentProject, error: currentProjectError } = await supabase
+        .from("projects")
+        .select("client_id")
+        .eq("id", id)
+        .single();
+
+      if (!currentProjectError && currentProject?.client_id) {
+        const clientUpdates: any = {};
+        
+        if (client_name !== undefined) clientUpdates.name = client_name;
+        if (client_email !== undefined) clientUpdates.email = client_email;
+        if (client_phone !== undefined) clientUpdates.phone = client_phone;
+
+        if (Object.keys(clientUpdates).length > 0) {
+          const { error: clientError } = await supabase
+            .from("clients")
+            .update(clientUpdates)
+            .eq("id", currentProject.client_id)
+            .eq("tenant_id", userData.tenant_id);
+          
+          if (clientError) {
+            console.error("Error updating client:", clientError);
+            // We don't fail the whole request, but log it
+          }
+        }
+      }
     }
 
     return NextResponse.json({ project });

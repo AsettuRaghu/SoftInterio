@@ -96,6 +96,10 @@ export type LeadActivityType =
   | "stage_changed"
   | "assignment_changed"
   | "document_uploaded"
+  | "task_created"
+  | "task_completed"
+  | "task_assigned"
+  | "task_updated"
   | "other";
 
 export type MeetingType = "client_meeting" | "internal_meeting" | "site_visit" | "other";
@@ -120,16 +124,12 @@ export type DisqualificationReason =
 
 export type LostReason =
   | "price_too_high"
-  | "chose_competitor"
   | "project_cancelled"
   | "timeline_not_met"
   | "scope_mismatch"
   | "no_response"
   | "budget_reduced"
   | "other";
-
-// Lead Score (replaces priority)
-export type LeadScore = "cold" | "warm" | "hot" | "on_hold";
 
 // Display labels for enums
 export const PropertyCategoryLabels: Record<PropertyCategory, string> = {
@@ -267,30 +267,12 @@ export const DisqualificationReasonLabels: Record<
 
 export const LostReasonLabels: Record<LostReason, string> = {
   price_too_high: "Price Too High",
-  chose_competitor: "Chose Competitor",
   project_cancelled: "Project Cancelled",
   timeline_not_met: "Timeline Not Met",
   scope_mismatch: "Scope Mismatch",
   no_response: "No Response",
   budget_reduced: "Budget Reduced",
   other: "Other",
-};
-
-export const LeadScoreLabels: Record<LeadScore, string> = {
-  cold: "Cold",
-  warm: "Warm",
-  hot: "Hot",
-  on_hold: "On Hold",
-};
-
-export const LeadScoreColors: Record<
-  LeadScore,
-  { bg: string; text: string; dot: string }
-> = {
-  cold: { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-500" },
-  warm: { bg: "bg-amber-100", text: "text-amber-700", dot: "bg-amber-500" },
-  hot: { bg: "bg-red-100", text: "text-red-700", dot: "bg-red-500" },
-  on_hold: { bg: "bg-gray-100", text: "text-gray-600", dot: "bg-gray-400" },
 };
 
 export const LeadActivityTypeLabels: Record<LeadActivityType, string> = {
@@ -310,6 +292,10 @@ export const LeadActivityTypeLabels: Record<LeadActivityType, string> = {
   stage_changed: "Stage Changed",
   assignment_changed: "Assignment Changed",
   document_uploaded: "Document Uploaded",
+  task_created: "Task Created",
+  task_completed: "Task Completed",
+  task_assigned: "Task Assigned",
+  task_updated: "Task Updated",
   other: "Other",
 };
 
@@ -393,17 +379,18 @@ export interface Property {
 export interface Lead {
   id: string;
   tenant_id: string;
-  lead_number: string;
 
   client_id: string;
   
   // Linked Property (FK to properties table) - optional
   property_id: string | null;
 
+  // Lead Number (unique identifier for this lead)
+  lead_number: string | null;
+
   // Service & Source
   service_type: ServiceType | null;
   lead_source: LeadSource | null;
-  lead_source_detail: string | null;
 
   // Timeline
   target_start_date: string | null; // ISO date
@@ -411,11 +398,6 @@ export interface Lead {
 
   // Budget
   budget_range: BudgetRange | null;
-  estimated_value: number | null;
-
-  // Scope
-  project_scope: string | null;
-  special_requirements: string | null;
 
   // Stage & Status
   stage: LeadStage;
@@ -425,7 +407,6 @@ export interface Lead {
   disqualification_reason: DisqualificationReason | null;
   disqualification_notes: string | null;
   lost_reason: LostReason | null;
-  lost_to_competitor: string | null;
   lost_notes: string | null;
 
   // Won Details
@@ -434,44 +415,31 @@ export interface Lead {
   contract_signed_date: string | null;
   expected_project_start: string | null;
 
-  // Handover Details (for Won stage)
-  // Handover Details (MOVED TO SEPARATE TABLE/PROCESS)
-  // payment_terms, token_amount, token_received_date, handover_notes, handover_completed... removed
-
-
   // Assignment
   assigned_to: string | null;
   assigned_at: string | null;
   assigned_by: string | null;
   created_by: string;
 
-  // Approval
-  requires_approval: boolean;
-  approval_status: "pending" | "approved" | "rejected" | null;
-  approval_requested_at: string | null;
-  approval_requested_by: string | null;
-  approved_at: string | null;
-  approved_by: string | null;
-  approval_notes: string | null;
-
-  // Lead Score (formerly priority)
-  lead_score: LeadScore;
-  // Keep priority for backward compatibility during migration
-  priority?: "low" | "medium" | "high" | "urgent";
-
   // Activity Tracking
+  priority: "low" | "medium" | "high" | "urgent";
   last_activity_at: string;
   last_activity_type: LeadActivityType | null;
-  next_followup_date: string | null;
-  next_followup_notes: string | null;
 
   // Timestamps
   created_at: string;
   updated_at: string;
 
+  // Linked data
+  project_id: string | null;
+
   // Joined data (from foreign keys)
   client?: Client;
   property?: Property | null;
+  project?: {
+    id: string;
+    name: string;
+  } | null;
   assigned_user?: {
     id: string;
     name: string;
@@ -507,15 +475,11 @@ export interface CreateLeadInput {
   // Lead-specific fields
   service_type?: ServiceType;
   lead_source?: LeadSource;
-  lead_source_detail?: string;
   target_start_date?: string;
   target_end_date?: string;
   budget_range?: BudgetRange;
-  estimated_value?: number;
-  project_scope?: string;
-  special_requirements?: string;
-  lead_score?: LeadScore;
-  notes?: string;
+  assigned_to?: string; // UUID of team member to assign to (defaults to creator)
+  notes?: string; // Optional notes for the lead
 }
 
 // Lead update input - updates to client/property are passed inline
@@ -540,17 +504,10 @@ export interface UpdateLeadInput {
   // Lead-specific field updates
   service_type?: ServiceType | null;
   lead_source?: LeadSource | null;
-  lead_source_detail?: string | null;
   target_start_date?: string | null;
   target_end_date?: string | null;
   budget_range?: BudgetRange | null;
-  estimated_value?: number | null;
-  project_scope?: string | null;
-  special_requirements?: string | null;
-  lead_score?: LeadScore;
   assigned_to?: string | null;
-  next_followup_date?: string | null;
-  next_followup_notes?: string | null;
 }
 
 // Stage transition input
@@ -567,7 +524,6 @@ export interface StageTransitionInput {
 
   // For Requirement Discussion (updates property)
   budget_range?: BudgetRange;
-  project_scope?: string;
   property_name?: string;
   unit_number?: string;
   property_category?: PropertyCategory;
@@ -583,14 +539,15 @@ export interface StageTransitionInput {
 
   // For Lost
   lost_reason?: LostReason;
-  lost_to_competitor?: string;
   lost_notes?: string;
 
   // For Won
   won_amount?: number;
   contract_signed_date?: string;
   expected_project_start?: string;
-  won_notes?: string;
+  expected_project_end?: string;
+  project_manager_id?: string;
+  project_priority?: string;
   skip_project_creation?: boolean;
   selected_quotation_id?: string;
 

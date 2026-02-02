@@ -20,7 +20,7 @@ export function DashboardOverview() {
     {
       name: "Office Renovation",
       client: "ABC Corp",
-      status: "Planning",
+      status: "In Progress",
       progress: 25,
     },
     {

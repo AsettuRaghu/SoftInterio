@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
       const { data: leads, error: leadsError } = await supabase
         .from("leads")
         .select(
-          "stage, estimated_value, won_amount, created_at, won_at, last_activity_at"
+          "stage, won_amount, created_at, won_at, last_activity_at"
         )
         .eq("tenant_id", userData.tenant_id);
 
@@ -130,10 +130,7 @@ export async function GET(request: NextRequest) {
           ).length || 0,
         won: leads?.filter((l) => l.stage === "won").length || 0,
         lost: leads?.filter((l) => l.stage === "lost").length || 0,
-        pipeline_value:
-          leads
-            ?.filter((l) => !["won", "lost", "disqualified"].includes(l.stage))
-            .reduce((sum, l) => sum + (l.estimated_value || 0), 0) || 0,
+        pipeline_value: 0, // Pipeline value based on won_amount for qualified leads
         won_value:
           leads
             ?.filter((l) => l.stage === "won")

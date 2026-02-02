@@ -54,7 +54,6 @@ export default function EditQuotationPage() {
   const [quotationNumber, setQuotationNumber] = useState("");
   const [quotationName, setQuotationName] = useState("");
   const [version, setVersion] = useState(1);
-  const [validUntil, setValidUntil] = useState("");
   const [notes, setNotes] = useState("");
   const [taxPercent, setTaxPercent] = useState(DEFAULT_TAX_PERCENT);
   const [spaces, setSpaces] = useState<BuilderSpace[]>([]);
@@ -171,7 +170,6 @@ export default function EditQuotationPage() {
         setQuotationNumber(q.quotation_number || "");
         setQuotationName(q.title || q.name || "");
         setVersion(q.version || 1);
-        setValidUntil(q.valid_until ? q.valid_until.split("T")[0] : "");
         setNotes(q.notes || "");
         setTaxPercent(q.tax_percent ?? 18); // Load tax percent, default to 18%
         setAssignedTo(q.assigned_to || null);
@@ -611,6 +609,42 @@ export default function EditQuotationPage() {
     );
   };
 
+  // Move line item up/down within a component
+  const moveLineItem = (
+    spaceId: string,
+    componentId: string,
+    lineItemId: string,
+    direction: "up" | "down"
+  ) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id !== spaceId) return space;
+
+        const updatedComponents = space.components.map((component) => {
+          if (component.id !== componentId) return component;
+
+          const itemIndex = component.lineItems.findIndex(
+            (li) => li.id === lineItemId
+          );
+          if (itemIndex === -1) return component;
+
+          const newIndex = direction === "up" ? itemIndex - 1 : itemIndex + 1;
+          if (newIndex < 0 || newIndex >= component.lineItems.length)
+            return component;
+
+          const newLineItems = [...component.lineItems];
+          [newLineItems[itemIndex], newLineItems[newIndex]] = [
+            newLineItems[newIndex],
+            newLineItems[itemIndex],
+          ];
+          return { ...component, lineItems: newLineItems };
+        });
+
+        return { ...space, components: updatedComponents };
+      })
+    );
+  };
+
   // Cost item operations
   const addCostItem = (
     spaceId: string,
@@ -727,7 +761,7 @@ export default function EditQuotationPage() {
     fetchTemplates();
   };
 
-  const fetchTemplates = async (search?: string) => {
+  const fetchTemplates = useCallback(async (search?: string) => {
     try {
       setLoadingTemplates(true);
       const params = new URLSearchParams();
@@ -746,7 +780,7 @@ export default function EditQuotationPage() {
     } finally {
       setLoadingTemplates(false);
     }
-  };
+  }, []);
 
   const loadTemplate = async (templateId: string) => {
     try {
@@ -763,9 +797,10 @@ export default function EditQuotationPage() {
       const newSpaces: BuilderSpace[] = [];
       const lineItemsBySpace: Record<string, Record<string, any[]>> = {};
 
-      // Group line items
+      // Group line items by template_space_id (individual space instance, not just type)
       (template.line_items || []).forEach((item: any) => {
-        const spaceKey = item.space_type_id || "ungrouped";
+        const spaceKey =
+          item.template_space_id || item.space_type_id || "ungrouped";
         const componentKey = item.component_type_id || "direct";
 
         if (!lineItemsBySpace[spaceKey]) lineItemsBySpace[spaceKey] = {};
@@ -780,7 +815,8 @@ export default function EditQuotationPage() {
           (st) => st.id === ts.space_type_id
         );
         const spaceId = `new-${generateId()}`;
-        const spaceLineItems = lineItemsBySpace[ts.space_type_id] || {};
+        // Use template_space_id to get line items specific to this space instance
+        const spaceLineItems = lineItemsBySpace[ts.id] || {};
 
         const components: BuilderComponent[] = [];
 
@@ -999,7 +1035,6 @@ export default function EditQuotationPage() {
 
       const payload = {
         title: quotationName,
-        valid_until: validUntil || null,
         notes,
         assigned_to: assignedTo,
         template_id: appliedTemplateId, // Track which template was used
@@ -1133,7 +1168,7 @@ export default function EditQuotationPage() {
         clearTimeout(autoSaveTimeoutRef.current);
       }
     };
-  }, [spaces, quotationName, validUntil, notes, assignedTo]);
+  }, [spaces, quotationName, notes, assignedTo]);
 
   // Mark initial load complete after data is loaded
   useEffect(() => {
@@ -1520,17 +1555,7 @@ export default function EditQuotationPage() {
                   className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
-              <div className="w-36">
-                <label className="block text-xs font-medium text-slate-600 mb-1">
-                  Valid Until
-                </label>
-                <input
-                  type="date"
-                  value={validUntil}
-                  onChange={(e) => setValidUntil(e.target.value)}
-                  className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
+
               <div className="flex-1 min-w-[200px]">
                 <label className="block text-xs font-medium text-slate-600 mb-1">
                   Notes
@@ -1760,6 +1785,12 @@ export default function EditQuotationPage() {
                         moveComponent(space.id, componentId, "down");
                       }
                     }}
+                    onMoveLineItemUp={(componentId, lineItemId) =>
+                      moveLineItem(space.id, componentId, lineItemId, "up")
+                    }
+                    onMoveLineItemDown={(componentId, lineItemId) =>
+                      moveLineItem(space.id, componentId, lineItemId, "down")
+                    }
                     showValidation={showValidation}
                   />
                 ))}
@@ -1850,8 +1881,8 @@ export default function EditQuotationPage() {
       <TemplateModal
         isOpen={showTemplateModal}
         onClose={() => setShowTemplateModal(false)}
-        onLoad={() => {
-          selectedTemplateId && loadTemplate(selectedTemplateId);
+        onLoad={(templateId: string) => {
+          loadTemplate(templateId);
         }}
         onFetchTemplates={fetchTemplates}
         templates={templates}

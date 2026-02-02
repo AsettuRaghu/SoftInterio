@@ -59,7 +59,7 @@ export function CreateTaskModal({
   // Form state
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState<TaskStatus>("todo");
-  const [priority, setPriority] = useState<TaskPriority>(null);
+  const [priority, setPriority] = useState<TaskPriority>("low");
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -82,7 +82,7 @@ export function CreateTaskModal({
       // Reset form with default linked entity
       setTitle("");
       setStatus("todo");
-      setPriority(null);
+      setPriority("low");
       setAssignedTo(currentUser?.id || null);
       setStartDate("");
       setDueDate("");
@@ -192,10 +192,13 @@ export function CreateTaskModal({
             .map((st) => ({
               title: st.title,
               priority: st.priority || null,
-              assigned_to: st.assigned_to || null,
+              assigned_to: st.assigned_to || assignedTo || null, // Inherit parent's assignee if not set
               start_date: st.start_date || null,
               due_date: st.due_date || null,
               status: st.status || "todo",
+              // Inherit parent's linked entity
+              related_type: primaryLink?.type || null,
+              related_id: primaryLink?.id || null,
             })),
         }),
       });

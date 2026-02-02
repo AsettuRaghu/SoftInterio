@@ -623,18 +623,6 @@ export default function TemplateDetailPage() {
                     template.quality_tier?.slice(1) || "Standard"}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">Base:</span>
-                <span className="text-sm font-semibold text-slate-900">
-                  {formatCurrency(template.base_price || 0)}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">Used:</span>
-                <span className="text-sm text-slate-900">
-                  {template.usage_count || 0}x
-                </span>
-              </div>
               {template.description && (
                 <div className="flex items-center gap-2 flex-1 min-w-[200px]">
                   <span className="text-xs text-slate-500">Desc:</span>
@@ -1077,20 +1065,6 @@ export default function TemplateDetailPage() {
                 No spaces defined yet.
               </p>
             )}
-
-            <div className="border-t border-slate-200 pt-4">
-              <div className="flex items-center justify-between pt-2">
-                <span className="text-sm font-semibold text-slate-900">
-                  Base Price
-                </span>
-                <span className="text-lg font-bold text-blue-600">
-                  {formatCurrency(template.base_price || 0)}
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mt-1">
-                Actual cost calculated from dimensions
-              </p>
-            </div>
           </div>
 
           {/* Statistics Card */}
@@ -1115,12 +1089,6 @@ export default function TemplateDetailPage() {
                 <span className="text-slate-600">Total Cost Items</span>
                 <span className="font-medium text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
                   {stats.lineItems}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-600">Times Used</span>
-                <span className="font-medium text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
-                  {template.usage_count || 0}
                 </span>
               </div>
             </div>

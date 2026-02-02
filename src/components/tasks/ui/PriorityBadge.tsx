@@ -15,27 +15,27 @@ interface PriorityConfig {
 const priorityConfig: Record<NonNullable<TaskPriority>, PriorityConfig> = {
   critical: {
     label: "Critical",
-    color: "text-red-700",
+    color: "text-red-900",
     bgColor: "bg-red-50 hover:bg-red-100",
     flagColor: "text-red-600",
   },
   high: {
     label: "High",
-    color: "text-orange-700",
+    color: "text-orange-900",
     bgColor: "bg-orange-50 hover:bg-orange-100",
     flagColor: "text-orange-600",
   },
   medium: {
     label: "Medium",
-    color: "text-yellow-700",
-    bgColor: "bg-yellow-50 hover:bg-yellow-100",
-    flagColor: "text-yellow-600",
+    color: "text-blue-900",
+    bgColor: "bg-blue-50 hover:bg-blue-100",
+    flagColor: "text-blue-600",
   },
   low: {
     label: "Low",
-    color: "text-slate-600",
-    bgColor: "bg-slate-50 hover:bg-slate-100",
-    flagColor: "text-slate-500",
+    color: "text-green-700",
+    bgColor: "bg-green-50 hover:bg-green-100",
+    flagColor: "text-green-500",
   },
 };
 
@@ -122,7 +122,6 @@ export function PriorityBadge({
   const padding = size === "sm" ? "p-1.5" : "p-1.5";
 
   const allPriorityOptions: TaskPriority[] = [
-    null,
     "critical",
     "high",
     "medium",

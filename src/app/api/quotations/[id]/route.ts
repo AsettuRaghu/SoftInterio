@@ -948,10 +948,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Fetch updated quotation
+    // Fetch updated quotation with relationships
     const { data: updatedQuotation, error: refetchError } = await supabase
-      .from("quotations_with_lead")
-      .select("*")
+      .from("quotations")
+      .select(`
+        *,
+        lead:leads!quotations_lead_id_fkey(
+          id,
+          lead_number,
+          stage,
+          client:clients!leads_client_id_fkey(id, name, phone, email)
+        ),
+        client:clients!quotations_client_id_fkey(id, name, phone, email),
+        assigned_user:users!quotations_assigned_to_fkey(id, name, avatar_url),
+        created_user:users!quotations_created_by_fkey(id, name, avatar_url)
+      `)
       .eq("id", id)
       .single();
 

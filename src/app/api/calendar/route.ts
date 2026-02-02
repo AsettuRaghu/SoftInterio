@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get("start");
     const endDate = searchParams.get("end");
     const source = searchParams.get("source"); // lead, project, standalone, all
+    const linkedId = searchParams.get("linked_id"); // specific lead or project ID
 
     const supabase = await createClient();
     const supabaseAdmin = createAdminClient();
@@ -89,6 +90,11 @@ export async function GET(request: NextRequest) {
         .not("meeting_scheduled_at", "is", null)
         .in("activity_type", ["meeting_scheduled", "client_meeting", "internal_meeting", "site_visit", "other"])
         .order("meeting_scheduled_at", { ascending: true });
+
+      // Filter by specific lead if linkedId is provided
+      if (linkedId && source === "lead") {
+        leadEventsQuery = leadEventsQuery.eq("lead_id", linkedId);
+      }
 
       // Apply date filters if provided
       if (startDate) {

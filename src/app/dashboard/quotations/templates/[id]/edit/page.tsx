@@ -368,6 +368,42 @@ export default function EditTemplatePage() {
     );
   };
 
+  // Move line item up/down within a component
+  const moveLineItem = (
+    spaceId: string,
+    componentId: string,
+    lineItemId: string,
+    direction: "up" | "down"
+  ) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id !== spaceId) return space;
+
+        const updatedComponents = space.components.map((component) => {
+          if (component.id !== componentId) return component;
+
+          const itemIndex = component.lineItems.findIndex(
+            (li) => li.id === lineItemId
+          );
+          if (itemIndex === -1) return component;
+
+          const newIndex = direction === "up" ? itemIndex - 1 : itemIndex + 1;
+          if (newIndex < 0 || newIndex >= component.lineItems.length)
+            return component;
+
+          const newLineItems = [...component.lineItems];
+          [newLineItems[itemIndex], newLineItems[newIndex]] = [
+            newLineItems[newIndex],
+            newLineItems[itemIndex],
+          ];
+          return { ...component, lineItems: newLineItems };
+        });
+
+        return { ...space, components: updatedComponents };
+      })
+    );
+  };
+
   // Drag & drop handlers for spaces
   const handleSpaceDragStart = (spaceId: string) => {
     setDraggedSpaceId(spaceId);
@@ -974,6 +1010,12 @@ export default function EditTemplatePage() {
                 }
                 onMoveComponentDown={(componentId) =>
                   moveComponent(space.id, componentId, "down")
+                }
+                onMoveLineItemUp={(componentId, lineItemId) =>
+                  moveLineItem(space.id, componentId, lineItemId, "up")
+                }
+                onMoveLineItemDown={(componentId, lineItemId) =>
+                  moveLineItem(space.id, componentId, lineItemId, "down")
                 }
               />
             ))}

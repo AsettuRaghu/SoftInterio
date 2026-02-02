@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { getQuotationNumberAndVersion } from "@/utils/quotation-number-generator";
 
 export async function POST(
   request: NextRequest,
@@ -52,18 +53,13 @@ export async function POST(
 
     // Generate new quotation number
     const today = new Date();
-    const datePrefix = `QT${today.getFullYear()}${String(
-      today.getMonth() + 1
-    ).padStart(2, "0")}`;
 
-    // Get the count of quotations created today to generate sequential number
-    const { count } = await supabase
-      .from("quotations")
-      .select("*", { count: "exact", head: true })
-      .like("quotation_number", `${datePrefix}%`);
-
-    const sequentialNumber = String((count || 0) + 1).padStart(4, "0");
-    const newQuotationNumber = `${datePrefix}${sequentialNumber}`;
+    // Get quotation number and version - reuses existing number if for same lead/project
+    const { quotationNumber, nextVersion } = await getQuotationNumberAndVersion(
+      original.tenant_id,
+      original.lead_id,
+      original.project_id
+    );
 
     // Create new quotation as a copy
     const duplicateData = {
@@ -71,18 +67,11 @@ export async function POST(
       lead_id: original.lead_id,
       client_id: original.client_id,
       project_id: original.project_id,
-      quotation_number: newQuotationNumber,
-      version: 1,
+      quotation_number: quotationNumber,
+      version: nextVersion,
       status: "draft" as const,
       title: original.title ? `${original.title} (Copy)` : "Quotation (Copy)",
       description: original.description,
-      client_name: original.client_name,
-      client_email: original.client_email,
-      client_phone: original.client_phone,
-      property_name: original.property_name,
-      property_type: original.property_type,
-      property_address: original.property_address,
-      carpet_area: original.carpet_area,
       subtotal: original.subtotal,
       discount_type: original.discount_type,
       discount_value: original.discount_value,
@@ -98,12 +87,11 @@ export async function POST(
       notes: original.notes,
       presentation_level: original.presentation_level,
       hide_dimensions: original.hide_dimensions,
+      valid_from: original.valid_from,
       valid_until: new Date(
         Date.now() + 30 * 24 * 60 * 60 * 1000
       ).toISOString(), // 30 days from now
       created_by: user!.id,
-      assigned_to: user!.id,
-      template_id: original.template_id, // Keep track of the template used
     };
 
     const { data: newQuotation, error: createError } = await supabase

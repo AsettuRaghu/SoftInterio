@@ -54,10 +54,13 @@ export async function GET(
       );
     }
 
-    // Fetch activities
-    const { data: activities, error: activitiesError } = await supabase
+    // Fetch activities with user details
+    const { data: activities, error: activitiesError } = await supabaseAdmin
       .from("project_activities")
-      .select("*")
+      .select(`
+        *,
+        created_user:created_by(id, name, avatar_url)
+      `)
       .eq("project_id", projectId)
       .order("created_at", { ascending: false });
 
@@ -69,7 +72,17 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ activities: activities || [] });
+    // Transform activities to match expected format
+    const transformedActivities = (activities || []).map((activity: any) => ({
+      ...activity,
+      created_user: activity.created_user ? {
+        id: activity.created_user.id,
+        name: activity.created_user.name,
+        avatar_url: activity.created_user.avatar_url,
+      } : null,
+    }));
+
+    return NextResponse.json({ activities: transformedActivities || [] });
   } catch (error) {
     console.error("Get project activities API error:", error);
     return NextResponse.json(

@@ -138,7 +138,6 @@ export async function POST(request: NextRequest) {
     if (!userData?.tenant_id) {
       return createErrorResponse("No tenant associated with user", 400);
     }
-    }
 
     // Validate required fields
     if (!body.name || !body.unit_code) {

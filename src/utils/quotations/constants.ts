@@ -15,12 +15,13 @@ export const QUOTATION_STATUS_OPTIONS: Array<{
 }> = [
   { value: "draft", label: "Draft", color: "#94a3b8" },
   { value: "sent", label: "Sent", color: "#3b82f6" },
-  { value: "viewed", label: "Viewed", color: "#06b6d4" },
   { value: "negotiating", label: "Negotiating", color: "#f59e0b" },
   { value: "approved", label: "Approved", color: "#22c55e" },
   { value: "rejected", label: "Rejected", color: "#ef4444" },
   { value: "cancelled", label: "Cancelled", color: "#f97316" },
   { value: "expired", label: "Expired", color: "#6b7280" },
+  { value: "linked_to_project", label: "Linked to Project", color: "#8b5cf6" },
+  { value: "project_baseline", label: "Project Baseline", color: "#06b6d4" },
 ];
 
 /**

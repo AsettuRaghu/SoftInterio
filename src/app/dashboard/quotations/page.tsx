@@ -71,8 +71,23 @@ interface Template {
   components_count?: number;
 }
 
-// Status options for filtering and bulk updates
-const STATUS_OPTIONS = QUOTATION_STATUS_OPTIONS;
+// Status options for bulk updates (exclude auto-set statuses)
+const STATUS_OPTIONS = QUOTATION_STATUS_OPTIONS.filter(
+  (opt) => opt.value !== "linked_to_project" && opt.value !== "project_baseline"
+);
+
+// Allowed status filter options for list view display
+const ALLOWED_STATUS_FILTER_OPTIONS = QUOTATION_STATUS_OPTIONS.filter((opt) =>
+  [
+    "draft",
+    "sent",
+    "negotiating",
+    "approved",
+    "project_baseline",
+    "rejected",
+    "cancelled",
+  ].includes(opt.value)
+);
 
 // Active statuses constant
 const ACTIVE_STATUSES = ACTIVE_QUOTATION_STATUSES;
@@ -82,12 +97,24 @@ export default function QuotationsListPage() {
   const [allQuotations, setAllQuotations] = useState<Quotation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [leadStatusFilter, setLeadStatusFilter] = useState<
-    "active" | "inactive"
-  >("active");
+  const [selectedLeadStatuses, setSelectedLeadStatuses] = useState<
+    Set<"active" | "inactive">
+  >(new Set(["active"] as ("active" | "inactive")[]));
 
-  // Filter states
-  const [statusFilter, setStatusFilter] = useState<QuotationStatus | "">("");
+  // Filter states - multi-select for status filter
+  const [selectedStatuses, setSelectedStatuses] = useState<
+    Set<QuotationStatus>
+  >(
+    new Set([
+      "draft",
+      "sent",
+      "negotiating",
+      "approved",
+      "project_baseline",
+    ] as QuotationStatus[])
+  );
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showLeadStatusDropdown, setShowLeadStatusDropdown] = useState(false);
 
   // Selection state for bulk actions
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -115,9 +142,9 @@ export default function QuotationsListPage() {
     (data: Quotation[], searchTerm: string) => {
       let filtered = data;
 
-      // Apply status filter
-      if (statusFilter) {
-        filtered = filtered.filter((q) => q.status === statusFilter);
+      // Apply status filter (multi-select)
+      if (selectedStatuses.size > 0) {
+        filtered = filtered.filter((q) => selectedStatuses.has(q.status));
       }
 
       // Apply search filter
@@ -142,7 +169,7 @@ export default function QuotationsListPage() {
 
       return filtered;
     },
-    [statusFilter]
+    [selectedStatuses]
   );
 
   // Custom sort value getter
@@ -160,7 +187,6 @@ export default function QuotationsListPage() {
         const statusOrder: QuotationStatus[] = [
           "draft",
           "sent",
-          "viewed",
           "negotiating",
           "approved",
           "rejected",
@@ -168,7 +194,7 @@ export default function QuotationsListPage() {
         ];
         return statusOrder.indexOf(item.status);
       case "valid_until":
-        return item.valid_until ? new Date(item.valid_until) : null;
+        return item.created_at ? new Date(item.created_at) : null;
       case "created_at":
       default:
         return item.created_at ? new Date(item.created_at) : null;
@@ -179,21 +205,35 @@ export default function QuotationsListPage() {
   const processedQuotations = useMemo(() => {
     // Filter based on lead status filter
     let filteredByLeadStatus = allQuotations;
-    if (leadStatusFilter === "active") {
+    if (selectedLeadStatuses.has("active")) {
       // Active: exclude quotations linked to closed leads (won/lost/disqualified)
-      filteredByLeadStatus = allQuotations.filter(
+      const activeQuotations = allQuotations.filter(
         (q) =>
           !q.lead_stage ||
           !["won", "lost", "disqualified"].includes(q.lead_stage)
       );
-    } else if (leadStatusFilter === "inactive") {
-      // Inactive: show only quotations linked to closed leads (won/lost/disqualified)
+
+      if (selectedLeadStatuses.has("inactive")) {
+        // Both selected: show all
+        filteredByLeadStatus = allQuotations;
+      } else {
+        // Only active selected
+        filteredByLeadStatus = activeQuotations;
+      }
+    } else if (selectedLeadStatuses.has("inactive")) {
+      // Only inactive selected: show only quotations linked to closed leads
       filteredByLeadStatus = allQuotations.filter(
         (q) =>
           q.lead_stage && ["won", "lost", "disqualified"].includes(q.lead_stage)
       );
     }
-    const filtered = filterData(filteredByLeadStatus, searchValue);
+
+    // Filter by selected statuses from dropdown (no hard-coded filter)
+    const filteredByStatus = filteredByLeadStatus.filter((q) =>
+      selectedStatuses.has(q.status)
+    );
+
+    const filtered = filterData(filteredByStatus, searchValue);
     return sortData(filtered, getSortValue);
   }, [
     allQuotations,
@@ -201,7 +241,8 @@ export default function QuotationsListPage() {
     filterData,
     sortData,
     getSortValue,
-    leadStatusFilter,
+    selectedLeadStatuses,
+    selectedStatuses,
   ]);
 
   // Fetch quotations
@@ -210,8 +251,17 @@ export default function QuotationsListPage() {
       setIsLoading(true);
       setError(null);
 
+      // Determine lead_status parameter: if both selected, use "all", else use specific status
+      const leadStatusParam =
+        selectedLeadStatuses.has("active") &&
+        selectedLeadStatuses.has("inactive")
+          ? "all"
+          : selectedLeadStatuses.has("inactive")
+          ? "inactive"
+          : "active";
+
       const response = await fetch(
-        `/api/quotations?lead_status=${leadStatusFilter}`
+        `/api/quotations?lead_status=${leadStatusParam}`
       );
       if (!response.ok) throw new Error("Failed to fetch quotations");
 
@@ -226,7 +276,7 @@ export default function QuotationsListPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [leadStatusFilter]);
+  }, [selectedLeadStatuses]);
 
   // Fetch modal data when modal opens - fetch in parallel for speed
   const fetchModalData = useCallback(async () => {
@@ -287,13 +337,23 @@ export default function QuotationsListPage() {
   };
 
   // Create quotation
-  const handleCreateQuotation = async () => {
+  const handleCreateQuotation = async (data?: {
+    source: "lead" | "project" | "standalone";
+    leadId?: string;
+    projectId?: string;
+    templateId?: string;
+  }) => {
+    const leadId = data?.leadId || selectedLeadId;
+    const projectId = data?.projectId || selectedProjectId;
+    const templateId = data?.templateId || selectedTemplateId;
+    const source = data?.source || createSource;
+
     // For lead/project source, require selection
-    if (createSource === "lead" && !selectedLeadId) {
+    if (source === "lead" && !leadId) {
       alert("Please select a lead");
       return;
     }
-    if (createSource === "project" && !selectedProjectId) {
+    if (source === "project" && !projectId) {
       alert("Please select a project");
       return;
     }
@@ -301,14 +361,14 @@ export default function QuotationsListPage() {
     setIsCreating(true);
     try {
       const payload: Record<string, string> = {};
-      if (createSource === "lead" && selectedLeadId) {
-        payload.lead_id = selectedLeadId;
-      } else if (createSource === "project" && selectedProjectId) {
-        payload.project_id = selectedProjectId;
+      if (source === "lead" && leadId) {
+        payload.lead_id = leadId;
+      } else if (source === "project" && projectId) {
+        payload.project_id = projectId;
       }
       // For standalone, we don't add lead_id or project_id
-      if (selectedTemplateId) {
-        payload.template_id = selectedTemplateId;
+      if (templateId) {
+        payload.template_id = templateId;
       }
 
       const response = await fetch("/api/quotations", {
@@ -337,12 +397,41 @@ export default function QuotationsListPage() {
     fetchQuotations();
   }, [fetchQuotations]);
 
+  // Handle URL parameters to auto-open create modal
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const shouldCreate = searchParams.get("create") === "true";
+    const leadId = searchParams.get("lead_id");
+
+    if (shouldCreate && !showCreateModal) {
+      setShowCreateModal(true);
+      setCreateSource("lead");
+      fetchModalData(); // Fetch leads, projects, and templates
+      // Clear the URL parameters
+      window.history.replaceState({}, "", "/dashboard/quotations");
+    }
+  }, [showCreateModal, fetchModalData]);
+
   // Calculate stats
   const stats = useMemo(() => {
     const total = allQuotations.length;
     const draft = allQuotations.filter((q) => q.status === "draft").length;
     const sent = allQuotations.filter((q) => q.status === "sent").length;
-    const pipelineValue = allQuotations
+
+    // Get only latest version of each quotation (by quotation_number)
+    const latestQuotations = new Map<string, Quotation>();
+    allQuotations.forEach((q) => {
+      const key = q.quotation_number;
+      const existing = latestQuotations.get(key);
+      if (
+        !existing ||
+        (q.version && existing.version && q.version > existing.version)
+      ) {
+        latestQuotations.set(key, q);
+      }
+    });
+
+    const pipelineValue = Array.from(latestQuotations.values())
       .filter((q) => q.status === "draft")
       .reduce((sum, q) => sum + (q.grand_total || 0), 0);
 
@@ -490,7 +579,7 @@ export default function QuotationsListPage() {
       width: "4%",
       render: (quotation) => {
         const isLeadClosed =
-          quotation.lead_stage &&
+          !!quotation.lead_stage &&
           ["won", "lost", "disqualified"].includes(quotation.lead_stage);
         return (
           <input
@@ -637,23 +726,14 @@ export default function QuotationsListPage() {
     },
     {
       key: "valid_until",
-      header: "Valid Until",
+      header: "Created At",
       width: "10%",
       sortable: true,
       render: (quotation) => (
         <div>
-          <p
-            className={`text-sm ${
-              isExpiringSoon(quotation.valid_until)
-                ? "text-amber-600 font-medium"
-                : "text-slate-700"
-            }`}
-          >
-            {formatDate(quotation.valid_until)}
+          <p className="text-sm text-slate-700">
+            {formatDate(quotation.created_at)}
           </p>
-          {isExpiringSoon(quotation.valid_until) && (
-            <p className="text-xs text-amber-600">Expiring soon</p>
-          )}
         </div>
       ),
     },
@@ -795,33 +875,229 @@ export default function QuotationsListPage() {
             )}
           </div>
 
-          {/* Status Filter Dropdown */}
-          <select
-            value={statusFilter}
-            onChange={(e) =>
-              setStatusFilter(e.target.value as QuotationStatus | "")
-            }
-            className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 cursor-pointer"
-          >
-            <option value="">All Status</option>
-            {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label} ({stats.statusCounts[opt.value] || 0})
-              </option>
-            ))}
-          </select>
+          {/* Status Filter Dropdown with Checkboxes */}
+          <div className="relative">
+            <button
+              onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+              className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 cursor-pointer hover:bg-slate-50 flex items-center gap-2"
+            >
+              Status Filter ({selectedStatuses.size})
+              <svg
+                className={`w-4 h-4 transition-transform ${
+                  showStatusDropdown ? "rotate-180" : ""
+                }`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 14l-7 7m0 0l-7-7m7 7V3"
+                />
+              </svg>
+            </button>
+
+            {showStatusDropdown && (
+              <>
+                {/* Overlay to close dropdown */}
+                <div
+                  className="fixed inset-0"
+                  style={{ zIndex: 998 }}
+                  onClick={() => setShowStatusDropdown(false)}
+                />
+
+                {/* Dropdown Menu - Fixed positioning to float above everything */}
+                <div
+                  className="fixed bg-white border border-slate-200 rounded-lg shadow-2xl min-w-max p-2 max-h-96 overflow-y-auto"
+                  style={{
+                    zIndex: 999,
+                    top: "140px",
+                    left: "540px",
+                    maxWidth: "350px",
+                  }}
+                >
+                  {/* Select All / Deselect All */}
+                  <div className="px-3 py-2 border-b border-slate-200 mb-2">
+                    <button
+                      onClick={() => {
+                        if (
+                          selectedStatuses.size ===
+                          ALLOWED_STATUS_FILTER_OPTIONS.length
+                        ) {
+                          setSelectedStatuses(new Set());
+                        } else {
+                          setSelectedStatuses(
+                            new Set(
+                              ALLOWED_STATUS_FILTER_OPTIONS.map(
+                                (opt) => opt.value
+                              )
+                            )
+                          );
+                        }
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      {selectedStatuses.size ===
+                      ALLOWED_STATUS_FILTER_OPTIONS.length
+                        ? "Deselect All"
+                        : "Select All"}
+                    </button>
+                  </div>
+
+                  {/* Status Options */}
+                  {ALLOWED_STATUS_FILTER_OPTIONS.map((opt) => (
+                    <label
+                      key={opt.value}
+                      className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 rounded cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedStatuses.has(opt.value)}
+                        onChange={(e) => {
+                          const newStatuses = new Set(selectedStatuses);
+                          if (e.target.checked) {
+                            newStatuses.add(opt.value);
+                          } else {
+                            newStatuses.delete(opt.value);
+                          }
+                          setSelectedStatuses(newStatuses);
+                        }}
+                        className="rounded"
+                      />
+                      <span className="text-sm text-slate-700">
+                        {opt.label} ({stats.statusCounts[opt.value] || 0})
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
 
           {/* Lead Status Filter Dropdown */}
-          <select
-            value={leadStatusFilter}
-            onChange={(e) =>
-              setLeadStatusFilter(e.target.value as "active" | "inactive")
-            }
-            className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 cursor-pointer"
-          >
-            <option value="active">Active Leads</option>
-            <option value="inactive">Inactive Leads</option>
-          </select>
+          <div className="relative">
+            <button
+              onClick={() => setShowLeadStatusDropdown(!showLeadStatusDropdown)}
+              className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 cursor-pointer hover:bg-slate-50 flex items-center gap-2"
+            >
+              Lead Status ({selectedLeadStatuses.size})
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+
+            {showLeadStatusDropdown && (
+              <>
+                <div
+                  className="fixed inset-0"
+                  style={{ zIndex: 998 }}
+                  onClick={() => setShowLeadStatusDropdown(false)}
+                />
+                <div
+                  className="fixed bg-white border border-slate-200 rounded-lg shadow-2xl p-2"
+                  style={{
+                    zIndex: 999,
+                    top: "140px",
+                    left: "630px",
+                    minWidth: "200px",
+                  }}
+                >
+                  {/* Select All / Deselect All */}
+                  <button
+                    onClick={() => {
+                      if (selectedLeadStatuses.size === 2) {
+                        setSelectedLeadStatuses(new Set());
+                      } else {
+                        setSelectedLeadStatuses(
+                          new Set(["active", "inactive"] as (
+                            | "active"
+                            | "inactive"
+                          )[])
+                        );
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-100 rounded font-medium mb-1"
+                  >
+                    {selectedLeadStatuses.size === 2
+                      ? "Deselect All"
+                      : "Select All"}
+                  </button>
+
+                  <div className="border-t border-slate-200 my-1" />
+
+                  {/* Active Leads */}
+                  <label className="flex items-center px-3 py-2 hover:bg-slate-100 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedLeadStatuses.has("active")}
+                      onChange={(e) => {
+                        const newStatuses = new Set(selectedLeadStatuses);
+                        if (e.target.checked) {
+                          newStatuses.add("active");
+                        } else {
+                          newStatuses.delete("active");
+                        }
+                        setSelectedLeadStatuses(newStatuses);
+                      }}
+                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500/20"
+                    />
+                    <span className="ml-3 text-sm text-slate-700 flex-1">
+                      Active
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      {
+                        allQuotations.filter(
+                          (q) =>
+                            !q.lead_stage ||
+                            !["won", "lost", "disqualified"].includes(
+                              q.lead_stage
+                            )
+                        ).length
+                      }
+                    </span>
+                  </label>
+
+                  {/* Inactive Leads */}
+                  <label className="flex items-center px-3 py-2 hover:bg-slate-100 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedLeadStatuses.has("inactive")}
+                      onChange={(e) => {
+                        const newStatuses = new Set(selectedLeadStatuses);
+                        if (e.target.checked) {
+                          newStatuses.add("inactive");
+                        } else {
+                          newStatuses.delete("inactive");
+                        }
+                        setSelectedLeadStatuses(newStatuses);
+                      }}
+                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500/20"
+                    />
+                    <span className="ml-3 text-sm text-slate-700 flex-1">
+                      Inactive
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      {
+                        allQuotations.filter(
+                          (q) =>
+                            q.lead_stage &&
+                            ["won", "lost", "disqualified"].includes(
+                              q.lead_stage
+                            )
+                        ).length
+                      }
+                    </span>
+                  </label>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         <AppTable
@@ -839,7 +1115,8 @@ export default function QuotationsListPage() {
           emptyState={{
             title: "No quotations found",
             description:
-              statusFilter || searchValue
+              selectedStatuses.size < ALLOWED_STATUS_FILTER_OPTIONS.length ||
+              searchValue
                 ? "No quotations match your filters. Try a different filter."
                 : "Click 'Create Quotation' to create a new quotation for a lead or project.",
             icon: <DocumentTextIcon className="w-6 h-6 text-slate-400" />,
@@ -852,11 +1129,7 @@ export default function QuotationsListPage() {
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onCreate={async (data) => {
-          setSelectedLeadId(data.leadId || "");
-          setSelectedProjectId(data.projectId || "");
-          setSelectedTemplateId(data.templateId || "");
-          setCreateSource(data.source);
-          await handleCreateQuotation();
+          await handleCreateQuotation(data);
         }}
         leads={leads}
         projects={projects}

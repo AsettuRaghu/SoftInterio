@@ -144,10 +144,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             .select("lead_number, client:clients(name)")
             .eq("id", task.related_id)
             .single();
-          const leadClientName = (lead?.client as { name?: string } | null)?.name;
-          relatedName = lead
-            ? `${lead.lead_number} - ${leadClientName || "N/A"}`
-            : null;
+          const leadClientName = (lead?.client as { name?: string } | null)?.name || "Unknown Client";
+          // Format: "LEAD-001 • Client Name"
+          relatedName = lead && lead.lead_number
+            ? `${lead.lead_number} • ${leadClientName}`
+            : leadClientName;
           break;
         case "quotation":
           const { data: quotation } = await supabase
@@ -158,20 +159,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             `)
             .eq("id", task.related_id)
             .single();
-          const clientName = (quotation?.client as { name?: string } | null)?.name;
-          relatedName = quotation
-            ? `${quotation.quotation_number} - ${clientName || "N/A"}`
-            : null;
+          const clientName = (quotation?.client as { name?: string } | null)?.name || "Unknown Client";
+          // Format: "QUOT-001 • Client Name"
+          relatedName = quotation && quotation.quotation_number
+            ? `${quotation.quotation_number} • ${clientName}`
+            : clientName;
           break;
         case "project":
           const { data: project } = await supabase
             .from("projects")
-            .select("name, project_number")
+            .select("project_number, client:clients(name)")
             .eq("id", task.related_id)
             .single();
-          relatedName = project
-            ? `${project.project_number || ""} - ${project.name}`
-            : null;
+          const projectClientName = (project?.client as { name?: string } | null)?.name || "Unknown Client";
+          // Format: "PROJ-001 • Client Name"
+          relatedName = project && project.project_number
+            ? `${project.project_number} • ${projectClientName}`
+            : projectClientName;
           break;
         case "client":
           const { data: client } = await supabase

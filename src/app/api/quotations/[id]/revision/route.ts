@@ -33,10 +33,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Fetch the newly created quotation
+    // Fetch the newly created quotation with relationships
     const { data: newQuotation, error: fetchError } = await supabase
-      .from("quotations_with_lead")
-      .select("*")
+      .from("quotations")
+      .select(`
+        *,
+        lead:leads(
+          id,
+          lead_number,
+          stage,
+          client:clients(id, name, phone, email)
+        ),
+        client:clients(id, name, phone, email)
+      `)
       .eq("id", data)
       .single();
 
@@ -46,6 +55,31 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { error: "Revision created but failed to fetch details" },
         { status: 500 }
       );
+    }
+
+    // Log activity in lead's timeline if quotation is linked to a lead
+    if (newQuotation.lead_id) {
+      try {
+        const { data: userData } = await supabase
+          .from("users")
+          .select("tenant_id")
+          .eq("id", user.id)
+          .single();
+
+        if (userData?.tenant_id) {
+          await supabase.from("lead_activities").insert({
+            lead_id: newQuotation.lead_id,
+            tenant_id: userData.tenant_id,
+            activity_type: "quotation_created",
+            title: `Quotation revision v${newQuotation.version} created`,
+            description: `Created new version (v${newQuotation.version}) of quotation ${newQuotation.quotation_number}`,
+            created_by: user.id,
+          });
+        }
+      } catch (activityError) {
+        // Don't fail the revision creation if activity logging fails
+        console.error("Failed to log quotation revision activity:", activityError);
+      }
     }
 
     return NextResponse.json({
