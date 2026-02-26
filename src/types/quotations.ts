@@ -11,6 +11,7 @@
 export type QuotationStatus =
   | "draft"
   | "sent"
+  | "viewed"
   | "negotiating"
   | "approved"
   | "rejected"
@@ -624,6 +625,8 @@ export const QuotationStatusLabels: Record<QuotationStatus, string> = {
   rejected: "Rejected",
   expired: "Expired",
   cancelled: "Cancelled",
+  linked_to_project: "Linked to Project",
+  project_baseline: "Project Baseline",
 };
 
 export const QuotationStatusColors: Record<
@@ -669,6 +672,16 @@ export const QuotationStatusColors: Record<
     bg: "bg-orange-100",
     text: "text-orange-700",
     dot: "bg-orange-500",
+  },
+  linked_to_project: {
+    bg: "bg-purple-100",
+    text: "text-purple-700",
+    dot: "bg-purple-500",
+  },
+  project_baseline: {
+    bg: "bg-indigo-100",
+    text: "text-indigo-700",
+    dot: "bg-indigo-500",
   },
 };
 

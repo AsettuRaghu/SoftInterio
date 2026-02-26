@@ -11,26 +11,20 @@ export * from "./leads";
 // Property types - explicit exports to avoid conflicts with leads.ts
 export type {
   PropertyTypeV2,
-  OwnershipType,
-  PropertyStatus,
-  FacingDirection,
-  AreaUnit,
-  FurnishingStatus,
   Property as PropertyRecord,
   PropertyDetails,
   CreatePropertyInput,
+  PropertyCategory,
+  PropertySubtype,
 } from "./properties";
 
 export {
   PropertyTypeLabelsV2,
-  OwnershipTypeLabels,
-  PropertyStatusLabels,
-  FacingDirectionLabels,
-  AreaUnitLabels,
-  FurnishingStatusLabels,
   PropertyTypeCategory,
   ResidentialPropertyTypes,
   CommercialPropertyTypes,
+  PropertyCategoryLabels,
+  PropertySubtypeLabels,
 } from "./properties";
 
 // Client types - explicit exports to avoid conflicts with leads.ts

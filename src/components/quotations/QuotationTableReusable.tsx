@@ -29,6 +29,8 @@ interface QuotationTableReusableProps {
   onCreateQuotation?: () => void;
   onViewQuotation?: (quotation: Quotation) => void;
   onNavigateToQuotations?: () => void; // Navigate to quotations list page
+  onReviseQuotation?: (quotationId: string, e: React.MouseEvent) => void;
+  revisingId?: string | null;
 }
 
 type SortField =
@@ -42,6 +44,7 @@ type SortDirection = "asc" | "desc";
 const DEFAULT_STATUS_LABELS: Record<QuotationStatus, string> = {
   draft: "Draft",
   sent: "Sent",
+  viewed: "Viewed",
   negotiating: "Negotiating",
   approved: "Approved",
   rejected: "Rejected",
@@ -63,6 +66,8 @@ export default function QuotationTableReusable({
   onCreateQuotation,
   onViewQuotation,
   onNavigateToQuotations,
+  onReviseQuotation,
+  revisingId,
 }: QuotationTableReusableProps) {
   // State
   const [searchQuery, setSearchQuery] = useState("");

@@ -738,8 +738,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
             <OverviewTab
               project={project}
               onUpdate={updateProject}
-              isModalOpen={showEditDetailsModal}
-              onModalClose={() => setShowEditDetailsModal(false)}
             />
           )}
 

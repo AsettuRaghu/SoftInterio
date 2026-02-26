@@ -24,6 +24,7 @@ export interface TaskWithUser extends Task {
     avatar_url: string | null;
     email: string;
   };
+  subtasks?: any[];
 }
 
 export function useLeadDetail() {

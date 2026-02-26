@@ -15,12 +15,14 @@ interface OverviewTabProps {
   project: Project;
   isModalOpen?: boolean;
   onModalClose?: () => void;
+  onUpdate?: (updates: Partial<Project>) => Promise<void>;
 }
 
 export default function OverviewTab({
   project,
   isModalOpen = false,
   onModalClose,
+  onUpdate,
 }: OverviewTabProps) {
   const handleSaveModal = async (
     editForm: Parameters<typeof EditProjectDetailsModal>[0]["onSave"] extends (

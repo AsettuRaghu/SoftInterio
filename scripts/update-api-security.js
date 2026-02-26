@@ -23,10 +23,8 @@ const PUBLIC_ROUTES = [
   "auth/callback",
   "auth/check-user",
   "auth/cleanup-and-reinvite",
-  "auth/debug-invite",
   "auth/signout", // signout doesn't need protection
   "billing/plans",
-  "debug",
 ];
 
 // Routes that need special handling (admin operations)
@@ -72,13 +70,13 @@ function isAlreadyProtected(content) {
 
 function hasExportedHandlers(content) {
   return /export\s+async\s+function\s+(GET|POST|PUT|PATCH|DELETE)/.test(
-    content
+    content,
   );
 }
 
 function needsAdminClient(relativePath) {
   return ADMIN_ROUTES.some(
-    (p) => relativePath === p || relativePath.startsWith(p + "/")
+    (p) => relativePath === p || relativePath.startsWith(p + "/"),
   );
 }
 
@@ -129,7 +127,7 @@ function updateRouteFile(filePath) {
     // Pattern to match handler function
     const handlerPattern = new RegExp(
       `(export\\s+async\\s+function\\s+${handler}\\s*\\([^)]*\\)\\s*\\{)\\s*\\n(\\s*)try\\s*\\{\\s*\\n(\\s*)(?:const\\s+supabase|const\\s+adminSupabase|const\\s+userSupabase|const\\s+\\{)`,
-      "g"
+      "g",
     );
 
     const protectionCode = `$1
@@ -152,7 +150,7 @@ $3const`;
   for (const handler of handlers) {
     const simplePattern = new RegExp(
       `(export\\s+async\\s+function\\s+${handler}\\s*\\([^)]*\\)\\s*\\{)\\s*\\n(\\s*)(const\\s+supabase)`,
-      "g"
+      "g",
     );
 
     if (
@@ -169,7 +167,7 @@ $2  return createErrorResponse(guard.error!, guard.statusCode!);
 $2}
 $2const { user } = guard;
 
-$2$3`
+$2$3`,
       );
     }
   }
@@ -188,7 +186,7 @@ function main() {
   const updated = results.filter((r) => r.status === "updated");
   const skipped = results.filter((r) => r.status === "skipped");
   const alreadyProtected = results.filter(
-    (r) => r.status === "already-protected"
+    (r) => r.status === "already-protected",
   );
 
   console.log("\n✅ UPDATED (" + updated.length + ")");

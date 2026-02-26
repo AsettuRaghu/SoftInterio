@@ -29,9 +29,7 @@ const EXCLUDED_ROUTES = [
   "auth/callback",
   "auth/check-user",
   "auth/cleanup-and-reinvite",
-  "auth/debug-invite",
   "billing/plans",
-  "debug",
   "quotations/client", // Client-facing endpoints with token-based auth
 ];
 
@@ -91,7 +89,7 @@ function auditRoute(filePath) {
     issues.push("❌ NO AUTH: No authentication check found");
   } else if (!hasProtection && hasBasicAuth) {
     issues.push(
-      "⚠️  PARTIAL: Uses basic auth.getUser() but not protectApiRoute()"
+      "⚠️  PARTIAL: Uses basic auth.getUser() but not protectApiRoute()",
     );
   }
 
@@ -160,12 +158,12 @@ function main() {
     console.log("\\n⚠️  " + needsFix.length + " routes need security updates!");
     console.log("\\nTo fix, import and use protectApiRoute():");
     console.log(
-      '\\n  import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";'
+      '\\n  import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";',
     );
     console.log("\\n  const guard = await protectApiRoute(request);");
     console.log("  if (!guard.success) {");
     console.log(
-      "    return createErrorResponse(guard.error!, guard.statusCode!);"
+      "    return createErrorResponse(guard.error!, guard.statusCode!);",
     );
     console.log("  }");
     process.exit(1);

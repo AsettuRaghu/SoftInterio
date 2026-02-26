@@ -33,6 +33,9 @@ export interface EditFormData {
   target_end_date: string;
   priority?: string;
   assigned_to?: string;
+  won_amount?: string;
+  contract_signed_date?: string;
+  expected_project_start?: string;
 }
 
 const getRequiredFieldsForStage = (stage: LeadStage): string[] => {

@@ -236,18 +236,18 @@ export default function ProjectsFilterBar({
       <div className="flex items-center gap-2 flex-wrap">
         {/* Status Dropdown */}
         {renderFilterDropdown(
-          statusDropdownRef,
+          statusDropdownRef as React.RefObject<HTMLDivElement>,
           showStatusDropdown,
           setShowStatusDropdown,
           "Status",
-          selectedStatuses,
-          onStatusChange,
+          selectedStatuses as string[],
+          (values) => onStatusChange(values as ProjectStatus[]),
           PROJECT_STATUS_OPTIONS
         )}
 
         {/* Priority Dropdown */}
         {renderFilterDropdown(
-          priorityDropdownRef,
+          priorityDropdownRef as React.RefObject<HTMLDivElement>,
           showPriorityDropdown,
           setShowPriorityDropdown,
           "Priority",
@@ -259,7 +259,7 @@ export default function ProjectsFilterBar({
         {/* Property Type Dropdown */}
         {propertyTypeOptions.length > 0 &&
           renderFilterDropdown(
-            propertyTypeDropdownRef,
+            propertyTypeDropdownRef as React.RefObject<HTMLDivElement>,
             showPropertyTypeDropdown,
             setShowPropertyTypeDropdown,
             "Property Type",
@@ -271,7 +271,7 @@ export default function ProjectsFilterBar({
         {/* Phase Dropdown */}
         {phaseOptions.length > 0 &&
           renderFilterDropdown(
-            phaseDropdownRef,
+            phaseDropdownRef as React.RefObject<HTMLDivElement>,
             showPhaseDropdown,
             setShowPhaseDropdown,
             "Phase",

@@ -485,12 +485,6 @@ export function LineItemRow({
                   e.preventDefault();
                 }
               }}
-              onKeyDown={(e) => {
-                // Prevent decimal point, minus, plus
-                if ([".", "-", "+", "e", "E"].includes(e.key)) {
-                  e.preventDefault();
-                }
-              }}
               onPaste={(e) => {
                 e.preventDefault();
                 const pasted = (e.clipboardData?.getData("text") || "").replace(

@@ -207,9 +207,9 @@ export async function GET(request: NextRequest) {
                   .single();
 
                 if (lead) {
-                  sourceName = lead.client?.name || null;
+                  sourceName = (lead.client as any)?.name || null;
                   sourceNumber = lead.lead_number;
-                  propertyName = lead.property?.property_name || null;
+                  propertyName = (lead.property as any)?.property_name || null;
                 }
               } else if (event.linked_type === "project") {
                 const { data: project } = await supabaseAdmin
@@ -400,9 +400,9 @@ export async function POST(request: NextRequest) {
           .single();
 
         if (lead) {
-          sourceName = lead.client?.name || null;
+          sourceName = (lead.client as any)?.name || null;
           sourceNumber = lead.lead_number;
-          propertyName = lead.property?.property_name || null;
+          propertyName = (lead.property as any)?.property_name || null;
         }
       } else if (event.linked_type === "project") {
         const { data: project } = await supabaseAdmin

@@ -52,8 +52,8 @@ interface NotesTableReusableProps {
   // Callbacks
   onNoteClick?: (note: NoteItem) => void;
   onCreateNote?: () => void;
-  onEditNote?: (note: NoteItem) => void;
-  onDeleteNote?: (note: NoteItem) => void;
+  onEditNote?: (note: NoteItem | any) => void;
+  onDeleteNote?: (note: NoteItem | any) => void;
   onTogglePin?: (noteId: string, isPinned: boolean) => void;
 }
 

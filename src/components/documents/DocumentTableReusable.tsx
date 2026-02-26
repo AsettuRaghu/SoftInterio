@@ -50,6 +50,7 @@ export interface DocumentTableProps {
   onDownload?: (document: Document) => void;
   onDelete?: (document: Document) => void;
   onUpload?: () => void;
+  onCountChange?: (count: number) => void;
 
   // Optional: External state control
   externalDocuments?: DocumentWithUrl[];
