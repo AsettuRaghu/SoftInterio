@@ -348,18 +348,6 @@ export default function CompanySettingsPage() {
     return statusMap[status || "suspended"] || "inactive";
   };
 
-  // Get tenant type badge styling
-  const getTenantTypeBadgeColor = (type: string): string => {
-    const colorMap: Record<string, string> = {
-      client: "bg-blue-100 text-blue-700",
-      architect: "bg-purple-100 text-purple-700",
-      interiors: "bg-emerald-100 text-emerald-700",
-      vendor: "bg-orange-100 text-orange-700",
-      factory: "bg-indigo-100 text-indigo-700",
-    };
-    return colorMap[type] || "bg-slate-100 text-slate-700";
-  };
-
   return (
     <PageLayout
       isLoading={isLoading}
@@ -439,15 +427,17 @@ export default function CompanySettingsPage() {
                   {company ? getInitials(company.company_name) : "?"}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-semibold text-slate-900 truncate">
-                    {company?.company_name || "Company"}
-                  </h3>
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-sm font-semibold text-slate-900 truncate">
+                      {company?.company_name || "Company"}
+                    </h3>
+                    <span className="inline-flex px-2 py-0.5 text-[10px] font-medium rounded-full bg-purple-100 text-purple-700 shrink-0">
+                      {getTenantTypeLabel(company?.tenant_type || "")}
+                    </span>
+                  </div>
                   <p className="text-xs text-slate-500 truncate">
                     {company?.email}
                   </p>
-                  <span className={`inline-flex mt-1 px-2 py-0.5 text-[10px] font-medium rounded-full ${getTenantTypeBadgeColor(company?.tenant_type || "")}`}>
-                    {getTenantTypeLabel(company?.tenant_type || "")}
-                  </span>
                 </div>
                 <div className="hidden md:flex items-center gap-8 pl-6 border-l border-slate-200">
                   <FieldDisplay
