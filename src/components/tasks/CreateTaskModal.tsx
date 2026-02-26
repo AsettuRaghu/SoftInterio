@@ -63,13 +63,11 @@ export function CreateTaskModal({
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [linkedEntities, setLinkedEntities] = useState<
-    {
-      type: string;
-      id: string;
-      name: string;
-    }[]
-  >([]);
+  const [linkedEntity, setLinkedEntity] = useState<{
+    type: string;
+    id: string;
+    name: string;
+  } | null>(null);
   const [description, setDescription] = useState("");
   const [subtasks, setSubtasks] = useState<SubTask[]>([]);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
@@ -87,7 +85,7 @@ export function CreateTaskModal({
       setStartDate("");
       setDueDate("");
       // Use default linked entity if provided
-      setLinkedEntities(defaultLinkedEntity ? [defaultLinkedEntity] : []);
+      setLinkedEntity(defaultLinkedEntity || null);
       setDescription("");
       setSubtasks([]);
       setNewSubtaskTitle("");
@@ -123,7 +121,7 @@ export function CreateTaskModal({
     setStartDate("");
     setDueDate("");
     // Use default linked entity if provided
-    setLinkedEntities(defaultLinkedEntity ? [defaultLinkedEntity] : []);
+    setLinkedEntity(defaultLinkedEntity || null);
     setDescription("");
     setSubtasks([]);
     setNewSubtaskTitle("");
@@ -150,7 +148,7 @@ export function CreateTaskModal({
 
   const updateSubtask = (index: number, updates: Partial<SubTask>) => {
     setSubtasks((prev) =>
-      prev.map((st, i) => (i === index ? { ...st, ...updates } : st))
+      prev.map((st, i) => (i === index ? { ...st, ...updates } : st)),
     );
   };
 
@@ -170,8 +168,8 @@ export function CreateTaskModal({
     setError(null);
 
     try {
-      // Extract related_type and related_id from linkedEntities (use first one)
-      const primaryLink = linkedEntities.length > 0 ? linkedEntities[0] : null;
+      // Extract related_type and related_id from linkedEntity
+      const primaryLink = linkedEntity;
 
       const response = await fetch("/api/tasks", {
         method: "POST",
@@ -325,11 +323,11 @@ export function CreateTaskModal({
                 minDate={startDate}
               />
               <LinkedEntity
-                value={linkedEntities}
+                value={linkedEntity}
                 onChange={(val) =>
-                  setLinkedEntities(Array.isArray(val) ? val : val ? [val] : [])
+                  setLinkedEntity(Array.isArray(val) ? val[0] || null : val)
                 }
-                multiple
+                readOnly={!!defaultLinkedEntity}
               />
             </div>
 

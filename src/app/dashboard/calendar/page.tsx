@@ -21,6 +21,7 @@ import {
   PageContent,
   StatBadge,
 } from "@/components/ui/PageLayout";
+import { LinkedEntity } from "@/components/tasks/ui";
 
 interface CalendarEvent {
   id: string;
@@ -138,6 +139,11 @@ export default function CalendarPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [linkedEntity, setLinkedEntity] = useState<{
+    type: string;
+    id: string;
+    name: string;
+  } | null>(null);
   const [newEvent, setNewEvent] = useState({
     title: "",
     description: "",
@@ -145,8 +151,6 @@ export default function CalendarPage() {
     scheduled_at: "",
     end_at: "",
     location: "",
-    lead_id: null as string | null,
-    project_id: null as string | null,
     attendees: [] as { type: string; name: string }[],
   });
 
@@ -209,8 +213,8 @@ export default function CalendarPage() {
             ? new Date(newEvent.end_at).toISOString()
             : null,
           location: newEvent.location.trim() || null,
-          lead_id: newEvent.lead_id,
-          project_id: newEvent.project_id,
+          linked_type: linkedEntity?.type || null,
+          linked_id: linkedEntity?.id || null,
           attendees: newEvent.attendees.length > 0 ? newEvent.attendees : null,
         }),
       });
@@ -228,10 +232,9 @@ export default function CalendarPage() {
         scheduled_at: "",
         end_at: "",
         location: "",
-        lead_id: null,
-        project_id: null,
         attendees: [],
       });
+      setLinkedEntity(null);
       setIsCreateModalOpen(false);
 
       // Refresh events
@@ -978,7 +981,7 @@ export default function CalendarPage() {
         {/* Create Event Modal */}
         {isCreateModalOpen && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-2xl w-full max-w-3xl overflow-hidden max-h-[90vh] overflow-y-auto">
               <div className="border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 bg-white">
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">
@@ -1022,29 +1025,45 @@ export default function CalendarPage() {
                   />
                 </div>
 
-                {/* Event Type */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Event Type
-                  </label>
-                  <select
-                    value={newEvent.event_type}
-                    onChange={(e) =>
-                      setNewEvent({ ...newEvent, event_type: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                  >
-                    <option value="client_meeting">Client Meeting</option>
-                    <option value="internal_meeting">Internal Meeting</option>
-                    <option value="site_visit">Site Visit</option>
-                    <option value="follow_up">Follow Up</option>
-                    <option value="reminder">Reminder</option>
-                    <option value="other">Other</option>
-                  </select>
+                {/* Event Type & Location */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Event Type
+                    </label>
+                    <select
+                      value={newEvent.event_type}
+                      onChange={(e) =>
+                        setNewEvent({ ...newEvent, event_type: e.target.value })
+                      }
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                    >
+                      <option value="client_meeting">Client Meeting</option>
+                      <option value="internal_meeting">Internal Meeting</option>
+                      <option value="site_visit">Site Visit</option>
+                      <option value="follow_up">Follow Up</option>
+                      <option value="reminder">Reminder</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Location
+                    </label>
+                    <input
+                      type="text"
+                      value={newEvent.location}
+                      onChange={(e) =>
+                        setNewEvent({ ...newEvent, location: e.target.value })
+                      }
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                      placeholder="Enter location or meeting link"
+                    />
+                  </div>
                 </div>
 
-                {/* Date & Time */}
-                <div className="grid grid-cols-2 gap-4">
+                {/* Date & Time with Link */}
+                <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">
                       Start Date & Time <span className="text-red-500">*</span>
@@ -1074,22 +1093,18 @@ export default function CalendarPage() {
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                     />
                   </div>
-                </div>
-
-                {/* Location */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Location
-                  </label>
-                  <input
-                    type="text"
-                    value={newEvent.location}
-                    onChange={(e) =>
-                      setNewEvent({ ...newEvent, location: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                    placeholder="Enter location or meeting link"
-                  />
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Link to Lead/Project
+                    </label>
+                    <LinkedEntity
+                      value={linkedEntity}
+                      onChange={(val) =>
+                        setLinkedEntity(Array.isArray(val) ? val[0] || null : val)
+                      }
+                      placeholder="Link"
+                    />
+                  </div>
                 </div>
 
                 {/* Description */}
@@ -1111,8 +1126,8 @@ export default function CalendarPage() {
                 {/* Info Box */}
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
                   <p className="text-sm text-slate-600">
-                    <strong>💡 Tip:</strong> To link this event to a lead or
-                    project, create it from the respective lead or project page.
+                    <strong>💡 Tip:</strong> Link this event to a lead or
+                    project to track it in their timeline.
                   </p>
                 </div>
 

@@ -32,12 +32,12 @@ const routePermissions: RoutePermission[] = [
   { pattern: "/dashboard/settings/quotations-config", permissions: ["quotations.view"] },
   
   // Sales routes
-  { pattern: "/dashboard/sales/leads/*", permissions: ["leads.view"] },
-  { pattern: "/dashboard/sales/leads", permissions: ["leads.view"] },
-  { pattern: "/dashboard/sales/pipeline", permissions: ["leads.view"] },
+  { pattern: "/dashboard/sales/leads/*", permissions: ["leads.view", "sales.leads.view"], requireAll: false },
+  { pattern: "/dashboard/sales/leads", permissions: ["leads.view", "sales.leads.view"], requireAll: false },
+  { pattern: "/dashboard/sales/pipeline", permissions: ["leads.view", "sales.leads.view"], requireAll: false },
   { pattern: "/dashboard/sales/clients/*", permissions: ["clients.view"] },
   { pattern: "/dashboard/sales/clients", permissions: ["clients.view"] },
-  { pattern: "/dashboard/sales", permissions: ["leads.view", "clients.view"], requireAll: false },
+  { pattern: "/dashboard/sales", permissions: ["leads.view", "sales.leads.view", "clients.view"], requireAll: false },
   
   // Projects routes
   { pattern: "/dashboard/projects/*", permissions: ["projects.view"] },

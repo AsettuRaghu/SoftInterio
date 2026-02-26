@@ -138,7 +138,7 @@ export default function LeadDetailPage() {
   const [editingTask, setEditingTask] = useState<TaskWithUser | null>(null);
   const [showMeetingModal, setShowMeetingModal] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<LeadActivity | null>(
-    null
+    null,
   );
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
@@ -180,7 +180,7 @@ export default function LeadDetailPage() {
   // Handle revision with event object
   const handleReviseQuotation = async (
     quotationId: string,
-    e: React.MouseEvent
+    e: React.MouseEvent,
   ) => {
     e.stopPropagation();
     e.preventDefault();
@@ -340,8 +340,8 @@ export default function LeadDetailPage() {
                         isActive
                           ? "bg-blue-600"
                           : isPassed
-                          ? "bg-blue-300"
-                          : "bg-slate-200"
+                            ? "bg-blue-300"
+                            : "bg-slate-200"
                       }`}
                     />
                   </div>
@@ -492,7 +492,7 @@ export default function LeadDetailPage() {
             onNavigateToQuotations={() => {
               // Navigate to quotations list page which will open the create modal
               router.push(
-                `/dashboard/quotations?create=true&lead_id=${lead.id}`
+                `/dashboard/quotations?create=true&lead_id=${lead.id}`,
               );
             }}
             onViewQuotation={(quotation) => {
@@ -630,6 +630,7 @@ export default function LeadDetailPage() {
                 lead?.lead_number && lead?.client?.name
                   ? `${lead.lead_number} • ${lead.client.name}`
                   : lead?.client?.name || "This Lead",
+              subtasks: editingTask.subtasks,
             }}
             isOpen={!!editingTask}
             onClose={() => setEditingTask(null)}

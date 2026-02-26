@@ -161,6 +161,17 @@ export async function GET(request: NextRequest) {
         .eq("tenant_id", tenantId)
         .order("scheduled_at", { ascending: true });
 
+      // Filter by linked entity if specified
+      if (linkedId && source === "lead") {
+        standaloneQuery = standaloneQuery
+          .eq("linked_type", "lead")
+          .eq("linked_id", linkedId);
+      } else if (linkedId && source === "project") {
+        standaloneQuery = standaloneQuery
+          .eq("linked_type", "project")
+          .eq("linked_id", linkedId);
+      }
+
       // Apply date filters
       if (startDate) {
         standaloneQuery = standaloneQuery.gte("scheduled_at", startDate);
@@ -175,28 +186,70 @@ export async function GET(request: NextRequest) {
         console.error("Error fetching standalone events:", standaloneError);
       } else {
         // Transform standalone events to calendar format
-        const standaloneCalendarEvents = (standaloneEvents || []).map((event: any) => ({
-          id: event.id,
-          source_type: event.linked_type || "standalone" as const,
-          source_id: event.linked_id || null,
-          source_number: null,
-          source_name: null,
-          activity_type: event.event_type,
-          meeting_type: event.event_type,
-          title: event.title,
-          description: event.description,
-          scheduled_at: event.scheduled_at,
-          end_at: event.end_at,
-          is_all_day: event.is_all_day,
-          location: event.location,
-          is_completed: event.is_completed,
-          notes: event.notes,
-          attendees: event.attendees || [],
-          created_by: event.created_by,
-          created_at: event.created_at,
-          created_user: event.created_user,
-          is_standalone: true,
-        }));
+        const standaloneCalendarEvents = await Promise.all(
+          (standaloneEvents || []).map(async (event: any) => {
+            let sourceName = null;
+            let sourceNumber = null;
+            let propertyName = null;
+
+            // Fetch linked entity details if linked
+            if (event.linked_type && event.linked_id) {
+              if (event.linked_type === "lead") {
+                const { data: lead } = await supabaseAdmin
+                  .from("leads")
+                  .select(`
+                    id,
+                    lead_number,
+                    client:clients!leads_client_id_fkey(id, name),
+                    property:properties!leads_property_id_fkey(id, property_name)
+                  `)
+                  .eq("id", event.linked_id)
+                  .single();
+
+                if (lead) {
+                  sourceName = lead.client?.name || null;
+                  sourceNumber = lead.lead_number;
+                  propertyName = lead.property?.property_name || null;
+                }
+              } else if (event.linked_type === "project") {
+                const { data: project } = await supabaseAdmin
+                  .from("projects")
+                  .select("id, project_name, project_number")
+                  .eq("id", event.linked_id)
+                  .single();
+
+                if (project) {
+                  sourceName = project.project_name;
+                  sourceNumber = project.project_number;
+                }
+              }
+            }
+
+            return {
+              id: event.id,
+              source_type: event.linked_type || ("standalone" as const),
+              source_id: event.linked_id || null,
+              source_number: sourceNumber,
+              source_name: sourceName,
+              activity_type: event.event_type,
+              meeting_type: event.event_type,
+              title: event.title,
+              description: event.description,
+              scheduled_at: event.scheduled_at,
+              end_at: event.end_at,
+              is_all_day: event.is_all_day,
+              location: event.location,
+              is_completed: event.is_completed,
+              notes: event.notes,
+              attendees: event.attendees || [],
+              created_by: event.created_by,
+              created_at: event.created_at,
+              created_user: event.created_user,
+              is_standalone: !event.linked_type,
+              property_name: propertyName,
+            };
+          })
+        );
         allEvents.push(...standaloneCalendarEvents);
       }
     }
@@ -327,7 +380,70 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ event }, { status: 201 });
+    // Transform the created event to include source details if linked
+    const supabaseAdmin = createAdminClient();
+    let sourceName = null;
+    let sourceNumber = null;
+    let propertyName = null;
+
+    if (event.linked_type && event.linked_id) {
+      if (event.linked_type === "lead") {
+        const { data: lead } = await supabaseAdmin
+          .from("leads")
+          .select(`
+            id,
+            lead_number,
+            client:clients!leads_client_id_fkey(id, name),
+            property:properties!leads_property_id_fkey(id, property_name)
+          `)
+          .eq("id", event.linked_id)
+          .single();
+
+        if (lead) {
+          sourceName = lead.client?.name || null;
+          sourceNumber = lead.lead_number;
+          propertyName = lead.property?.property_name || null;
+        }
+      } else if (event.linked_type === "project") {
+        const { data: project } = await supabaseAdmin
+          .from("projects")
+          .select("id, name, project_number")
+          .eq("id", event.linked_id)
+          .single();
+
+        if (project) {
+          sourceName = project.name;
+          sourceNumber = project.project_number;
+        }
+      }
+    }
+
+    // Transform event to match GET response format
+    const transformedEvent = {
+      id: event.id,
+      source_type: event.linked_type || ("standalone" as const),
+      source_id: event.linked_id || null,
+      source_number: sourceNumber,
+      source_name: sourceName,
+      activity_type: event.event_type,
+      meeting_type: event.event_type,
+      title: event.title,
+      description: event.description,
+      scheduled_at: event.scheduled_at,
+      end_at: event.end_at,
+      is_all_day: event.is_all_day,
+      location: event.location,
+      is_completed: event.is_completed,
+      notes: event.notes,
+      attendees: event.attendees || [],
+      created_by: event.created_by,
+      created_at: event.created_at,
+      created_user: event.created_user,
+      is_standalone: !event.linked_type,
+      property_name: propertyName,
+    };
+
+    return NextResponse.json({ event: transformedEvent }, { status: 201 });
   } catch (error) {
     console.error("Calendar POST error:", error);
     return NextResponse.json(

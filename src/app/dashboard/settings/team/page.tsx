@@ -6,6 +6,7 @@ import { useUserPermissions } from "@/hooks/useUserPermissions";
 import { InviteTeamMemberModal } from "@/components/team/InviteTeamMemberModal";
 import { ConfirmationModal } from "@/components/team/ConfirmationModal";
 import { CredentialsModal } from "@/components/team/CredentialsModal";
+import { PasswordResetModal } from "@/components/team/PasswordResetModal";
 import { EditMemberModal } from "@/components/team/EditMemberModal";
 import { ProcessingOverlay } from "@/components/ui/ProcessingOverlay";
 import {
@@ -115,6 +116,21 @@ export default function TeamSettingsPage() {
     password: "",
     loginUrl: "",
     shareMessage: "",
+  });
+
+  // Password reset modal state (for showing reset password credentials)
+  const [passwordModal, setPasswordModal] = useState<{
+    show: boolean;
+    memberName: string;
+    memberEmail: string;
+    temporaryPassword: string;
+    onClose: () => void;
+  }>({
+    show: false,
+    memberName: "",
+    memberEmail: "",
+    temporaryPassword: "",
+    onClose: () => {},
   });
 
   // Edit member modal state
@@ -315,8 +331,8 @@ export default function TeamSettingsPage() {
           roleIds: roles.find((r) => r.is_default)?.id
             ? [roles.find((r) => r.is_default)!.id]
             : roles[0]?.id
-            ? [roles[0].id]
-            : [],
+              ? [roles[0].id]
+              : [],
           password: "",
         });
       } else {
@@ -384,10 +400,10 @@ export default function TeamSettingsPage() {
           if (data.success) {
             setSuccess("Invitation cancelled successfully!");
             setInvitations((prev) =>
-              prev.filter((inv) => inv.id !== invitationId)
+              prev.filter((inv) => inv.id !== invitationId),
             );
             setTeamMembers((prev) =>
-              prev.filter((m) => m.email.toLowerCase() !== email.toLowerCase())
+              prev.filter((m) => m.email.toLowerCase() !== email.toLowerCase()),
             );
             setTimeout(() => setSuccess(null), 3000);
           } else {
@@ -433,8 +449,8 @@ export default function TeamSettingsPage() {
             // Update status in local state so they appear in Inactive filter
             setTeamMembers((prev) =>
               prev.map((m) =>
-                m.id === memberId ? { ...m, status: "disabled" } : m
-              )
+                m.id === memberId ? { ...m, status: "disabled" } : m,
+              ),
             );
             setTimeout(() => setSuccess(null), 3000);
           } else {
@@ -451,7 +467,7 @@ export default function TeamSettingsPage() {
 
   const handleReactivateMember = async (
     memberId: string,
-    memberName: string
+    memberName: string,
   ) => {
     setConfirmModal({
       show: true,
@@ -470,7 +486,7 @@ export default function TeamSettingsPage() {
             `/api/team/members/${memberId}/reactivate`,
             {
               method: "PUT",
-            }
+            },
           );
 
           const data = await response.json();
@@ -480,8 +496,8 @@ export default function TeamSettingsPage() {
             // Update status in local state so they appear in Active filter
             setTeamMembers((prev) =>
               prev.map((m) =>
-                m.id === memberId ? { ...m, status: "active" } : m
-              )
+                m.id === memberId ? { ...m, status: "active" } : m,
+              ),
             );
             setTimeout(() => setSuccess(null), 3000);
           } else {
@@ -498,7 +514,7 @@ export default function TeamSettingsPage() {
 
   const handleTransferOwnership = async (
     memberId: string,
-    memberName: string
+    memberName: string,
   ) => {
     setConfirmModal({
       show: true,
@@ -517,7 +533,7 @@ export default function TeamSettingsPage() {
             `/api/team/members/${memberId}/transfer-ownership`,
             {
               method: "PUT",
-            }
+            },
           );
 
           const data = await response.json();
@@ -538,6 +554,50 @@ export default function TeamSettingsPage() {
         }
       },
     });
+  };
+
+  const handleResetPassword = async (memberId: string) => {
+    setIsProcessing(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await fetch(
+        `/api/team/members/${memberId}/reset-password`,
+        {
+          method: "PUT",
+        },
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Show the new password in a modal for sharing
+        setPasswordModal({
+          show: true,
+          memberName: data.data.memberName,
+          memberEmail: data.data.memberEmail,
+          temporaryPassword: data.data.temporaryPassword,
+          onClose: () => {
+            setPasswordModal({
+              show: false,
+              memberName: "",
+              memberEmail: "",
+              temporaryPassword: "",
+              onClose: () => {},
+            });
+            setSuccess("Password reset successfully!");
+            setTimeout(() => setSuccess(null), 3000);
+          },
+        });
+      } else {
+        setError(data.error || "Failed to reset password");
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to reset password");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleEditMember = (member: TeamMember) => {
@@ -583,7 +643,7 @@ export default function TeamSettingsPage() {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ roleIds: editModal.selectedRoleIds }),
-        }
+        },
       );
 
       const data = await response.json();
@@ -597,11 +657,11 @@ export default function TeamSettingsPage() {
               ? {
                   ...m,
                   roles: roles.filter((r) =>
-                    editModal.selectedRoleIds.includes(r.id)
+                    editModal.selectedRoleIds.includes(r.id),
                   ),
                 }
-              : m
-          )
+              : m,
+          ),
         );
         setEditModal({
           show: false,
@@ -720,7 +780,7 @@ export default function TeamSettingsPage() {
         if (item.type === "member") {
           const member = item.data as TeamMember;
           const statusLabel = getStatusDisplay(
-            member.status
+            member.status,
           ).label.toLowerCase();
           return (
             member.name.toLowerCase().includes(query) ||
@@ -731,7 +791,7 @@ export default function TeamSettingsPage() {
         } else {
           const invite = item.data as Invitation;
           const statusLabel = getStatusDisplay(
-            invite.status
+            invite.status,
           ).label.toLowerCase();
           return (
             invite.email.toLowerCase().includes(query) ||
@@ -807,7 +867,7 @@ export default function TeamSettingsPage() {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedItems = processedData.slice(
     startIndex,
-    startIndex + itemsPerPage
+    startIndex + itemsPerPage,
   );
 
   // Check if current user can edit a member based on hierarchy
@@ -820,7 +880,7 @@ export default function TeamSettingsPage() {
     // Get member's minimum hierarchy level
     const memberMinHierarchy = member.roles.reduce(
       (min, role) => Math.min(min, role.hierarchy_level),
-      999
+      999,
     );
 
     return hierarchyLevel < memberMinHierarchy;
@@ -834,7 +894,7 @@ export default function TeamSettingsPage() {
     // Get member's minimum hierarchy level
     const memberMinHierarchy = member.roles.reduce(
       (min, role) => Math.min(min, role.hierarchy_level),
-      999
+      999,
     );
 
     return hierarchyLevel < memberMinHierarchy;
@@ -922,7 +982,7 @@ export default function TeamSettingsPage() {
                       {status}
                     </button>
                   );
-                }
+                },
               )}
             </div>
 
@@ -1083,7 +1143,7 @@ export default function TeamSettingsPage() {
                                         !(
                                           member.is_super_admin &&
                                           role.slug === "owner"
-                                        )
+                                        ),
                                     )
                                     .map((role) => {
                                       // Color code Admin role purple, others slate
@@ -1124,25 +1184,27 @@ export default function TeamSettingsPage() {
                             <td className="px-4 py-2.5 text-right">
                               <div className="flex items-center justify-end gap-1">
                                 {canEditMember(member) && (
-                                  <button
-                                    onClick={() => handleEditMember(member)}
-                                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                    title="Edit Member"
-                                  >
-                                    <svg
-                                      className="w-4 h-4"
-                                      fill="none"
-                                      viewBox="0 0 24 24"
-                                      stroke="currentColor"
+                                  <>
+                                    <button
+                                      onClick={() => handleEditMember(member)}
+                                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                      title="Edit Member"
                                     >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                                      />
-                                    </svg>
-                                  </button>
+                                      <svg
+                                        className="w-4 h-4"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                                        />
+                                      </svg>
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             </td>
@@ -1362,6 +1424,14 @@ export default function TeamSettingsPage() {
             }}
           />
 
+          <PasswordResetModal
+            isOpen={passwordModal.show}
+            memberName={passwordModal.memberName}
+            memberEmail={passwordModal.memberEmail}
+            temporaryPassword={passwordModal.temporaryPassword}
+            onClose={passwordModal.onClose}
+          />
+
           <EditMemberModal
             isOpen={editModal.show}
             member={editModal.member}
@@ -1384,6 +1454,7 @@ export default function TeamSettingsPage() {
             onDelete={handleDeleteMember}
             onReactivate={handleReactivateMember}
             onTransferOwnership={handleTransferOwnership}
+            onResetPassword={handleResetPassword}
           />
 
           {/* Processing Overlay */}

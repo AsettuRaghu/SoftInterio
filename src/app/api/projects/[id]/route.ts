@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 interface RouteParams {
@@ -18,6 +19,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
+    const supabaseAdmin = createAdminClient();
 
     // Get user's tenant_id
     const { data: userData } = await supabase
@@ -365,6 +367,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // Fetch calendar events linked to this project
+    const { data: calendarEvents } = await supabaseAdmin
+      .from("calendar_events")
+      .select(
+        `
+        *,
+        created_user:users!calendar_events_created_by_fkey(id, name, avatar_url)
+      `
+      )
+      .eq("tenant_id", userData.tenant_id)
+      .eq("linked_type", "project")
+      .eq("linked_id", id)
+      .order("scheduled_at", { ascending: false });
+
     return NextResponse.json({
       project: {
         ...flattenedProject,
@@ -384,6 +400,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         phases: phasesWithDeps || [],
         payment_milestones: paymentMilestones || [],
         lead_activities: leadActivities,
+        calendar_events: calendarEvents || [],
       },
     });
   } catch (error) {

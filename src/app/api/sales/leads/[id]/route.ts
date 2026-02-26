@@ -71,6 +71,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       { data: documents },
       { data: tasks },
       { data: quotations },
+      { data: calendarEvents },
     ] = await Promise.all([
       supabaseAdmin
         .from("lead_family_members")
@@ -153,6 +154,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         `)
         .eq("lead_id", id)
         .order("version", { ascending: false }),
+      // Fetch calendar events linked to this lead
+      supabaseAdmin
+        .from("calendar_events")
+        .select(
+          `
+          *,
+          created_user:users!calendar_events_created_by_fkey(id, name, avatar_url)
+        `
+        )
+        .eq("tenant_id", userData.tenant_id)
+        .eq("linked_type", "lead")
+        .eq("linked_id", id)
+        .order("scheduled_at", { ascending: false }),
     ]);
 
     // Fetch subtasks for parent tasks
@@ -277,6 +291,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       documents: documents || [],
       tasks: tasks || [],
       quotations: quotations || [],
+      calendarEvents: calendarEvents || [],
     });
   } catch (error) {
     console.error("Get lead API error:", error);

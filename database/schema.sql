@@ -1802,7 +1802,7 @@ BEGIN
     SELECT name INTO v_client_name FROM clients WHERE id = v_client_id;
     v_project_name := COALESCE(v_client_name, 'New') || ' - ' || INITCAP(v_project_category::TEXT) || ' Project';
     
-    -- Create project with ONLY columns that exist in the projects table
+    -- Create project with correct column names
     INSERT INTO projects (
         tenant_id,
         project_number,
@@ -1811,7 +1811,7 @@ BEGIN
         client_id,
         property_id,
         project_category,
-        start_date,
+        expected_start_date,
         expected_end_date,
         actual_cost,
         lead_id,
@@ -1981,6 +1981,7 @@ BEGIN
     v_project_name := COALESCE(v_client_name, 'New') || '-' || COALESCE(v_property_name, 'Property');
 
     -- Create project with proper initialization of all fields
+    -- CORRECTED: Using 'expected_start_date' and 'expected_end_date' (not 'start_date' and 'expected_end_date')
     INSERT INTO projects (
         tenant_id,
         project_number,
@@ -1989,7 +1990,7 @@ BEGIN
         client_id,
         property_id,
         project_category,
-        start_date,
+        expected_start_date,
         expected_end_date,
         actual_cost,
         lead_id,
