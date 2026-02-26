@@ -91,7 +91,11 @@ export function UserProfileDropdown() {
     router.push("/dashboard/settings/profile");
   };
 
-  if (isLoading) {
+  // Only show loading skeleton on first load, not on subsequent refetches
+  // This prevents the flash/blur when switching browser tabs
+  const shouldShowLoadingState = isLoading && !user;
+
+  if (shouldShowLoadingState) {
     return (
       <div className="flex items-center space-x-3 p-2">
         <div className="hidden sm:block text-right">
@@ -101,6 +105,11 @@ export function UserProfileDropdown() {
         <div className="w-9 h-9 bg-gray-200 rounded-full animate-pulse"></div>
       </div>
     );
+  }
+
+  // If no user and not loading, return empty state (shouldn't happen in normal flow)
+  if (!user) {
+    return null;
   }
 
   return (
