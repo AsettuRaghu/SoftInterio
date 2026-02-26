@@ -233,8 +233,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
               a.activity_type === "client_meeting" ||
               a.activity_type === "internal_meeting" ||
               a.activity_type === "site_visit" ||
-              (a.meeting_scheduled_at && a.meeting_scheduled_at !== null)
-          ).length
+              (a.meeting_scheduled_at && a.meeting_scheduled_at !== null),
+          ).length,
         );
       }
       setCalendarLoading(false);
@@ -273,7 +273,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
       // Sort by created_at descending
       allQuotations.sort(
         (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
       );
 
       setQuotations(allQuotations);
@@ -315,7 +315,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
     subPhaseId: string,
     phaseId: string,
     action: "start" | "hold" | "resume" | "complete" | "cancel",
-    notes: string
+    notes: string,
   ) => {
     try {
       const statusMap: Record<string, string> = {
@@ -335,7 +335,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status: newStatus, notes }),
-        }
+        },
       );
 
       if (!response.ok) throw new Error("Failed to update status");
@@ -397,7 +397,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
   const updateSubPhaseStatus = async (
     pId: string,
     spId: string,
-    status: string
+    status: string,
   ) => {
     try {
       const response = await fetch(
@@ -406,7 +406,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status }),
-        }
+        },
       );
       if (!response.ok) throw new Error("Failed");
       fetchProject();
@@ -419,7 +419,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
     pId: string,
     spId: string,
     itemId: string,
-    val: boolean
+    val: boolean,
   ) => {
     try {
       const response = await fetch(
@@ -428,7 +428,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ is_completed: !val }),
-        }
+        },
       );
       if (!response.ok) throw new Error("Failed");
       fetchProject();
@@ -507,7 +507,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
     } catch (err) {
       console.error("Error saving project edit:", err);
       setProjectValidationError(
-        err instanceof Error ? err.message : "Failed to update project"
+        err instanceof Error ? err.message : "Failed to update project",
       );
     } finally {
       setIsSavingProject(false);
@@ -636,7 +636,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
             <div className="flex items-center gap-1">
               {STATUS_WORKFLOW.map((step, index) => {
                 const currentIndex = STATUS_WORKFLOW.indexOf(
-                  project.status || "new"
+                  project.status || "new",
                 );
                 const isCompleted = index < currentIndex;
                 const isCurrent = index === currentIndex;
@@ -648,8 +648,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
                       isCompleted
                         ? "bg-green-500"
                         : isCurrent
-                        ? "bg-blue-600"
-                        : "bg-slate-200"
+                          ? "bg-blue-600"
+                          : "bg-slate-200"
                     }`}
                     title={step}
                   />
@@ -663,12 +663,12 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 project.status === "completed"
                   ? "bg-green-100 text-green-700"
                   : project.status === "in_progress"
-                  ? "bg-blue-100 text-blue-700"
-                  : project.status === "on_hold"
-                  ? "bg-amber-100 text-amber-700"
-                  : project.status === "cancelled"
-                  ? "bg-red-100 text-red-700"
-                  : "bg-slate-100 text-slate-700"
+                    ? "bg-blue-100 text-blue-700"
+                    : project.status === "on_hold"
+                      ? "bg-amber-100 text-amber-700"
+                      : project.status === "cancelled"
+                        ? "bg-red-100 text-red-700"
+                        : "bg-slate-100 text-slate-700"
               }`}
             >
               {ProjectStatusLabels[project.status] || project.status}
@@ -735,10 +735,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
           {activeTab === "rooms" && <RoomsTab projectId={project.id} />}
 
           {activeTab === "overview" && (
-            <OverviewTab
-              project={project}
-              onUpdate={updateProject}
-            />
+            <OverviewTab project={project} onUpdate={updateProject} />
           )}
 
           {activeTab === "tasks" && taskLoading ? (

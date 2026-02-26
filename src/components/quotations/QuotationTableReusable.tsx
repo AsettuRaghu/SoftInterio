@@ -72,7 +72,7 @@ export default function QuotationTableReusable({
   // State
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<QuotationStatus | "all">(
-    "all"
+    "all",
   );
   const [sortField, setSortField] = useState<SortField>("created_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");

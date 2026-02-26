@@ -148,7 +148,7 @@ export default function ProjectsFilterBar({
     label: string,
     selectedValues: string[],
     onSelect: (values: string[]) => void,
-    options: Array<{ value: string; label: string }>
+    options: Array<{ value: string; label: string }>,
   ) => (
     <div className="relative" ref={ref}>
       <button
@@ -159,9 +159,9 @@ export default function ProjectsFilterBar({
         {selectedValues.length === 0
           ? "All"
           : selectedValues.length === 1
-          ? options.find((o) => o.value === selectedValues[0])?.label ||
-            selectedValues[0]
-          : `${selectedValues.length} selected`}
+            ? options.find((o) => o.value === selectedValues[0])?.label ||
+              selectedValues[0]
+            : `${selectedValues.length} selected`}
         <ChevronDownIcon
           className={`w-4 h-4 transition-transform ${show ? "rotate-180" : ""}`}
         />
@@ -197,7 +197,7 @@ export default function ProjectsFilterBar({
                   onSelect(
                     selectedValues.includes(option.value)
                       ? selectedValues.filter((v) => v !== option.value)
-                      : [...selectedValues, option.value]
+                      : [...selectedValues, option.value],
                   );
                 }}
                 className="w-full text-left px-3 py-2 hover:bg-slate-100 rounded text-sm text-slate-700 flex items-center gap-2"
@@ -242,7 +242,7 @@ export default function ProjectsFilterBar({
           "Status",
           selectedStatuses as string[],
           (values) => onStatusChange(values as ProjectStatus[]),
-          PROJECT_STATUS_OPTIONS
+          PROJECT_STATUS_OPTIONS,
         )}
 
         {/* Priority Dropdown */}
@@ -253,7 +253,7 @@ export default function ProjectsFilterBar({
           "Priority",
           selectedPriorities,
           onPriorityChange,
-          PROJECT_PRIORITY_OPTIONS
+          PROJECT_PRIORITY_OPTIONS,
         )}
 
         {/* Property Type Dropdown */}
@@ -265,7 +265,7 @@ export default function ProjectsFilterBar({
             "Property Type",
             selectedPropertyTypes,
             onPropertyTypeChange,
-            propertyTypeOptions
+            propertyTypeOptions,
           )}
 
         {/* Phase Dropdown */}
@@ -277,7 +277,7 @@ export default function ProjectsFilterBar({
             "Phase",
             selectedPhases,
             onPhaseChange,
-            phaseOptions
+            phaseOptions,
           )}
 
         {/* Clear All Filters Button */}
@@ -288,7 +288,7 @@ export default function ProjectsFilterBar({
           <button
             onClick={() => {
               onStatusChange(
-                PROJECT_STATUS_OPTIONS.map((opt) => opt.value as ProjectStatus)
+                PROJECT_STATUS_OPTIONS.map((opt) => opt.value as ProjectStatus),
               );
               onPriorityChange([]);
               onPropertyTypeChange([]);

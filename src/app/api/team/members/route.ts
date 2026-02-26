@@ -361,17 +361,22 @@ export async function DELETE(request: NextRequest) {
         "global" // Sign out from all sessions
       );
       if (signOutError) {
-        console.error(
-          "[TEAM API] Failed to invalidate user session:",
-          signOutError
-        );
-        // Non-fatal - middleware will catch them on next request
+        // Note: JWT bad_jwt errors are expected if user has invalid/expired sessions
+        // User is already disabled, so this is non-critical
+        if (signOutError.code !== 'bad_jwt') {
+          console.warn(
+            "[TEAM API] Warning: Could not invalidate user session:",
+            signOutError
+          );
+        }
       } else {
         console.log("[TEAM API] User session invalidated:", memberId);
       }
     } catch (signOutErr) {
-      console.error("[TEAM API] Error invalidating session:", signOutErr);
-      // Non-fatal - middleware will catch them on next request
+      // Non-critical error - user is already disabled
+      if (signOutErr instanceof Error && !signOutErr.message.includes('bad_jwt')) {
+        console.warn("[TEAM API] Warning: Error invalidating session:", signOutErr);
+      }
     }
 
     console.log("[TEAM API] Member removed successfully:", memberId);

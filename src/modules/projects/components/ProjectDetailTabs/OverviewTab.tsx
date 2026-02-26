@@ -26,10 +26,10 @@ export default function OverviewTab({
 }: OverviewTabProps) {
   const handleSaveModal = async (
     editForm: Parameters<typeof EditProjectDetailsModal>[0]["onSave"] extends (
-      data: infer T
+      data: infer T,
     ) => Promise<void>
       ? T
-      : never
+      : never,
   ) => {
     const updateData: any = {
       // Project Details

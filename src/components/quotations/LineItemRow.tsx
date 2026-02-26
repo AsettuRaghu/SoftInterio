@@ -41,13 +41,13 @@ export function LineItemRow({
   // Local state for input fields to allow empty values while typing
   const [rateInput, setRateInput] = useState<string>(item.rate.toString());
   const [quantityInput, setQuantityInput] = useState<string>(
-    (item.quantity ?? "").toString()
+    (item.quantity ?? "").toString(),
   );
   const [lengthInput, setLengthInput] = useState<string>(
-    (item.length ?? "").toString()
+    (item.length ?? "").toString(),
   );
   const [widthInput, setWidthInput] = useState<string>(
-    (item.width ?? "").toString()
+    (item.width ?? "").toString(),
   );
 
   const measureInfo = getMeasurementInfo(item.unitCode);
@@ -438,7 +438,7 @@ export function LineItemRow({
                 e.preventDefault();
                 const pasted = (e.clipboardData?.getData("text") || "").replace(
                   /[^0-9]/g,
-                  ""
+                  "",
                 );
                 handleQuantityChange(pasted);
               }}
@@ -489,7 +489,7 @@ export function LineItemRow({
                 e.preventDefault();
                 const pasted = (e.clipboardData?.getData("text") || "").replace(
                   /[^0-9]/g,
-                  ""
+                  "",
                 );
                 handleLengthChange(pasted);
               }}
@@ -523,7 +523,7 @@ export function LineItemRow({
                 e.preventDefault();
                 const pasted = (e.clipboardData?.getData("text") || "").replace(
                   /[^0-9]/g,
-                  ""
+                  "",
                 );
                 handleLengthChange(pasted);
               }}
@@ -575,7 +575,7 @@ export function LineItemRow({
                 e.preventDefault();
                 const pasted = (e.clipboardData?.getData("text") || "").replace(
                   /[^0-9]/g,
-                  ""
+                  "",
                 );
                 handleWidthChange(pasted);
               }}
@@ -657,7 +657,7 @@ export function LineItemRow({
               e.preventDefault();
               const pasted = (e.clipboardData?.getData("text") || "").replace(
                 /[^0-9]/g,
-                ""
+                "",
               );
               handleRateChange(pasted);
             }}

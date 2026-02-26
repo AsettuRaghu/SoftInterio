@@ -158,10 +158,10 @@ export function ProjectOverviewTab({
 
   const handleSaveModal = async (
     editForm: Parameters<typeof EditProjectDetailsModal>[0]["onSave"] extends (
-      data: infer T
+      data: infer T,
     ) => Promise<void>
       ? T
-      : never
+      : never,
   ) => {
     try {
       setIsSaving(true);
@@ -314,7 +314,7 @@ export function ProjectOverviewTab({
   const renderReadOnlyField = (
     label: string,
     value: React.ReactNode,
-    icon: React.ReactNode
+    icon: React.ReactNode,
   ) => (
     <div className="flex items-start justify-between py-1.5 gap-2">
       <span className="flex items-center gap-1.5 text-xs text-slate-500 shrink-0">
@@ -511,7 +511,7 @@ export function ProjectOverviewTab({
                 <dd>
                   <span
                     className={`inline-block px-2.5 py-1 text-xs font-semibold rounded-md ${getStatusColor(
-                      project.status
+                      project.status,
                     )}`}
                   >
                     {formatLabel(project.status)}

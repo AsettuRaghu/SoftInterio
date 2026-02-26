@@ -145,13 +145,13 @@ export default function DocumentTable({
       } catch (err) {
         console.error("Error fetching documents:", err);
         setError(
-          err instanceof Error ? err.message : "Failed to load documents"
+          err instanceof Error ? err.message : "Failed to load documents",
         );
       } finally {
         setIsLoading(false);
       }
     },
-    [linkedType, linkedId, getCacheKey]
+    [linkedType, linkedId, getCacheKey],
   );
 
   // Initial load
@@ -343,7 +343,7 @@ export default function DocumentTable({
           doc.original_name?.toLowerCase().includes(query) ||
           doc.title?.toLowerCase().includes(query) ||
           doc.category?.toLowerCase().includes(query) ||
-          doc.uploaded_user?.name?.toLowerCase().includes(query)
+          doc.uploaded_user?.name?.toLowerCase().includes(query),
       );
     }
 

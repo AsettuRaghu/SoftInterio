@@ -317,7 +317,7 @@ export function EditLeadModal({
                       <option key={value} value={value}>
                         {label}
                       </option>
-                    )
+                    ),
                   )}
                 </select>
               </div>

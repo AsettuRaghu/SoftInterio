@@ -70,7 +70,7 @@ export default function CompanySettingsPage() {
 
   const [company, setCompany] = useState<Tenant | null>(null);
   const [tenantSettings, setTenantSettings] = useState<TenantSettings | null>(
-    null
+    null,
   );
 
   const [formData, setFormData] = useState<CompanyFormData>({
@@ -253,7 +253,7 @@ export default function CompanySettingsPage() {
           currency: formData.currency,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "tenant_id" }
+        { onConflict: "tenant_id" },
       );
 
       uiLogger.info("Company details saved successfully", {
@@ -281,7 +281,7 @@ export default function CompanySettingsPage() {
               currency: formData.currency,
               updated_at: updatedAt,
             }
-          : null
+          : null,
       );
       setOriginalFormData({ ...formData });
       setIsEditing(false);
@@ -599,7 +599,7 @@ export default function CompanySettingsPage() {
                   <FieldDisplay
                     label="Time Zone"
                     value={getTimezoneLabel(
-                      tenantSettings?.timezone || "Asia/Kolkata"
+                      tenantSettings?.timezone || "Asia/Kolkata",
                     )}
                     required
                   />

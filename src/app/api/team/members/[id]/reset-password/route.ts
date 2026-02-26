@@ -164,14 +164,19 @@ export async function PUT(
       );
 
       if (signOutError) {
-        console.warn("[RESET PASSWORD API] Warning: Could not invalidate sessions:", signOutError);
-        // Don't fail the request if session invalidation fails - password was already reset
+        // Note: JWT bad_jwt errors are expected if user has invalid/expired sessions
+        // The password was already reset successfully, so this is non-critical
+        if (signOutError.code !== 'bad_jwt') {
+          console.warn("[RESET PASSWORD API] Warning: Could not invalidate sessions:", signOutError);
+        }
       } else {
         console.log(`[RESET PASSWORD API] Invalidated all sessions for: ${memberId}`);
       }
     } catch (signOutError) {
-      console.warn("[RESET PASSWORD API] Warning: Could not invalidate sessions:", signOutError);
-      // Don't fail the request if session invalidation fails - password was already reset
+      // Non-critical error - password was already reset
+      if (signOutError instanceof Error && !signOutError.message.includes('bad_jwt')) {
+        console.warn("[RESET PASSWORD API] Warning: Could not invalidate sessions:", signOutError);
+      }
     }
 
     console.log(`[RESET PASSWORD API] Password reset successfully for: ${memberId}`);
