@@ -339,13 +339,25 @@ export default function CompanySettingsPage() {
   // Map company status to StatusBadge format
   const getStatusForBadge = (status: string | undefined): string => {
     const statusMap: Record<string, string> = {
-      trial: "pending",
+      trial: "active",
       active: "active",
       suspended: "inactive",
       expired: "inactive",
       closed: "disabled",
     };
     return statusMap[status || "suspended"] || "inactive";
+  };
+
+  // Get tenant type badge styling
+  const getTenantTypeBadgeColor = (type: string): string => {
+    const colorMap: Record<string, string> = {
+      client: "bg-blue-100 text-blue-700",
+      architect: "bg-purple-100 text-purple-700",
+      interiors: "bg-emerald-100 text-emerald-700",
+      vendor: "bg-orange-100 text-orange-700",
+      factory: "bg-indigo-100 text-indigo-700",
+    };
+    return colorMap[type] || "bg-slate-100 text-slate-700";
   };
 
   return (
@@ -433,7 +445,7 @@ export default function CompanySettingsPage() {
                   <p className="text-xs text-slate-500 truncate">
                     {company?.email}
                   </p>
-                  <span className="inline-flex mt-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-slate-100 text-slate-700">
+                  <span className={`inline-flex mt-1 px-2 py-0.5 text-[10px] font-medium rounded-full ${getTenantTypeBadgeColor(company?.tenant_type || "")}`}>
                     {getTenantTypeLabel(company?.tenant_type || "")}
                   </span>
                 </div>
