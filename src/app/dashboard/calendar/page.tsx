@@ -132,7 +132,7 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(
-    null
+    null,
   );
 
   // Create Event Modal State
@@ -166,7 +166,7 @@ export default function CalendarPage() {
       const endDate = new Date(year, month + 2, 0).toISOString(); // Include next month for better UX
 
       const response = await fetch(
-        `/api/calendar?start=${startDate}&end=${endDate}`
+        `/api/calendar?start=${startDate}&end=${endDate}`,
       );
 
       if (!response.ok) {
@@ -249,13 +249,13 @@ export default function CalendarPage() {
   // Navigation
   const goToPreviousMonth = () => {
     setCurrentDate(
-      new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1)
+      new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1),
     );
   };
 
   const goToNextMonth = () => {
     setCurrentDate(
-      new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1)
+      new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1),
     );
   };
 
@@ -292,7 +292,7 @@ export default function CalendarPage() {
       const date = new Date(year, month, day);
       const dateStr = date.toISOString().split("T")[0];
       const dayEvents = events.filter((e) =>
-        e.scheduled_at.startsWith(dateStr)
+        e.scheduled_at.startsWith(dateStr),
       );
       days.push({ date, isCurrentMonth: true, events: dayEvents });
     }
@@ -461,7 +461,7 @@ export default function CalendarPage() {
                         >
                           {day}
                         </div>
-                      )
+                      ),
                     )}
                   </div>
 
@@ -480,8 +480,8 @@ export default function CalendarPage() {
                               !day.isCurrentMonth
                                 ? "text-slate-400"
                                 : isToday(day.date)
-                                ? "w-6 h-6 flex items-center justify-center rounded-full bg-blue-600 text-white text-xs"
-                                : "text-slate-700"
+                                  ? "w-6 h-6 flex items-center justify-center rounded-full bg-blue-600 text-white text-xs"
+                                  : "text-slate-700"
                             }`}
                           >
                             {day.date.getDate()}
@@ -596,7 +596,7 @@ export default function CalendarPage() {
                                             >
                                               {attendee.name}
                                             </span>
-                                          )
+                                          ),
                                         )}
                                       </div>
                                     </div>
@@ -838,7 +838,7 @@ export default function CalendarPage() {
                           day: "numeric",
                           month: "long",
                           year: "numeric",
-                        }
+                        },
                       )}
                     </p>
                     <p className="text-sm text-slate-500">
@@ -1100,7 +1100,9 @@ export default function CalendarPage() {
                     <LinkedEntity
                       value={linkedEntity}
                       onChange={(val) =>
-                        setLinkedEntity(Array.isArray(val) ? val[0] || null : val)
+                        setLinkedEntity(
+                          Array.isArray(val) ? val[0] || null : val,
+                        )
                       }
                       placeholder="Link"
                     />
