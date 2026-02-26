@@ -210,9 +210,9 @@ export function useCurrentUser(): UseCurrentUserReturn {
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
         // Only refetch if we already had data (actual re-auth, not initial load)
         if (hasFetched) {
-          globalUser = null;
+          // Don't clear globalUser for TOKEN_REFRESHED - just refetch in background
+          // This prevents UI flashing when switching browser tabs
           globalFetchPromise = null;
-          hasFetched = false;
           fetchUser();
         }
         // If !hasFetched, the initial useEffect fetch is already handling it
