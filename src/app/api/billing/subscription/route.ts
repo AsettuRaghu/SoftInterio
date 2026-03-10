@@ -6,16 +6,22 @@ import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 // Returns comprehensive subscription status, plan details, usage, and warnings
 export async function GET(request: NextRequest) {
   try {
+    console.log("=== SUBSCRIPTION FETCH START ===");
+    
     // Protect API route
     const guard = await protectApiRoute(request);
     if (!guard.success) {
+      console.log("API guard failed:", guard.error);
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
     const { user } = guard;
+    console.log("User authenticated:", { userId: user.id, email: user.email });
+    
     const supabase = await createClient();
 
     // Get user's tenant
+    console.log("Fetching user tenant...");
     const { data: userData, error: userError } = await supabase
       .from("users")
       .select("tenant_id")
@@ -23,6 +29,7 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (userError || !userData?.tenant_id) {
+      console.log("User tenant fetch failed:", { userError, userData });
       return NextResponse.json(
         { error: "User not associated with a tenant" },
         { status: 400 }
@@ -30,8 +37,10 @@ export async function GET(request: NextRequest) {
     }
 
     const tenantId = userData.tenant_id;
+    console.log("User tenant found:", { tenantId });
 
     // Get tenant info
+    console.log("Fetching tenant info...");
     const { data: tenant, error: tenantError } = await supabase
       .from("tenants")
       .select("id, company_name, subscription_plan_id, status")
@@ -46,7 +55,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    console.log("Tenant info fetched:", { 
+      tenantId: tenant.id, 
+      companyName: tenant.company_name,
+      subscriptionPlanId: tenant.subscription_plan_id,
+      status: tenant.status,
+    });
+
     // Get subscription details with all new fields
+    console.log("Fetching subscription details...");
     const { data: subscription, error: subscriptionError } = await supabase
       .from("tenant_subscriptions")
       .select(
@@ -79,6 +96,15 @@ export async function GET(request: NextRequest) {
 
     if (subscriptionError) {
       console.error("Error fetching subscription:", subscriptionError);
+    } else {
+      console.log("Subscription details fetched:", {
+        hasSubscription: !!subscription,
+        subscriptionId: subscription?.id,
+        status: subscription?.status,
+        planId: subscription?.plan_id,
+        isTrial: subscription?.is_trial,
+        billingCycle: subscription?.billing_cycle,
+      });
     }
 
     // Get billing config for warning threshold and billing options
@@ -86,6 +112,7 @@ export async function GET(request: NextRequest) {
     let allowedBillingCycles: string[] = ["yearly"]; // Default to yearly only
     let allowMonthly = false;
     try {
+      console.log("Fetching billing config...");
       const { data: billingConfig } = await supabase
         .from("system_config")
         .select("config_value")
@@ -110,6 +137,12 @@ export async function GET(request: NextRequest) {
 
     // Get the plan
     const planId = subscription?.plan_id || tenant.subscription_plan_id;
+    console.log("Fetching subscription plan...", { 
+      planId,
+      subscriptionPlanId: subscription?.plan_id,
+      tenantPlanId: tenant.subscription_plan_id,
+    });
+    
     let plan = null;
     let planFeatures: Array<{
       feature_key: string;
@@ -119,33 +152,72 @@ export async function GET(request: NextRequest) {
     }> = [];
 
     if (planId) {
-      const { data: planData } = await supabase
+      const { data: planData, error: planFetchError } = await supabase
         .from("subscription_plans")
         .select("*")
         .eq("id", planId)
         .single();
 
-      plan = planData;
+      if (planFetchError) {
+        console.error("Error fetching plan:", {
+          planId,
+          error: planFetchError.message,
+          code: planFetchError.code,
+        });
+      } else {
+        plan = planData;
+        console.log("Plan fetched successfully:", {
+          planId: plan?.id,
+          planName: plan?.name,
+          planSlug: plan?.slug,
+          priceMonthly: plan?.price_monthly,
+          priceYearly: plan?.price_yearly,
+          maxUsers: plan?.max_users,
+          maxProjects: plan?.max_projects,
+          maxStorageGb: plan?.max_storage_gb,
+        });
+      }
 
-      const { data: features } = await supabase
-        .from("subscription_plan_features")
-        .select("*")
-        .eq("plan_id", planId);
+      if (plan) {
+        const { data: features, error: featuresError } = await supabase
+          .from("subscription_plan_features")
+          .select("*")
+          .eq("plan_id", planId);
 
-      planFeatures = features || [];
+        if (featuresError) {
+          console.warn("Error fetching plan features:", featuresError.message);
+        } else {
+          planFeatures = features || [];
+        }
+        console.log("Plan features fetched:", { featuresCount: planFeatures.length });
+      }
+    } else {
+      console.warn("No plan ID found for subscription", {
+        subscriptionId: subscription?.id,
+        subscriptionPlanId: subscription?.plan_id,
+        tenantId,
+        tenantPlanId: tenant.subscription_plan_id,
+      });
     }
 
     // Get usage data
     let usage = null;
     try {
+      console.log("Fetching tenant usage...");
       const { data: usageData } = await supabase
         .from("tenant_usage")
         .select("*")
         .eq("tenant_id", tenantId)
         .maybeSingle();
       usage = usageData;
+      console.log("Usage data fetched:", {
+        currentUsers: usage?.current_users,
+        currentProjects: usage?.current_projects,
+        storageUsedBytes: usage?.storage_used_bytes,
+      });
     } catch {
       // Table might not exist
+      console.log("Usage table not available");
     }
 
     // Calculate days remaining and warning flags
@@ -339,8 +411,14 @@ export async function GET(request: NextRequest) {
         allowYearly: allowedBillingCycles.includes("yearly"),
       },
     });
+
+    console.log("=== SUBSCRIPTION FETCH RESPONSE ===");
+    console.log("Subscription fetch completed successfully");
+    console.log("=== END SUBSCRIPTION FETCH ===");
   } catch (error) {
+    console.error("=== SUBSCRIPTION FETCH ERROR ===");
     console.error("Error fetching subscription:", error);
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

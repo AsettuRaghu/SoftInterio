@@ -10,6 +10,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import {
+  validatePassword,
+  DEFAULT_PASSWORD_POLICY,
+  getPasswordRequirements,
+} from "@/lib/auth/password-validation";
 import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
@@ -61,6 +66,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Check usage limits - can add users?
+    const { canAddUser } = await import("@/lib/billing/usage");
+    const usageCheck = await canAddUser(currentUser.tenant_id);
+    if (!usageCheck.canAdd) {
+      console.log("[INVITE API] User limit reached for tenant:", currentUser.tenant_id);
+      return NextResponse.json(
+        {
+          success: false,
+          error: usageCheck.message || "User limit reached",
+          upsellRequired: true,
+          usage: {
+            current: usageCheck.current,
+            limit: usageCheck.limit,
+            percentage: usageCheck.percentage,
+          },
+        },
+        { status: 403 }
+      );
+    }
+
     // Parse request body
     const body = await request.json();
     const { email, firstName, lastName, roleIds, designation, password } = body;
@@ -92,11 +117,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!password || password.length < 8) {
+    // Validate password strength
+    const passwordValidation = validatePassword(password, DEFAULT_PASSWORD_POLICY);
+    if (!passwordValidation.isValid) {
       return NextResponse.json(
         {
           success: false,
-          error: "Password is required (minimum 8 characters)",
+          error:
+            passwordValidation.errors[0]?.message ||
+            "Password does not meet requirements",
+          passwordErrors: passwordValidation.errors,
+          passwordRequirements: getPasswordRequirements(DEFAULT_PASSWORD_POLICY),
         },
         { status: 400 }
       );
@@ -104,7 +135,26 @@ export async function POST(request: NextRequest) {
 
     const adminClient = createAdminClient();
 
-    // Check for existing invitation or user
+    // CRITICAL: Check if email exists in ANY tenant globally (one email = one tenant rule)
+    console.log("[INVITE API] Checking if email exists globally...");
+    const { data: emailInOtherTenant } = await adminClient
+      .from("users")
+      .select("id, email, tenant_id")
+      .eq("email", email.toLowerCase())
+      .maybeSingle();
+
+    if (emailInOtherTenant) {
+      // Email already belongs to another tenant
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Email already in use",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Check for existing invitation or user in THIS tenant
     const { data: existingInvite } = await adminClient
       .from("user_invitations")
       .select("id, status")
@@ -129,7 +179,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user already exists in users table for this tenant
+    // Check if user already exists in users table for this tenant (shouldn't happen due to global check, but keep for safety)
     const { data: existingUser } = await adminClient
       .from("users")
       .select("id, email")
@@ -141,7 +191,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "This email is already registered in your organization",
+          error: "Email already in use",
         },
         { status: 400 }
       );

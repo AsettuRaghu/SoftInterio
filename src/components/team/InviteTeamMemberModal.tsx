@@ -23,7 +23,7 @@ interface InviteTeamMemberModalProps {
     password: string;
   };
   onFormChange: (
-    updates: Partial<InviteTeamMemberModalProps["inviteForm"]>
+    updates: Partial<InviteTeamMemberModalProps["inviteForm"]>,
   ) => void;
   roles: Role[];
   modalError: string | null;
@@ -106,11 +106,53 @@ export function InviteTeamMemberModal({
               type="text"
               value={inviteForm.password}
               onChange={(e) => onFormChange({ password: e.target.value })}
-              placeholder="Set a password (min 8 characters)"
+              placeholder="Set a password"
               className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              minLength={8}
             />
-            <p className="text-xs text-slate-500 mt-1">
+            <div className="mt-2 space-y-1">
+              <p className="text-xs font-medium text-slate-600">
+                Password must contain:
+              </p>
+              <ul className="text-xs text-slate-600 space-y-0.5">
+                <li className="flex items-center gap-2">
+                  <span
+                    className={`w-4 h-4 flex items-center justify-center rounded ${
+                      inviteForm.password.length >= 8
+                        ? "bg-green-100 text-green-600"
+                        : "bg-slate-100 text-slate-400"
+                    }`}
+                  >
+                    {inviteForm.password.length >= 8 ? "✓" : "•"}
+                  </span>
+                  At least 8 characters
+                </li>
+                <li className="flex items-center gap-2">
+                  <span
+                    className={`w-4 h-4 flex items-center justify-center rounded ${
+                      /[a-zA-Z]/.test(inviteForm.password)
+                        ? "bg-green-100 text-green-600"
+                        : "bg-slate-100 text-slate-400"
+                    }`}
+                  >
+                    {/[a-zA-Z]/.test(inviteForm.password) ? "✓" : "•"}
+                  </span>
+                  At least one letter (A-Z or a-z)
+                </li>
+                <li className="flex items-center gap-2">
+                  <span
+                    className={`w-4 h-4 flex items-center justify-center rounded ${
+                      /\d/.test(inviteForm.password)
+                        ? "bg-green-100 text-green-600"
+                        : "bg-slate-100 text-slate-400"
+                    }`}
+                  >
+                    {/\d/.test(inviteForm.password) ? "✓" : "•"}
+                  </span>
+                  At least one number (0-9)
+                </li>
+              </ul>
+            </div>
+            <p className="text-xs text-slate-500 mt-2">
               You'll share this password with the user after they're added.
             </p>
           </div>
@@ -144,7 +186,7 @@ export function InviteTeamMemberModal({
                         } else {
                           onFormChange({
                             roleIds: inviteForm.roleIds.filter(
-                              (id) => id !== role.id
+                              (id) => id !== role.id,
                             ),
                           });
                         }
@@ -186,7 +228,7 @@ export function InviteTeamMemberModal({
                         onClick={() =>
                           onFormChange({
                             roleIds: inviteForm.roleIds.filter(
-                              (id) => id !== roleId
+                              (id) => id !== roleId,
                             ),
                           })
                         }

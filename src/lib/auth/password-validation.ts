@@ -22,14 +22,14 @@ export interface PasswordPolicy {
   requireUppercase: boolean;
   /** Require at least one lowercase letter */
   requireLowercase: boolean;
+  /** Require at least one letter (any case) */
+  requireLetter: boolean;
   /** Require at least one number */
   requireNumber: boolean;
   /** Require at least one special character */
   requireSpecialChar: boolean;
   /** Minimum number of unique characters */
   minUniqueChars: number;
-  /** Prevent common passwords */
-  preventCommonPasswords: boolean;
   /** Prevent user info in password (email, name) */
   preventUserInfo: boolean;
 }
@@ -38,12 +38,12 @@ export interface PasswordPolicy {
 export const DEFAULT_PASSWORD_POLICY: PasswordPolicy = {
   minLength: 8,
   maxLength: 128,
-  requireUppercase: true,
-  requireLowercase: true,
-  requireNumber: true,
-  requireSpecialChar: false, // Set to false to be less restrictive but still secure
+  requireUppercase: false,
+  requireLowercase: false,
+  requireLetter: true, // At least one letter (any case)
+  requireNumber: true, // At least one number
+  requireSpecialChar: false,
   minUniqueChars: 4,
-  preventCommonPasswords: true,
   preventUserInfo: true,
 };
 
@@ -56,7 +56,6 @@ export const ADMIN_PASSWORD_POLICY: PasswordPolicy = {
   requireNumber: true,
   requireSpecialChar: true,
   minUniqueChars: 6,
-  preventCommonPasswords: true,
   preventUserInfo: true,
 };
 
@@ -253,6 +252,14 @@ export function validatePassword(
     });
   }
 
+  // Check letter requirement (any case)
+  if (policy.requireLetter && !/[a-zA-Z]/.test(password)) {
+    errors.push({
+      code: "LETTER_REQUIRED",
+      message: "Password must contain at least one letter (A-Z or a-z)",
+    });
+  }
+
   // Check number requirement
   if (policy.requireNumber && !/[0-9]/.test(password)) {
     errors.push({
@@ -280,18 +287,6 @@ export function validatePassword(
       code: "UNIQUE_CHARS",
       message: `Password must contain at least ${policy.minUniqueChars} unique characters`,
     });
-  }
-
-  // Check common passwords
-  if (policy.preventCommonPasswords) {
-    const lowerPassword = password.toLowerCase();
-    if (COMMON_PASSWORDS.has(lowerPassword)) {
-      errors.push({
-        code: "COMMON_PASSWORD",
-        message:
-          "This password is too common. Please choose a stronger password.",
-      });
-    }
   }
 
   // Check user info in password
@@ -465,6 +460,9 @@ export function getPasswordRequirements(
 
   requirements.push(`At least ${policy.minLength} characters long`);
 
+  if (policy.requireLetter) {
+    requirements.push("At least one letter (A-Z or a-z)");
+  }
   if (policy.requireUppercase) {
     requirements.push("At least one uppercase letter (A-Z)");
   }
@@ -476,9 +474,6 @@ export function getPasswordRequirements(
   }
   if (policy.requireSpecialChar) {
     requirements.push("At least one special character (!@#$%^&*)");
-  }
-  if (policy.preventCommonPasswords) {
-    requirements.push("Not a commonly used password");
   }
 
   return requirements;

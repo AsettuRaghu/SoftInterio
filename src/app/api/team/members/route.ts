@@ -294,49 +294,54 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // ALWAYS set users.status = 'disabled' first (works without migration)
-    // This is the primary security mechanism
-    const { error: userStatusError } = await adminClient
+    // HARD DELETE: Remove user from users table completely (email becomes available)
+    console.log("[TEAM API] Hard deleting user record...");
+    const { error: userDeleteError } = await adminClient
       .from("users")
-      .update({
-        status: "disabled",
-        updated_at: new Date().toISOString(),
-      })
+      .delete()
       .eq("id", memberId)
       .eq("tenant_id", currentUser.tenant_id);
 
-    if (userStatusError) {
+    if (userDeleteError) {
       console.error(
-        "[TEAM API] Failed to disable user status:",
-        userStatusError
+        "[TEAM API] Failed to delete user record:",
+        userDeleteError
       );
       return NextResponse.json(
         { success: false, error: "Failed to remove member" },
         { status: 500 }
       );
     }
-    console.log("[TEAM API] User status set to disabled:", memberId);
+    console.log("[TEAM API] User record hard deleted:", memberId);
 
-    // Also try to update tenant_users if the table exists (for multi-tenant support)
+    // Clean up tenant_users membership records
     const { error: membershipError } = await adminClient
       .from("tenant_users")
-      .update({
-        is_active: false,
-        removed_at: new Date().toISOString(),
-        removed_by: authUser.id,
-        updated_at: new Date().toISOString(),
-      })
+      .delete()
       .eq("user_id", memberId)
       .eq("tenant_id", currentUser.tenant_id);
 
     if (membershipError) {
       console.log(
-        "[TEAM API] Note: tenant_users update skipped (table may not exist):",
+        "[TEAM API] Note: tenant_users cleanup skipped:",
         membershipError.message
       );
-      // Not an error - tenant_users table may not exist yet
+      // Not an error - may not exist
     } else {
-      console.log("[TEAM API] tenant_users membership deactivated:", memberId);
+      console.log("[TEAM API] tenant_users records deleted:", memberId);
+    }
+
+    // Hard delete auth user as well
+    console.log("[TEAM API] Hard deleting auth user...");
+    const { error: authDeleteError } = await adminClient.auth.admin.deleteUser(
+      memberId
+    );
+
+    if (authDeleteError) {
+      console.error("[[TEAM API] Failed to delete auth user:", authDeleteError);
+      // Log but don't fail - user record already deleted from users table
+    } else {
+      console.log("[TEAM API] Auth user hard deleted:", memberId);
     }
 
     // Delete user_roles for this user (tenant-specific cleanup)
@@ -351,6 +356,23 @@ export async function DELETE(request: NextRequest) {
         rolesDeleteError
       );
       // Non-fatal - continue
+    }
+
+    // Delete user_invitations for this user (so they can be re-invited)
+    const { error: invitationsDeleteError } = await adminClient
+      .from("user_invitations")
+      .delete()
+      .eq("user_id", memberId)
+      .eq("tenant_id", currentUser.tenant_id);
+
+    if (invitationsDeleteError) {
+      console.log(
+        "[TEAM API] Note: user_invitations cleanup skipped:",
+        invitationsDeleteError.message
+      );
+      // Non-fatal - may not have invitations
+    } else {
+      console.log("[TEAM API] user_invitations records deleted:", memberId);
     }
 
     // SECURITY: Invalidate the user's session immediately

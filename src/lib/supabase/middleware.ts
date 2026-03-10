@@ -5,6 +5,9 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { getSubscriptionStatus, hasAccessToplatform, getAccessBlockedMessage } from "@/lib/billing/subscription-status";
+import type { TenantSubscriptionData } from "@/lib/billing/subscription-status";
+import { accessLogger } from "@/lib/activity-logger";
 
 // ============================================
 // ROUTE PERMISSION CONFIGURATION
@@ -194,6 +197,45 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url);
       }
 
+      // Check subscription status
+      if (userData?.tenant_id) {
+        const { data: subscription, error: subscriptionError } = await supabase
+          .from("tenant_subscriptions")
+          .select("id, status, is_trial, trial_start_date, trial_end_date, subscription_start_date, subscription_end_date, current_period_start, current_period_end, last_payment_date, grace_period_days, grace_period_end")
+          .eq("tenant_id", userData.tenant_id)
+          .single();
+
+        if (!subscriptionError && subscription) {
+          // Use new subscription status utility
+          const subscriptionStatus = getSubscriptionStatus(subscription as TenantSubscriptionData);
+          
+          // Block access if user doesn't have access to platform
+          if (!subscriptionStatus.isActive) {
+            console.log(
+              "[MIDDLEWARE] Access blocked for user:",
+              user.id,
+              "Reason:",
+              subscriptionStatus.state
+            );
+            
+            // Log access denied
+            if (subscriptionStatus.state === 'expired-no-payment') {
+              await accessLogger.blockedTrialExpired(userData.tenant_id, user.id);
+            } else if (subscriptionStatus.state === 'expired-subscription') {
+              await accessLogger.blockedSubscriptionExpired(userData.tenant_id, user.id);
+            } else {
+              await accessLogger.blockedInactiveAccount(userData.tenant_id, user.id);
+            }
+            
+            await supabase.auth.signOut();
+            const url = request.nextUrl.clone();
+            url.pathname = "/auth/signin";
+            url.searchParams.set("error", subscriptionStatus.state);
+            return NextResponse.redirect(url);
+          }
+        }
+      }
+
       // Check tenant_users for active membership (if table exists and user has tenant)
       if (userData?.tenant_id) {
         const { data: membership, error: membershipError } = await supabase
@@ -216,47 +258,29 @@ export async function updateSession(request: NextRequest) {
           return NextResponse.redirect(url);
         }
 
-        // Check subscription status - ensure tenant has active subscription or valid trial
+        // Check subscription status - ensure tenant has access
         const { data: subscription, error: subscriptionError } = await supabase
           .from("tenant_subscriptions")
-          .select("id, status, is_trial, trial_end_date, current_period_end, grace_period_end")
+          .select("id, status, is_trial, trial_start_date, trial_end_date, subscription_start_date, subscription_end_date, current_period_start, current_period_end, last_payment_date, grace_period_days, grace_period_end")
           .eq("tenant_id", userData.tenant_id)
           .single();
 
         if (!subscriptionError && subscription) {
-          const now = new Date();
-          const isTrialExpired = subscription.is_trial && subscription.trial_end_date && new Date(subscription.trial_end_date) < now;
-          const isSubscriptionExpired = subscription.current_period_end && new Date(subscription.current_period_end) < now;
-          const isGracePeriodExpired = subscription.grace_period_end && new Date(subscription.grace_period_end) < now;
+          // Use new subscription status utility
+          const subscriptionStatus = getSubscriptionStatus(subscription as TenantSubscriptionData);
           
-          // Check if subscription is cancelled, expired, or suspended
-          const inactiveStatuses = ['cancelled', 'expired', 'suspended'];
-          const isInactiveStatus = inactiveStatuses.includes(subscription.status);
-
-          // Block access if:
-          // 1. On trial and trial has expired, OR
-          // 2. Subscription status is inactive AND grace period has passed
-          if (subscription.is_trial && isTrialExpired) {
+          // Block access if user doesn't have access to platform
+          if (!subscriptionStatus.isActive) {
             console.log(
-              "[MIDDLEWARE] Trial expired for tenant:",
-              userData.tenant_id
+              "[MIDDLEWARE] Access blocked for tenant:",
+              userData.tenant_id,
+              "Reason:",
+              subscriptionStatus.state
             );
             await supabase.auth.signOut();
             const url = request.nextUrl.clone();
             url.pathname = "/auth/signin";
-            url.searchParams.set("error", "trial_expired");
-            return NextResponse.redirect(url);
-          }
-
-          if (isInactiveStatus && (isGracePeriodExpired || (!subscription.grace_period_end && isSubscriptionExpired))) {
-            console.log(
-              "[MIDDLEWARE] Subscription expired for tenant:",
-              userData.tenant_id
-            );
-            await supabase.auth.signOut();
-            const url = request.nextUrl.clone();
-            url.pathname = "/auth/signin";
-            url.searchParams.set("error", "subscription_expired");
+            url.searchParams.set("error", subscriptionStatus.state);
             return NextResponse.redirect(url);
           }
         }

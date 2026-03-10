@@ -58,7 +58,7 @@ export function Breadcrumbs({ items, basePath }: BreadcrumbsProps) {
             ) : (
               <span
                 className={cn(
-                  isLast ? "text-slate-700 font-medium" : "text-slate-500"
+                  isLast ? "text-slate-700 font-medium" : "text-slate-500",
                 )}
               >
                 {item.label}
@@ -179,7 +179,7 @@ export function PageHeader({
     <div
       className={cn(
         "px-4 py-2.5 border-b border-slate-100 bg-linear-to-r from-slate-50 to-white shrink-0",
-        className
+        className,
       )}
     >
       {/* Breadcrumbs */}
@@ -195,7 +195,7 @@ export function PageHeader({
             <div
               className={cn(
                 "w-8 h-8 rounded-lg bg-linear-to-br flex items-center justify-center shadow-sm",
-                iconBgClass
+                iconBgClass,
               )}
             >
               {icon}
@@ -287,6 +287,12 @@ const statusConfig: Record<
     color: "text-emerald-700",
     bgColor: "bg-emerald-50",
     dotColor: "bg-emerald-500",
+  },
+  trial: {
+    label: "Trial",
+    color: "text-blue-700",
+    bgColor: "bg-blue-50",
+    dotColor: "bg-blue-500",
   },
   pending: {
     label: "Pending",
@@ -419,7 +425,7 @@ export function StatBadge({
       className={cn(
         "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border",
         statColorConfig[color],
-        className
+        className,
       )}
     >
       <span className="text-slate-500">{label}:</span>
@@ -476,7 +482,7 @@ export function Alert({ type, message, onDismiss, className }: AlertProps) {
         config.bg,
         config.border,
         config.text,
-        className
+        className,
       )}
     >
       <span className="text-sm">{message}</span>
@@ -485,7 +491,7 @@ export function Alert({ type, message, onDismiss, className }: AlertProps) {
           onClick={onDismiss}
           className={cn(
             "ml-4 p-1 rounded hover:bg-white/50 transition-colors",
-            config.icon
+            config.icon,
           )}
         >
           <svg
@@ -530,7 +536,7 @@ export function EmptyState({
     <div
       className={cn(
         "flex flex-col items-center justify-center py-12 text-center",
-        className
+        className,
       )}
     >
       {icon && (

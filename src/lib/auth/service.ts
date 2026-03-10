@@ -14,11 +14,11 @@ import type {
 
 /**
  * Check if a user already exists by email
- * Returns status information about the user
+ * With hard-delete policy, any existing user email means account exists
+ * Also checks tenants table to prevent duplicate tenant creation
  */
 export async function checkExistingUser(email: string): Promise<{
   exists: boolean;
-  isActive: boolean;
   authUserId?: string;
   userRecord?: any;
 }> {
@@ -30,28 +30,43 @@ export async function checkExistingUser(email: string): Promise<{
     (u) => u.email?.toLowerCase() === email.toLowerCase()
   );
 
-  if (!existingAuthUser) {
-    return { exists: false, isActive: false };
+  if (existingAuthUser) {
+    // Try to get users table record, but it's OK if it doesn't exist
+    const { data: userRecord } = await supabase
+      .from("users")
+      .select("id, tenant_id, status, name, phone, avatar_url, primary_tenant_id")
+      .eq("id", existingAuthUser.id)
+      .single();
+
+    // Email exists in auth.users - that's enough to block signup
+    return {
+      exists: true,
+      authUserId: existingAuthUser.id,
+      userRecord: userRecord || undefined,
+    };
   }
 
-  // Check users table for status
-  const { data: userRecord } = await supabase
-    .from("users")
-    .select("id, tenant_id, status, name, phone, avatar_url, primary_tenant_id")
-    .eq("id", existingAuthUser.id)
-    .single();
+  // Also check tenants table for orphaned tenant records
+  // This prevents "duplicate key value violates unique constraint" errors
+  // Use LOWER() comparison for case-insensitive matching
+  const { data: allTenants } = await supabase
+    .from("tenants")
+    .select("id, email");
 
-  if (!userRecord) {
-    // Auth exists but no user record - treat as new
-    return { exists: false, isActive: false, authUserId: existingAuthUser.id };
+  const existingTenant = allTenants?.find(
+    (t) => t.email?.toLowerCase() === email.toLowerCase()
+  );
+
+  if (existingTenant) {
+    console.log(
+      "[AUTH SERVICE] Found existing tenant with this email:",
+      existingTenant.id
+    );
+    return { exists: true };
   }
 
-  return {
-    exists: true,
-    isActive: userRecord.status === "active",
-    authUserId: existingAuthUser.id,
-    userRecord,
-  };
+  // No existing user or tenant found
+  return { exists: false };
 }
 
 /**
@@ -78,7 +93,7 @@ export async function registerExistingUserToNewTenant(
     .from("users")
     .update({
       tenant_id: tenantId,
-      status: "pending_verification",
+      status: "active", // User already verified, can login immediately
       is_super_admin: true,
       name: signUpData.name || existingUserRecord.name,
       updated_at: new Date().toISOString(),
@@ -98,7 +113,6 @@ export async function registerExistingUserToNewTenant(
       tenant_id: tenantId,
       user_id: authUserId,
       is_active: true,
-      is_primary_tenant: !existingUserRecord.primary_tenant_id,
       joined_at: new Date().toISOString(),
     });
 
@@ -118,11 +132,16 @@ export async function registerExistingUserToNewTenant(
     .update({ created_by_user_id: authUserId })
     .eq("id", tenantId);
 
-  // Send password reset email - this actually sends the email
+  // Send password reset/setup email to new company owner
+  // Try to send password reset email to allow them to set up password
   console.log(
-    "[AUTH SERVICE] Sending password reset email to:",
+    "[AUTH SERVICE] Sending password setup email to:",
     signUpData.email
   );
+  
+  let emailSent = false;
+  
+  // Try resetPasswordForEmail first (for existing auth users)
   const { error: resetError } = await clientSupabase.auth.resetPasswordForEmail(
     signUpData.email,
     {
@@ -131,10 +150,41 @@ export async function registerExistingUserToNewTenant(
   );
 
   if (resetError) {
-    console.error("[AUTH SERVICE] Error sending reset email:", resetError);
-    // Non-fatal - user can use forgot password later
+    console.warn(
+      "[AUTH SERVICE] resetPasswordForEmail failed, trying resend...",
+      resetError.message
+    );
+    
+    // Try using resend as alternate method
+    const { error: resendError } = await clientSupabase.auth.resend({
+      type: "signup",
+      email: signUpData.email,
+      options: {
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/confirmation`,
+      },
+    });
+    
+    if (resendError) {
+      console.error(
+        "[AUTH SERVICE] Both password setup methods failed:",
+        resendError.message
+      );
+      console.warn(
+        "[AUTH SERVICE] User will need to use forgot password flow to set password"
+      );
+    } else {
+      emailSent = true;
+      console.log("[AUTH SERVICE] Verification email sent via resend");
+    }
   } else {
-    console.log("[AUTH SERVICE] Password reset email sent successfully");
+    emailSent = true;
+    console.log("[AUTH SERVICE] Password setup email sent successfully");
+  }
+
+  if (!emailSent) {
+    console.warn(
+      "[AUTH SERVICE] Email sending failed - user can use forgot password link later"
+    );
   }
 
   console.log(
@@ -145,7 +195,7 @@ export async function registerExistingUserToNewTenant(
     user: {
       ...existingUserRecord,
       tenant_id: tenantId,
-      status: "pending_verification",
+      status: "active", // User already verified, can login immediately
     } as User,
   };
 }
@@ -252,9 +302,10 @@ export async function createTenant(data: CreateTenantInput): Promise<Tenant> {
 
   // Create tenant subscription record if plan was selected
   if (subscriptionPlanId) {
-    console.log("[AUTH SERVICE] Creating tenant subscription...");
-    const trialEndDate = new Date();
-    trialEndDate.setDate(trialEndDate.getDate() + 14); // 14-day trial
+    console.log("[AUTH SERVICE] Creating tenant subscription with 30-day trial...");
+    const now = new Date();
+    const trialEndDate = new Date(now);
+    trialEndDate.setDate(trialEndDate.getDate() + 30); // 30-day trial
 
     const { error: subscriptionError } = await supabase
       .from("tenant_subscriptions")
@@ -262,12 +313,16 @@ export async function createTenant(data: CreateTenantInput): Promise<Tenant> {
         tenant_id: tenant.id,
         plan_id: subscriptionPlanId,
         status: "trial",
-        billing_cycle: "yearly",
+        billing_cycle: "monthly", // Default to monthly, can be changed later
         is_trial: true,
-        trial_start_date: new Date().toISOString(),
+        trial_days_granted: 30,
+        trial_start_date: now.toISOString(),
         trial_end_date: trialEndDate.toISOString(),
-        current_period_start: new Date().toISOString(),
+        subscription_start_date: trialEndDate.toISOString(), // Subscription starts after trial
+        subscription_end_date: new Date(trialEndDate.getTime() + (30 * 24 * 60 * 60 * 1000)).toISOString(), // 30 days after trial
+        current_period_start: now.toISOString(),
         current_period_end: trialEndDate.toISOString(),
+        auto_renew: false, // Trial doesn't auto-renew
       });
 
     if (subscriptionError) {
@@ -279,7 +334,7 @@ export async function createTenant(data: CreateTenantInput): Promise<Tenant> {
         `Failed to create subscription: ${subscriptionError.message}`
       );
     }
-    console.log("[AUTH SERVICE] Tenant subscription created successfully");
+    console.log("[AUTH SERVICE] Tenant subscription created successfully with 30-day trial");
   }
 
   console.log("[AUTH SERVICE] createTenant completed successfully");
@@ -308,7 +363,7 @@ export async function registerUser(
     await supabase.auth.admin.createUser({
       email: signUpData.email,
       password: signUpData.password,
-      email_confirm: false,
+      email_confirm: true, // Auto-confirm user so they can login immediately
       user_metadata: {
         name: signUpData.name,
         tenant_id: tenantId,
@@ -333,7 +388,7 @@ export async function registerUser(
       name: signUpData.name,
       email: signUpData.email,
       phone: signUpData.phone,
-      status: "pending_verification",
+      status: "active", // User is active since email is auto-confirmed
       is_super_admin: true,
       primary_tenant_id: tenantId,
     })
@@ -357,7 +412,6 @@ export async function registerUser(
       tenant_id: tenantId,
       user_id: authUserId,
       is_active: true,
-      is_primary_tenant: true,
       joined_at: new Date().toISOString(),
     });
 
@@ -427,22 +481,16 @@ async function assignOwnerRole(
 
 /**
  * Send email verification link
+ * Currently disabled for development - users are auto-confirmed after signup
+ * TODO: Enable email sending when email provider is configured (SendGrid, Resend, etc.)
  */
 export async function sendVerificationEmail(email: string): Promise<void> {
-  const supabase = createAdminClient();
-
-  const { error } = await supabase.auth.resend({
-    type: "signup",
-    email: email,
-    options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/confirmation`,
-    },
-  });
-
-  if (error) {
-    console.error("Error sending verification email:", error);
-    // Don't throw - email sending failure shouldn't block registration
-  }
+  console.log(
+    "[AUTH SERVICE] Email verification skipped for development.",
+    "User was auto-confirmed and can login immediately."
+  );
+  // Email verification is currently skipped
+  // Re-enable this when Supabase email provider is configured
 }
 
 /**

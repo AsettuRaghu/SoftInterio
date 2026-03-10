@@ -342,7 +342,7 @@ export const navigationConfig: NavigationItem[] = [
         permission: "settings.team.view",
       },
       {
-        name: "Subscription",
+        name: "Billing and Subscription",
         href: "/dashboard/settings/billing",
         permission: "settings.billing",
       },
@@ -354,7 +354,7 @@ export const navigationConfig: NavigationItem[] = [
 export function filterNavigationByPermissions(
   items: NavigationItem[],
   hasPermission: (permission: string) => boolean,
-  showDisabled: boolean = true // If true, show greyed out; if false, hide completely
+  showDisabled: boolean = true, // If true, show greyed out; if false, hide completely
 ): (NavigationItem & {
   disabled: boolean;
   subItems?: (NavigationSubItem & { disabled: boolean })[];

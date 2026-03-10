@@ -6,6 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import {
+  validatePassword,
+  DEFAULT_PASSWORD_POLICY,
+} from "@/lib/auth/password-validation";
 
 export default function ResetPasswordForm() {
   const router = useRouter();
@@ -23,7 +27,7 @@ export default function ResetPasswordForm() {
 
     if (!code && !accessToken) {
       setError(
-        "Invalid or expired reset link. Please request a new password reset."
+        "Invalid or expired reset link. Please request a new password reset.",
       );
     }
   }, [searchParams]);
@@ -38,8 +42,15 @@ export default function ResetPasswordForm() {
       return;
     }
 
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters long");
+    const passwordValidation = validatePassword(
+      password,
+      DEFAULT_PASSWORD_POLICY,
+    );
+    if (!passwordValidation.isValid) {
+      setError(
+        passwordValidation.errors[0]?.message ||
+          "Password does not meet requirements",
+      );
       return;
     }
 
@@ -146,6 +157,50 @@ export default function ResetPasswordForm() {
             disabled={isLoading}
           />
 
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-gray-600">
+              Password must contain:
+            </p>
+            <ul className="text-xs text-gray-600 space-y-0.5">
+              <li className="flex items-center gap-2">
+                <span
+                  className={`w-4 h-4 flex items-center justify-center rounded ${
+                    password.length >= 8
+                      ? "bg-green-100 text-green-600"
+                      : "bg-slate-100 text-slate-400"
+                  }`}
+                >
+                  {password.length >= 8 ? "✓" : "•"}
+                </span>
+                At least 8 characters
+              </li>
+              <li className="flex items-center gap-2">
+                <span
+                  className={`w-4 h-4 flex items-center justify-center rounded ${
+                    /[a-zA-Z]/.test(password)
+                      ? "bg-green-100 text-green-600"
+                      : "bg-slate-100 text-slate-400"
+                  }`}
+                >
+                  {/[a-zA-Z]/.test(password) ? "✓" : "•"}
+                </span>
+                At least one letter (A-Z or a-z)
+              </li>
+              <li className="flex items-center gap-2">
+                <span
+                  className={`w-4 h-4 flex items-center justify-center rounded ${
+                    /\d/.test(password)
+                      ? "bg-green-100 text-green-600"
+                      : "bg-slate-100 text-slate-400"
+                  }`}
+                >
+                  {/\d/.test(password) ? "✓" : "•"}
+                </span>
+                At least one number (0-9)
+              </li>
+            </ul>
+          </div>
+
           <FormField
             label="Confirm Password"
             id="confirmPassword"
@@ -156,10 +211,6 @@ export default function ResetPasswordForm() {
             required
             disabled={isLoading}
           />
-
-          <div className="text-xs text-gray-500">
-            Password must be at least 8 characters long
-          </div>
 
           <Button
             type="submit"

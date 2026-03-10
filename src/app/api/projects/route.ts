@@ -191,6 +191,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check usage limits - can add projects?
+    const { canAddProject } = await import("@/lib/billing/usage");
+    const usageCheck = await canAddProject(userData.tenant_id);
+    if (!usageCheck.canAdd) {
+      console.log("[PROJECTS API] Project limit reached for tenant:", userData.tenant_id);
+      return NextResponse.json(
+        {
+          error: usageCheck.message || "Project limit reached",
+          upsellRequired: true,
+          usage: {
+            current: usageCheck.current,
+            limit: usageCheck.limit,
+            percentage: usageCheck.percentage,
+          },
+        },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const {
       name,

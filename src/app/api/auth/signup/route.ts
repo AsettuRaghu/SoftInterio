@@ -109,68 +109,22 @@ export async function POST(request: NextRequest) {
     const existingUserCheck = await checkExistingUser(body.email);
 
     if (existingUserCheck.exists) {
-      if (existingUserCheck.isActive) {
-        // Active user - they should sign in first
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "An account with this email already exists and is active. Please sign in to your existing account first.",
-          },
-          { status: 409 }
-        );
-      }
-
-      // Disabled user - allow them to create a new company
-      console.log(
-        "[SIGNUP API] Existing disabled user, creating new company..."
-      );
-
-      // Create tenant with company email (not user email to avoid unique constraint)
-      // Use company name-based email or generate unique one
-      const tenantEmail = `${body.company_name
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "")}-${Date.now()}@company.internal`;
-
-      const tenant = await createTenant({
-        tenant_type: body.tenant_type,
-        company_name: body.company_name,
-        email: tenantEmail, // Use generated email to avoid conflict
-        phone: body.phone,
-        selected_plan: body.selected_plan,
+      // Email already in use - block signup (one email = one tenant)
+      console.log("[SIGNUP API] User already exists:", {
+        email: body.email,
+        authUserId: existingUserCheck.authUserId,
+        hasTenant: !!existingUserCheck.userRecord?.tenant_id,
       });
-      console.log("[SIGNUP API] Tenant created for existing user:", tenant.id);
-
-      // Register existing user to new tenant
-      const result = await registerExistingUserToNewTenant(
-        existingUserCheck.authUserId!,
-        existingUserCheck.userRecord!,
-        tenant.id,
-        body
-      );
-
       return NextResponse.json(
         {
-          success: true,
-          message:
-            "Your new company has been created! We've sent you an email to set up your password. Please check your inbox and click the link to complete the setup.",
-          data: {
-            tenant: {
-              id: tenant.id,
-              company_name: tenant.company_name,
-              tenant_type: tenant.tenant_type,
-            },
-            user: {
-              id: result.user.id,
-              name: result.user.name,
-              email: result.user.email,
-            },
-            requiresPasswordReset: true,
-          },
+          success: false,
+          error: "Email already in use. Please sign in instead.",
         },
-        { status: 201 }
+        { status: 409 }
       );
     }
+
+    console.log("[SIGNUP API] Email is available, proceeding with signup...");
 
     // NEW USER FLOW: Create tenant first, then user
     console.log("[SIGNUP API] New user, creating tenant...");

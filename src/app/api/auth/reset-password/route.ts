@@ -6,6 +6,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { updatePassword } from "@/lib/auth/service";
+import {
+  validatePassword,
+  DEFAULT_PASSWORD_POLICY,
+  getPasswordRequirements,
+} from "@/lib/auth/password-validation";
 
 export async function POST(request: NextRequest) {
   console.log(
@@ -33,12 +38,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (password.length < 8) {
-      console.log("[RESET PASSWORD API] Validation failed: Password too short");
+    // Validate password strength
+    const passwordValidation = validatePassword(
+      password,
+      DEFAULT_PASSWORD_POLICY
+    );
+    if (!passwordValidation.isValid) {
+      console.log(
+        "[RESET PASSWORD API] Validation failed: Password does not meet requirements"
+      );
       return NextResponse.json(
         {
           success: false,
-          error: "Password must be at least 8 characters long",
+          error:
+            passwordValidation.errors[0]?.message ||
+            "Password does not meet requirements",
+          passwordErrors: passwordValidation.errors,
+          passwordRequirements: getPasswordRequirements(
+            DEFAULT_PASSWORD_POLICY
+          ),
         },
         { status: 400 }
       );

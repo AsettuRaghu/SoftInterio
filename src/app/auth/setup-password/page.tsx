@@ -6,6 +6,10 @@ import { createBrowserClient } from "@supabase/ssr";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import {
+  validatePassword,
+  DEFAULT_PASSWORD_POLICY,
+} from "@/lib/auth/password-validation";
 
 export default function SetupPasswordPage() {
   const router = useRouter();
@@ -19,7 +23,7 @@ export default function SetupPasswordPage() {
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
 
   // Check if user has a valid session from the invite link
@@ -42,7 +46,7 @@ export default function SetupPasswordPage() {
 
         // First, handle any hash fragments from the invite link (Supabase implicit flow)
         const hashParams = new URLSearchParams(
-          window.location.hash.substring(1)
+          window.location.hash.substring(1),
         );
         const accessToken = hashParams.get("access_token");
         const refreshToken = hashParams.get("refresh_token");
@@ -62,12 +66,12 @@ export default function SetupPasswordPage() {
           console.error(
             "[SetupPassword] Error in hash:",
             errorInHash,
-            errorDescInHash
+            errorDescInHash,
           );
           setError(
             errorDescInHash ||
               errorInHash ||
-              "Authentication failed. Please try again."
+              "Authentication failed. Please try again.",
           );
           setIsCheckingSession(false);
           return;
@@ -84,7 +88,7 @@ export default function SetupPasswordPage() {
           if (sessionError) {
             console.error("[SetupPassword] Session error:", sessionError);
             setError(
-              "Invalid or expired invitation link. Please request a new invite."
+              "Invalid or expired invitation link. Please request a new invite.",
             );
             setIsCheckingSession(false);
             return;
@@ -112,10 +116,10 @@ export default function SetupPasswordPage() {
           if (exchangeError) {
             console.error(
               "[SetupPassword] Code exchange error:",
-              exchangeError
+              exchangeError,
             );
             setError(
-              "Invalid or expired invitation link. Please request a new invite."
+              "Invalid or expired invitation link. Please request a new invite.",
             );
             setIsCheckingSession(false);
             return;
@@ -124,7 +128,7 @@ export default function SetupPasswordPage() {
           if (data.user) {
             console.log(
               "[SetupPassword] Session established for:",
-              data.user.email
+              data.user.email,
             );
             setUserEmail(data.user.email || null);
             // Clear the code from URL
@@ -140,7 +144,7 @@ export default function SetupPasswordPage() {
         if (sessionData?.session?.user) {
           console.log(
             "[SetupPassword] Found existing session:",
-            sessionData.session.user.email
+            sessionData.session.user.email,
           );
           setUserEmail(sessionData.session.user.email || null);
           setIsCheckingSession(false);
@@ -162,7 +166,7 @@ export default function SetupPasswordPage() {
         // No session found
         console.log("[SetupPassword] No valid session found");
         setError(
-          "No valid session found. Please click the invitation link from your email again."
+          "No valid session found. Please click the invitation link from your email again.",
         );
         setIsCheckingSession(false);
       } catch (err) {
@@ -185,8 +189,15 @@ export default function SetupPasswordPage() {
       return;
     }
 
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters long");
+    const passwordValidation = validatePassword(
+      password,
+      DEFAULT_PASSWORD_POLICY,
+    );
+    if (!passwordValidation.isValid) {
+      setError(
+        passwordValidation.errors[0]?.message ||
+          "Password does not meet requirements",
+      );
       return;
     }
 
@@ -414,7 +425,49 @@ export default function SetupPasswordPage() {
             required
             disabled={isLoading}
           />
-
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-gray-600">
+              Password must contain:
+            </p>
+            <ul className="text-xs text-gray-600 space-y-0.5">
+              <li className="flex items-center gap-2">
+                <span
+                  className={`w-4 h-4 flex items-center justify-center rounded ${
+                    password.length >= 8
+                      ? "bg-green-100 text-green-600"
+                      : "bg-slate-100 text-slate-400"
+                  }`}
+                >
+                  {password.length >= 8 ? "✓" : "•"}
+                </span>
+                At least 8 characters
+              </li>
+              <li className="flex items-center gap-2">
+                <span
+                  className={`w-4 h-4 flex items-center justify-center rounded ${
+                    /[a-zA-Z]/.test(password)
+                      ? "bg-green-100 text-green-600"
+                      : "bg-slate-100 text-slate-400"
+                  }`}
+                >
+                  {/[a-zA-Z]/.test(password) ? "✓" : "•"}
+                </span>
+                At least one letter (A-Z or a-z)
+              </li>
+              <li className="flex items-center gap-2">
+                <span
+                  className={`w-4 h-4 flex items-center justify-center rounded ${
+                    /\d/.test(password)
+                      ? "bg-green-100 text-green-600"
+                      : "bg-slate-100 text-slate-400"
+                  }`}
+                >
+                  {/\d/.test(password) ? "✓" : "•"}
+                </span>
+                At least one number (0-9)
+              </li>
+            </ul>
+          </div>
           <FormField
             label="Confirm Password"
             id="confirmPassword"
@@ -425,10 +478,6 @@ export default function SetupPasswordPage() {
             required
             disabled={isLoading}
           />
-
-          <div className="text-xs text-gray-500">
-            Password must be at least 8 characters long
-          </div>
 
           <Button
             type="submit"
