@@ -31,6 +31,11 @@ const EXCLUDED_ROUTES = [
   "auth/cleanup-and-reinvite",
   "billing/plans",
   "quotations/client", // Client-facing endpoints with token-based auth
+  // Razorpay calls this server-to-server, so there is never a session to check.
+  // It is authenticated by HMAC-SHA256 over the raw body against
+  // RAZORPAY_WEBHOOK_SECRET, and rejects with 401 on mismatch. Excluded so this
+  // audit can reach zero - a check that is permanently red gets ignored.
+  "billing/webhook/razorpay",
 ];
 
 // Patterns to check

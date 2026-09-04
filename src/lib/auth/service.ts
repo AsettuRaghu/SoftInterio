@@ -201,6 +201,44 @@ export async function registerExistingUserToNewTenant(
 }
 
 /**
+ * Delete a half-built tenant.
+ *
+ * Signup cannot run in a single database transaction because creating the
+ * Supabase Auth user is an external API call. So the tenant is created first
+ * and compensated for if a later step fails. tenant_settings,
+ * tenant_subscriptions and tenant_usage all cascade from tenants, so removing
+ * the tenant row is enough.
+ *
+ * Never throws: it runs inside error handlers, and masking the original
+ * failure with a cleanup failure would make signup bugs impossible to debug.
+ */
+export async function rollbackTenantCreation(tenantId: string): Promise<void> {
+  try {
+    console.log("[AUTH SERVICE] Rolling back tenant:", tenantId);
+    const supabase = createAdminClient();
+    const { error } = await supabase.from("tenants").delete().eq("id", tenantId);
+
+    if (error) {
+      // Loud, because the result is an orphaned tenant holding a trial
+      // subscription and, if it had an email, blocking that address forever.
+      console.error(
+        "[AUTH SERVICE] ORPHANED TENANT - rollback failed for",
+        tenantId,
+        error.message
+      );
+      return;
+    }
+    console.log("[AUTH SERVICE] Tenant rolled back successfully:", tenantId);
+  } catch (error: any) {
+    console.error(
+      "[AUTH SERVICE] ORPHANED TENANT - rollback threw for",
+      tenantId,
+      error?.message
+    );
+  }
+}
+
+/**
  * Create a new tenant (company account)
  */
 export async function createTenant(data: CreateTenantInput): Promise<Tenant> {
@@ -294,6 +332,9 @@ export async function createTenant(data: CreateTenantInput): Promise<Tenant> {
       "[AUTH SERVICE] Error creating tenant settings:",
       settingsError
     );
+    // The tenant row already exists at this point. Remove it rather than
+    // leaving a company with no settings behind.
+    await rollbackTenantCreation(tenant.id);
     throw new Error(
       `Failed to create tenant settings: ${settingsError.message}`
     );
@@ -330,6 +371,7 @@ export async function createTenant(data: CreateTenantInput): Promise<Tenant> {
         "[AUTH SERVICE] Error creating subscription:",
         subscriptionError
       );
+      await rollbackTenantCreation(tenant.id);
       throw new Error(
         `Failed to create subscription: ${subscriptionError.message}`
       );

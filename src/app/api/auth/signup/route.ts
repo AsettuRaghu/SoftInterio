@@ -15,6 +15,7 @@ import {
   sendVerificationEmail,
   checkExistingUser,
   registerExistingUserToNewTenant,
+  rollbackTenantCreation,
 } from "@/lib/auth/service";
 import { isAuthRateLimited, getRateLimitInfo } from "@/lib/auth/api-guard";
 import {
@@ -126,7 +127,14 @@ export async function POST(request: NextRequest) {
 
     console.log("[SIGNUP API] Email is available, proceeding with signup...");
 
-    // NEW USER FLOW: Create tenant first, then user
+    // NEW USER FLOW: Create tenant first, then user.
+    //
+    // These two steps cannot share a database transaction, because
+    // registerUser calls the Supabase Auth admin API. So if user creation
+    // fails, the tenant must be compensated for explicitly. Without this,
+    // every failed signup left behind a tenant with a live trial
+    // subscription and no members - and, worse, one holding the company
+    // email, since tenants.email is UNIQUE.
     console.log("[SIGNUP API] New user, creating tenant...");
     const tenant = await createTenant({
       tenant_type: body.tenant_type,
@@ -138,9 +146,19 @@ export async function POST(request: NextRequest) {
     console.log("[SIGNUP API] Tenant created successfully:", tenant.id);
 
     // Register new user
-    console.log("[SIGNUP API] Registering new user...");
-    const { user } = await registerUser(body, tenant.id);
-    console.log("[SIGNUP API] User registered successfully:", user.id);
+    let user;
+    try {
+      console.log("[SIGNUP API] Registering new user...");
+      ({ user } = await registerUser(body, tenant.id));
+      console.log("[SIGNUP API] User registered successfully:", user.id);
+    } catch (registerError) {
+      console.error(
+        "[SIGNUP API] User registration failed, rolling back tenant:",
+        tenant.id
+      );
+      await rollbackTenantCreation(tenant.id);
+      throw registerError;
+    }
 
     // Send verification email
     sendVerificationEmail(body.email).catch((error) => {

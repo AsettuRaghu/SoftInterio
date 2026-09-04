@@ -1,6 +1,29 @@
 # Database Scripts - Simple Guide
 
-## You Only Need These 3 Scripts
+## Health checks (read-only, safe to run any time)
+
+```bash
+npm run security:audit   # every API route is behind protectApiRoute
+npm run security:views   # no database view leaks rows to unauthenticated callers
+npm run db:orphans       # tenants left behind with no users
+```
+
+All three exit non-zero on failure, so they work in CI.
+
+`db:orphans` reports only. Add `--delete` to actually remove them:
+
+```bash
+node scripts/find-orphan-tenants.js --delete
+```
+
+Orphans were created by a signup bug (the tenant was created before the user
+and never cleaned up when user creation failed). Signup now rolls back
+properly, so this should stay at zero - it is a cleanup for existing rows and
+a canary if the rollback ever regresses.
+
+---
+
+## Manual admin scripts
 
 ### 1. `find-tenant.js` - Find what tenant an email belongs to
 

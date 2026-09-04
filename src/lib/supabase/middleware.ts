@@ -74,6 +74,8 @@ const routePermissions: RoutePermission[] = [
   { pattern: "/dashboard/finance", permissions: ["finance.view"] },
   
   // Tasks routes
+  { pattern: "/dashboard/procedures/*", permissions: ["tasks.templates.view"] },
+  { pattern: "/dashboard/procedures", permissions: ["tasks.templates.view"] },
   { pattern: "/dashboard/tasks/templates/*", permissions: ["tasks.templates.view"] },
   { pattern: "/dashboard/tasks/templates", permissions: ["tasks.templates.view"] },
   { pattern: "/dashboard/tasks/*", permissions: ["tasks.view"] },
@@ -295,7 +297,7 @@ export async function updateSession(request: NextRequest) {
         
         if (routePermission) {
           // Fetch user's permissions from database
-          const { data: userRolesData } = await supabase
+          const { data: userRolesData, error: rolesError } = await supabase
             .from("user_roles")
             .select(`
               roles (
@@ -311,11 +313,46 @@ export async function updateSession(request: NextRequest) {
             .eq("user_id", user.id);
 
           // Check if user is super admin
-          const { data: userRecord } = await supabase
+          const { data: userRecord, error: userRecordError } = await supabase
             .from("users")
             .select("is_super_admin")
             .eq("id", user.id)
             .single();
+
+          // If either lookup failed we do not KNOW what this user may do, and
+          // "unknown" is not the same as "not allowed".
+          //
+          // These queries reuse the session that supabase.auth.getUser() just
+          // refreshed. After a long idle period the old access token has
+          // expired, and a refresh that is still in flight (or a transient
+          // network failure reaching Supabase) makes them return an error with
+          // data undefined. The previous code discarded the error, so
+          // userRecord became undefined -> isSuperAdmin false, userRolesData
+          // became undefined -> zero permissions -> access_denied. A network
+          // blip logged people out of the page they were on, super admins
+          // included.
+          //
+          // Skipping the check here is safe: this gate is a UX affordance, not
+          // the security boundary. protectApiRoute() guards all 98 API routes
+          // and RLS guards every table, so a user who genuinely lacks
+          // permission still sees no data - they just are not bounced to the
+          // dashboard on an infrastructure hiccup.
+          // !userRecord is checked explicitly, not just the error. RLS on
+          // user_roles is USING (user_id = auth.uid()), so an expired token
+          // makes auth.uid() NULL and that query returns an EMPTY ARRAY WITH
+          // NO ERROR - which would read as "this user has no permissions".
+          // The users .single() lookup does error in that situation, but
+          // relying on that side effect would be fragile.
+          if (rolesError || userRecordError || !userRecord) {
+            console.log(
+              "[MIDDLEWARE] Could not resolve permissions, allowing through:",
+              pathname,
+              rolesError?.message ||
+                userRecordError?.message ||
+                "no user record returned"
+            );
+            return supabaseResponse;
+          }
 
           const isSuperAdmin = userRecord?.is_super_admin === true;
 

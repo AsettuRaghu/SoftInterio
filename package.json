@@ -10,6 +10,8 @@
     "lint": "next lint",
     "test": "echo \"Error: no test specified\" && exit 1",
     "security:audit": "node scripts/audit-api-security.js",
+    "security:views": "node scripts/check-view-rls.js",
+    "db:orphans": "node scripts/find-orphan-tenants.js",
     "security:check": "node scripts/audit-api-security.js || (echo '\\n❌ Security check failed! Run npm run security:audit for details.' && exit 1)"
   },
   "keywords": [

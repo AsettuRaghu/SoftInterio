@@ -53,6 +53,7 @@ export const ADMIN_PASSWORD_POLICY: PasswordPolicy = {
   maxLength: 128,
   requireUppercase: true,
   requireLowercase: true,
+  requireLetter: true,
   requireNumber: true,
   requireSpecialChar: true,
   minUniqueChars: 6,
