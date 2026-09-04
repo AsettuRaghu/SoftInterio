@@ -290,8 +290,10 @@ export const navigationConfig: NavigationItem[] = [
         permission: "tasks.view",
       },
       {
-        name: "Task Templates",
-        href: "/dashboard/tasks/templates",
+        // Supersedes Task Templates: same idea, but the steps are ordered and
+        // gated rather than a one-off stamp that enforces nothing.
+        name: "Procedures",
+        href: "/dashboard/procedures",
         permission: "tasks.templates.view",
       },
     ],
