@@ -6,6 +6,7 @@ import {
   LeadStageLabels as StageLabels,
   LeadStageColors as StageColors,
   BudgetRangeLabels,
+  LeadActivityTypeLabels,
 } from "@/types/leads";
 import { AppTable, type ColumnDef } from "@/components/ui/AppTable";
 import { CalendarIcon } from "@heroicons/react/24/outline";
@@ -45,6 +46,14 @@ export function LeadsTable({
   emptyState,
   stickyHeader,
 }: LeadsTableProps) {
+  /** Whole days between then and now. Null when there is no date at all. */
+  const daysSince = useCallback((dateString?: string | null) => {
+    if (!dateString) return null;
+    const then = new Date(dateString).getTime();
+    if (Number.isNaN(then)) return null;
+    return Math.max(0, Math.floor((Date.now() - then) / 86400000));
+  }, []);
+
   const formatDate = useCallback((dateString: string | null) => {
     if (!dateString) return "—";
     return new Date(dateString).toLocaleDateString("en-IN", {
@@ -69,7 +78,7 @@ export function LeadsTable({
       {
         key: "client_name",
         header: "Client",
-        width: "18%",
+        width: "16%",
         sortable: true,
         render: (lead) => (
           <div className="space-y-1">
@@ -87,7 +96,7 @@ export function LeadsTable({
       {
         key: "property_name",
         header: "Property",
-        width: "13%",
+        width: "12%",
         sortable: true,
         render: (lead) => (
           <div>
@@ -113,7 +122,7 @@ export function LeadsTable({
       {
         key: "budget_range",
         header: "Budget",
-        width: "11%",
+        width: "10%",
         sortable: true,
         render: (lead) => (
           <div className="space-y-0.5">
@@ -130,7 +139,7 @@ export function LeadsTable({
       {
         key: "stage",
         header: "Stage",
-        width: "13%",
+        width: "12%",
         sortable: true,
         render: (lead) => {
           const colors = StageColors[lead.stage];
@@ -148,7 +157,7 @@ export function LeadsTable({
       {
         key: "status",
         header: "Status",
-        width: "10%",
+        width: "9%",
         sortable: true,
         render: (lead) => {
           const getStatusLabel = (stage: LeadStage) => {
@@ -183,7 +192,7 @@ export function LeadsTable({
       {
         key: "priority",
         header: "Priority",
-        width: "9%",
+        width: "8%",
         sortable: true,
         render: (lead) => {
           const priorityColors: Record<string, string> = {
@@ -216,7 +225,7 @@ export function LeadsTable({
       {
         key: "assigned_to",
         header: "Assigned",
-        width: "12%",
+        width: "11%",
         sortable: true,
         render: (lead) => {
           const displayUser = lead.assigned_user || lead.created_user;
@@ -242,26 +251,94 @@ export function LeadsTable({
         },
       },
 
+      // Replaces the Created Date column. A creation date never changes and
+      // says nothing about whether a lead needs attention; recency of contact
+      // does. Both fields below are already maintained on the leads table.
       {
-        key: "created_at",
-        header: "Created Date",
+        key: "last_activity_at",
+        header: "Last Activity",
         width: "11%",
         sortable: true,
-        render: (lead) => (
-          <div>
-            <p className="text-sm text-slate-900 font-medium">
-              {formatDate(lead.created_at)}
-            </p>
-            {lead.created_user && (
-              <p className="text-xs text-slate-500">
-                by {lead.created_user.name}
+        render: (lead) => {
+          const days = daysSince(lead.last_activity_at);
+          if (days === null) {
+            return <span className="text-sm text-slate-400 italic">Never</span>;
+          }
+          // The colour is the signal: a lead untouched for over a week is the
+          // one rotting quietly at the bottom of the list.
+          const tone =
+            days > 7
+              ? "text-red-600"
+              : days > 3
+              ? "text-amber-600"
+              : "text-slate-900";
+          return (
+            <div>
+              <p className={`text-sm font-medium ${tone}`}>
+                {days === 0 ? "Today" : `${days}d ago`}
               </p>
-            )}
-          </div>
-        ),
+              {/* The activity's own words where we have them - "Budget range:
+                  5L-10L → 10L-15L" tells a seller far more than "Lead
+                  Updated". The type label is the fallback. Full text on hover
+                  via the native title attribute, since the column is narrow. */}
+              {(lead.last_activity_detail || lead.last_activity_type) && (
+                <p
+                  className="text-xs text-slate-500 truncate"
+                  title={
+                    lead.last_activity_detail
+                      ? `${
+                          lead.last_activity_type
+                            ? LeadActivityTypeLabels[lead.last_activity_type] ||
+                              lead.last_activity_type
+                            : "Activity"
+                        } — ${lead.last_activity_detail}`
+                      : undefined
+                  }
+                >
+                  {lead.last_activity_detail ||
+                    LeadActivityTypeLabels[lead.last_activity_type!] ||
+                    lead.last_activity_type}
+                </p>
+              )}
+            </div>
+          );
+        },
+      },
+
+      {
+        key: "next_follow_up_at",
+        header: "Follow-up",
+        width: "10%",
+        sortable: true,
+        render: (lead) => {
+          if (!lead.next_follow_up_at) {
+            return <span className="text-sm text-slate-300">—</span>;
+          }
+          const today = new Date().toISOString().slice(0, 10);
+          const due = lead.next_follow_up_at.slice(0, 10);
+          // Same red / amber / slate coding as the follow-up filters on the
+          // notes table, so the two read the same way.
+          if (due < today) {
+            const over = daysSince(lead.next_follow_up_at) ?? 0;
+            return (
+              <div>
+                <p className="text-sm font-medium text-red-600">Overdue</p>
+                <p className="text-xs text-red-500">{over}d late</p>
+              </div>
+            );
+          }
+          if (due === today) {
+            return <p className="text-sm font-medium text-amber-600">Today</p>;
+          }
+          return (
+            <p className="text-sm text-slate-700">
+              {formatDate(lead.next_follow_up_at)}
+            </p>
+          );
+        },
       },
     ],
-    [formatDate, getInitials]
+    [formatDate, daysSince, getInitials]
   );
 
   return (

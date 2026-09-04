@@ -112,6 +112,9 @@ export async function GET(request: NextRequest) {
       "stage",
       "priority",
       "last_activity_at",
+      // The leads list offers this as a sortable column; without it here the
+      // sort silently fell back to created_at.
+      "next_follow_up_at",
       "property_name",
     ];
     const sortColumn = validSortColumns.includes(sortBy)
@@ -132,6 +135,42 @@ export async function GET(request: NextRequest) {
         { error: "Failed to fetch leads", details: leadsError.message },
         { status: 500 }
       );
+    }
+
+    // Attach the most recent activity's own words to each lead.
+    //
+    // leads.last_activity_type says a note was added; it cannot say what the
+    // note said. That detail lives on lead_activities, so the list would
+    // otherwise force a click into the lead to learn anything useful.
+    //
+    // One batched query for the whole page rather than one per row. If this
+    // list ever grows past a few hundred rows per page, the better move is a
+    // last_activity_summary rollup column on leads maintained by the same
+    // trigger that already sets last_activity_at.
+    const leadIds = (leads || []).map((l: any) => l.id);
+    if (leadIds.length) {
+      const { data: recent, error: recentError } = await supabase
+        .from("lead_activities")
+        .select("lead_id, activity_type, title, description, created_at")
+        .in("lead_id", leadIds)
+        .order("created_at", { ascending: false });
+
+      if (recentError) {
+        // Non-fatal: the list still renders, just without the detail line.
+        console.error("[GET /api/sales/leads] activity detail:", recentError);
+      } else {
+        // Rows arrive newest-first, so the first one seen per lead wins.
+        const latest = new Map<string, any>();
+        for (const a of recent || []) {
+          if (!latest.has(a.lead_id)) latest.set(a.lead_id, a);
+        }
+        for (const lead of leads || []) {
+          const a = latest.get(lead.id);
+          (lead as any).last_activity_detail = a
+            ? a.description || a.title || null
+            : null;
+        }
+      }
     }
 
     return NextResponse.json({

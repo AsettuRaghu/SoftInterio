@@ -475,10 +475,12 @@ export default function LeadDetailPage() {
         {/* Notes Tab */}
         {activeTab === "notes" && (
           <NotesTab
+            leadId={lead.id}
             notes={notes}
             leadClosed={leadClosed}
             onAddNoteClick={() => setShowNoteModal(true)}
             onEditNote={(note) => setEditingNote(note)}
+            onRefresh={fetchNotes}
             formatDateTime={formatDateTime}
           />
         )}

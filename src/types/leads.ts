@@ -100,6 +100,16 @@ export type LeadActivityType =
   | "task_completed"
   | "task_assigned"
   | "task_updated"
+  | "task_deleted"
+  // Added so every action leaves a timeline trace, not just creations.
+  | "lead_created"
+  | "lead_updated"
+  | "note_updated"
+  | "note_deleted"
+  | "document_deleted"
+  | "follow_up_scheduled"
+  | "follow_up_completed"
+  | "follow_up_cancelled"
   | "other";
 
 export type MeetingType = "client_meeting" | "internal_meeting" | "site_visit" | "other";
@@ -296,6 +306,15 @@ export const LeadActivityTypeLabels: Record<LeadActivityType, string> = {
   task_completed: "Task Completed",
   task_assigned: "Task Assigned",
   task_updated: "Task Updated",
+  task_deleted: "Task Deleted",
+  lead_created: "Lead Created",
+  lead_updated: "Lead Updated",
+  note_updated: "Note Updated",
+  note_deleted: "Note Deleted",
+  document_deleted: "Document Deleted",
+  follow_up_scheduled: "Follow-up Scheduled",
+  follow_up_completed: "Follow-up Completed",
+  follow_up_cancelled: "Follow-up Removed",
   other: "Other",
 };
 
@@ -425,6 +444,18 @@ export interface Lead {
   priority: "low" | "medium" | "high" | "urgent";
   last_activity_at: string;
   last_activity_type: LeadActivityType | null;
+  /**
+   * Earliest unresolved follow-up date across the lead's notes, maintained by
+   * a database trigger. The column existed but was missing from this type, so
+   * nothing could read it without a cast.
+   */
+  next_follow_up_at: string | null;
+  /**
+   * The most recent activity's description (or title), attached by the list
+   * endpoint. Not a column - leads only stores the activity *type*, which says
+   * "a note was added" but never what the note said.
+   */
+  last_activity_detail?: string | null;
 
   // Timestamps
   created_at: string;

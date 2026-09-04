@@ -11,7 +11,29 @@ import {
   BudgetRangeLabels,
   PropertyCategory,
 } from "@/types/leads";
-import React from "react";
+import React, { useEffect, useState } from "react";
+
+/**
+ * Who may own a lead. Both spellings of sales-manager exist as roles in the
+ * database (sales-manager and sales_manager), so both are listed rather than
+ * silently missing half the team. Owners, admins and managers are included
+ * because they take leads themselves in small studios.
+ */
+const ASSIGNABLE_ROLES = [
+  "sales",
+  "sales-manager",
+  "sales_manager",
+  "owner",
+  "admin",
+  "manager",
+].join(",");
+
+interface AssignableUser {
+  id: string;
+  name: string;
+  email: string;
+  avatar_url?: string | null;
+}
 
 export interface EditFormData {
   client_name: string;
@@ -88,6 +110,32 @@ export function EditLeadModal({
   isSaving: boolean;
   validationError: string | null;
 }) {
+  const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
+
+  useEffect(() => {
+    // Server-side role filter, so this modal does not reimplement "who counts
+    // as sales" and drift from anywhere else that needs the same list.
+    (async () => {
+      try {
+        const response = await fetch(
+          `/api/team/members?roles=${ASSIGNABLE_ROLES}`
+        );
+        if (!response.ok) return;
+        const data = await response.json();
+        setAssignableUsers(
+          (data.data || []).map((m: any) => ({
+            id: m.id,
+            name: m.name,
+            email: m.email,
+            avatar_url: m.avatar_url,
+          }))
+        );
+      } catch {
+        // Non-fatal: the select falls back to the current owner only.
+      }
+    })();
+  }, []);
+
   const requiredFields = getRequiredFieldsForStage(lead.stage);
   const isRequired = (fieldName: string) => requiredFields.includes(fieldName);
 
@@ -167,12 +215,48 @@ export function EditLeadModal({
           className="flex flex-col flex-1 overflow-hidden"
         >
           <div className="overflow-y-auto flex-1 p-6">
-            {/* Priority Section - Top */}
+            {/* Ownership & Priority */}
             <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
               <h3 className="text-sm font-semibold text-slate-900 mb-4">
-                Priority
+                Ownership & Priority
               </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Assigned to
+                </label>
+                <select
+                  value={editForm.assigned_to || ""}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      assigned_to: e.target.value || undefined,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white"
+                >
+                  <option value="">Unassigned</option>
+                  {assignableUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name || u.email}
+                    </option>
+                  ))}
+                  {/* Whoever owns it now might no longer hold a sales role.
+                      Without this the select would fall back to Unassigned and
+                      silently drop the owner on save. */}
+                  {editForm.assigned_to &&
+                    !assignableUsers.some((u) => u.id === editForm.assigned_to) && (
+                      <option value={editForm.assigned_to}>
+                        Current owner (no longer in a sales role)
+                      </option>
+                    )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Priority
+                </label>
                 <select
                   value={editForm.priority || ""}
                   onChange={(e) =>
@@ -189,6 +273,7 @@ export function EditLeadModal({
                   <option value="high">High</option>
                   <option value="urgent">Urgent</option>
                 </select>
+              </div>
               </div>
             </div>
 

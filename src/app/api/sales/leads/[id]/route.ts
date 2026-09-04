@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import {
+  logLeadActivity,
+  describeChanges,
+  LEAD_FIELD_LABELS,
+} from "@/lib/activity/log";
 import type { UpdateLeadInput } from "@/types/leads";
 
 interface RouteParams {
@@ -320,7 +325,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // Check lead exists and get current state with linked records
     const { data: existingLead, error: fetchError } = await supabase
       .from("leads")
-      .select("id, stage, assigned_to, client_id, property_id, tenant_id")
+      .select(
+        `id, stage, assigned_to, client_id, property_id, tenant_id,
+         service_type, lead_source, target_start_date, target_end_date,
+         budget_range, won_amount, contract_signed_date,
+         expected_project_start, priority,
+         client:clients!leads_client_id_fkey(name, phone, email),
+         property:properties!leads_property_id_fkey(
+           property_name, unit_number, category, property_type,
+           property_subtype, carpet_area, address_line1, city, pincode)`
+      )
       .eq("id", id)
       .single();
 
@@ -340,6 +354,42 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         { status: 403 }
       );
     }
+
+    // Snapshot the fields the edit modal can touch, flattened into the same
+    // key space the request body uses, so the two can be diffed directly.
+    // Taken before STEP 1 - the client and property rows are updated in place
+    // below, and re-reading afterwards would compare a row against itself.
+    const beforeClient: any = Array.isArray((existingLead as any).client)
+      ? (existingLead as any).client[0]
+      : (existingLead as any).client;
+    const beforeProperty: any = Array.isArray((existingLead as any).property)
+      ? (existingLead as any).property[0]
+      : (existingLead as any).property;
+
+    const before: Record<string, unknown> = {
+      client_name: beforeClient?.name ?? null,
+      phone: beforeClient?.phone ?? null,
+      email: beforeClient?.email ?? null,
+      property_name: beforeProperty?.property_name ?? null,
+      unit_number: beforeProperty?.unit_number ?? null,
+      property_category: beforeProperty?.category ?? null,
+      property_type: beforeProperty?.property_type ?? null,
+      property_subtype: beforeProperty?.property_subtype ?? null,
+      carpet_area: beforeProperty?.carpet_area ?? null,
+      property_address: beforeProperty?.address_line1 ?? null,
+      property_city: beforeProperty?.city ?? null,
+      property_pincode: beforeProperty?.pincode ?? null,
+      service_type: (existingLead as any).service_type ?? null,
+      lead_source: (existingLead as any).lead_source ?? null,
+      target_start_date: (existingLead as any).target_start_date ?? null,
+      target_end_date: (existingLead as any).target_end_date ?? null,
+      budget_range: (existingLead as any).budget_range ?? null,
+      assigned_to: existingLead.assigned_to ?? null,
+      won_amount: (existingLead as any).won_amount ?? null,
+      contract_signed_date: (existingLead as any).contract_signed_date ?? null,
+      expected_project_start: (existingLead as any).expected_project_start ?? null,
+      priority: (existingLead as any).priority ?? null,
+    };
 
     // Initialize lead update data object (may be populated by property creation below)
     const leadUpdateData: Record<string, unknown> = {};
@@ -474,6 +524,63 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           { status: 500 }
         );
       }
+    }
+
+    // STEP 3b: Record what actually changed on the timeline.
+    //
+    // Only fields present in the request are considered, and describeChanges
+    // drops those whose value did not move - so re-saving the modal without
+    // touching anything writes nothing, rather than a stream of empty
+    // "Lead updated" rows.
+    const after: Record<string, unknown> = {};
+    for (const field of Object.keys(before)) {
+      if (field in body) after[field] = body[field as keyof UpdateLeadInput];
+    }
+    // STEP 1 lowercases the address before storing it, so compare the same
+    // form - otherwise merely retyping an email in different case reads as a
+    // change that never happened.
+    if ("email" in after) {
+      after.email = (after.email as string | null)?.toLowerCase() || null;
+    }
+
+    // A change of owner is what a manager scans the timeline for, so it gets
+    // its own entry and is kept out of the generic field diff.
+    const reassigned =
+      "assigned_to" in after &&
+      (before.assigned_to ?? null) !== (after.assigned_to ?? null);
+    delete after.assigned_to;
+
+    if (reassigned) {
+      // Resolve both ids to names in one round trip; an unassigned side is null.
+      const ids = [before.assigned_to, body.assigned_to].filter(
+        Boolean
+      ) as string[];
+      const { data: people } = ids.length
+        ? await supabase.from("users").select("id, name").in("id", ids)
+        : { data: [] as { id: string; name: string }[] };
+      const nameOf = (uid: unknown) =>
+        uid ? people?.find((p) => p.id === uid)?.name ?? "Unknown user" : "Unassigned";
+
+      await logLeadActivity(supabase, {
+        leadId: id,
+        tenantId: existingLead.tenant_id,
+        userId: user.id,
+        type: "assignment_changed",
+        title: "Lead reassigned",
+        description: `${nameOf(before.assigned_to)} → ${nameOf(body.assigned_to)}`,
+      });
+    }
+
+    const summary = describeChanges(before, after, LEAD_FIELD_LABELS);
+    if (summary) {
+      await logLeadActivity(supabase, {
+        leadId: id,
+        tenantId: existingLead.tenant_id,
+        userId: user.id,
+        type: "lead_updated",
+        title: "Lead details updated",
+        description: summary,
+      });
     }
 
     // STEP 4: Fetch and return updated lead with joined data

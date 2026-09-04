@@ -150,10 +150,25 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform the data to include roles
-    const transformedMembers = members?.map((member: any) => ({
+    let transformedMembers = members?.map((member: any) => ({
       ...member,
       roles: userRolesMap[member.id] || [],
     }));
+
+    // Optional ?roles=a,b,c filter, so callers that only want (say) sales
+    // people do not each reimplement the same client-side filtering.
+    const roleFilter = request.nextUrl.searchParams
+      .get("roles")
+      ?.split(",")
+      .map((r) => r.trim())
+      .filter(Boolean);
+
+    if (roleFilter?.length) {
+      const wanted = new Set(roleFilter);
+      transformedMembers = (transformedMembers || []).filter((m: any) =>
+        (m.roles || []).some((r: any) => wanted.has(r.slug))
+      );
+    }
 
     return NextResponse.json({
       success: true,

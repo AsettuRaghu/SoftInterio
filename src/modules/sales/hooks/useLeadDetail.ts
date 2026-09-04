@@ -93,6 +93,10 @@ export function useLeadDetail() {
 
       const data = await response.json();
       setTasks(data.tasks || []);
+      // Creating or editing a task writes to the lead timeline, and this
+      // response already carries the refreshed list - so keep it in step
+      // rather than leaving the Timeline tab stale.
+      setActivities(data.activities || []);
     } catch (err) {
       console.error("Error fetching tasks:", err);
     }
@@ -108,6 +112,9 @@ export function useLeadDetail() {
 
       const data = await response.json();
       setNotes(data.notes || []);
+      // Adding, editing or deleting a note - and scheduling or completing a
+      // follow-up - all write timeline entries. Same response, no extra call.
+      setActivities(data.activities || []);
     } catch (err) {
       console.error("Error fetching notes:", err);
     }
@@ -237,11 +244,15 @@ export function useLeadDetail() {
         }
 
         const data = await response.json();
-        // Update only the lead, stage history, and activities
+        // Refresh every slice a transition can touch. Notes belong here
+        // because moving a lead between stages records the reason as a real
+        // note - without this the Notes tab kept its pre-transition list and
+        // only a hard refresh revealed the new entry.
         setLead(data.lead);
         setStageHistory(data.stageHistory || []);
         setActivities(data.activities || []);
         setQuotations(data.quotations || []);
+        setNotes(data.notes || []);
       } catch (err) {
         console.error("Error updating lead after stage transition:", err);
       }
