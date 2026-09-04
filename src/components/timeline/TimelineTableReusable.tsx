@@ -12,6 +12,8 @@ import {
   MapPinIcon,
   UserGroupIcon,
   ClockIcon,
+  BellAlertIcon,
+  PencilSquareIcon,
 } from "@heroicons/react/24/outline";
 
 // =====================================================
@@ -107,6 +109,16 @@ const DEFAULT_ACTIVITY_LABELS: Record<string, string> = {
   task_completed: "Task Completed",
   task_assigned: "Task Assigned",
   task_updated: "Task Updated",
+  task_deleted: "Task Deleted",
+  lead_created: "Lead Created",
+  lead_updated: "Lead Updated",
+  project_updated: "Project Updated",
+  note_updated: "Note Updated",
+  note_deleted: "Note Deleted",
+  document_deleted: "Document Deleted",
+  follow_up_scheduled: "Follow-up Scheduled",
+  follow_up_completed: "Follow-up Completed",
+  follow_up_cancelled: "Follow-up Removed",
   other: "Other",
 };
 
@@ -190,6 +202,18 @@ export default function TimelineTableReusable({
 
     const activityType = item.activity_type || "";
 
+    // Checked before "note", since a follow-up lives on a note but reads as a
+    // reminder on the timeline.
+    if (activityType.startsWith("follow_up")) {
+      return <BellAlertIcon className="w-4 h-4" />;
+    }
+    if (
+      activityType === "lead_updated" ||
+      activityType === "project_updated" ||
+      activityType === "assignment_changed"
+    ) {
+      return <PencilSquareIcon className="w-4 h-4" />;
+    }
     if (activityType.includes("call")) {
       return <PhoneIcon className="w-4 h-4" />;
     }
@@ -222,6 +246,22 @@ export default function TimelineTableReusable({
 
     const activityType = item.activity_type || "";
 
+    if (activityType === "follow_up_completed") {
+      return "bg-emerald-100 text-emerald-600";
+    }
+    if (activityType.startsWith("follow_up")) {
+      return "bg-amber-100 text-amber-600";
+    }
+    if (
+      activityType === "lead_updated" ||
+      activityType === "project_updated" ||
+      activityType === "assignment_changed"
+    ) {
+      return "bg-sky-100 text-sky-600";
+    }
+    if (activityType.endsWith("_deleted")) {
+      return "bg-red-100 text-red-600";
+    }
     if (activityType.includes("call")) {
       return "bg-blue-100 text-blue-600";
     }

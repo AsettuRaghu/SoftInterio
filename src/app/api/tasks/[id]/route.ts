@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import {
+  logLeadActivity,
+  logProjectActivity,
+  describeChanges,
+} from "@/lib/activity/log";
+
+/** Task fields whose edits are worth naming on the parent timeline. */
+const TASK_FIELD_LABELS: Record<string, string> = {
+  title: "Title",
+  priority: "Priority",
+  due_date: "Due date",
+  description: "Description",
+};
 import type { UpdateTaskInput } from "@/types/tasks";
 
 interface RouteParams {
@@ -46,9 +59,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Live timing (running session / current hold) lives on the view, which
+    // has no FK metadata for PostgREST embedding - so fetch it alongside
+    // rather than joining. Settled totals are already on the base row.
+    const { data: timing } = await supabase
+      .from("tasks_with_timing")
+      .select(
+        "live_active_seconds, live_held_seconds, is_clock_running, lead_time_seconds, cycle_time_seconds, start_count, resume_count, original_lead_time_seconds, is_rework, open_subtask_count"
+      )
+      .eq("id", id)
+      .single();
+
     // Transform to expected format
     const task = {
       ...rawTask,
+      ...(timing || {}),
       assigned_to_name: rawTask.assigned_user?.name || null,
       assigned_to_email: rawTask.assigned_user?.email || null,
       assigned_to_avatar: rawTask.assigned_user?.avatar_url || null,
@@ -92,14 +117,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         .order("created_at", { ascending: true }),
       // Attachments
       supabase
-        .from("task_attachments")
+        .from("documents")
         .select(
           `
           *,
-          uploaded_user:users!task_attachments_uploaded_by_fkey(id, name, avatar_url)
+          uploaded_user:users!documents_uploaded_by_fkey(id, name, avatar_url)
         `
         )
-        .eq("task_id", id)
+        .eq("linked_type", "task")
+        .eq("linked_id", id)
+        .eq("is_latest", true)
         .order("created_at", { ascending: false }),
       // Activities
       supabase
@@ -245,7 +272,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { data: existingTask, error: fetchError } = await supabase
       .from("tasks")
       .select(
-        "id, title, status, is_from_template, template_id, assigned_to, created_by, related_type, related_id"
+        "id, title, status, priority, due_date, description, is_from_template, template_id, assigned_to, created_by, related_type, related_id"
       )
       .eq("id", id)
       .single();
@@ -254,20 +281,54 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
+    // Status changes go through task_transition() so that transition rules,
+    // status history and work sessions stay consistent no matter which client
+    // made the change. Everything else is a plain field update.
+    if (body.status && body.status !== existingTask.status) {
+      const { data: transition, error: transitionError } = await supabase.rpc(
+        "task_transition",
+        {
+          p_task_id: id,
+          p_user_id: user.id,
+          p_to: body.status,
+          p_reason: (body as { hold_reason?: string }).hold_reason ?? null,
+        }
+      );
+
+      if (transitionError) {
+        console.error("Error transitioning task:", transitionError);
+        return NextResponse.json(
+          { error: "Failed to update task status" },
+          { status: 500 }
+        );
+      }
+
+      if (!(transition as { success?: boolean })?.success) {
+        return NextResponse.json(
+          {
+            error:
+              (transition as { error?: string })?.error ||
+              "Invalid status transition",
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     // Build update object
     const updateData: Record<string, unknown> = {
       updated_by: user.id,
     };
 
+    // 'status' is deliberately absent - handled by the RPC above.
+    // 'actual_hours' is derived from work sessions and must not be overwritten.
     const allowedFields = [
       "title",
       "description",
       "priority",
-      "status",
       "start_date",
       "due_date",
       "estimated_hours",
-      "actual_hours",
       "assigned_to",
       "related_type",
       "related_id",
@@ -276,6 +337,28 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     for (const field of allowedFields) {
       if (field in body) {
         updateData[field] = body[field as keyof UpdateTaskInput];
+      }
+    }
+
+    // Tags are a full replacement of the assignment set: whatever the client
+    // sends becomes the complete list. Sending [] clears them.
+    if ("tag_ids" in body && Array.isArray(body.tag_ids)) {
+      const tagIds = body.tag_ids as string[];
+
+      await supabase.from("task_tag_assignments").delete().eq("task_id", id);
+
+      if (tagIds.length > 0) {
+        const { error: tagError } = await supabase
+          .from("task_tag_assignments")
+          .insert(tagIds.map((tagId) => ({ task_id: id, tag_id: tagId })));
+
+        if (tagError) {
+          console.error("Error updating task tags:", tagError);
+          return NextResponse.json(
+            { error: "Failed to update tags" },
+            { status: 500 }
+          );
+        }
       }
     }
 
@@ -295,24 +378,84 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Create activity in related entity's timeline if status changed or significant update
-    if (body.status && body.status !== existingTask.status) {
-      const statusChanged = `Task status changed to ${body.status}`;
-      if (existingTask.related_type === "lead" && existingTask.related_id) {
-        await supabase.from("lead_activities").insert({
-          lead_id: existingTask.related_id,
-          activity_type: "task_completed",
-          title: body.status === "completed" ? "Task completed" : "Task updated",
-          description: `Task "${existingTask.title}": ${statusChanged}`,
-          created_by: user.id,
+    // Record the edit on the parent lead or project timeline.
+    //
+    // Previously only a status change was logged, and always as
+    // "task_completed" - so reopening a task appeared on the timeline as a
+    // completion, and renaming one or moving its due date left no trace at all.
+    if (existingTask.related_id && existingTask.related_type) {
+      const write = (entry: {
+        type: string;
+        title: string;
+        description?: string | null;
+      }) =>
+        existingTask.related_type === "lead"
+          ? logLeadActivity(supabase, {
+              ...entry,
+              leadId: existingTask.related_id,
+              tenantId: user.tenantId,
+              userId: user.id,
+            })
+          : logProjectActivity(supabase, {
+              ...entry,
+              projectId: existingTask.related_id,
+              userId: user.id,
+            });
+
+      const statusChanged = body.status && body.status !== existingTask.status;
+
+      if (statusChanged) {
+        const completed = body.status === "completed";
+        await write({
+          type: completed ? "task_completed" : "task_updated",
+          title: completed ? "Task completed" : "Task status changed",
+          description: `Task "${existingTask.title}": status changed to ${body.status}`,
         });
-      } else if (existingTask.related_type === "project" && existingTask.related_id) {
-        await supabase.from("project_activities").insert({
-          project_id: existingTask.related_id,
-          activity_type: "task_completed",
-          title: body.status === "completed" ? "Task completed" : "Task updated",
-          description: `Task "${existingTask.title}": ${statusChanged}`,
-          created_by: user.id,
+      }
+
+      // Reassignment is worth its own line - it changes who is accountable.
+      if (
+        "assigned_to" in body &&
+        (body.assigned_to ?? null) !== (existingTask.assigned_to ?? null)
+      ) {
+        const ids = [existingTask.assigned_to, body.assigned_to].filter(
+          Boolean
+        ) as string[];
+        const { data: people } = ids.length
+          ? await supabase.from("users").select("id, name").in("id", ids)
+          : { data: [] as { id: string; name: string }[] };
+        const nameOf = (uid: unknown) =>
+          uid
+            ? people?.find((pp) => pp.id === uid)?.name ?? "Unknown user"
+            : "Unassigned";
+
+        await write({
+          type: "task_updated",
+          title: "Task reassigned",
+          description: `Task "${existingTask.title}": ${nameOf(
+            existingTask.assigned_to
+          )} → ${nameOf(body.assigned_to)}`,
+        });
+      }
+
+      // Everything else the edit touched, as one line. Status and assignee are
+      // excluded because they were just reported on their own.
+      const before = {
+        title: existingTask.title,
+        priority: (existingTask as any).priority,
+        due_date: (existingTask as any).due_date,
+        description: (existingTask as any).description,
+      };
+      const after: Record<string, unknown> = {};
+      for (const field of Object.keys(before)) {
+        if (field in body) after[field] = (body as Record<string, unknown>)[field];
+      }
+      const summary = describeChanges(before, after, TASK_FIELD_LABELS);
+      if (summary) {
+        await write({
+          type: "task_updated",
+          title: "Task updated",
+          description: `Task "${existingTask.title}": ${summary}`,
         });
       }
     }
@@ -330,15 +473,34 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .eq("id", id)
       .single();
 
+    // Tags and live timing come from elsewhere, so pull them alongside - the
+    // caller merges this straight into its local state and would otherwise
+    // show stale tags right after editing them.
+    const [{ data: updatedTags }, { data: timing }] = await Promise.all([
+      supabase
+        .from("task_tag_assignments")
+        .select("tag:task_tags(id, name, color)")
+        .eq("task_id", id),
+      supabase
+        .from("tasks_with_timing")
+        .select(
+          "live_active_seconds, live_held_seconds, is_clock_running, lead_time_seconds, cycle_time_seconds, start_count, resume_count, original_lead_time_seconds, is_rework, open_subtask_count"
+        )
+        .eq("id", id)
+        .single(),
+    ]);
+
     // Transform to expected format
     const transformedTask = fullTask
       ? {
           ...fullTask,
+          ...(timing || {}),
           assigned_to_name: fullTask.assigned_user?.name || null,
           assigned_to_email: fullTask.assigned_user?.email || null,
           assigned_to_avatar: fullTask.assigned_user?.avatar_url || null,
           created_by_name: fullTask.created_by_user?.name || null,
           created_by_email: fullTask.created_by_user?.email || null,
+          tags: updatedTags?.map((ta) => ta.tag).filter(Boolean) || [],
         }
       : null;
 
@@ -380,7 +542,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (existingTask.related_type === "lead" && existingTask.related_id) {
       await supabase.from("lead_activities").insert({
         lead_id: existingTask.related_id,
-        activity_type: "other",
+        activity_type: "task_deleted",
         title: "Task deleted",
         description: `Task "${existingTask.title}" was deleted`,
         created_by: user.id,
@@ -388,7 +550,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     } else if (existingTask.related_type === "project" && existingTask.related_id) {
       await supabase.from("project_activities").insert({
         project_id: existingTask.related_id,
-        activity_type: "other",
+        activity_type: "task_deleted",
         title: "Task deleted",
         description: `Task "${existingTask.title}" was deleted`,
         created_by: user.id,

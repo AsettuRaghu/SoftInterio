@@ -5,7 +5,9 @@ import type { StageTransitionInput, LeadStage } from "@/types/leads";
 import {
   isValidStageTransition,
   getRequiredFieldsForTransition,
+  LeadStageLabels,
 } from "@/types/leads";
+import { logLeadActivity } from "@/lib/activity/log";
 import { generateUniqueProjectNumber } from "@/utils/project-number-generator";
 
 interface RouteParams {
@@ -359,71 +361,100 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Note: Stage change is automatically recorded in lead_stage_history table via database trigger
     // However, we log activities for important stage actions with their reasons/notes
 
-    // Log activity for disqualification with reason
+    // The note the user is made to type when moving a lead between stages is
+    // recorded as a real note, not just buried in an activity description.
+    //
+    // Previously this was inconsistent: disqualified and lost created a
+    // lead_notes row, but won and every ordinary forward stage kept the text
+    // only inside the activity row - so a note the user was *required* to
+    // write could not be found again in the Notes tab. Worse, the forward-stage
+    // case logged an activity typed "note_added" when no note existed at all.
+    //
+    // The note text is whichever field that stage collects.
+    const stageNoteText: string | undefined =
+      to_stage === "disqualified"
+        ? body.disqualification_notes
+        : to_stage === "lost"
+        ? body.lost_notes
+        : body.change_reason;
+
+    const fromLabel =
+      LeadStageLabels[lead.stage as LeadStage] || lead.stage || "";
+    const toLabel = LeadStageLabels[to_stage as LeadStage] || to_stage;
+
+    let stageNoteId: string | null = null;
+    if (stageNoteText?.trim()) {
+      // The prefix keeps the note self-describing in a list that mixes
+      // stage notes with ordinary ones. lead_notes has no category column
+      // (project_notes does - the two tables have drifted), so the context
+      // has to live in the text.
+      const { data: createdNote, error: noteError } = await supabase
+        .from("lead_notes")
+        .insert({
+          lead_id: id,
+          content: `[${fromLabel} → ${toLabel}] ${stageNoteText.trim()}`,
+          created_by: user.id,
+        })
+        .select("id")
+        .single();
+
+      if (noteError) {
+        // The stage change itself has already succeeded; losing the note copy
+        // must not fail the request.
+        console.error("Failed to record stage-change note:", noteError);
+      } else {
+        stageNoteId = createdNote?.id ?? null;
+      }
+    }
+
+    // Supplementary activity rows carrying the reason. The stage change itself
+    // is recorded separately in lead_stage_history by a database trigger.
     if (to_stage === "disqualified") {
-      await supabase.from("lead_activities").insert({
-        lead_id: id,
-        activity_type: "other",
+      await logLeadActivity(supabase, {
+        leadId: id,
+        tenantId: lead.tenant_id,
+        userId: user.id,
+        linkedNoteId: stageNoteId,
+        type: "stage_changed",
         title: "Lead Disqualified",
         description: `Reason: ${body.disqualification_reason || "Not specified"}${
           body.disqualification_notes ? ` - ${body.disqualification_notes}` : ""
         }`,
-        created_by: user.id,
       });
-
-      // Create a note record if disqualification notes are provided
-      if (body.disqualification_notes?.trim()) {
-        await supabase.from("lead_notes").insert({
-          lead_id: id,
-          content: `Disqualification Note: ${body.disqualification_notes.trim()}`,
-          created_by: user.id,
-        });
-      }
-    }
-
-    // Log activity for lost stage with reason
-    if (to_stage === "lost") {
-      await supabase.from("lead_activities").insert({
-        lead_id: id,
-        activity_type: "other",
+    } else if (to_stage === "lost") {
+      await logLeadActivity(supabase, {
+        leadId: id,
+        tenantId: lead.tenant_id,
+        userId: user.id,
+        linkedNoteId: stageNoteId,
+        type: "stage_changed",
         title: "Lead Lost",
         description: `Reason: ${body.lost_reason || "Not specified"}${
           body.lost_notes ? ` - ${body.lost_notes}` : ""
         }`,
-        created_by: user.id,
       });
-
-      // Create a note record if lost notes are provided
-      if (body.lost_notes?.trim()) {
-        await supabase.from("lead_notes").insert({
-          lead_id: id,
-          content: `Lost Reason Note: ${body.lost_notes.trim()}`,
-          created_by: user.id,
-        });
-      }
-    }
-
-    // Log activity for won stage
-    if (to_stage === "won") {
-      await supabase.from("lead_activities").insert({
-        lead_id: id,
-        activity_type: "other",
+    } else if (to_stage === "won") {
+      await logLeadActivity(supabase, {
+        leadId: id,
+        tenantId: lead.tenant_id,
+        userId: user.id,
+        linkedNoteId: stageNoteId,
+        type: "stage_changed",
         title: "Lead Won",
         description: `Won Amount: ₹${body.won_amount || "Not specified"}${
           body.change_reason ? ` - ${body.change_reason}` : ""
         }`,
-        created_by: user.id,
       });
-    }
-
-    // Log activity for any notes/change_reason provided during transition
-    if (body.change_reason && to_stage !== "won" && to_stage !== "lost" && to_stage !== "disqualified") {
-      await supabase.from("lead_activities").insert({
-        lead_id: id,
-        activity_type: "note_added",
-        title: "Note Added",
+    } else if (stageNoteId) {
+      // A note really was created now, so note_added is accurate.
+      await logLeadActivity(supabase, {
+        leadId: id,
+        tenantId: lead.tenant_id,
+        userId: user.id,
+        linkedNoteId: stageNoteId,
+        type: "note_added",
+        title: "Note added on stage change",
         description: body.change_reason,
-        created_by: user.id,
       });
     }
 

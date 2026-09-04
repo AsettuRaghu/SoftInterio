@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { logLeadActivity, logProjectActivity } from "@/lib/activity/log";
 import type { DocumentCategory, UpdateDocumentInput } from "@/types/documents";
 
 const STORAGE_BUCKET = "documents";
@@ -187,7 +188,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     // Note: Using 'as any' until database types are regenerated after running migration 033
     const { data: document, error: fetchError } = await supabaseAdmin
       .from("documents" as any)
-      .select("storage_path")
+      .select("storage_path, title, file_name, linked_type, linked_id")
       .eq("id", id)
       .eq("tenant_id", userData.tenant_id)
       .single();
@@ -216,6 +217,31 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       .delete()
       .eq("id", id)
       .eq("tenant_id", userData.tenant_id);
+
+    // Uploads were already recorded on the parent timeline; deletions were not,
+    // so a document could vanish with no trace of who removed it.
+    if (!dbError) {
+      const doc = document as any;
+      const name = doc.title || doc.file_name || "Untitled";
+      if (doc.linked_type === "lead" && doc.linked_id) {
+        await logLeadActivity(supabaseAdmin, {
+          leadId: doc.linked_id,
+          tenantId: userData.tenant_id,
+          userId: user.id,
+          type: "document_deleted",
+          title: "Document deleted",
+          description: `Document "${name}" was deleted`,
+        });
+      } else if (doc.linked_type === "project" && doc.linked_id) {
+        await logProjectActivity(supabaseAdmin, {
+          projectId: doc.linked_id,
+          userId: user.id,
+          type: "document_deleted",
+          title: "Document deleted",
+          description: `Document "${name}" was deleted`,
+        });
+      }
+    }
 
     if (dbError) {
       console.error("Error deleting document record:", dbError);
