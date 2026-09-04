@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { logLeadActivity, noteExcerpt } from "@/lib/activity/log";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -62,7 +63,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const supabase = await createClient();
 
-    const { content, is_pinned } = await request.json();
+    // follow_up_at turns a note into a scheduled next contact. The note text
+    // is the reason, so there is no separate reason field.
+    const { content, is_pinned, follow_up_at } = await request.json();
 
     if (!content?.trim()) {
       return NextResponse.json(
@@ -74,7 +77,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Verify lead exists
     const { data: lead, error: leadError } = await supabase
       .from("leads")
-      .select("id")
+      .select("id, tenant_id")
       .eq("id", id)
       .single();
 
@@ -90,6 +93,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         content: content.trim(),
         is_pinned: is_pinned || false,
         created_by: user.id,
+        follow_up_at: follow_up_at || null,
       })
       .select(
         `
@@ -107,15 +111,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Create activity for the note
-    await supabase.from("lead_activities").insert({
-      lead_id: id,
-      activity_type: "note_added",
+    const activity = {
+      leadId: id,
+      tenantId: lead.tenant_id,
+      userId: user.id,
+      // Links the entry back to its note, so the timeline can navigate to it.
+      linkedNoteId: note.id,
+    };
+
+    await logLeadActivity(supabase, {
+      ...activity,
+      type: "note_added",
       title: "Note added",
-      description:
-        content.trim().slice(0, 100) + (content.length > 100 ? "..." : ""),
-      created_by: user.id,
+      description: noteExcerpt(content),
     });
+
+    // A note created with a follow-up is two things happening at once. The
+    // reminder gets its own entry so it appears alongside every other
+    // follow-up event rather than being buried in the note.
+    if (follow_up_at) {
+      await logLeadActivity(supabase, {
+        ...activity,
+        type: "follow_up_scheduled",
+        title: "Follow-up scheduled",
+        description: `Due ${follow_up_at}`,
+      });
+    }
 
     return NextResponse.json({ note }, { status: 201 });
   } catch (error) {

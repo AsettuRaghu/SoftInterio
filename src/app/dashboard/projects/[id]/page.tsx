@@ -116,6 +116,18 @@ export default function ProjectDetailPage({ params }: PageProps) {
   const [tasks, setTasks] = useState<any[]>([]);
   const [notesCount, setNotesCount] = useState(0);
   const [notes, setNotes] = useState<any[]>([]);
+  // Targeted refetch for the notes composer - reloading the whole project
+  // page after saving a note would be needlessly heavy.
+  const refetchNotes = useCallback(async () => {
+    if (!id) return;
+    const res = await fetch(`/api/projects/${id}/notes`);
+    if (res.ok) {
+      const data = await res.json();
+      const list = data.notes || [];
+      setNotes(list);
+      setNotesCount(list.length);
+    }
+  }, [id]);
   const [calendarCount, setCalendarCount] = useState(0);
   const [activities, setActivities] = useState<any[]>([]);
   const [quotationsCount, setQuotationsCount] = useState(0);
@@ -783,6 +795,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
               notes={notes}
               projectClosed={project.status === "completed"}
               onCountChange={(count) => setNotesCount(count)}
+              onRefresh={refetchNotes}
             />
           ) : null}
 

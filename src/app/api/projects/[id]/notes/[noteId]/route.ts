@@ -1,6 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import {
+  logProjectActivity,
+  logNoteChange,
+  noteExcerpt,
+} from "@/lib/activity/log";
 
 interface RouteParams {
   params: Promise<{ id: string; noteId: string }>;
@@ -57,15 +62,43 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const supabase = await createClient();
 
     const body = await request.json();
-    const { title, content, category, is_pinned } = body;
+    const { title, content, category, is_pinned, follow_up_at, follow_up_done } =
+      body;
 
-    // Build update object
-    const updateData: Record<string, unknown> = {};
+    // Build update object. updated_at was never set here, so an edited
+    // project note kept its original timestamp - the Updated column would
+    // have shown stale data.
+    const updateData: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
 
     if (title !== undefined) updateData.title = title;
     if (content !== undefined) updateData.content = content;
     if (category !== undefined) updateData.category = category;
     if (is_pinned !== undefined) updateData.is_pinned = is_pinned;
+    if (follow_up_at !== undefined) {
+      updateData.follow_up_at = follow_up_at || null;
+      // Rescheduling revives a resolved follow-up; otherwise the new date
+      // would sit on a done note and never surface.
+      if (follow_up_at) {
+        updateData.follow_up_done_at = null;
+        updateData.follow_up_done_by = null;
+      }
+    }
+    if (follow_up_done !== undefined) {
+      updateData.follow_up_done_at = follow_up_done
+        ? new Date().toISOString()
+        : null;
+      updateData.follow_up_done_by = follow_up_done ? user.id : null;
+    }
+
+    // Prior state, needed to describe the edit on the timeline.
+    const { data: before } = await supabase
+      .from("project_notes")
+      .select("content, follow_up_at, follow_up_done_at")
+      .eq("id", noteId)
+      .eq("project_id", projectId)
+      .maybeSingle();
 
     const { data: note, error } = await supabase
       .from("project_notes")
@@ -80,6 +113,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json(
         { error: "Failed to update note" },
         { status: 500 }
+      );
+    }
+
+    if (before) {
+      // Wording lives in @/lib/activity/log so lead and project notes read the
+      // same way on their respective timelines.
+      await logNoteChange(
+        (entry) =>
+          logProjectActivity(supabase, {
+            ...entry,
+            projectId,
+            userId: user.id,
+            linkedNoteId: note.id,
+          }),
+        { before, after: note }
       );
     }
 
@@ -102,8 +150,18 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
+    const { user } = guard;
     const { id: projectId, noteId } = await params;
     const supabase = await createClient();
+
+    // Read the note before deleting it - afterwards there is nothing left to
+    // describe on the timeline.
+    const { data: existing } = await supabase
+      .from("project_notes")
+      .select("content")
+      .eq("id", noteId)
+      .eq("project_id", projectId)
+      .maybeSingle();
 
     const { error } = await supabase
       .from("project_notes")
@@ -117,6 +175,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         { error: "Failed to delete note" },
         { status: 500 }
       );
+    }
+
+    if (existing) {
+      await logProjectActivity(supabase, {
+        projectId,
+        userId: user.id,
+        type: "note_deleted",
+        title: "Note deleted",
+        description: noteExcerpt(existing.content || ""),
+      });
     }
 
     return NextResponse.json({ success: true });

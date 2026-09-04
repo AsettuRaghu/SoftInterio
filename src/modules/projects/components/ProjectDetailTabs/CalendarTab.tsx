@@ -36,21 +36,13 @@ export default function CalendarTab({
   onRefresh,
   onCountChange,
 }: CalendarTabProps) {
-  // Filter activities to only include meeting/calendar events
-  const calendarEvents = (activities || []).filter(
-    (activity) =>
-      activity.activity_type === "meeting_scheduled" ||
-      activity.activity_type === "client_meeting" ||
-      activity.activity_type === "internal_meeting" ||
-      activity.activity_type === "site_visit" ||
-      (activity.meeting_scheduled_at && activity.meeting_scheduled_at !== null)
-  );
-
+  // Same reasoning as the lead tab: filtering activities here would show only
+  // lead_activities, hiding standalone events and note follow-ups that
+  // /api/calendar already returns. Let the component fetch the full union.
   return (
     <CalendarTableReusable
       linkedType="project"
       linkedId={projectId}
-      externalEvents={calendarEvents}
       showHeader={false}
       compact={true}
       readOnly={projectClosed}

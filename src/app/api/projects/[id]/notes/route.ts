@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { logProjectActivity, noteExcerpt } from "@/lib/activity/log";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -60,7 +61,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const supabase = await createClient();
 
-    const { title, content, category, is_pinned } = await request.json();
+    const { title, content, category, is_pinned, follow_up_at } =
+      await request.json();
 
     if (!content?.trim()) {
       return NextResponse.json(
@@ -91,6 +93,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         category: category || "general",
         is_pinned: is_pinned || false,
         created_by: user.id,
+        follow_up_at: follow_up_at || null,
       })
       .select("*")
       .single();
@@ -110,19 +113,30 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Create activity for the note
-    const { error: activityError } = await supabase.from("project_activities").insert({
-      project_id: id,
-      activity_type: "note_added",
+    const activity = {
+      projectId: id,
+      userId: user.id,
+      // Links the entry back to its note, so the timeline can navigate to it.
+      linkedNoteId: note.id,
+    };
+
+    await logProjectActivity(supabase, {
+      ...activity,
+      type: "note_added",
       title: title?.trim() || "Note added",
-      description:
-        content.trim().slice(0, 100) + (content.length > 100 ? "..." : ""),
-      created_by: user.id,
+      description: noteExcerpt(content),
     });
 
-    if (activityError) {
-      console.error("Error creating activity for note:", activityError);
-      // Don't fail the whole request, note was created successfully
+    // A note created with a follow-up is two things happening at once. The
+    // reminder gets its own entry so it appears alongside every other
+    // follow-up event rather than being buried in the note.
+    if (follow_up_at) {
+      await logProjectActivity(supabase, {
+        ...activity,
+        type: "follow_up_scheduled",
+        title: "Follow-up scheduled",
+        description: `Due ${follow_up_at}`,
+      });
     }
 
     return NextResponse.json({ note }, { status: 201 });

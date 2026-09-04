@@ -33,6 +33,12 @@ interface CalendarEvent {
   meeting_scheduled_at?: string | null;
   meeting_location?: string | null;
   meeting_completed?: boolean;
+  /** True for rows derived from note follow-ups - they have no event row. */
+  is_derived?: boolean;
+  /** Set on rows derived from a task's due date. */
+  task_id?: string;
+  /** The note behind a derived follow-up row. */
+  note_id?: string;
   meeting_notes?: string | null;
   attendees?: any[];
 }
@@ -68,6 +74,7 @@ const MEETING_TYPE_LABELS: Record<string, string> = {
   internal_meeting: "Internal Meeting",
   site_visit: "Site Visit",
   follow_up: "Follow Up",
+  task_due: "Task Due",
   meeting_scheduled: "Meeting",
   other: "Other",
 };
@@ -155,11 +162,26 @@ export default function CalendarTableReusable({
   // DATA FETCHING
   // =====================================================
 
+  /**
+   * This component was written around lead_activities, so it reads
+   * meeting_scheduled_at. /api/calendar normalises every source to
+   * scheduled_at, which left the date column empty for anything fetched
+   * rather than passed in. Bridge the two names once, here, instead of
+   * touching a dozen read sites.
+   */
+  const normalise = (rows: any[]): CalendarEvent[] =>
+    (rows || []).map((e) => ({
+      ...e,
+      meeting_scheduled_at: e.meeting_scheduled_at ?? e.scheduled_at ?? null,
+      meeting_type: e.meeting_type ?? e.event_type ?? e.activity_type,
+      meeting_completed: e.meeting_completed ?? e.is_completed ?? false,
+    }));
+
   const fetchEvents = useCallback(async () => {
     // If external events are provided, use them
     if (externalEvents) {
-      setEvents(externalEvents);
-      setCachedEvents(externalEvents);
+      setEvents(normalise(externalEvents));
+      setCachedEvents(normalise(externalEvents));
       return;
     }
 
@@ -185,7 +207,7 @@ export default function CalendarTableReusable({
       if (!response.ok) throw new Error("Failed to fetch calendar events");
 
       const data = await response.json();
-      const fetchedEvents = data.events || [];
+      const fetchedEvents = normalise(data.events || []);
       setEvents(fetchedEvents);
       setCachedEvents(fetchedEvents);
     } catch (error) {
@@ -225,18 +247,56 @@ export default function CalendarTableReusable({
       return;
     }
 
+    // A task-due row is derived from the task itself. It completes through the
+    // task endpoint, and needs no linked lead or project to do it - a
+    // standalone task appears on this calendar too.
+    if (event.is_derived && event.task_id) {
+      try {
+        const response = await fetch(`/api/tasks/${event.task_id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "completed" }),
+        });
+        if (!response.ok) throw new Error("Failed to complete task");
+
+        // Completing the task removes it from the calendar entirely - the
+        // source query excludes finished work - so drop the row rather than
+        // showing a completed deadline.
+        setEvents((prev) => prev.filter((ev) => ev.id !== event.id));
+        clearCache();
+        if (onRefresh) onRefresh();
+      } catch (error) {
+        console.error("Error completing task:", error);
+        alert("Failed to complete task");
+      }
+      return;
+    }
+
     if (!linkedId || !linkedType) return;
 
     try {
-      const apiEndpoint =
-        linkedType === "lead"
-          ? `/api/sales/leads/${linkedId}/activities?activityId=${event.id}`
-          : `/api/projects/${linkedId}/activities?activityId=${event.id}`;
+      // A follow-up row is derived from a note - there is no activity to
+      // complete. Sending it to the activities endpoint would PATCH a
+      // non-existent record while the optimistic update below made it look
+      // like it had worked.
+      const isFollowUp = event.is_derived && event.note_id;
+
+      const apiEndpoint = isFollowUp
+        ? linkedType === "lead"
+          ? `/api/sales/leads/notes/${event.note_id}`
+          : `/api/projects/${linkedId}/notes/${event.note_id}`
+        : linkedType === "lead"
+        ? `/api/sales/leads/${linkedId}/activities?activityId=${event.id}`
+        : `/api/projects/${linkedId}/activities?activityId=${event.id}`;
 
       const response = await fetch(apiEndpoint, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meeting_completed: true }),
+        body: JSON.stringify(
+          isFollowUp
+            ? { follow_up_done: true }
+            : { meeting_completed: true }
+        ),
       });
 
       if (!response.ok) throw new Error("Failed to complete event");
@@ -263,6 +323,17 @@ export default function CalendarTableReusable({
 
     if (onDeleteEvent) {
       onDeleteEvent(event);
+      return;
+    }
+
+    // A follow-up has no event row to delete - it belongs to a note. Deleting
+    // it here would either 404 or, worse, remove an unrelated activity.
+    if (event.is_derived) {
+      alert(
+        event.task_id
+          ? "This is a task's due date. Change or clear the due date on the task instead."
+          : "This follow-up belongs to a note. Clear the follow-up date on the note instead."
+      );
       return;
     }
 

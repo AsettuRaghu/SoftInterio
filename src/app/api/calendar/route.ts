@@ -59,8 +59,12 @@ export async function GET(request: NextRequest) {
     const tenantId = userData.tenant_id;
     let allEvents: any[] = [];
 
-    // Fetch lead activities (meetings, site visits) - unless filtering for standalone only
-    if (source !== "standalone") {
+    // Lead meetings. Excluded for source="project": a project asking for its
+    // calendar was previously handed EVERY lead meeting in the tenant, because
+    // the linkedId filter below only applies when source === "lead". That was
+    // invisible while the project tab passed externalEvents and never called
+    // this endpoint.
+    if (source !== "standalone" && source !== "project") {
       let leadEventsQuery = supabaseAdmin
         .from("lead_activities")
         .select(`
@@ -255,6 +259,266 @@ export async function GET(request: NextRequest) {
     }
 
     // Sort all events by scheduled_at
+    // Note follow-ups, as a THIRD source rather than as calendar_events rows.
+    //
+    // Writing a real event row when a follow-up is set would store one fact
+    // twice, and the two copies would drift the moment anyone rescheduled the
+    // note, resolved the event, or deleted the note. This endpoint is already
+    // a union over lead_activities and calendar_events, so deriving costs one
+    // more query and keeps the note as the single source of truth.
+    if (source !== "standalone" && source !== "project") {
+      let followUpQuery = supabaseAdmin
+        .from("lead_notes")
+        .select(`
+          id,
+          lead_id,
+          content,
+          follow_up_at,
+          follow_up_done_at,
+          created_by,
+          created_at,
+          created_user:users!lead_notes_created_by_fkey(id, name, avatar_url),
+          lead:leads!inner(
+            id,
+            lead_number,
+            tenant_id,
+            client:clients!leads_client_id_fkey(id, name, email, phone)
+          )
+        `)
+        .eq("lead.tenant_id", tenantId)
+        .not("follow_up_at", "is", null);
+
+      if (linkedId && source === "lead") {
+        followUpQuery = followUpQuery.eq("lead_id", linkedId);
+      }
+      if (startDate) followUpQuery = followUpQuery.gte("follow_up_at", startDate);
+      if (endDate) followUpQuery = followUpQuery.lte("follow_up_at", endDate);
+
+      const { data: followUps, error: followUpError } = await followUpQuery;
+
+      if (followUpError) {
+        console.error("Error fetching follow-ups:", followUpError);
+      } else {
+        allEvents.push(
+          ...(followUps || []).map((n: any) => ({
+            id: `followup-${n.id}`,
+            source_type: "lead" as const,
+            source_id: n.lead_id,
+            source_number: n.lead?.lead_number,
+            source_name: n.lead?.client?.name,
+            // Uses the follow_up type that already exists in calendar_events,
+            // so the UI can colour and filter it alongside everything else.
+            activity_type: "follow_up",
+            event_type: "follow_up",
+            // The calendar table labels rows from meeting_type, and its map
+            // already has a follow_up entry - without this it fell back to
+            // "Other".
+            meeting_type: "follow_up",
+            // The note text IS the reason, so it is the title.
+            title: n.content?.slice(0, 80) || "Follow up",
+            description: n.content,
+            // A follow-up is a day, not a time. Anchor it to 09:00 local so it
+            // sorts sensibly against timed meetings rather than landing at
+            // midnight above everything else.
+            scheduled_at: `${n.follow_up_at}T09:00:00`,
+            is_all_day: true,
+            is_completed: !!n.follow_up_done_at,
+            attendees: [],
+            created_by: n.created_by,
+            created_at: n.created_at,
+            created_user: n.created_user,
+            client_email: n.lead?.client?.email,
+            client_phone: n.lead?.client?.phone,
+            // Marks it as derived - it has no calendar_events row, so the UI
+            // must not offer to edit or delete it as though it did.
+            is_derived: true,
+            note_id: n.id,
+          }))
+        );
+      }
+    }
+
+    // Project note follow-ups - the same derived treatment as lead notes.
+    if (source !== "standalone" && source !== "lead") {
+      let projFollowUpQuery = supabaseAdmin
+        .from("project_notes")
+        .select(`
+          id,
+          project_id,
+          title,
+          content,
+          follow_up_at,
+          follow_up_done_at,
+          created_by,
+          created_at,
+          created_user:users!project_notes_created_by_fkey(id, name, avatar_url),
+          project:projects!inner(id, project_number, name, tenant_id)
+        `)
+        .eq("project.tenant_id", tenantId)
+        .not("follow_up_at", "is", null);
+
+      if (linkedId && source === "project") {
+        projFollowUpQuery = projFollowUpQuery.eq("project_id", linkedId);
+      }
+      if (startDate) projFollowUpQuery = projFollowUpQuery.gte("follow_up_at", startDate);
+      if (endDate) projFollowUpQuery = projFollowUpQuery.lte("follow_up_at", endDate);
+
+      const { data: projFollowUps, error: projFollowUpError } =
+        await projFollowUpQuery;
+
+      if (projFollowUpError) {
+        console.error("Error fetching project follow-ups:", projFollowUpError);
+      } else {
+        allEvents.push(
+          ...(projFollowUps || []).map((n: any) => ({
+            id: `followup-${n.id}`,
+            source_type: "project" as const,
+            source_id: n.project_id,
+            source_number: n.project?.project_number,
+            source_name: n.project?.name,
+            activity_type: "follow_up",
+            event_type: "follow_up",
+            // The calendar table labels rows from meeting_type, and its map
+            // already has a follow_up entry - without this it fell back to
+            // "Other".
+            meeting_type: "follow_up",
+            title: n.title || n.content?.slice(0, 80) || "Follow up",
+            description: n.content,
+            scheduled_at: `${n.follow_up_at}T09:00:00`,
+            is_all_day: true,
+            is_completed: !!n.follow_up_done_at,
+            attendees: [],
+            created_by: n.created_by,
+            created_at: n.created_at,
+            created_user: n.created_user,
+            is_derived: true,
+            note_id: n.id,
+          }))
+        );
+      }
+    }
+
+    // Task due dates.
+    //
+    // Derived, like note follow-ups: the task stays the single source of truth
+    // and nothing is copied into calendar_events, so rescheduling or completing
+    // a task cannot leave a stale calendar row behind.
+    //
+    // A due date is a deadline, not an appointment - it has no time and no
+    // duration - so these are all-day rows typed task_due, which the calendar's
+    // existing type filter can hide for anyone who finds them noisy.
+    {
+      let taskQuery = supabaseAdmin
+        .from("tasks")
+        .select(
+          `id, title, description, due_date, status, priority, assigned_to,
+           related_type, related_id, created_by, created_at,
+           assigned_user:users!tasks_assigned_to_fkey(id, name, avatar_url)`
+        )
+        .eq("tenant_id", tenantId)
+        .not("due_date", "is", null)
+        // Finished work is not a reminder.
+        .not("status", "in", "(completed,cancelled,skipped)");
+
+      if (source === "lead") taskQuery = taskQuery.eq("related_type", "lead");
+      if (source === "project") taskQuery = taskQuery.eq("related_type", "project");
+      if (linkedId && (source === "lead" || source === "project")) {
+        taskQuery = taskQuery.eq("related_id", linkedId);
+      }
+      if (startDate) taskQuery = taskQuery.gte("due_date", startDate);
+      if (endDate) taskQuery = taskQuery.lte("due_date", endDate);
+
+      const { data: dueTasks, error: taskError } = await taskQuery;
+
+      if (taskError) {
+        console.error("Error fetching task due dates:", taskError);
+      } else if (dueTasks?.length) {
+        // Resolve the names of whatever the tasks hang off, in two batched
+        // lookups rather than one per task.
+        const leadIds = dueTasks
+          .filter((t: any) => t.related_type === "lead" && t.related_id)
+          .map((t: any) => t.related_id);
+        const projectIds = dueTasks
+          .filter((t: any) => t.related_type === "project" && t.related_id)
+          .map((t: any) => t.related_id);
+
+        const [{ data: relLeads }, { data: relProjects }] = await Promise.all([
+          leadIds.length
+            ? supabaseAdmin
+                .from("leads")
+                .select(
+                  `id, lead_number, client:clients!leads_client_id_fkey(name)`
+                )
+                .in("id", leadIds)
+            : Promise.resolve({ data: [] as any[] }),
+          projectIds.length
+            ? supabaseAdmin
+                .from("projects")
+                .select("id, project_number, project_name")
+                .in("id", projectIds)
+            : Promise.resolve({ data: [] as any[] }),
+        ]);
+
+        const leadById = new Map((relLeads || []).map((l: any) => [l.id, l]));
+        const projectById = new Map(
+          (relProjects || []).map((pr: any) => [pr.id, pr])
+        );
+
+        allEvents.push(
+          ...dueTasks.map((t: any) => {
+            const rel =
+              t.related_type === "lead"
+                ? leadById.get(t.related_id)
+                : t.related_type === "project"
+                ? projectById.get(t.related_id)
+                : null;
+
+            return {
+              id: `task-${t.id}`,
+              source_type: (t.related_type === "project"
+                ? "project"
+                : t.related_type === "lead"
+                ? "lead"
+                : "standalone") as any,
+              source_id: t.related_id,
+              source_number: rel?.lead_number || rel?.project_number,
+              source_name: rel?.client?.name || rel?.project_name,
+              activity_type: "task_due",
+              event_type: "task_due",
+              meeting_type: "task_due",
+              title: t.title,
+              description: t.description,
+              // Anchored to 09:00 like note follow-ups so both read as
+              // "handle this today" rather than sorting at midnight above
+              // every real appointment.
+              scheduled_at: `${String(t.due_date).slice(0, 10)}T09:00:00`,
+              is_all_day: true,
+              is_completed: false,
+              // The person who must act on a task is its assignee, not its
+              // creator. Listing them as an attendee is what lets the
+              // role-based visibility filter below show the task to them.
+              attendees: t.assigned_to
+                ? [
+                    {
+                      type: "team",
+                      id: t.assigned_to,
+                      name: t.assigned_user?.name || "Assignee",
+                    },
+                  ]
+                : [],
+              created_by: t.created_by,
+              created_at: t.created_at,
+              created_user: t.assigned_user,
+              priority: t.priority,
+              // Derived: there is no calendar_events row to edit or delete.
+              is_derived: true,
+              task_id: t.id,
+            };
+          })
+        );
+      }
+    }
+
     allEvents.sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
 
     // Filter events based on user role and attendee status

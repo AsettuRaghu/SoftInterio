@@ -34,21 +34,17 @@ export default function CalendarTab({
   onEditEvent,
   onRefresh,
 }: CalendarTabProps) {
-  // Filter activities to only include meeting/calendar events
-  const calendarEvents = activities.filter(
-    (activity) =>
-      activity.activity_type === "meeting_scheduled" ||
-      activity.activity_type === "client_meeting" ||
-      activity.activity_type === "internal_meeting" ||
-      activity.activity_type === "site_visit" ||
-      (activity.meeting_scheduled_at && activity.meeting_scheduled_at !== null)
-  );
-
+  // Deliberately NOT passing externalEvents.
+  //
+  // This used to filter the lead's activities client-side, which meant the tab
+  // only ever saw lead_activities. /api/calendar is a union of meetings,
+  // standalone events AND note follow-ups, so filtering here silently hid the
+  // follow-ups a user had just created. Letting the component fetch keeps this
+  // tab identical to the main calendar.
   return (
     <CalendarTableReusable
       linkedType="lead"
       linkedId={leadId}
-      externalEvents={calendarEvents}
       showHeader={false}
       compact={true}
       readOnly={leadClosed}
