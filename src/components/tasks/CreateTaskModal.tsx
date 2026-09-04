@@ -8,6 +8,7 @@ import {
   AssigneeSelector,
   DatePicker,
   LinkedEntity,
+  TagSelector,
   TaskStatus,
   TaskPriority,
 } from "./ui";
@@ -69,6 +70,7 @@ export function CreateTaskModal({
     name: string;
   } | null>(null);
   const [description, setDescription] = useState("");
+  const [tagIds, setTagIds] = useState<string[]>([]);
   const [subtasks, setSubtasks] = useState<SubTask[]>([]);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const [showSubtaskForm, setShowSubtaskForm] = useState(false);
@@ -87,6 +89,7 @@ export function CreateTaskModal({
       // Use default linked entity if provided
       setLinkedEntity(defaultLinkedEntity || null);
       setDescription("");
+      setTagIds([]);
       setSubtasks([]);
       setNewSubtaskTitle("");
       setShowSubtaskForm(false);
@@ -115,6 +118,7 @@ export function CreateTaskModal({
 
   const resetForm = useCallback(() => {
     setTitle("");
+    setTagIds([]);
     setStatus("todo");
     setPriority(null);
     setAssignedTo(currentUser?.id || null);
@@ -185,6 +189,7 @@ export function CreateTaskModal({
           related_id: primaryLink?.id || null,
           description: description || null,
           parent_task_id: parentTaskId || null,
+          tag_ids: tagIds,
           subtasks: subtasks
             .filter((st) => st.title.trim())
             .map((st) => ({
@@ -329,6 +334,14 @@ export function CreateTaskModal({
                 }
                 readOnly={!!defaultLinkedEntity}
               />
+            </div>
+
+            {/* Tags */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                Tags
+              </label>
+              <TagSelector selected={tagIds} onChange={setTagIds} />
             </div>
 
             {/* Description */}

@@ -3,12 +3,10 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 
-type TaskStatus =
-  | "todo"
-  | "in_progress"
-  | "completed"
-  | "on_hold"
-  | "cancelled";
+// Imported rather than re-declared. A local copy of this union has already
+// drifted twice - once when "blocked" was added and again for "skipped" -
+// each time producing a type error far from the cause. One definition.
+import type { TaskStatus } from "@/types/tasks";
 
 interface StatusConfig {
   label: string;
@@ -85,6 +83,41 @@ const statusConfig: Record<TaskStatus, StatusConfig> = {
       >
         <rect x="6" y="4" width="4" height="16" rx="1" />
         <rect x="14" y="4" width="4" height="16" rx="1" />
+      </svg>
+    ),
+  },
+  blocked: {
+    label: "Blocked",
+    color: "text-orange-600",
+    bgColor: "bg-orange-50",
+    borderColor: "border-orange-200",
+    icon: (
+      <svg
+        className="w-3.5 h-3.5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+      >
+        <circle cx="12" cy="12" r="9" />
+        <path d="M5.6 5.6l12.8 12.8" />
+      </svg>
+    ),
+  },
+  skipped: {
+    label: "Skipped",
+    color: "text-slate-500",
+    bgColor: "bg-slate-50",
+    borderColor: "border-slate-200",
+    icon: (
+      <svg
+        className="w-3.5 h-3.5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
       </svg>
     ),
   },

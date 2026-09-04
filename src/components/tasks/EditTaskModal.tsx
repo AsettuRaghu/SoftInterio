@@ -1,12 +1,18 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { TaskStatusControls } from "./TaskStatusControls";
+import { TaskTimeLog } from "./TaskTimeLog";
+import { TaskAttachments } from "./TaskAttachments";
+import { TaskRequirements } from "./TaskRequirements";
+import { formatDuration } from "@/types/tasks";
 import {
   StatusBadge,
   PriorityBadge,
   AssigneeSelector,
   DatePicker,
   LinkedEntity,
+  TagSelector,
   TaskStatus,
   TaskPriority,
 } from "./ui";
@@ -32,7 +38,22 @@ interface Task {
   subtask_count?: number;
   completed_subtask_count?: number;
   subtasks?: SubTask[];
+  tags?: Array<{ id: string; name: string; color: string }>;
   created_at?: string;
+  // Lifecycle timing
+  estimated_hours?: number;
+  hold_reason?: string;
+  total_active_seconds?: number;
+  total_held_seconds?: number;
+  live_active_seconds?: number;
+  live_held_seconds?: number;
+  is_clock_running?: boolean;
+  first_started_at?: string;
+  start_count?: number;
+  resume_count?: number;
+  first_completed_at?: string;
+  completion_count?: number;
+  open_subtask_count?: number;
 }
 
 interface TeamMember {
@@ -73,6 +94,22 @@ export function EditTaskModal({
   // Form state
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [tagIds, setTagIds] = useState<string[]>([]);
+  // The lifecycle controls transition immediately via the API, while the rest
+  // of this form saves on submit. Keep a live snapshot so the timer readout
+  // stays correct and so Save Changes cannot overwrite a transition.
+  const [timingVersion, setTimingVersion] = useState(0);
+  const [attachmentCount, setAttachmentCount] = useState(0);
+  const [timing, setTiming] = useState<{
+    status: TaskStatus;
+    hold_reason?: string;
+    total_active_seconds: number;
+    live_active_seconds?: number;
+    is_clock_running?: boolean;
+    estimated_hours?: number;
+    open_subtask_count?: number;
+    completion_count?: number;
+  } | null>(null);
   const [priority, setPriority] = useState<TaskPriority>("medium");
   const [status, setStatus] = useState<TaskStatus>("todo");
   const [startDate, setStartDate] = useState("");
@@ -108,6 +145,17 @@ export function EditTaskModal({
           : null
       );
       setSubtasks(task.subtasks || []);
+      setTagIds((task.tags || []).map((t) => t.id));
+      setTiming({
+        status: task.status,
+        hold_reason: task.hold_reason,
+        total_active_seconds: task.total_active_seconds ?? 0,
+        live_active_seconds: task.live_active_seconds,
+        is_clock_running: task.is_clock_running,
+        estimated_hours: task.estimated_hours,
+        open_subtask_count: task.open_subtask_count,
+        completion_count: task.completion_count,
+      });
       setError(null);
     }
   }, [task, isOpen]);
@@ -191,6 +239,7 @@ export function EditTaskModal({
           assigned_to: assignedTo,
           related_type: projectLead?.type || null,
           related_id: projectLead?.id || null,
+          tag_ids: tagIds,
           subtasks: subtasks.filter((st) => st.title?.trim()),
         }),
       });
@@ -353,6 +402,118 @@ export function EditTaskModal({
                   setProjectLead(Array.isArray(val) ? val[0] || null : val)
                 }
               />
+            </div>
+
+            {/* Time tracking - applies immediately, not on Save */}
+            {task && timing && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                  Time Tracking
+                </label>
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <TaskStatusControls
+                    task={{ id: task.id, ...timing }}
+                    size="sm"
+                    onTransitioned={(updated) => {
+                      // Mirror the new status into the form so submitting
+                      // afterwards does not revert it.
+                      setStatus(updated.status as TaskStatus);
+                      setTiming({
+                        status: updated.status,
+                        hold_reason: updated.hold_reason,
+                        total_active_seconds: updated.total_active_seconds ?? 0,
+                        live_active_seconds: updated.live_active_seconds,
+                        is_clock_running: updated.is_clock_running,
+                        estimated_hours: updated.estimated_hours,
+                        open_subtask_count: updated.open_subtask_count,
+                        completion_count: updated.completion_count,
+                      });
+                      setTimingVersion((v) => v + 1);
+                      // Deliberately NOT calling onUpdate() here - the parent
+                      // closes the modal in that callback, which would slam it
+                      // shut the moment you press Start. The list refreshes
+                      // when the modal closes instead.
+                    }}
+                  />
+                  <div className="flex items-center gap-4 text-xs text-slate-500">
+                    <span>
+                      Worked{" "}
+                      <span className="font-medium text-slate-700 tabular-nums">
+                        {formatDuration(
+                          timing.live_active_seconds ?? timing.total_active_seconds
+                        )}
+                      </span>
+                    </span>
+                    {task.total_held_seconds ? (
+                      <span>
+                        Held{" "}
+                        <span className="font-medium text-slate-700 tabular-nums">
+                          {formatDuration(
+                            task.live_held_seconds ?? task.total_held_seconds
+                          )}
+                        </span>
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <TaskTimeLog taskId={task.id} refreshKey={timingVersion} />
+                </div>
+
+                {task.first_started_at ? (
+                  <p className="mt-1.5 text-[11px] text-slate-400">
+                    First started{" "}
+                    {new Date(task.first_started_at).toLocaleString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                    {task.resume_count
+                      ? ` \u00b7 resumed ${task.resume_count}\u00d7`
+                      : ""}
+                    {" \u00b7 changes apply immediately"}
+                  </p>
+                ) : (
+                  <p className="mt-1.5 text-[11px] text-slate-400">
+                    Not started yet \u00b7 changes apply immediately
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Gates first: they explain why Complete is refused. */}
+            {task && (
+              <TaskRequirements
+                taskId={task.id}
+                onChanged={() => setTimingVersion((v) => v + 1)}
+              />
+            )}
+
+            {/* Attachments - upload applies immediately, like the timer */}
+            {task && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                  Attachments
+                  {attachmentCount > 0 && (
+                    <span className="ml-1 text-slate-400 normal-case font-normal">
+                      ({attachmentCount})
+                    </span>
+                  )}
+                </label>
+                <TaskAttachments
+                  taskId={task.id}
+                  onCountChange={setAttachmentCount}
+                />
+              </div>
+            )}
+
+            {/* Tags */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                Tags
+              </label>
+              <TagSelector selected={tagIds} onChange={setTagIds} />
             </div>
 
             {/* Description */}

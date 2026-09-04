@@ -215,9 +215,40 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Fetch tags for all tasks
-    if (tasks.length > 0) {
-      const taskIds = tasks.map((t) => t.id);
+    // Every row rendered by the client, parents AND the subtasks nested under
+    // them. Subtasks were previously excluded, so their rows had no
+    // open_subtask_count and no live timing - which made their timer buttons
+    // behave differently from their parents' for no visible reason.
+    const allRenderedTasks: any[] = [
+      ...tasks,
+      ...tasks.flatMap((t: any) => t.subtasks || []),
+    ];
+
+    // Fetch live timing in one round trip. The view has no FK metadata for
+    // PostgREST embedding, so it is merged in rather than joined.
+    if (allRenderedTasks.length > 0) {
+      const { data: timings } = await supabase
+        .from("tasks_with_timing")
+        .select(
+          "id, live_active_seconds, live_held_seconds, is_clock_running, lead_time_seconds, cycle_time_seconds, start_count, resume_count, original_lead_time_seconds, is_rework, open_subtask_count"
+        )
+        .in(
+          "id",
+          allRenderedTasks.map((t) => t.id)
+        );
+
+      if (timings) {
+        const timingMap = new Map(timings.map((t) => [t.id, t]));
+        allRenderedTasks.forEach((task) => {
+          const timing = timingMap.get(task.id);
+          if (timing) Object.assign(task, timing);
+        });
+      }
+    }
+
+    // Fetch tags for all rendered rows, subtasks included.
+    if (allRenderedTasks.length > 0) {
+      const taskIds = allRenderedTasks.map((t) => t.id);
       const { data: tagAssignments } = await supabase
         .from("task_tag_assignments")
         .select(
@@ -239,7 +270,7 @@ export async function GET(request: NextRequest) {
           }
         });
 
-        tasks.forEach((task) => {
+        allRenderedTasks.forEach((task) => {
           (task as any).tags = tagMap.get(task.id) || [];
         });
       }
@@ -406,6 +437,12 @@ export async function POST(request: NextRequest) {
           priority: subtask.priority || null,
           status: subtask.status || "todo",
           parent_task_id: task.id,
+          // The modal sends these but they were never mapped in, so every
+          // subtask created here lost its lead/project. A database trigger
+          // now backstops this for all callers, but sending the right value
+          // from the start keeps the intent visible.
+          related_type: subtask.related_type ?? body.related_type ?? null,
+          related_id: subtask.related_id ?? body.related_id ?? null,
           start_date: subtask.start_date || null,
           due_date: subtask.due_date || null,
           estimated_hours: subtask.estimated_hours || null,

@@ -53,11 +53,20 @@ export async function GET(request: NextRequest) {
       .eq("is_latest", true)
       .order("created_at", { ascending: false });
 
-    // Apply filters
-    if (linkedType) {
+    // Apply filters.
+    //
+    // A file uploaded on a task is stored as linked_type='task' plus the
+    // task's own lead/project in parent_linked_*. Asking for a project's
+    // documents must therefore match EITHER link, otherwise site photos
+    // captured through tasks stay invisible on the entity they belong to.
+    if (linkedType && linkedId) {
+      query = query.or(
+        `and(linked_type.eq.${linkedType},linked_id.eq.${linkedId}),` +
+          `and(parent_linked_type.eq.${linkedType},parent_linked_id.eq.${linkedId})`
+      );
+    } else if (linkedType) {
       query = query.eq("linked_type", linkedType);
-    }
-    if (linkedId) {
+    } else if (linkedId) {
       query = query.eq("linked_id", linkedId);
     }
     if (category) {
@@ -113,6 +122,20 @@ export async function GET(request: NextRequest) {
                     ? `${projectData.project_number} - ${projectData.name}` 
                     : projectData.name;
                 }
+              } else if (doc.linked_type === 'task') {
+                // Files uploaded on a task. Without this branch linked_name
+                // stayed null and the Documents page showed a blank Linked To
+                // cell, so a task attachment looked unattached to anything.
+                const { data: taskData } = await supabaseAdmin
+                  .from('tasks')
+                  .select('task_number, title')
+                  .eq('id', doc.linked_id)
+                  .single();
+                if (taskData) {
+                  linked_name = taskData.task_number
+                    ? `${taskData.task_number} - ${taskData.title}`
+                    : taskData.title;
+                }
               }
             } catch (err) {
               console.error("Error fetching linked entity:", err);
@@ -120,10 +143,46 @@ export async function GET(request: NextRequest) {
             }
           }
 
+          // A task document also carries its lead/project in parent_linked_*.
+          // Resolving it lets the row show where the work actually belongs,
+          // not just which task it hung off.
+          let parent_linked_name: string | null = null;
+          if (doc.parent_linked_id && doc.parent_linked_type) {
+            try {
+              if (doc.parent_linked_type === 'lead') {
+                const { data: p } = await supabaseAdmin
+                  .from('leads')
+                  .select('lead_number, client:clients!leads_client_id_fkey(name)')
+                  .eq('id', doc.parent_linked_id)
+                  .single();
+                if (p) {
+                  const clientName = (p.client as any)?.name || 'Unknown';
+                  parent_linked_name = p.lead_number
+                    ? `${p.lead_number} - ${clientName}`
+                    : clientName;
+                }
+              } else if (doc.parent_linked_type === 'project') {
+                const { data: p } = await supabaseAdmin
+                  .from('projects')
+                  .select('project_number, name')
+                  .eq('id', doc.parent_linked_id)
+                  .single();
+                if (p) {
+                  parent_linked_name = p.project_number
+                    ? `${p.project_number} - ${p.name}`
+                    : p.name;
+                }
+              }
+            } catch (err) {
+              console.error("Error fetching parent linked entity:", err);
+            }
+          }
+
           return {
             ...doc,
             signed_url: urlData?.signedUrl || null,
             linked_name,
+            parent_linked_name,
           };
         } catch (err) {
           console.error("Error processing document:", err);

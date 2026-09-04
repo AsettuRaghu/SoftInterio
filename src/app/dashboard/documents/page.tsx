@@ -14,6 +14,7 @@ import {
   DocumentTextIcon,
   TableCellsIcon,
   BuildingOfficeIcon,
+  ClipboardDocumentListIcon,
   UserIcon,
   ChevronUpIcon,
   ChevronDownIcon,
@@ -36,6 +37,7 @@ import { DocumentPreviewModal } from "@/components/documents/DocumentPreviewModa
 // Extended document type to include linked entity info
 interface DocumentWithLinked extends DocumentWithUrl {
   linked_name?: string;
+  parent_linked_name?: string;
 }
 
 // Linked entity for selection
@@ -238,6 +240,7 @@ export default function DocumentsPage() {
       total: documents.length,
       leads: documents.filter((d) => d.linked_type === "lead").length,
       projects: documents.filter((d) => d.linked_type === "project").length,
+      tasks: documents.filter((d) => d.linked_type === "task").length,
     };
   }, [documents]);
 
@@ -449,6 +452,13 @@ export default function DocumentsPage() {
             Project
           </span>
         );
+      case "task":
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-50 text-violet-700 text-xs rounded-full">
+            <ClipboardDocumentListIcon className="w-3 h-3" />
+            Task
+          </span>
+        );
       default:
         return null;
     }
@@ -480,6 +490,9 @@ export default function DocumentsPage() {
               <StatBadge label="Total" value={stats.total} color="slate" />
               <StatBadge label="Leads" value={stats.leads} color="amber" />
               <StatBadge label="Projects" value={stats.projects} color="blue" />
+              {stats.tasks > 0 && (
+                <StatBadge label="Tasks" value={stats.tasks} color="slate" />
+              )}
             </>
           ) : undefined
         }
@@ -683,6 +696,13 @@ export default function DocumentsPage() {
                         {doc.linked_name && (
                           <span className="text-xs text-slate-600 truncate max-w-xs">
                             {doc.linked_name}
+                          </span>
+                        )}
+                        {/* A task file belongs to a lead/project too - that is
+                            the object people scan this column for. */}
+                        {doc.parent_linked_name && (
+                          <span className="text-xs text-slate-400 truncate max-w-xs">
+                            in {doc.parent_linked_name}
                           </span>
                         )}
                       </div>

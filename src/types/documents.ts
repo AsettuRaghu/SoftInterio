@@ -2,9 +2,11 @@
 // Unified document types for all modules
 
 // Linked entity types
+// Must stay in sync with the document_linked_type enum in the database.
 export type DocumentLinkedType =
   | "lead"
   | "project"
+  | "task"
   | "quotation"
   | "invoice"
   | "client"
@@ -75,6 +77,9 @@ export interface Document {
   tenant_id: string;
   linked_type: DocumentLinkedType;
   linked_id: string;
+  /** Secondary link: a file on a task also carries the task's lead/project. */
+  parent_linked_type?: DocumentLinkedType | null;
+  parent_linked_id?: string | null;
   file_name: string;
   original_name: string;
   file_type: string | null;

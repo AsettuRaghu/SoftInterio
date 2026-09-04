@@ -4,6 +4,7 @@ import React from "react";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
 import TaskTableReusable from "@/components/tasks/TaskTableReusable";
+import { ProceduresPanel } from "@/components/procedures";
 import type { Task } from "@/types/tasks";
 
 interface TaskWithUser extends Task {
@@ -52,7 +53,17 @@ export default function TasksTab({
   }
 
   return (
-    <TaskTableReusable
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <ProceduresPanel
+          relatedType="lead"
+          relatedId={leadId}
+          readOnly={leadClosed}
+          onRunChange={onRefresh}
+        />
+      </div>
+
+      <TaskTableReusable
       // Filter by this lead
       relatedType="lead"
       relatedId={leadId}
@@ -80,5 +91,6 @@ export default function TasksTab({
       externalTasks={tasks as any}
       onRefresh={onRefresh}
     />
+    </div>
   );
 }

@@ -27,3 +27,5 @@ export { AssigneeSelector, UserAvatar } from "./AssigneeSelector";
 export { DatePicker } from "./DatePicker";
 
 export { LinkedEntity } from "./LinkedEntity";
+
+export { TagSelector, TagChips } from "./TagSelector";

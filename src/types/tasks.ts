@@ -8,8 +8,21 @@ export type TaskStatus =
   | "todo"
   | "in_progress"
   | "on_hold"
+  | "blocked"
   | "completed"
+  | "skipped"
   | "cancelled";
+
+// Statuses where the work clock is running
+export const ACTIVE_TASK_STATUSES: TaskStatus[] = ["in_progress"];
+// Statuses where the task is parked and accruing held time
+export const PARKED_TASK_STATUSES: TaskStatus[] = ["on_hold", "blocked"];
+// Statuses where the task is finished and no longer accrues anything
+export const TERMINAL_TASK_STATUSES: TaskStatus[] = [
+  "completed",
+  "skipped",
+  "cancelled",
+];
 export type TaskRelatedType = "lead" | "quotation" | "project" | "client";
 export type TaskTemplateCategory =
   | "project"
@@ -45,7 +58,9 @@ export const TaskStatusLabels: Record<TaskStatus, string> = {
   todo: "To Do",
   in_progress: "In Progress",
   on_hold: "On Hold",
+  blocked: "Blocked",
   completed: "Completed",
+  skipped: "Skipped",
   cancelled: "Cancelled",
 };
 
@@ -60,11 +75,19 @@ export const TaskStatusColors: Record<
     text: "text-yellow-700",
     dot: "bg-yellow-500",
   },
+  blocked: {
+    bg: "bg-orange-100",
+    text: "text-orange-700",
+    dot: "bg-orange-500",
+  },
   completed: {
     bg: "bg-green-100",
     text: "text-green-700",
     dot: "bg-green-500",
   },
+  // Settled but not done - deliberately passed over, which is a different
+  // outcome from cancelled and worth seeing as such.
+  skipped: { bg: "bg-slate-100", text: "text-slate-500", dot: "bg-slate-400" },
   cancelled: { bg: "bg-red-100", text: "text-red-700", dot: "bg-red-500" },
 };
 
@@ -174,11 +197,36 @@ export interface Task {
   due_date?: string;
   completed_at?: string;
   estimated_hours?: number;
+  /** Derived from task_work_sessions by the DB. Do not set by hand. */
   actual_hours?: number;
+  // --- lifecycle timing (see task_status_history / task_work_sessions) ---
+  /** Most recent transition into in_progress. Resets on every resume. */
+  started_at?: string;
+  /** First ever start. Never overwritten, so cycle time survives a reopen. */
+  first_started_at?: string;
+  cancelled_at?: string;
+  cancelled_by?: string;
+  /** The ORIGINAL completion. Never overwritten - survives a reopen. */
+  first_completed_at?: string;
+  /** Times completed. > 1 means rework. */
+  completion_count?: number;
+  /** Why the task is currently on_hold or blocked. */
+  hold_reason?: string;
+  /** Settled worked seconds. Excludes any running session. */
+  total_active_seconds: number;
+  /** Accumulated seconds spent on_hold or blocked. */
+  total_held_seconds: number;
   assigned_to?: string;
   related_type?: TaskRelatedType;
   related_id?: string;
-  is_recurring: boolean;
+  /**
+   * NOT IMPLEMENTED. These three columns exist in the database but nothing
+   * reads or writes them - there is no recurrence engine, no scheduler and no
+   * UI. They are typed as optional so no code can assume a recurring task will
+   * ever actually recur. Either build the feature or drop the columns; do not
+   * treat these as working.
+   */
+  is_recurring?: boolean;
   recurrence_rule?: string;
   recurrence_end_date?: string;
   created_by?: string;
@@ -213,6 +261,137 @@ export interface TaskWithDetails extends Task {
   subtasks?: TaskWithDetails[];
   // Related entity name (fetched separately)
   related_name?: string;
+  // --- live timing, from the tasks_with_timing view ---
+  /** total_active_seconds plus any session running right now. */
+  live_active_seconds?: number;
+  /** total_held_seconds plus the current hold, if parked. */
+  live_held_seconds?: number;
+  /** True while at least one work session is open. */
+  is_clock_running?: boolean;
+  /** created_at -> completed_at */
+  lead_time_seconds?: number;
+  /** first_started_at -> completed_at */
+  cycle_time_seconds?: number;
+  /** Every entry into in_progress. 0 = never started. */
+  start_count?: number;
+  /** Entries into in_progress after the first. 0 = started once, never paused. */
+  resume_count?: number;
+  /** created_at -> first_completed_at. Stable across reopens, unlike lead_time_seconds. */
+  original_lead_time_seconds?: number;
+  /** Completed more than once. */
+  is_rework?: boolean;
+  /** Subtasks not yet completed or cancelled. These block completion. */
+  open_subtask_count?: number;
+}
+
+// ============================================================================
+// Task Timing
+// ============================================================================
+
+/**
+ * One worked interval. Effort, not elapsed time - several people can have
+ * concurrent open sessions against the same task.
+ */
+export interface TaskWorkSession {
+  id: string;
+  task_id: string;
+  tenant_id: string;
+  user_id?: string;
+  started_at: string;
+  ended_at?: string;
+  /** 0 while the session is still open. */
+  duration_seconds: number;
+  source: "status" | "manual" | "timer";
+  note?: string;
+  created_at: string;
+}
+
+/**
+ * One status change. Elapsed time, not effort.
+ * duration_seconds is how long the task sat in from_status before this row.
+ */
+export interface TaskStatusHistoryEntry {
+  id: string;
+  task_id: string;
+  tenant_id: string;
+  from_status?: TaskStatus;
+  to_status: TaskStatus;
+  duration_seconds: number;
+  reason?: string;
+  changed_by?: string;
+  changed_at: string;
+}
+
+/** Result of the task_transition() RPC. */
+export interface TaskTransitionResult {
+  success: boolean;
+  error?: string;
+  /** Titles of subtasks blocking completion, when the gate refuses. */
+  open_subtasks?: string[];
+  /** True when reopening this subtask also reopened its parent. */
+  parent_reopened?: boolean;
+  status?: TaskStatus;
+  from?: TaskStatus;
+  to?: TaskStatus;
+  started_at?: string | null;
+  first_started_at?: string | null;
+  completed_at?: string | null;
+  total_active_seconds?: number;
+  total_held_seconds?: number;
+}
+
+/**
+ * Allowed status transitions. Mirrors is_valid_task_transition() in the DB -
+ * kept here so the UI can grey out impossible actions before a round trip.
+ * The DB remains the authority.
+ */
+export const ValidTaskTransitions: Record<TaskStatus, TaskStatus[]> = {
+  // todo -> completed is allowed: ticking off a task nobody formally started
+  // is normal, and it simply records zero worked time.
+  todo: ["in_progress", "completed", "cancelled", "skipped"],
+  in_progress: ["on_hold", "blocked", "completed", "cancelled", "skipped"],
+  on_hold: ["in_progress", "blocked", "completed", "cancelled", "skipped"],
+  blocked: ["in_progress", "on_hold", "completed", "cancelled", "skipped"],
+  completed: ["in_progress", "todo"],
+  skipped: ["todo", "in_progress"],
+  cancelled: ["todo"],
+};
+
+/** Pausing or blocking requires a reason - the DB rejects it otherwise. */
+export const TRANSITIONS_REQUIRING_REASON: TaskStatus[] = ["on_hold", "blocked"];
+
+export function canTransitionTask(from: TaskStatus, to: TaskStatus): boolean {
+  if (from === to) return true;
+  return ValidTaskTransitions[from]?.includes(to) ?? false;
+}
+
+/**
+ * Past its due date and still open. Settled work is never overdue - a task
+ * completed late is finished, not outstanding.
+ */
+export function isOverdue(task: {
+  due_date?: string | null;
+  status: TaskStatus;
+}): boolean {
+  if (!task.due_date) return false;
+  if (TERMINAL_TASK_STATUSES.includes(task.status)) return false;
+  const due = new Date(task.due_date);
+  due.setHours(23, 59, 59, 999); // due "on" a day means end of that day
+  return due.getTime() < Date.now();
+}
+
+/** Compact duration for table cells and badges: "3h 42m", "12m", "45s". */
+export function formatDuration(seconds?: number | null): string {
+  if (!seconds || seconds < 0) return "—";
+  if (seconds < 60) return `${Math.floor(seconds)}s`;
+  const totalMinutes = Math.floor(seconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes}m`;
+  if (hours < 24) return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return remainingHours === 0 ? `${days}d` : `${days}d ${remainingHours}h`;
 }
 
 // ============================================================================
@@ -285,6 +464,13 @@ export interface CreateSubtaskInput {
   due_date?: string;
   estimated_hours?: number;
   assigned_to?: string;
+  /**
+   * Usually omitted - a subtask inherits its parent's linked entity via a
+   * database trigger. Only set these to deliberately point a subtask at a
+   * different lead/project than its parent.
+   */
+  related_type?: TaskRelatedType | null;
+  related_id?: string | null;
 }
 
 export interface CreateTaskInput {
@@ -308,13 +494,16 @@ export interface UpdateTaskInput {
   description?: string;
   priority?: TaskPriority;
   status?: TaskStatus;
+  /** Required when status is on_hold or blocked. */
+  hold_reason?: string | null;
   start_date?: string;
   due_date?: string;
   estimated_hours?: number;
-  actual_hours?: number;
   assigned_to?: string;
   related_type?: string | null;
   related_id?: string | null;
+  /** Full replacement of the tag set. [] clears all tags. */
+  tag_ids?: string[];
 }
 
 export interface CreateTaskTemplateInput {

@@ -51,6 +51,7 @@ export {
 } from "./SettingsTable";
 
 export { DataTable } from "./DataTable";
+export { Toast } from "./Toast";
 
 // Filter and Bulk Action Components
 export { FilterBar, QuickFilterPills } from "./FilterBar";

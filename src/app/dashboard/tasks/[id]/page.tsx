@@ -10,12 +10,15 @@ import {
   TaskStatusLabels,
   TaskStatusColors,
   TaskRelatedTypeLabels,
+  formatDuration,
 } from "@/types/tasks";
 import {
   CreateTaskModal,
   InlineDropdown,
   InlineAssignee,
   InlineDatePicker,
+  TaskStatusControls,
+  TagSelector,
   type TeamMember,
 } from "@/components/tasks";
 
@@ -31,6 +34,17 @@ interface Task {
   due_date?: string;
   estimated_hours?: number;
   actual_hours?: number;
+  // Lifecycle timing
+  started_at?: string;
+  first_started_at?: string;
+  hold_reason?: string;
+  total_active_seconds: number;
+  total_held_seconds: number;
+  live_active_seconds?: number;
+  live_held_seconds?: number;
+  is_clock_running?: boolean;
+  lead_time_seconds?: number;
+  cycle_time_seconds?: number;
   assigned_to?: string;
   assigned_to_name?: string;
   assigned_to_email?: string;
@@ -225,13 +239,14 @@ export default function TaskDetailPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editEstimatedHours, setEditEstimatedHours] = useState("");
-  const [editActualHours, setEditActualHours] = useState("");
 
   const statusOptions: TaskStatus[] = [
     "todo",
     "in_progress",
     "on_hold",
+    "blocked",
     "completed",
+    "skipped",
     "cancelled",
   ];
   const priorityOptions: TaskPriority[] = ["critical", "high", "medium", "low"];
@@ -254,7 +269,6 @@ export default function TaskDetailPage() {
       setEditTitle(data.task.title);
       setEditDescription(data.task.description || "");
       setEditEstimatedHours(data.task.estimated_hours?.toString() || "");
-      setEditActualHours(data.task.actual_hours?.toString() || "");
     } catch (err) {
       console.error("Error fetching task:", err);
       setError(err instanceof Error ? err.message : "Failed to load task");
@@ -474,7 +488,13 @@ export default function TaskDetailPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <TaskStatusControls
+            task={task}
+            onTransitioned={(updated) =>
+              setTask((prev) => (prev ? { ...prev, ...updated } : null))
+            }
+          />
           <button
             onClick={deleteTask}
             className="px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -705,39 +725,80 @@ export default function TaskDetailPage() {
               )}
             </div>
 
-            {/* Actual Hours */}
+            {/* Time worked - derived from work sessions, not editable */}
             <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-500">Actual Hours</span>
-              {editingField === "actual_hours" ? (
-                <input
-                  type="number"
-                  value={editActualHours}
-                  onChange={(e) => setEditActualHours(e.target.value)}
-                  onBlur={() => {
-                    const newValue = editActualHours
-                      ? parseFloat(editActualHours)
-                      : null;
-                    if (newValue !== task.actual_hours) {
-                      updateTask("actual_hours", newValue);
-                    } else {
-                      setEditingField(null);
-                    }
-                  }}
-                  min="0"
-                  step="0.5"
-                  autoFocus
-                  className="w-20 px-2 py-1 text-sm text-right border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              ) : (
-                <button
-                  onClick={() => setEditingField("actual_hours")}
-                  className="text-sm text-slate-700 hover:text-blue-600 flex items-center gap-1"
-                >
-                  <ClockIcon className="w-4 h-4 text-slate-400" />
-                  {task.actual_hours ? `${task.actual_hours}h` : "Not set"}
-                </button>
-              )}
+              <span className="text-sm text-slate-500">Time Worked</span>
+              <span
+                className="text-sm text-slate-700 flex items-center gap-1 tabular-nums"
+                title="Summed from work sessions. Recorded automatically when the task is started and paused."
+              >
+                <ClockIcon className="w-4 h-4 text-slate-400" />
+                {formatDuration(
+                  task.live_active_seconds ?? task.total_active_seconds
+                )}
+              </span>
             </div>
+          </div>
+
+          {/* Timing breakdown */}
+          <div className="bg-white rounded-lg border border-slate-200 p-4 space-y-3">
+            <h3 className="text-sm font-medium text-slate-700">Timing</h3>
+
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-500">Held / Blocked</span>
+              <span className="text-sm text-slate-700 tabular-nums">
+                {formatDuration(
+                  task.live_held_seconds ?? task.total_held_seconds
+                )}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span
+                className="text-sm text-slate-500"
+                title="Created until completed - includes all waiting time"
+              >
+                Lead Time
+              </span>
+              <span className="text-sm text-slate-700 tabular-nums">
+                {formatDuration(task.lead_time_seconds)}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span
+                className="text-sm text-slate-500"
+                title="First started until completed - excludes time before anyone picked it up"
+              >
+                Cycle Time
+              </span>
+              <span className="text-sm text-slate-700 tabular-nums">
+                {formatDuration(task.cycle_time_seconds)}
+              </span>
+            </div>
+
+            {task.first_started_at && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500">First Started</span>
+                <span className="text-sm text-slate-700">
+                  {new Date(task.first_started_at).toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Tags */}
+          <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <h3 className="text-sm font-medium text-slate-700 mb-3">Tags</h3>
+            <TagSelector
+              selected={(task.tags || []).map((t) => t.id)}
+              disabled={isSaving}
+              onChange={(tagIds) => updateTask("tag_ids", tagIds)}
+            />
           </div>
 
           {/* Linked Entity */}

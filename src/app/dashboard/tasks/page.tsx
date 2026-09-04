@@ -7,8 +7,15 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import { CreateTaskModal, EditTaskModal } from "@/components/tasks";
+import {
+  CreateTaskModal,
+  EditTaskModal,
+  TagChips,
+  TaskStatusControls,
+} from "@/components/tasks";
+import { isOverdue } from "@/types/tasks";
 import { SearchBox } from "@/components/ui/SearchBox";
+import { Toast } from "@/components/ui/Toast";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import {
   StatusBadge,
@@ -55,6 +62,15 @@ interface Task {
   completed_subtask_count: number;
   created_at: string;
   subtasks?: Task[];
+  tags?: Array<{ id: string; name: string; color: string }>;
+  // Lifecycle timing (see task_work_sessions / task_status_history)
+  estimated_hours?: number;
+  hold_reason?: string;
+  total_active_seconds?: number;
+  live_active_seconds?: number;
+  is_clock_running?: boolean;
+  open_subtask_count?: number;
+  completion_count?: number;
 }
 
 interface TeamMember {
@@ -64,7 +80,12 @@ interface TeamMember {
   avatar_url?: string;
 }
 
-type TabType = "my-tasks" | "assigned-by-me" | "all-tasks";
+// "unassigned" exists because procedure steps often land with no owner: a
+// step's assign_to_role resolves to nobody when two people hold the role, and
+// the system declines to guess. Without this tab that work is invisible -
+// "My Tasks" filters on assigned_to, so a whole 25-step run would be seen by
+// no one.
+type TabType = "my-tasks" | "assigned-by-me" | "unassigned" | "all-tasks";
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -150,6 +171,8 @@ export default function TasksPage() {
   });
   const [notesText, setNotesText] = useState("");
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+  // Feedback for inline edits, which have no form to report errors into.
+  const [actionError, setActionError] = useState<string | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const notesInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -158,11 +181,13 @@ export default function TasksPage() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   // Filters
+  // Default view is "work still in flight". "review" was in this list but is
+  // not a task_status value, which made the default query fail outright.
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([
     "todo",
     "in_progress",
     "on_hold",
-    "review",
+    "blocked",
   ]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSource, setSelectedSource] = useState<string>("all"); // all, lead, project, unlinked
@@ -258,11 +283,16 @@ export default function TasksPage() {
   }, [inlineSubtaskFor]);
 
   // Filter tasks into categories
-  const { myTasks, assignedByMe, allTasks } = useMemo(() => {
+  const { myTasks, assignedByMe, unassignedTasks, allTasks } = useMemo(() => {
     const currentUserId = currentUser?.id;
 
     if (!currentUserId) {
-      return { myTasks: tasks, assignedByMe: [], allTasks: tasks };
+      return {
+        myTasks: tasks,
+        assignedByMe: [],
+        unassignedTasks: [],
+        allTasks: tasks,
+      };
     }
 
     // My Tasks: Tasks assigned TO me (from anyone)
@@ -298,7 +328,22 @@ export default function TasksPage() {
       return createdByMe || assignedToMe;
     });
 
-    return { myTasks: my, assignedByMe: delegated, allTasks: all };
+    // Deliberately computed from the FULL fetched set, not from `all` above:
+    // "All Tasks" is really "created by me or assigned to me", so unassigned
+    // work would otherwise be visible only to whoever started the procedure.
+    // A queue nobody else can see is not a queue.
+    const unassigned = tasks.filter(
+      (task) =>
+        !task.assigned_to &&
+        !["completed", "cancelled", "skipped"].includes(task.status)
+    );
+
+    return {
+      myTasks: my,
+      assignedByMe: delegated,
+      unassignedTasks: unassigned,
+      allTasks: all,
+    };
   }, [tasks, currentUser?.id]);
 
   // Apply filters and sorting
@@ -446,6 +491,10 @@ export default function TasksPage() {
     () => getFilteredTasks(assignedByMe),
     [getFilteredTasks, assignedByMe]
   );
+  const filteredUnassigned = useMemo(
+    () => getFilteredTasks(unassignedTasks),
+    [getFilteredTasks, unassignedTasks]
+  );
   const filteredAllTasks = useMemo(
     () => getFilteredTasks(allTasks),
     [getFilteredTasks, allTasks]
@@ -457,12 +506,39 @@ export default function TasksPage() {
         return filteredMyTasks;
       case "assigned-by-me":
         return filteredAssignedByMe;
+      case "unassigned":
+        return filteredUnassigned;
       case "all-tasks":
         return filteredAllTasks;
       default:
         return filteredMyTasks;
     }
-  }, [activeTab, filteredMyTasks, filteredAssignedByMe, filteredAllTasks]);
+  }, [
+    activeTab,
+    filteredMyTasks,
+    filteredAssignedByMe,
+    filteredUnassigned,
+    filteredAllTasks,
+  ]);
+
+  // How many tasks the current tab holds BEFORE filtering. Without this the
+  // page silently shows fewer rows than exist and looks like it is losing
+  // tasks - completed ones in particular, since the default status filter
+  // excludes them while the Lead/Project task tabs do not filter at all.
+  const unfilteredForTab = useMemo(() => {
+    switch (activeTab) {
+      case "assigned-by-me":
+        return assignedByMe.length;
+      case "unassigned":
+        return unassignedTasks.length;
+      case "all-tasks":
+        return allTasks.length;
+      default:
+        return myTasks.length;
+    }
+  }, [activeTab, myTasks, assignedByMe, unassignedTasks, allTasks]);
+
+  const hiddenByFilters = Math.max(0, unfilteredForTab - activeTasks.length);
 
   // Pagination
   const totalPages = Math.ceil(activeTasks.length / pageSize);
@@ -676,10 +752,18 @@ export default function TasksPage() {
         setEditingTaskId(null);
         setEditingField(null);
       } else {
-        console.error("Failed to update task");
+        // The server refuses some changes on purpose - completing a parent
+        // with open subtasks, or an invalid status jump. Its message explains
+        // exactly why, so show it rather than dropping it into the console
+        // where the change just appears to do nothing.
+        const data = await response.json().catch(() => ({}));
+        setActionError(data.error || "Could not update the task");
+        setEditingTaskId(null);
+        setEditingField(null);
       }
     } catch (err) {
       console.error("Error updating task:", err);
+      setActionError("Could not reach the server");
     }
   };
 
@@ -845,6 +929,7 @@ export default function TasksPage() {
                 <span className="text-xs font-medium text-slate-800 hover:text-blue-600 transition-colors">
                   {task.title}
                 </span>
+                <TagChips tags={task.tags} max={3} size="xs" />
                 {hasSubtasks && !isSubtask && (
                   <span className="flex items-center gap-0.5 text-[9px] text-slate-400 bg-slate-100 px-1 py-0.5 rounded shrink-0">
                     <ListBulletIcon className="w-2.5 h-2.5" />
@@ -881,6 +966,50 @@ export default function TasksPage() {
               </button>
             )}
           </div>
+        </td>
+
+        {/* Timer - start/pause + complete, with live elapsed time */}
+        <td className="px-2 py-1.5 whitespace-nowrap">
+          <TaskStatusControls
+            task={{ ...task, total_active_seconds: task.total_active_seconds ?? 0 }}
+            variant="compact"
+            onTransitioned={(updated, result) => {
+              // A subtask transition changes its PARENT's gating state too:
+              // completing the last open child unblocks the parent's tick, and
+              // reopening a child pushes a completed parent back to
+              // in_progress (the DB does this - see task_transition). Patching
+              // only the row that moved left the parent stale, so its Complete
+              // button stayed disabled after its subtasks were finished.
+              if (isSubtask && parentTaskId) {
+                setTasks((prev) =>
+                  prev.map((t) => {
+                    if (t.id !== parentTaskId) return t;
+                    const subtasks = (t.subtasks || []).map((st) =>
+                      st.id === task.id ? { ...st, ...updated } : st
+                    );
+                    const settled = (st: { status: string }) =>
+                      st.status === "completed" || st.status === "cancelled";
+                    return {
+                      ...t,
+                      subtasks,
+                      open_subtask_count: subtasks.filter((st) => !settled(st))
+                        .length,
+                      completed_subtask_count: subtasks.filter(
+                        (st) => st.status === "completed"
+                      ).length,
+                      status: result?.parent_reopened
+                        ? ("in_progress" as typeof t.status)
+                        : t.status,
+                    };
+                  })
+                );
+              } else {
+                setTasks((prev) =>
+                  prev.map((t) => (t.id === task.id ? { ...t, ...updated } : t))
+                );
+              }
+            }}
+          />
         </td>
 
         {/* Notes */}
@@ -962,8 +1091,14 @@ export default function TasksPage() {
           />
         </td>
 
-        {/* Due Date */}
-        <td className="px-2 py-1.5 whitespace-nowrap">
+        {/* Due Date - ringed red when overdue, so a late task is visible in
+            the list rather than only on opening it. */}
+        <td
+          className={`px-2 py-1.5 whitespace-nowrap ${
+            isOverdue(task) ? "bg-red-50/60" : ""
+          }`}
+          title={isOverdue(task) ? "Overdue" : undefined}
+        >
           <DatePicker
             value={task.due_date || ""}
             onChange={(val) =>
@@ -1198,6 +1333,26 @@ export default function TasksPage() {
                 </span>
               </button>
               <button
+                onClick={() => setActiveTab("unassigned")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  activeTab === "unassigned"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+                }`}
+                title="Open work with no owner - procedure steps land here when a role maps to more than one person"
+              >
+                Unassigned
+                <span
+                  className={`ml-1 text-[10px] ${
+                    activeTab === "unassigned"
+                      ? "text-blue-200"
+                      : "text-slate-400"
+                  }`}
+                >
+                  {filteredUnassigned.length}
+                </span>
+              </button>
+              <button
                 onClick={() => setActiveTab("all-tasks")}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                   activeTab === "all-tasks"
@@ -1325,6 +1480,31 @@ export default function TasksPage() {
             </div>
           ) : (
             <div className="flex-1 overflow-auto min-h-0">
+              {hiddenByFilters > 0 && (
+                <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 flex items-center justify-between gap-3 text-xs">
+                  <span className="text-amber-800">
+                    {hiddenByFilters} task{hiddenByFilters === 1 ? "" : "s"} hidden
+                    by the current filters
+                    {selectedStatuses.length > 0 &&
+                      !selectedStatuses.includes("completed") &&
+                      " (completed tasks are excluded by default)"}
+                    .
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedStatuses([]);
+                      setSelectedSource("all");
+                      setSearchQuery("");
+                      setCurrentPage(1);
+                    }}
+                    className="shrink-0 font-medium text-amber-800 underline hover:text-amber-900"
+                  >
+                    Show all
+                  </button>
+                </div>
+              )}
+
               <table className="w-full table-auto">
                 <thead className="sticky top-0 bg-slate-50 z-10">
                   <tr className="border-b border-slate-200">
@@ -1336,6 +1516,9 @@ export default function TasksPage() {
                         Task
                         <SortIndicator field="title" />
                       </span>
+                    </th>
+                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                      Timer
                     </th>
                     <th className="px-2 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                       Notes
@@ -1406,7 +1589,7 @@ export default function TasksPage() {
                           key={`inline-${task.id}`}
                           className="border-b border-slate-100 bg-blue-50/30"
                         >
-                          <td className="px-2 py-1.5 pl-8" colSpan={8}>
+                          <td className="px-2 py-1.5 pl-8" colSpan={9}>
                             <div className="flex items-center gap-1.5">
                               <div className="w-4 h-4 flex items-center justify-center text-blue-400">
                                 <PlusIcon className="w-3 h-3" />
@@ -1582,10 +1765,18 @@ export default function TasksPage() {
         defaultLinkedEntity={defaultLinkedEntity}
       />
 
+      <Toast message={actionError} onDismiss={() => setActionError(null)} />
+
       <EditTaskModal
         task={editingTask}
         isOpen={!!editingTask}
-        onClose={() => setEditingTask(null)}
+        onClose={() => {
+          // Refresh on close too: the modal's timer controls apply immediately
+          // without going through onUpdate, so the row would otherwise show
+          // stale status and elapsed time after a Cancel.
+          setEditingTask(null);
+          fetchTasks();
+        }}
         onUpdate={() => {
           fetchTasks();
           setEditingTask(null);

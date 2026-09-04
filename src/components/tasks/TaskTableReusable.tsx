@@ -17,9 +17,13 @@ import {
   TaskStatus,
   TaskPriority,
   StatusFilterDropdown,
+  TagChips,
 } from "./ui";
+import { isOverdue } from "@/types/tasks";
 import { SearchBox } from "@/components/ui/SearchBox";
+import { Toast } from "@/components/ui/Toast";
 import { CreateTaskModal } from "./CreateTaskModal";
+import { TaskStatusControls } from "./TaskStatusControls";
 import {
   PlusIcon,
   ChevronDownIcon,
@@ -52,6 +56,15 @@ interface Task {
   completed_subtask_count: number;
   created_at: string;
   subtasks?: Task[];
+  tags?: Array<{ id: string; name: string; color: string }>;
+  // Lifecycle timing (see task_work_sessions / task_status_history)
+  estimated_hours?: number;
+  hold_reason?: string;
+  total_active_seconds?: number;
+  live_active_seconds?: number;
+  is_clock_running?: boolean;
+  open_subtask_count?: number;
+  completion_count?: number;
 }
 
 interface TeamMember {
@@ -151,6 +164,8 @@ export default function TaskTable({
 
   // Create task modal state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  // Feedback for inline edits, which have no form to report errors into.
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Refs
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -178,7 +193,8 @@ export default function TaskTable({
             const cached = sessionStorage.getItem(cacheKey);
             if (cached) {
               const cachedData = JSON.parse(cached);
-              setTasks(cachedData);
+              // Older builds cached the { tasks, pagination } envelope.
+              setTasks(Array.isArray(cachedData) ? cachedData : cachedData.tasks || []);
               setIsLoading(false);
               return;
             }
@@ -200,12 +216,16 @@ export default function TaskTable({
         const response = await fetch(`/api/tasks?${params.toString()}`);
         if (!response.ok) throw new Error("Failed to fetch tasks");
 
+        // GET /api/tasks responds with { tasks, pagination }, not a bare
+        // array. This used to store the whole envelope in state, so any
+        // caller that did not pass externalTasks crashed on tasks.forEach.
         const data = await response.json();
-        setTasks(data);
+        const taskList: Task[] = Array.isArray(data) ? data : data.tasks || [];
+        setTasks(taskList);
 
         // Cache the data
         try {
-          sessionStorage.setItem(cacheKey, JSON.stringify(data));
+          sessionStorage.setItem(cacheKey, JSON.stringify(taskList));
           lastFetchTimeRef.current = now;
         } catch (e) {
           // Ignore cache storage errors (e.g., quota exceeded)
@@ -253,7 +273,7 @@ export default function TaskTable({
         const cached = sessionStorage.getItem(cacheKey);
         if (cached) {
           const cachedData = JSON.parse(cached);
-          setTasks(cachedData);
+          setTasks(Array.isArray(cachedData) ? cachedData : cachedData.tasks || []);
           setIsLoading(false);
 
           // Fetch fresh data in background if cache is old
@@ -796,9 +816,13 @@ export default function TaskTable({
       });
 
       if (!response.ok) {
-        // If server update fails, revert the optimistic update
-        console.error("Failed to update task on server");
-        handleRefresh(); // Fetch fresh data to ensure consistency
+        // Some refusals are deliberate (completing a parent with open
+        // subtasks, invalid status jumps). Surface the server's reason -
+        // otherwise the optimistic update silently snaps back and the user
+        // has no idea why.
+        const data = await response.json().catch(() => ({}));
+        setActionError(data.error || "Could not update the task");
+        handleRefresh(); // Revert the optimistic update
       } else {
         // Invalidate cache on successful update
         invalidateCache();
@@ -982,6 +1006,9 @@ export default function TaskTable({
                     {task.completed_subtask_count}/{task.subtask_count}
                   </span>
                 )}
+                {/* Inline rather than a 9th column - this table is already
+                    dense and tags are a scan aid, not a sortable field. */}
+                <TagChips tags={task.tags} max={3} size="xs" />
               </button>
             )}
 
@@ -1011,6 +1038,52 @@ export default function TaskTable({
               </button>
             )}
           </div>
+        </td>
+
+        {/* Timer - start/pause + complete, with live elapsed time */}
+        <td className="px-2 py-1.5 whitespace-nowrap">
+          <TaskStatusControls
+            task={{ ...task, total_active_seconds: task.total_active_seconds ?? 0 }}
+            variant="compact"
+            disabled={!isEditable}
+            onTransitioned={(updated, result) => {
+              // A subtask transition changes its PARENT's gating state too:
+              // completing the last open child unblocks the parent's tick, and
+              // reopening a child pushes a completed parent back to
+              // in_progress (the DB does this - see task_transition). Patching
+              // only the row that moved left the parent stale, so its Complete
+              // button stayed disabled after its subtasks were finished.
+              if (isSubtask && parentTaskId) {
+                setTasks((prev) =>
+                  prev.map((t) => {
+                    if (t.id !== parentTaskId) return t;
+                    const subtasks = (t.subtasks || []).map((st) =>
+                      st.id === task.id ? { ...st, ...updated } : st
+                    );
+                    const settled = (st: { status: string }) =>
+                      st.status === "completed" || st.status === "cancelled";
+                    return {
+                      ...t,
+                      subtasks,
+                      open_subtask_count: subtasks.filter((st) => !settled(st))
+                        .length,
+                      completed_subtask_count: subtasks.filter(
+                        (st) => st.status === "completed"
+                      ).length,
+                      status: result?.parent_reopened
+                        ? ("in_progress" as typeof t.status)
+                        : t.status,
+                    };
+                  })
+                );
+              } else {
+                setTasks((prev) =>
+                  prev.map((t) => (t.id === task.id ? { ...t, ...updated } : t))
+                );
+              }
+              invalidateCache();
+            }}
+          />
         </td>
 
         {/* Notes */}
@@ -1121,8 +1194,13 @@ export default function TaskTable({
           />
         </td>
 
-        {/* Due Date */}
-        <td className="px-2 py-1.5 whitespace-nowrap">
+        {/* Due Date - overdue is tinted so it reads from the row. */}
+        <td
+          className={`px-2 py-1.5 whitespace-nowrap ${
+            isOverdue(task) ? "bg-red-50/60" : ""
+          }`}
+          title={isOverdue(task) ? "Overdue" : undefined}
+        >
           <DatePicker
             value={task.due_date || ""}
             onChange={(val) => {
@@ -1282,6 +1360,7 @@ export default function TaskTable({
 
   return (
     <div className={compact ? "" : "h-full bg-slate-50/50"}>
+      <Toast message={actionError} onDismiss={() => setActionError(null)} />
       <div className={compact ? "" : "h-full flex flex-col px-4 py-4"}>
         <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-0">
           {/* Header */}
@@ -1491,6 +1570,9 @@ export default function TaskTable({
                         <SortIndicator field="title" />
                       </div>
                     </th>
+                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider">
+                      Timer
+                    </th>
                     <th
                       onClick={() => handleSort("notes")}
                       className="px-2 py-2 text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors group"
@@ -1542,7 +1624,7 @@ export default function TaskTable({
                       {/* Inline Subtask Input */}
                       {inlineSubtaskFor === task.id && (
                         <tr className="border-b border-slate-100 bg-blue-50/30">
-                          <td className="px-2 py-1.5 pl-8" colSpan={8}>
+                          <td className="px-2 py-1.5 pl-8" colSpan={9}>
                             <div className="flex items-center gap-1.5">
                               <div className="w-4 h-4 flex items-center justify-center text-blue-400">
                                 <PlusIcon className="w-3 h-3" />

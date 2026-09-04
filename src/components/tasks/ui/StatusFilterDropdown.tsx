@@ -3,13 +3,9 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 
-type TaskStatus =
-  | "todo"
-  | "in_progress"
-  | "review"
-  | "completed"
-  | "on_hold"
-  | "cancelled";
+// Imported, not re-declared - a local copy already drifted once ("review",
+// which is not a real status and made the tasks query fail outright).
+import type { TaskStatus } from "@/types/tasks";
 
 interface StatusConfig {
   label: string;
@@ -31,11 +27,11 @@ const statusConfig: Record<TaskStatus, StatusConfig> = {
     bgColor: "bg-blue-50",
     borderColor: "border-blue-200",
   },
-  review: {
-    label: "Review",
-    color: "text-purple-600",
-    bgColor: "bg-purple-50",
-    borderColor: "border-purple-200",
+  blocked: {
+    label: "Blocked",
+    color: "text-orange-600",
+    bgColor: "bg-orange-50",
+    borderColor: "border-orange-200",
   },
   completed: {
     label: "Completed",
@@ -49,6 +45,12 @@ const statusConfig: Record<TaskStatus, StatusConfig> = {
     bgColor: "bg-amber-50",
     borderColor: "border-amber-200",
   },
+  skipped: {
+    label: "Skipped",
+    color: "text-slate-500",
+    bgColor: "bg-slate-50",
+    borderColor: "border-slate-200",
+  },
   cancelled: {
     label: "Cancelled",
     color: "text-red-600",
@@ -60,9 +62,10 @@ const statusConfig: Record<TaskStatus, StatusConfig> = {
 const allStatuses: TaskStatus[] = [
   "todo",
   "in_progress",
-  "review",
-  "completed",
   "on_hold",
+  "blocked",
+  "completed",
+  "skipped",
   "cancelled",
 ];
 
