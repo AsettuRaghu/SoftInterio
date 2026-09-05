@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Modal, ModalBody, ModalFooter } from "@/components/ui/Modal";
 import {
   FormInput,
@@ -38,6 +39,7 @@ export function EditVendorModal({
   onClose,
   onSubmit,
 }: EditVendorModalProps) {
+  const { confirm, confirmDialog } = useConfirm();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("basic");
@@ -236,7 +238,15 @@ export function EditVendorModal({
 
   // Remove brand from vendor
   const handleRemoveBrand = async (vendorBrandId: string) => {
-    if (!confirm("Remove this brand from the vendor?")) return;
+    if (
+      !(await confirm({
+        title: "Remove this brand?",
+        message: "The brand stays in your catalogue; only the link to this vendor is removed.",
+        confirmLabel: "Remove",
+      }))
+    ) {
+      return;
+    }
 
     try {
       const response = await fetch(
@@ -812,6 +822,7 @@ export function EditVendorModal({
           </button>
         </ModalFooter>
       </form>
+      {confirmDialog}
     </Modal>
   );
 }

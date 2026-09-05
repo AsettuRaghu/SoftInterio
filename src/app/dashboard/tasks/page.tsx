@@ -14,6 +14,14 @@ import {
   TaskStatusControls,
 } from "@/components/tasks";
 import { isOverdue } from "@/types/tasks";
+
+/** Whole days between a due date and today. Used only for overdue tasks. */
+function daysLate(dueDate?: string | null): number {
+  if (!dueDate) return 0;
+  const due = new Date(dueDate);
+  due.setHours(23, 59, 59, 999);
+  return Math.max(1, Math.ceil((Date.now() - due.getTime()) / 86400000));
+}
 import { SearchBox } from "@/components/ui/SearchBox";
 import { Toast } from "@/components/ui/Toast";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -1091,28 +1099,42 @@ export default function TasksPage() {
           />
         </td>
 
-        {/* Due Date - ringed red when overdue, so a late task is visible in
-            the list rather than only on opening it. */}
+        {/* Due Date. The cell tint alone was easy to miss, so an overdue task
+            also carries an explicit badge saying how late it is. */}
         <td
           className={`px-2 py-1.5 whitespace-nowrap ${
             isOverdue(task) ? "bg-red-50/60" : ""
           }`}
-          title={isOverdue(task) ? "Overdue" : undefined}
         >
-          <DatePicker
-            value={task.due_date || ""}
-            onChange={(val) =>
-              updateTaskInline(
-                task.id,
-                "due_date",
-                val || null,
-                isSubtask,
-                parentTaskId
-              )
-            }
-            placeholder="Due"
-            minDate={task.start_date}
-          />
+          <div className="flex items-center gap-1.5">
+            <DatePicker
+              value={task.due_date || ""}
+              onChange={(val) =>
+                updateTaskInline(
+                  task.id,
+                  "due_date",
+                  val || null,
+                  isSubtask,
+                  parentTaskId
+                )
+              }
+              placeholder="Due"
+              minDate={task.start_date}
+              // Without this the picker judges on the date alone, and a task
+              // completed after its due date still showed red.
+              overdue={isOverdue(task)}
+            />
+            {isOverdue(task) && (
+              <span
+                className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700"
+                title={`Overdue by ${daysLate(task.due_date)} day${
+                  daysLate(task.due_date) === 1 ? "" : "s"
+                }`}
+              >
+                {daysLate(task.due_date)}d late
+              </span>
+            )}
+          </div>
         </td>
 
         {/* Linked */}

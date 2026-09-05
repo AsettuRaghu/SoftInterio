@@ -7,6 +7,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { PageLayout, PageHeader } from "@/components/ui/PageLayout";
 import { Toast } from "@/components/ui/Toast";
 import {
@@ -16,6 +17,7 @@ import { TaskRelatedTypeLabels } from "@/types/tasks";
 import type { ProcedureDefinition } from "@/types/procedures";
 
 export default function ProceduresPage() {
+  const { confirm, confirmDialog } = useConfirm();
   const [procedures, setProcedures] = useState<ProcedureDefinition[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +46,14 @@ export default function ProceduresPage() {
   }, [load]);
 
   const remove = async (p: ProcedureDefinition) => {
-    if (!confirm(`Delete "${p.name}"?`)) return;
+    if (
+      !(await confirm({
+        title: `Delete "${p.name}"?`,
+        message: "This cannot be undone.",
+      }))
+    ) {
+      return;
+    }
     const response = await fetch(`/api/procedures/${p.id}`, { method: "DELETE" });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -164,6 +173,7 @@ export default function ProceduresPage() {
         onClose={() => setIsBuilderOpen(false)}
         onSaved={load}
       />
+      {confirmDialog}
     </PageLayout>
   );
 }

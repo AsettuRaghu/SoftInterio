@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/utils/cn";
 import { Button } from "@/components/ui/Button";
 import {
@@ -37,12 +38,19 @@ export function DocumentList({
   showCategory = true,
   showUploader = true,
 }: DocumentListProps) {
+  const { confirm, confirmDialog } = useConfirm();
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleDelete = async (doc: Document) => {
     if (!onDelete) return;
-    if (!confirm(`Are you sure you want to delete "${doc.original_name}"?`))
+    if (
+      !(await confirm({
+        title: `Delete "${doc.original_name}"?`,
+        message: "The file is removed from storage and cannot be recovered.",
+      }))
+    ) {
       return;
+    }
 
     setDeletingId(doc.id);
     try {
@@ -511,6 +519,7 @@ export function DocumentList({
           </div>
         </div>
       ))}
+      {confirmDialog}
     </div>
   );
 }

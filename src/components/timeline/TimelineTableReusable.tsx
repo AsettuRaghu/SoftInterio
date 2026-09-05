@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { SearchBox } from "@/components/ui/SearchBox";
 import {
   ArrowPathIcon,
@@ -157,6 +157,8 @@ export default function TimelineTableReusable({
   const [filterType, setFilterType] = useState<string>("all");
   const [sortField, setSortField] = useState<string>("created_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   // =====================================================
   // UTILITY FUNCTIONS
@@ -481,6 +483,32 @@ export default function TimelineTableReusable({
     getActivityTitle,
   ]);
 
+  // Pagination, as in the notes, tasks and calendar tables. A timeline is the
+  // longest list in the app - every action on a lead lands here - so rendering
+  // all of it at once was the worst case of the three.
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredAndSortedItems.length / pageSize)
+  );
+  const paginatedItems = useMemo(
+    () =>
+      filteredAndSortedItems.slice(
+        (currentPage - 1) * pageSize,
+        currentPage * pageSize
+      ),
+    [filteredAndSortedItems, currentPage, pageSize]
+  );
+
+  // A filter change can strand the user on a page that no longer exists.
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(1);
+  }, [currentPage, totalPages]);
+
+  // Reset to the first page when the view changes underneath.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterType]);
+
   // Get unique activity types for filter dropdown
   const activityTypes = useMemo(() => {
     const types = new Set<string>();
@@ -592,7 +620,7 @@ export default function TimelineTableReusable({
               </tr>
             </thead>
             <tbody className="bg-white">
-              {filteredAndSortedItems.map((item) => {
+              {paginatedItems.map((item) => {
                 const userName =
                   item.created_user?.name || item.created_by_user?.name || "—";
                 const avatarUrl =
@@ -754,6 +782,86 @@ export default function TimelineTableReusable({
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Pagination, matching the notes, tasks and calendar tables. */}
+      {filteredAndSortedItems.length > 0 && (
+        <div className="border-t border-slate-200 px-3 py-2 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-slate-500">
+              Showing{" "}
+              <span className="font-medium">
+                {Math.min(
+                  (currentPage - 1) * pageSize + 1,
+                  filteredAndSortedItems.length
+                )}
+              </span>
+              {"-"}
+              <span className="font-medium">
+                {Math.min(currentPage * pageSize, filteredAndSortedItems.length)}
+              </span>
+              {" of "}
+              <span className="font-medium">
+                {filteredAndSortedItems.length}
+              </span>
+            </span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="px-1.5 py-0.5 text-[10px] border border-slate-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              {[10, 25, 50, 100].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-2 py-1 text-[10px] font-medium text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Prev
+            </button>
+            <div className="flex items-center gap-0.5 mx-1">
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                let n = i + 1;
+                if (totalPages > 5) {
+                  if (currentPage <= 3) n = i + 1;
+                  else if (currentPage >= totalPages - 2)
+                    n = totalPages - 4 + i;
+                  else n = currentPage - 2 + i;
+                }
+                return (
+                  <button
+                    key={n}
+                    onClick={() => setCurrentPage(n)}
+                    className={`w-6 h-6 text-[10px] font-medium rounded transition-colors ${
+                      currentPage === n
+                        ? "bg-blue-600 text-white"
+                        : "text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-2 py-1 text-[10px] font-medium text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
     </div>

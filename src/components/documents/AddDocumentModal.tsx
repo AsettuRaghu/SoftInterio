@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { cn } from "@/utils/cn";
 import { Button } from "@/components/ui/Button";
+import { TagInput } from "@/components/ui/TagInput";
 import {
   DocumentLinkedType,
   DocumentCategory,
@@ -42,6 +43,8 @@ export function AddDocumentModal({
   const [category, setCategory] = useState<DocumentCategory | "">("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
 
   // Reset form when modal opens
   useEffect(() => {
@@ -50,7 +53,23 @@ export function AddDocumentModal({
       setCategory("" as DocumentCategory);
       setTitle("");
       setDescription("");
+      setTags([]);
       setError(null);
+
+      // Load what the tenant already uses, so people reach for an existing tag
+      // instead of inventing a near-duplicate.
+      void (async () => {
+        try {
+          const response = await fetch("/api/documents/tags");
+          if (!response.ok) return;
+          const data = await response.json();
+          setTagSuggestions(
+            (data.tags || []).map((t: { name: string }) => t.name)
+          );
+        } catch {
+          // Suggestions are a convenience; typing still works without them.
+        }
+      })();
       setIsDragging(false);
     }
   }, [isOpen]);
@@ -168,6 +187,10 @@ export function AddDocumentModal({
       formData.append("linked_id", linkedId);
       formData.append("category", category);
       formData.append("title", title.trim());
+      if (tags.length) {
+        // The API splits this on commas back into a text[].
+        formData.append("tags", tags.join(","));
+      }
       if (description.trim()) {
         formData.append("description", description.trim());
       }
@@ -406,6 +429,26 @@ export function AddDocumentModal({
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Tags */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Tags
+                <span className="ml-1 font-normal text-slate-400">
+                  optional
+                </span>
+              </label>
+              <TagInput
+                value={tags}
+                onChange={setTags}
+                suggestions={tagSuggestions}
+                placeholder="Add tags..."
+              />
+              <p className="mt-1 text-[11px] text-slate-400">
+                Category is what kind of file this is. Tags are what it is
+                about, and a file can have several.
+              </p>
             </div>
 
             {/* Notes */}

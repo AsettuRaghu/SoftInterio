@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { TaskStatusControls } from "./TaskStatusControls";
 import { TaskTimeLog } from "./TaskTimeLog";
 import { TaskAttachments } from "./TaskAttachments";
@@ -86,6 +87,7 @@ export function EditTaskModal({
   onClose,
   onUpdate,
 }: EditTaskModalProps) {
+  const { confirm, confirmDialog } = useConfirm();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -261,11 +263,13 @@ export function EditTaskModal({
   const handleDelete = async () => {
     if (!task) return;
     if (
-      !confirm(
-        "Are you sure you want to delete this task? This action cannot be undone."
-      )
-    )
+      !(await confirm({
+        title: "Delete this task?",
+        message: "Subtasks, comments and attachments go with it.",
+      }))
+    ) {
       return;
+    }
 
     setIsDeleting(true);
     setError(null);
@@ -756,6 +760,7 @@ export function EditTaskModal({
           </div>
         </div>
       </div>
+      {confirmDialog}
     </div>
   );
 }

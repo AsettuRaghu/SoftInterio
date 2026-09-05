@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { canViewCosts } from "@/lib/quotations/cost-visibility";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
@@ -67,21 +68,40 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Calculate margin for each item
-    const itemsWithMargin = (costItems || []).map((item) => ({
-      ...item,
-      calculated_margin_percent:
-        item.company_cost > 0 && item.default_rate > 0
-          ? Math.round(
-              ((item.default_rate - item.company_cost) / item.company_cost) *
-                100 *
-                100
-            ) / 100
-          : null,
-    }));
+    // What the company pays, and therefore what it makes, is gated on
+    // cost_items.pricing - the permission that already governs these numbers
+    // in the library, held by owner and admin only. default_rate stays visible
+    // to everyone: it is the client-facing price, and the builder cannot
+    // quote without it.
+    const showCosts = await canViewCosts();
+
+    const itemsWithMargin = (costItems || []).map((item) => {
+      if (!showCosts) {
+        const {
+          company_cost: _c,
+          vendor_cost: _v,
+          retail_price: _r,
+          margin_percent: _m,
+          ...safe
+        } = item as Record<string, unknown>;
+        return safe;
+      }
+      return {
+        ...item,
+        calculated_margin_percent:
+          item.company_cost > 0 && item.default_rate > 0
+            ? Math.round(
+                ((item.default_rate - item.company_cost) / item.company_cost) *
+                  100 *
+                  100
+              ) / 100
+            : null,
+      };
+    });
 
     return NextResponse.json({
       quotationCostItems: itemsWithMargin,
+      can_view_costs: showCosts,
       // Legacy key for backward compatibility
       costItems: itemsWithMargin,
       pagination: {
@@ -154,7 +174,20 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error("Error creating quotation cost item:", error);
+
+      if (error.code === "23505") {
+
+        return NextResponse.json(
+
+          { error: "A cost item with that name already exists" },
+
+          { status: 409 }
+
+        );
+
+      }
+
+      console.error("Error creating cost item:", error);
       return NextResponse.json(
         { error: "Failed to create quotation cost item" },
         { status: 500 }

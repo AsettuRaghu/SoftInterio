@@ -106,26 +106,33 @@ export function Sidebar({ isExpanded, setIsExpanded }: SidebarProps) {
   // Special handling: /dashboard/quotations should NOT match /dashboard/quotations/templates
   const isSubItemActive = (href: string) => {
     if (pathname === href) return true;
-    // For sub-items, only match if pathname starts with href followed by /
-    // But NOT if there's another sub-item that's a better match
-    if (pathname.startsWith(href + "/")) {
-      // Check if there's a more specific sub-item that matches
-      // e.g., if we're at /dashboard/quotations/templates, don't match /dashboard/quotations
-      const currentItem = navigationItems.find((item) =>
-        item.subItems?.some((sub) => sub.href === href)
+    if (!pathname.startsWith(href + "/")) return false;
+
+    // Among sibling sub-items that also match, the longest href wins - that is
+    // the most specific one.
+    //
+    // This used to reject an href whenever *any other* sibling matched, which
+    // is not the same test: on /dashboard/quotations/templates/<id>/edit both
+    // "/dashboard/quotations/templates" and the shorter, less specific
+    // "/dashboard/quotations" match, so Templates was suppressed by its own
+    // parent and nothing highlighted at all. It only looked correct on the
+    // list page itself, where the exact-match branch above returns first - so
+    // every child route lost its highlight: template detail and edit, the new
+    // template page, and the print and terms library detail pages.
+    const parent = navigationItems.find((item) =>
+      item.subItems?.some((sub) => sub.href === href)
+    );
+    const longestMatch = (parent?.subItems || [])
+      .filter(
+        (sub) =>
+          pathname === sub.href || pathname.startsWith(sub.href + "/")
+      )
+      .reduce(
+        (best, sub) => (sub.href.length > best.length ? sub.href : best),
+        ""
       );
-      if (currentItem?.subItems) {
-        // Check if any other sub-item is a more specific match
-        const moreSpecificMatch = currentItem.subItems.find(
-          (sub) =>
-            sub.href !== href &&
-            (pathname === sub.href || pathname.startsWith(sub.href + "/"))
-        );
-        if (moreSpecificMatch) return false;
-      }
-      return true;
-    }
-    return false;
+
+    return longestMatch === href;
   };
 
   // Render a menu item

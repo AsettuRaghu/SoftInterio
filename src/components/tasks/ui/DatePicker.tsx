@@ -11,6 +11,15 @@ interface DatePickerProps {
   minDate?: string;
   readOnly?: boolean;
   showIcon?: boolean;
+  /**
+   * Whether the date should read as overdue.
+   *
+   * Left undefined, this component decides for itself purely on the date being
+   * in the past - which is wrong for anything with a lifecycle. A task
+   * completed after its due date is finished, not outstanding, but was still
+   * shown in red here. Callers that know the status should pass the answer in.
+   */
+  overdue?: boolean;
 }
 
 export function DatePicker({
@@ -21,6 +30,7 @@ export function DatePicker({
   minDate,
   readOnly = false,
   showIcon = true,
+  overdue,
 }: DatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0, ready: false });
@@ -93,7 +103,9 @@ export function DatePicker({
   };
 
   const isOverdue =
-    value && new Date(value) < new Date(new Date().setHours(0, 0, 0, 0));
+    overdue !== undefined
+      ? overdue
+      : !!value && new Date(value) < new Date(new Date().setHours(0, 0, 0, 0));
 
   // Calendar calculations
   const calendarDays = useMemo(() => {

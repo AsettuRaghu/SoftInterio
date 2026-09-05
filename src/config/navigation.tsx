@@ -228,6 +228,16 @@ export const navigationConfig: NavigationItem[] = [
         permission: "quotations.view",
       },
       {
+        name: "Print Library",
+        href: "/dashboard/quotations/print-library",
+        permission: "quotations.view",
+      },
+      {
+        name: "T&C Library",
+        href: "/dashboard/quotations/terms-library",
+        permission: "quotations.view",
+      },
+      {
         name: "Quotation Config",
         href: "/dashboard/quotations/config",
         permission: "quotations.view",

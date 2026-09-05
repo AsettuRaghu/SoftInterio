@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import {
   DocumentIcon,
   MagnifyingGlassIcon,
@@ -8,6 +9,7 @@ import {
   XMarkIcon,
   ArrowDownTrayIcon,
   TrashIcon,
+  PencilSquareIcon,
   EyeIcon,
   FolderIcon,
   PhotoIcon,
@@ -25,6 +27,7 @@ import {
   PageContent,
   StatBadge,
 } from "@/components/ui/PageLayout";
+import { TagInput, tagColour } from "@/components/ui/TagInput";
 import {
   DocumentWithUrl,
   DocumentCategory,
@@ -33,6 +36,7 @@ import {
   getFileTypeIcon,
 } from "@/types/documents";
 import { DocumentPreviewModal } from "@/components/documents/DocumentPreviewModal";
+import { EditDocumentModal } from "@/components/documents/EditDocumentModal";
 
 // Extended document type to include linked entity info
 interface DocumentWithLinked extends DocumentWithUrl {
@@ -49,6 +53,7 @@ interface LinkedEntity {
 }
 
 export default function DocumentsPage() {
+  const { confirm, confirmDialog } = useConfirm();
   const [documents, setDocuments] = useState<DocumentWithLinked[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +90,9 @@ export default function DocumentsPage() {
     ""
   );
   const [uploadNotes, setUploadNotes] = useState("");
+  const [uploadTags, setUploadTags] = useState<string[]>([]);
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [editingDoc, setEditingDoc] = useState<DocumentWithUrl | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -151,6 +159,18 @@ export default function DocumentsPage() {
   }, [fetchDocuments, fetchLinkedEntities]);
 
   // Filter and sort documents
+  const allTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const doc of documents) {
+      for (const tag of doc.tags || []) {
+        counts.set(tag, (counts.get(tag) || 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([name, count]) => ({ name, count }));
+  }, [documents]);
+
   const filteredDocuments = useMemo(() => {
     const filtered = documents.filter((doc) => {
       if (searchQuery) {
@@ -159,8 +179,13 @@ export default function DocumentsPage() {
           doc.original_name?.toLowerCase().includes(query) ||
           doc.title?.toLowerCase().includes(query) ||
           doc.description?.toLowerCase().includes(query) ||
-          doc.linked_name?.toLowerCase().includes(query);
+          doc.linked_name?.toLowerCase().includes(query) ||
+          doc.tags?.some((t) => t.toLowerCase().includes(query));
         if (!matchesSearch) return false;
+      }
+
+      if (tagFilter && !(doc.tags || []).includes(tagFilter)) {
+        return false;
       }
 
       if (categoryFilter !== "all" && doc.category !== categoryFilter) {
@@ -207,6 +232,7 @@ export default function DocumentsPage() {
     documents,
     searchQuery,
     categoryFilter,
+    tagFilter,
     linkedTypeFilter,
     sortField,
     sortDirection,
@@ -247,7 +273,10 @@ export default function DocumentsPage() {
   // Delete document
   const handleDelete = async (doc: DocumentWithLinked) => {
     if (
-      !confirm('Are you sure you want to delete "' + doc.original_name + '"?')
+      !(await confirm({
+        title: `Delete "${doc.original_name}"?`,
+        message: "The file is removed from storage and cannot be recovered.",
+      }))
     ) {
       return;
     }
@@ -373,6 +402,9 @@ export default function DocumentsPage() {
       formData.append("linked_id", selectedLinkedId);
       formData.append("category", uploadCategory);
       formData.append("title", uploadTitle.trim() || selectedFile.name);
+      if (uploadTags.length) {
+        formData.append("tags", uploadTags.join(","));
+      }
       if (uploadNotes.trim()) {
         formData.append("description", uploadNotes.trim());
       }
@@ -505,6 +537,53 @@ export default function DocumentsPage() {
           </div>
         )}
 
+        {/* Tag chips. Only rendered once tags exist, so the bar stays out of
+            the way until the feature is actually in use. Tags are what a file
+            is about; the category select below is what kind of file it is. */}
+        {allTags.length > 0 && (
+          <div className="mb-3 flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] font-medium text-slate-400 mr-0.5">
+              Tags
+            </span>
+            {allTags.map((t) => {
+              const isActive = tagFilter === t.name;
+              return (
+                <button
+                  key={t.name}
+                  type="button"
+                  onClick={() => setTagFilter(isActive ? null : t.name)}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border whitespace-nowrap transition-opacity hover:opacity-80"
+                  style={
+                    isActive
+                      ? {
+                          color: "#fff",
+                          backgroundColor: tagColour(t.name),
+                          borderColor: tagColour(t.name),
+                        }
+                      : {
+                          color: tagColour(t.name),
+                          borderColor: `${tagColour(t.name)}40`,
+                          backgroundColor: `${tagColour(t.name)}14`,
+                        }
+                  }
+                >
+                  {t.name}
+                  <span className="opacity-60">{t.count}</span>
+                </button>
+              );
+            })}
+            {tagFilter && (
+              <button
+                type="button"
+                onClick={() => setTagFilter(null)}
+                className="text-[11px] text-slate-500 hover:text-slate-700 underline ml-1"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Filters Bar */}
         <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           {/* Search */}
@@ -634,6 +713,9 @@ export default function DocumentsPage() {
                     Type
                     <SortIndicator field="type" />
                   </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
+                    Tags
+                  </th>
                   <th
                     className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
                     onClick={() => handleSort("linked")}
@@ -690,6 +772,42 @@ export default function DocumentsPage() {
                         ] || doc.category}
                       </span>
                     </td>
+                    {/* Clickable, so a tag seen on one row filters the whole
+                        list to its siblings. */}
+                    <td className="px-4 py-3">
+                      {doc.tags?.length ? (
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {doc.tags.map((tag) => (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setTagFilter(tagFilter === tag ? null : tag);
+                              }}
+                              className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium border whitespace-nowrap transition-opacity hover:opacity-80"
+                              style={
+                                tagFilter === tag
+                                  ? {
+                                      color: "#fff",
+                                      backgroundColor: tagColour(tag),
+                                      borderColor: tagColour(tag),
+                                    }
+                                  : {
+                                      color: tagColour(tag),
+                                      borderColor: `${tagColour(tag)}40`,
+                                      backgroundColor: `${tagColour(tag)}14`,
+                                    }
+                              }
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-300">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-1">
                         {getLinkedTypeBadge(doc.linked_type)}
@@ -720,28 +838,37 @@ export default function DocumentsPage() {
                         </p>
                       )}
                     </td>
+                    {/* Chip buttons, matching the other tables. Slate for
+                        neutral actions, blue for edit, red for delete. */}
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => handlePreview(doc)}
-                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300 transition-all"
                           title="Preview"
                         >
-                          <EyeIcon className="w-4 h-4" />
+                          <EyeIcon className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleDownload(doc)}
-                          className="p-1.5 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                          className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300 transition-all"
                           title="Download"
                         >
-                          <ArrowDownTrayIcon className="w-4 h-4" />
+                          <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setEditingDoc(doc)}
+                          className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-all"
+                          title="Edit document"
+                        >
+                          <PencilSquareIcon className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleDelete(doc)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 transition-all"
                           title="Delete"
                         >
-                          <TrashIcon className="w-4 h-4" />
+                          <TrashIcon className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>
@@ -993,6 +1120,22 @@ export default function DocumentsPage() {
                 </select>
               </div>
 
+              {/* Tags */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Tags
+                  <span className="ml-1 font-normal text-slate-400">
+                    optional
+                  </span>
+                </label>
+                <TagInput
+                  value={uploadTags}
+                  onChange={setUploadTags}
+                  suggestions={allTags.map((t) => t.name)}
+                  placeholder="Add tags..."
+                />
+              </div>
+
               {/* Notes */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -1040,11 +1183,19 @@ export default function DocumentsPage() {
       )}
 
       {/* Preview Modal */}
+      <EditDocumentModal
+        isOpen={!!editingDoc}
+        onClose={() => setEditingDoc(null)}
+        document={editingDoc}
+        onSaved={fetchDocuments}
+      />
+
       <DocumentPreviewModal
         isOpen={!!previewDocument}
         document={previewDocument}
         onClose={() => setPreviewDocument(null)}
       />
+      {confirmDialog}
     </PageLayout>
   );
 }

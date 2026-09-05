@@ -19,6 +19,7 @@ import type {
   BudgetRange,
 } from "@/types/leads";
 import {
+  LeadActivityTypeLabels,
   LeadStageLabels as StageLabels,
   LeadStageColors as StageColors,
   PropertyTypeLabels as PropLabels,
@@ -111,6 +112,18 @@ export default function LeadsPage() {
         lead.assigned_user?.name, // Assigned person name
         lead.created_user?.name, // Created by person name
         formatDateForSearch(lead.created_at), // Created date
+        // The two signal columns are searchable too, or the list would show
+        // text the search box cannot find.
+        lead.last_activity_detail, // What the last activity actually said
+        lead.last_activity_type, // e.g. note_added
+        lead.last_activity_type
+          ? LeadActivityTypeLabels[lead.last_activity_type]
+          : null, // e.g. "Note Added"
+        formatDateForSearch(lead.last_activity_at),
+        formatDateForSearch(lead.next_follow_up_at),
+        // Lets "overdue" and "today" find the leads the column marks as such,
+        // since those words are rendered rather than stored.
+        followUpKeywords(lead.next_follow_up_at),
       ]
         .filter(Boolean)
         .join(" ")
@@ -118,8 +131,21 @@ export default function LeadsPage() {
 
       return searchableText.includes(term);
 
+      /**
+       * The Follow-up column renders "Overdue" or "Today" instead of a date,
+       * so those words must be searchable even though no field contains them.
+       */
+      function followUpKeywords(dateString: string | null | undefined) {
+        if (!dateString) return "";
+        const today = new Date().toISOString().slice(0, 10);
+        const due = dateString.slice(0, 10);
+        if (due < today) return "overdue";
+        if (due === today) return "today";
+        return "upcoming";
+      }
+
       // Helper to format date for search
-      function formatDateForSearch(dateString: string | null) {
+      function formatDateForSearch(dateString: string | null | undefined) {
         if (!dateString) return "";
         const date = new Date(dateString);
         return date.toLocaleDateString("en-IN", {

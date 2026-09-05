@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { canViewCosts } from "@/lib/quotations/cost-visibility";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
@@ -87,8 +88,15 @@ export async function PUT(
     if (body.description !== undefined) updateData.description = body.description;
     if (body.category_id !== undefined) updateData.category_id = body.category_id;
     if (body.unit_code !== undefined) updateData.unit_code = body.unit_code;
-    if (body.vendor_cost !== undefined) updateData.vendor_cost = body.vendor_cost;
-    if (body.company_cost !== undefined) updateData.company_cost = body.company_cost;
+    // Cost fields are only writable by someone allowed to see them. The UI
+    // hides them already, but the UI is not the security boundary - without
+    // this, a crafted request could set a margin nobody is permitted to know.
+    if (await canViewCosts()) {
+      if (body.vendor_cost !== undefined)
+        updateData.vendor_cost = body.vendor_cost;
+      if (body.company_cost !== undefined)
+        updateData.company_cost = body.company_cost;
+    }
     if (body.default_rate !== undefined) updateData.default_rate = body.default_rate;
     if (body.quality_tier !== undefined) updateData.quality_tier = body.quality_tier;
     if (body.is_active !== undefined) updateData.is_active = body.is_active;
@@ -109,7 +117,20 @@ export async function PUT(
       .single();
 
     if (error) {
-      console.error("Error updating quotation cost item:", error);
+
+      if (error.code === "23505") {
+
+        return NextResponse.json(
+
+          { error: "Another cost item already uses that name" },
+
+          { status: 409 }
+
+        );
+
+      }
+
+      console.error("Error updating cost item:", error);
       return NextResponse.json(
         { error: "Failed to update quotation cost item" },
         { status: 500 }

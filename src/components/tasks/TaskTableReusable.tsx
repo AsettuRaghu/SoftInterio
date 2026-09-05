@@ -20,6 +20,14 @@ import {
   TagChips,
 } from "./ui";
 import { isOverdue } from "@/types/tasks";
+
+/** Whole days between a due date and today. Used only for overdue tasks. */
+function daysLate(dueDate?: string | null): number {
+  if (!dueDate) return 0;
+  const due = new Date(dueDate);
+  due.setHours(23, 59, 59, 999);
+  return Math.max(1, Math.ceil((Date.now() - due.getTime()) / 86400000));
+}
 import { SearchBox } from "@/components/ui/SearchBox";
 import { Toast } from "@/components/ui/Toast";
 import { CreateTaskModal } from "./CreateTaskModal";
@@ -31,6 +39,7 @@ import {
   ListBulletIcon,
   ChatBubbleLeftIcon,
   PencilSquareIcon,
+  ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
 
 // Types
@@ -77,6 +86,14 @@ interface TeamMember {
 type TabType = "my-tasks" | "assigned-by-me" | "all-tasks";
 
 export interface TaskTableProps {
+  /**
+   * Show the "Linked" column naming the lead or project a task belongs to.
+   *
+   * Off by default because both current callers are entity tabs, where every
+   * row links to the page you are already looking at. The generic tasks list
+   * at /dashboard/tasks has its own separate table and is unaffected.
+   */
+  showLinkedColumn?: boolean;
   // Optional: Filter by linked entity (lead, project, etc.)
   relatedType?: string;
   relatedId?: string;
@@ -127,6 +144,7 @@ export default function TaskTable({
   onCreateTask,
   externalTasks,
   onRefresh,
+  showLinkedColumn = false,
 }: TaskTableProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -134,6 +152,7 @@ export default function TaskTable({
   const [error, setError] = useState<string | null>(null);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<TabType>(defaultTab);
+  const [showOverdueOnly, setShowOverdueOnly] = useState(false);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -542,7 +561,7 @@ export default function TaskTable({
     ]
   );
 
-  const activeTasks = useMemo(() => {
+  const tasksInTab = useMemo(() => {
     if (!showTabs) return getFilteredAndSortedTasks(tasks);
 
     switch (activeTab) {
@@ -569,6 +588,19 @@ export default function TaskTable({
     sortDirection,
   ]);
 
+  // How much of the current tab is late. Shown as a count the user can click,
+  // so overdue work is something you find rather than something you have to
+  // notice while scrolling.
+  const overdueCount = useMemo(
+    () => tasksInTab.filter((t) => isOverdue(t)).length,
+    [tasksInTab]
+  );
+
+  const activeTasks = useMemo(
+    () => (showOverdueOnly ? tasksInTab.filter((t) => isOverdue(t)) : tasksInTab),
+    [tasksInTab, showOverdueOnly]
+  );
+
   // Pagination
   const totalPages = Math.ceil(activeTasks.length / pageSize);
   const paginatedTasks = useMemo(() => {
@@ -579,7 +611,13 @@ export default function TaskTable({
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedStatuses, searchQuery, activeTab]);
+  }, [selectedStatuses, searchQuery, activeTab, showOverdueOnly]);
+
+  // Nothing left to show once the last one is dealt with - drop the filter
+  // rather than leaving the user on a deliberately empty list.
+  useEffect(() => {
+    if (showOverdueOnly && overdueCount === 0) setShowOverdueOnly(false);
+  }, [showOverdueOnly, overdueCount]);
 
   // Sort handler
   const handleSort = (field: string) => {
@@ -1018,25 +1056,13 @@ export default function TaskTable({
                   e.stopPropagation();
                   setInlineSubtaskFor(task.id);
                 }}
-                className="w-5 h-5 flex items-center justify-center text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded transition-all opacity-0 group-hover:opacity-100"
+                className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"
                 title="Add subtask"
               >
                 <PlusIcon className="w-3.5 h-3.5" />
               </button>
             )}
 
-            {!isEditingTitle && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTaskClick?.(task);
-                }}
-                className="w-5 h-5 flex items-center justify-center text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded transition-all opacity-0 group-hover:opacity-100"
-                title="Edit task details"
-              >
-                <PencilSquareIcon className="w-3.5 h-3.5" />
-              </button>
-            )}
           </div>
         </td>
 
@@ -1194,34 +1220,53 @@ export default function TaskTable({
           />
         </td>
 
-        {/* Due Date - overdue is tinted so it reads from the row. */}
+        {/* Due Date. A faint cell tint alone was too easy to miss, so an
+            overdue task also carries an explicit badge saying how late it is.
+            Only dated, unfinished work can be overdue. */}
         <td
           className={`px-2 py-1.5 whitespace-nowrap ${
             isOverdue(task) ? "bg-red-50/60" : ""
           }`}
-          title={isOverdue(task) ? "Overdue" : undefined}
         >
-          <DatePicker
-            value={task.due_date || ""}
-            onChange={(val) => {
-              if (isEditable) {
-                updateTaskInline(
-                  task.id,
-                  "due_date",
-                  val || null,
-                  isSubtask,
-                  parentTaskId
-                );
-              }
-            }}
-            placeholder="Due"
-            minDate={task.start_date}
-            readOnly={!isEditable}
-          />
+          <div className="flex items-center gap-1.5">
+            <DatePicker
+              value={task.due_date || ""}
+              onChange={(val) => {
+                if (isEditable) {
+                  updateTaskInline(
+                    task.id,
+                    "due_date",
+                    val || null,
+                    isSubtask,
+                    parentTaskId
+                  );
+                }
+              }}
+              placeholder="Due"
+              minDate={task.start_date}
+              readOnly={!isEditable}
+              // Without this the picker decides on the date alone, and a task
+              // completed after its due date still showed red.
+              overdue={isOverdue(task)}
+            />
+            {isOverdue(task) && (
+              <span
+                className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700"
+                title={`Overdue by ${daysLate(task.due_date)} day${
+                  daysLate(task.due_date) === 1 ? "" : "s"
+                }`}
+              >
+                {daysLate(task.due_date)}d late
+              </span>
+            )}
+          </div>
         </td>
 
-        {/* Linked */}
-        <td className="px-2 py-1.5 whitespace-nowrap">
+        {/* Linked - hidden by default: inside a lead or project tab
+            every task links to that same entity, so the column only repeats
+            the page you are already on. */}
+        {showLinkedColumn && (
+          <td className="px-2 py-1.5 whitespace-nowrap">
           <LinkedEntity
             value={
               task.related_type && task.related_id
@@ -1314,6 +1359,27 @@ export default function TaskTable({
             }}
             readOnly={!isEditable}
           />
+          </td>
+        )}
+
+        {/* Actions. Always visible and colour-coded, matching the notes and
+            calendar tables - the edit button used to live inside the title
+            cell and only appeared on row hover, which made the affordance easy
+            to miss entirely. */}
+        <td className="px-2 py-1.5 whitespace-nowrap text-right">
+          <span className="inline-flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onTaskClick?.(task);
+              }}
+              title="Edit task details"
+              className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-all"
+            >
+              <PencilSquareIcon className="w-3.5 h-3.5" />
+            </button>
+          </span>
         </td>
       </tr>
     );
@@ -1479,6 +1545,28 @@ export default function TaskTable({
                 </button>
               </div>
 
+              {/* Only appears when something is actually late, so it reads as
+                  an alert rather than a permanently empty filter. */}
+              {overdueCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowOverdueOnly((v) => !v)}
+                  title={
+                    showOverdueOnly
+                      ? "Show all tasks"
+                      : "Show only overdue tasks"
+                  }
+                  className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                    showOverdueOnly
+                      ? "bg-red-600 border-red-600 text-white"
+                      : "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
+                  }`}
+                >
+                  <ExclamationTriangleIcon className="w-3.5 h-3.5" />
+                  {overdueCount} overdue
+                </button>
+              )}
+
               <div className="flex items-center gap-2 flex-1">
                 {/* Search box takes up most space on left */}
                 <div className="flex-1">
@@ -1609,11 +1697,16 @@ export default function TaskTable({
                     >
                       Due <SortIndicator field="due_date" />
                     </th>
+                    {showLinkedColumn && (
                     <th
                       onClick={() => handleSort("linked")}
                       className="px-2 py-2 text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors group"
                     >
                       Linked <SortIndicator field="linked" />
+                    </th>
+                    )}
+                    <th className="px-2 py-2 text-right text-[10px] font-semibold text-slate-600 uppercase tracking-wider">
+                      Actions
                     </th>
                   </tr>
                 </thead>
@@ -1624,7 +1717,13 @@ export default function TaskTable({
                       {/* Inline Subtask Input */}
                       {inlineSubtaskFor === task.id && (
                         <tr className="border-b border-slate-100 bg-blue-50/30">
-                          <td className="px-2 py-1.5 pl-8" colSpan={9}>
+                          {/* Tracks the header, which is 10 columns with Linked and 9 without.
+                              This was hard-coded at 9 while the table had 10,
+                              so the inline subtask row stopped one short. */}
+                          <td
+                            className="px-2 py-1.5 pl-8"
+                            colSpan={showLinkedColumn ? 11 : 10}
+                          >
                             <div className="flex items-center gap-1.5">
                               <div className="w-4 h-4 flex items-center justify-center text-blue-400">
                                 <PlusIcon className="w-3 h-3" />

@@ -114,7 +114,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       updateData.description = body.description;
     }
     if (body.tags !== undefined) {
-      updateData.tags = body.tags;
+      // Same normalisation as the upload path, so a tag edited in cannot
+      // differ from the identical tag added at upload.
+      const clean = [
+        ...new Set(
+          (Array.isArray(body.tags) ? body.tags : [])
+            .map((t: unknown) => String(t).trim().toLowerCase())
+            .filter(Boolean)
+        ),
+      ] as string[];
+      updateData.tags = clean.length ? clean : undefined;
+      if (!clean.length) {
+        // Explicitly clearing every tag has to reach the database as null,
+        // which `undefined` would not.
+        (updateData as Record<string, unknown>).tags = null;
+      }
     }
 
     // Update document

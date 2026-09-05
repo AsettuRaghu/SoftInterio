@@ -8,8 +8,11 @@ import React, {
   useRef,
 } from "react";
 import { cn } from "@/utils/cn";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { SearchBox } from "@/components/ui/SearchBox";
 import { AddDocumentModal } from "./AddDocumentModal";
+import { EditDocumentModal } from "./EditDocumentModal";
+import { StringTagChips } from "@/components/ui/TagInput";
 import {
   DocumentWithUrl,
   Document,
@@ -23,6 +26,7 @@ import {
   PlusIcon,
   MagnifyingGlassIcon,
   ArrowDownTrayIcon,
+  PencilSquareIcon,
   TrashIcon,
   EyeIcon,
   FunnelIcon,
@@ -76,6 +80,7 @@ export default function DocumentTable({
   externalDocuments,
   onRefresh,
 }: DocumentTableProps) {
+  const { confirm, confirmDialog } = useConfirm();
   const [documents, setDocuments] = useState<DocumentWithUrl[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +91,7 @@ export default function DocumentTable({
   const [sortField, setSortField] = useState<string>("uploaded_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingDoc, setEditingDoc] = useState<Document | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
   // Caching
@@ -210,8 +216,14 @@ export default function DocumentTable({
   // Handle delete
   const handleDelete = async (doc: Document) => {
     if (!allowDelete || readOnly) return;
-    if (!confirm(`Are you sure you want to delete "${doc.original_name}"?`))
+    if (
+      !(await confirm({
+        title: `Delete "${doc.original_name}"?`,
+        message: "The file is removed from storage and cannot be recovered.",
+      }))
+    ) {
       return;
+    }
 
     setDeletingId(doc.id);
     try {
@@ -343,6 +355,7 @@ export default function DocumentTable({
           doc.original_name?.toLowerCase().includes(query) ||
           doc.title?.toLowerCase().includes(query) ||
           doc.category?.toLowerCase().includes(query) ||
+          doc.tags?.some((t) => t.toLowerCase().includes(query)) ||
           doc.uploaded_user?.name?.toLowerCase().includes(query),
       );
     }
@@ -592,6 +605,9 @@ export default function DocumentTable({
                     </div>
                   </th>
                 )}
+                <th className="px-3 py-2 text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider">
+                  Tags
+                </th>
                 <th
                   onClick={() => handleSort("size")}
                   className="group px-3 py-2 text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100"
@@ -652,6 +668,13 @@ export default function DocumentTable({
                       </span>
                     </td>
                   )}
+                  <td className="px-3 py-2">
+                    {doc.tags?.length ? (
+                      <StringTagChips tags={doc.tags} size="xs" max={4} />
+                    ) : (
+                      <span className="text-xs text-slate-300">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-xs text-slate-600">
                     {doc.file_size ? formatFileSize(doc.file_size) : "—"}
                   </td>
@@ -663,32 +686,44 @@ export default function DocumentTable({
                       ? new Date(doc.created_at).toLocaleDateString()
                       : "—"}
                   </td>
+                  {/* Chip buttons, matching the notes, tasks and calendar
+                      tables. Slate for neutral actions, blue for edit, red for
+                      delete - green stays reserved for "mark done". */}
                   <td className="px-3 py-2">
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex items-center justify-end gap-1.5">
                       {isPreviewable(doc.file_type) && (
                         <button
                           onClick={() => handlePreview(doc)}
-                          className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                          className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300 transition-all"
                           title="Preview"
                         >
-                          <EyeIcon className="w-4 h-4" />
+                          <EyeIcon className="w-3.5 h-3.5" />
                         </button>
                       )}
                       <button
                         onClick={() => handleDownload(doc)}
-                        className="p-1 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                        className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300 transition-all"
                         title="Download"
                       >
-                        <ArrowDownTrayIcon className="w-4 h-4" />
+                        <ArrowDownTrayIcon className="w-3.5 h-3.5" />
                       </button>
+                      {!readOnly && (
+                        <button
+                          onClick={() => setEditingDoc(doc)}
+                          className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-all"
+                          title="Edit document"
+                        >
+                          <PencilSquareIcon className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       {allowDelete && !readOnly && (
                         <button
                           onClick={() => handleDelete(doc)}
                           disabled={deletingId === doc.id}
-                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                          className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 transition-all disabled:opacity-50"
                           title="Delete"
                         >
-                          <TrashIcon className="w-4 h-4" />
+                          <TrashIcon className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
@@ -713,6 +748,14 @@ export default function DocumentTable({
           linkedId={linkedId as any}
         />
       )}
+
+      <EditDocumentModal
+        isOpen={!!editingDoc}
+        onClose={() => setEditingDoc(null)}
+        document={editingDoc}
+        onSaved={handleRefresh}
+      />
+      {confirmDialog}
     </div>
   );
 }

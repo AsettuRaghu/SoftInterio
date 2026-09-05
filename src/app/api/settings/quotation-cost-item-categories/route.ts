@@ -88,7 +88,20 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error("Error creating quotation cost item category:", error);
+
+      if (error.code === "23505") {
+
+        return NextResponse.json(
+
+          { error: "A category with that name already exists" },
+
+          { status: 409 }
+
+        );
+
+      }
+
+      console.error("Error creating category:", error);
       return NextResponse.json(
         { error: "Failed to create category" },
         { status: 500 }

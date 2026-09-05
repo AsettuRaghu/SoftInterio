@@ -122,6 +122,16 @@ export const routePermissions: RoutePermission[] = [
     description: "Quotation config (spaces, components, cost items)",
   },
   {
+    pattern: "/dashboard/quotations/print-library",
+    permissions: ["quotations.view"],
+    description: "Quotation print formats",
+  },
+  {
+    pattern: "/dashboard/quotations/terms-library",
+    permissions: ["quotations.view"],
+    description: "Quotation terms & conditions clauses",
+  },
+  {
     pattern: "/dashboard/quotations/templates/*",
     permissions: ["quotations.templates.view"],
     description: "Quotation template detail",

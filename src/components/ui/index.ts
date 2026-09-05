@@ -58,3 +58,5 @@ export { FilterBar, QuickFilterPills } from "./FilterBar";
 export type { FilterConfig, FilterOption as FilterBarOption } from "./FilterBar";
 export { BulkActionsBar, SelectCheckbox, StatusDropdown } from "./BulkActions";
 export type { BulkAction as BulkActionConfig } from "./BulkActions";
+export { TagInput, StringTagChips, tagColour } from "./TagInput";
+export { ConfirmDialog, useConfirm } from "./ConfirmDialog";

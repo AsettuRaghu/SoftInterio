@@ -85,6 +85,15 @@ const MEETING_TYPE_COLORS: Record<
     text: "text-teal-700",
     dot: "bg-teal-500",
   },
+  // Task due dates are derived onto the calendar by /api/calendar. Without an
+  // entry here they fell back to the generic "other" styling and read as
+  // meetings.
+  task_due: {
+    bg: "bg-violet-50",
+    border: "border-violet-200",
+    text: "text-violet-700",
+    dot: "bg-violet-500",
+  },
   reminder: {
     bg: "bg-pink-50",
     border: "border-pink-200",
@@ -116,6 +125,7 @@ const MEETING_TYPE_LABELS: Record<string, string> = {
   internal_meeting: "Internal Meeting",
   site_visit: "Site Visit",
   follow_up: "Follow Up",
+  task_due: "Task Due",
   reminder: "Reminder",
   meeting_scheduled: "Meeting",
   other_meeting: "Other",
@@ -788,12 +798,10 @@ export default function CalendarPage() {
                         getEventColor(selectedEvent).text
                       }`}
                     >
-                      {
-                        MEETING_TYPE_LABELS[
-                          selectedEvent.meeting_type ||
-                            selectedEvent.activity_type
-                        ]
-                      }
+                      {MEETING_TYPE_LABELS[
+                        selectedEvent.meeting_type ||
+                          selectedEvent.activity_type
+                      ] || "Event"}
                     </span>
                     {selectedEvent.is_completed && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">

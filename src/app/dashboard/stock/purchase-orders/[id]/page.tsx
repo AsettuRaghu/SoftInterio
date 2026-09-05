@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, use } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { POStatusBadge, EditPurchaseOrderModal } from "@/components/stock";
@@ -318,6 +319,7 @@ export default function PurchaseOrderDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const { confirm, confirmDialog } = useConfirm();
   const { id } = use(params);
   const router = useRouter();
   const [purchaseOrder, setPurchaseOrder] = useState<PurchaseOrder | null>(
@@ -506,7 +508,14 @@ export default function PurchaseOrderDetailPage({
 
   // Handle cancel
   const handleCancel = async () => {
-    if (!confirm("Are you sure you want to cancel this purchase order?")) {
+    if (
+      !(await confirm({
+        title: "Cancel this purchase order?",
+        message: "It stays on record as cancelled.",
+        confirmLabel: "Cancel PO",
+        tone: "warning",
+      }))
+    ) {
       return;
     }
     setActionLoading("cancel");
@@ -565,9 +574,12 @@ export default function PurchaseOrderDetailPage({
   // Handle close PO
   const handleClose = async () => {
     if (
-      !confirm(
-        "Are you sure you want to close this purchase order? This action cannot be undone."
-      )
+      !(await confirm({
+        title: "Close this purchase order?",
+        message: "It can no longer receive goods once closed.",
+        confirmLabel: "Close PO",
+        tone: "warning",
+      }))
     ) {
       return;
     }
@@ -2977,6 +2989,7 @@ export default function PurchaseOrderDetailPage({
           />
         )}
       </div>
+      {confirmDialog}
     </>
   );
 }

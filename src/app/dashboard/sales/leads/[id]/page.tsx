@@ -58,6 +58,7 @@ import {
 } from "@/components/ui/PageLayout";
 import { UserGroupIcon } from "@heroicons/react/24/outline";
 import { MeetingCard } from "@/modules/sales/components";
+import { SpacesTab } from "@/components/property/SpacesTab";
 import { AddNoteModal, EditNoteModal } from "@/modules/sales/components";
 import { EditLeadModal, type EditFormData } from "@/modules/sales/components";
 import { StageTransitionModal } from "@/modules/sales/components";
@@ -69,6 +70,7 @@ import {
 import {
   isLeadClosed,
   LEAD_DETAIL_TABS,
+  type TabType,
 } from "@/modules/sales/constants/leadDetailConstants";
 import {
   OverviewTab,
@@ -123,15 +125,7 @@ export default function LeadDetailPage() {
   } = useLeadDetail();
 
   // Local UI state
-  const [activeTab, setActiveTab] = useState<
-    | "overview"
-    | "timeline"
-    | "calendar"
-    | "tasks"
-    | "documents"
-    | "notes"
-    | "quotations"
-  >("overview");
+  const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [showStageModal, setShowStageModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -418,6 +412,18 @@ export default function LeadDetailPage() {
         )}
 
         {/* Timeline Tab */}
+        {/* The rooms and areas the client wants work in, and what goes in
+            them. Named Spaces rather than Property because the property facts
+            on Overview - address, type, carpet area - are a different thing,
+            and because these rows outlive the sale: the quotation is generated
+            from them, and the project is later executed against them. */}
+        {activeTab === "spaces" && (
+          <SpacesTab
+            propertyId={lead.property?.id || lead.property_id || null}
+            readOnly={leadClosed}
+          />
+        )}
+
         {activeTab === "timeline" && (
           <TimelineTab
             activities={activities}

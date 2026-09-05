@@ -94,7 +94,20 @@ export async function PUT(
       .single();
 
     if (error) {
-      console.error("Error updating quotation cost item category:", error);
+
+      if (error.code === "23505") {
+
+        return NextResponse.json(
+
+          { error: "Another category already uses that name" },
+
+          { status: 409 }
+
+        );
+
+      }
+
+      console.error("Error updating category:", error);
       return NextResponse.json(
         { error: "Failed to update category" },
         { status: 500 }

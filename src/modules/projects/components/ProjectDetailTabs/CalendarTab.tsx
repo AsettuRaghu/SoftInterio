@@ -43,8 +43,6 @@ export default function CalendarTab({
     <CalendarTableReusable
       linkedType="project"
       linkedId={projectId}
-      showHeader={false}
-      compact={true}
       readOnly={projectClosed}
       allowCreate={!projectClosed}
       allowEdit={!projectClosed}

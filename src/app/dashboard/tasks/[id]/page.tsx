@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import type { TaskPriority, TaskStatus, TaskRelatedType } from "@/types/tasks";
@@ -220,6 +221,7 @@ const TrashIcon = ({ className }: { className?: string }) => (
 );
 
 export default function TaskDetailPage() {
+  const { confirm, confirmDialog } = useConfirm();
   const router = useRouter();
   const params = useParams();
   const taskId = params.id as string;
@@ -355,9 +357,10 @@ export default function TaskDetailPage() {
   // Delete task
   const deleteTask = async () => {
     if (
-      !confirm(
-        "Are you sure you want to delete this task? This action cannot be undone."
-      )
+      !(await confirm({
+        title: "Delete this task?",
+        message: "Subtasks, comments and attachments go with it.",
+      }))
     ) {
       return;
     }
@@ -874,6 +877,7 @@ export default function TaskDetailPage() {
         parentTaskId={task.id}
         parentTaskTitle={task.title}
       />
+      {confirmDialog}
     </div>
   );
 }

@@ -282,8 +282,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Parse tags
-    const tags = tagsStr ? tagsStr.split(",").map((t) => t.trim()) : null;
+    // Parse tags. Normalised here as well as in the UI, because this is the
+    // trust boundary - "Kitchen", "kitchen " and "" must not become three
+    // different tags just because a caller skipped the form.
+    const parsedTags = tagsStr
+      ? [
+          ...new Set(
+            tagsStr
+              .split(",")
+              .map((t) => t.trim().toLowerCase())
+              .filter(Boolean)
+          ),
+        ]
+      : [];
+    const tags = parsedTags.length ? parsedTags : null;
 
     // Create document record
     // Note: Using 'as any' until database types are regenerated after running migration 033

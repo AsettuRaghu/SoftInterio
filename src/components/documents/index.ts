@@ -4,3 +4,4 @@ export { DocumentList } from "./DocumentList";
 export { DocumentPreviewModal } from "./DocumentPreviewModal";
 export { AddDocumentModal } from "./AddDocumentModal";
 export { default as DocumentTableReusable } from "./DocumentTableReusable";
+export { EditDocumentModal } from "./EditDocumentModal";

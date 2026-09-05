@@ -8,14 +8,16 @@ import React, {
   useRef,
 } from "react";
 import { SearchBox } from "@/components/ui/SearchBox";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import {
   CalendarIcon,
   ClockIcon,
   MapPinIcon,
-  CheckCircleIcon,
-  PencilIcon,
+  CheckIcon,
+  PencilSquareIcon,
   TrashIcon,
   UserGroupIcon,
+  PlusIcon,
 } from "@heroicons/react/24/outline";
 
 // =====================================================
@@ -53,8 +55,6 @@ interface CalendarTableReusableProps {
   onRefresh?: () => void;
 
   // UI Configuration
-  showHeader?: boolean;
-  compact?: boolean;
   readOnly?: boolean;
   allowCreate?: boolean;
   allowEdit?: boolean;
@@ -68,6 +68,29 @@ interface CalendarTableReusableProps {
   onDeleteEvent?: (event: CalendarEvent) => void;
   onCompleteEvent?: (eventId: string) => void;
 }
+
+/**
+ * The three states an event can be in. Completion wins over date: an event
+ * held late is done, not overdue. An event with no date is in no bucket at
+ * all, which is why this can return null.
+ */
+function statusOf(event: {
+  meeting_completed?: boolean;
+  meeting_scheduled_at?: string | null;
+}): "upcoming" | "overdue" | "completed" | null {
+  if (event.meeting_completed) return "completed";
+  if (!event.meeting_scheduled_at) return null;
+  return new Date(event.meeting_scheduled_at) < new Date()
+    ? "overdue"
+    : "upcoming";
+}
+
+const STATUS_FILTERS: { key: string; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "upcoming", label: "Upcoming" },
+  { key: "overdue", label: "Overdue" },
+  { key: "completed", label: "Completed" },
+];
 
 const MEETING_TYPE_LABELS: Record<string, string> = {
   client_meeting: "Client Meeting",
@@ -88,8 +111,6 @@ export default function CalendarTableReusable({
   linkedId,
   externalEvents,
   onRefresh,
-  showHeader = true,
-  compact = false,
   readOnly = false,
   allowCreate = true,
   allowEdit = true,
@@ -101,6 +122,7 @@ export default function CalendarTableReusable({
   onDeleteEvent,
   onCompleteEvent,
 }: CalendarTableReusableProps) {
+  const { confirm, confirmDialog } = useConfirm();
   // =====================================================
   // STATE MANAGEMENT
   // =====================================================
@@ -110,6 +132,8 @@ export default function CalendarTableReusable({
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [sortField, setSortField] = useState<string>("meeting_scheduled_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
@@ -177,7 +201,18 @@ export default function CalendarTableReusable({
       meeting_completed: e.meeting_completed ?? e.is_completed ?? false,
     }));
 
-  const fetchEvents = useCallback(async () => {
+  /**
+   * `background: true` refreshes without the blocking spinner.
+   *
+   * Unlike the notes and tasks tabs, which receive their rows as props from the
+   * already-loaded page, this component fetches its own - /api/calendar unions
+   * five sources and cannot be filtered out of the lead payload. That meant
+   * every visit to the tab flipped isLoading and, with nothing yet in state,
+   * replaced the whole table with a spinner. Showing what we already have and
+   * updating it quietly is the difference.
+   */
+  const fetchEvents = useCallback(
+    async (opts?: { background?: boolean }) => {
     // If external events are provided, use them
     if (externalEvents) {
       setEvents(normalise(externalEvents));
@@ -187,7 +222,7 @@ export default function CalendarTableReusable({
 
     // Otherwise fetch from API
     try {
-      setIsLoading(true);
+      if (!opts?.background) setIsLoading(true);
 
       let url = "/api/calendar";
       const params = new URLSearchParams();
@@ -213,23 +248,36 @@ export default function CalendarTableReusable({
     } catch (error) {
       console.error("Error fetching calendar events:", error);
     } finally {
-      setIsLoading(false);
+      if (!opts?.background) setIsLoading(false);
     }
-  }, [linkedType, linkedId, externalEvents]);
+  },
+    [linkedType, linkedId, externalEvents]
+  );
 
   // =====================================================
   // EFFECTS
   // =====================================================
 
   useEffect(() => {
-    // Check cache first
     const cached = getCachedEvents();
-    if (cached && Date.now() - cached.timestamp < 30000) {
+
+    // Anything cached goes on screen immediately, however old. Stale rows for a
+    // moment beat an empty spinner - the previous code only used the cache when
+    // it was under 30 seconds old, so any tab visit after that showed the
+    // spinner even though usable data was sitting right there.
+    if (cached?.events?.length) {
       setEvents(cached.events);
-      fetchEvents();
-    } else {
-      fetchEvents();
+
+      // Very fresh data needs no request at all, which is what makes flicking
+      // between tabs feel instant.
+      if (Date.now() - cached.timestamp < 30000) return;
+
+      void fetchEvents({ background: true });
+      return;
     }
+
+    // Genuinely nothing to show - this is the only case that earns a spinner.
+    void fetchEvents();
   }, [fetchEvents]);
 
   // =====================================================
@@ -337,7 +385,14 @@ export default function CalendarTableReusable({
       return;
     }
 
-    if (!confirm("Are you sure you want to delete this event?")) return;
+    if (
+      !(await confirm({
+        title: "Delete this event?",
+        message: "This cannot be undone.",
+      }))
+    ) {
+      return;
+    }
 
     if (!linkedId || !linkedType) return;
 
@@ -466,7 +521,7 @@ export default function CalendarTableReusable({
   // FILTERING & SORTING
   // =====================================================
 
-  const filteredAndSortedEvents = useMemo(() => {
+  const matchingEvents = useMemo(() => {
     let filtered = [...events];
 
     // Search filter
@@ -517,25 +572,28 @@ export default function CalendarTableReusable({
       filtered = filtered.filter((e) => e.meeting_type === filterType);
     }
 
-    // Status filter
-    const now = new Date();
-    if (filterStatus === "upcoming") {
-      filtered = filtered.filter(
-        (e) =>
-          e.meeting_scheduled_at &&
-          new Date(e.meeting_scheduled_at) >= now &&
-          !e.meeting_completed
-      );
-    } else if (filterStatus === "completed") {
-      filtered = filtered.filter((e) => e.meeting_completed);
-    } else if (filterStatus === "overdue") {
-      filtered = filtered.filter(
-        (e) =>
-          e.meeting_scheduled_at &&
-          new Date(e.meeting_scheduled_at) < now &&
-          !e.meeting_completed
-      );
+    return filtered;
+  }, [events, searchQuery, filterType]);
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: matchingEvents.length,
+      upcoming: 0,
+      overdue: 0,
+      completed: 0,
+    };
+    for (const e of matchingEvents) {
+      const st = statusOf(e);
+      if (st) counts[st] += 1;
     }
+    return counts;
+  }, [matchingEvents]);
+
+  const filteredAndSortedEvents = useMemo(() => {
+    let filtered =
+      filterStatus === "all"
+        ? [...matchingEvents]
+        : matchingEvents.filter((e) => statusOf(e) === filterStatus);
 
     // Sort
     filtered.sort((a, b) => {
@@ -578,7 +636,23 @@ export default function CalendarTableReusable({
     });
 
     return filtered;
-  }, [events, searchQuery, filterType, filterStatus, sortField, sortDirection]);
+  }, [matchingEvents, filterStatus, sortField, sortDirection]);
+
+  // Pagination, as in the notes and tasks tables.
+  const totalPages = Math.max(1, Math.ceil(filteredAndSortedEvents.length / pageSize));
+  const paginatedEvents = useMemo(
+    () =>
+      filteredAndSortedEvents.slice(
+        (currentPage - 1) * pageSize,
+        currentPage * pageSize
+      ),
+    [filteredAndSortedEvents, currentPage, pageSize]
+  );
+
+  // A filter change can leave the user on a page that no longer exists.
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(1);
+  }, [currentPage, totalPages]);
 
   // =====================================================
   // STATUS BADGE UTILITY
@@ -625,10 +699,14 @@ export default function CalendarTableReusable({
   // RENDER: LOADING STATE
   // =====================================================
 
+  // Only a genuine first load reaches this - any cached rows are rendered
+  // instead and refreshed quietly. The card shell is kept so the panel does not
+  // disappear and then snap back, which read as the tab breaking.
   if (isLoading && events.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12">
+      <div className="flex flex-col h-full min-h-64 bg-white rounded-lg border border-slate-200 items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+        <p className="mt-3 text-xs text-slate-400">Loading calendar...</p>
       </div>
     );
   }
@@ -639,52 +717,80 @@ export default function CalendarTableReusable({
 
   return (
     <div className="flex flex-col h-full bg-white rounded-lg border border-slate-200">
-      {/* Search and Filters */}
-      <div className="flex items-center gap-2 p-3 border-b border-slate-200">
-        <div className="flex-1">
-          <SearchBox
-            value={searchQuery}
-            onChange={setSearchQuery}
-            placeholder="Search events..."
-          />
-        </div>
+      {/* One row: status pills, then search, then actions - the same order the
+          notes and tasks tables use, so the three read alike. */}
+      {showFilters && (
+        <div className="flex items-center gap-2 p-3 border-b border-slate-200">
+          <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-lg shrink-0">
+            {STATUS_FILTERS.map((f) => {
+              const isActive = filterStatus === f.key;
+              return (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => {
+                    setFilterStatus(f.key);
+                    setCurrentPage(1);
+                  }}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                    isActive
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+                  }`}
+                >
+                  {f.label}
+                  <span
+                    className={`ml-1 text-[10px] ${
+                      isActive ? "text-blue-200" : "text-slate-400"
+                    }`}
+                  >
+                    {statusCounts[f.key]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
 
-        {/* Meeting Type Filter */}
-        <select
-          value={filterType}
-          onChange={(e) => setFilterType(e.target.value)}
-          className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="all">All Types</option>
-          {Object.entries(MEETING_TYPE_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
+          <div className="flex-1 min-w-40">
+            <SearchBox
+              value={searchQuery}
+              onChange={(v) => {
+                setSearchQuery(v);
+                setCurrentPage(1);
+              }}
+              placeholder="Search events..."
+            />
+          </div>
 
-        {/* Status Filter */}
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="all">All Status</option>
-          <option value="upcoming">Upcoming</option>
-          <option value="overdue">Overdue</option>
-          <option value="completed">Completed</option>
-        </select>
-
-        {/* Schedule Event Button */}
-        {!readOnly && allowCreate && onCreateEvent && (
-          <button
-            onClick={onCreateEvent}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+          {/* Type has too many values to read as pills, so it stays a select. */}
+          <select
+            value={filterType}
+            onChange={(e) => {
+              setFilterType(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="shrink-0 px-2.5 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <span>+</span> Schedule Event
-          </button>
-        )}
-      </div>
+            <option value="all">All Types</option>
+            {Object.entries(MEETING_TYPE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+
+          {!readOnly && allowCreate && onCreateEvent && (
+            <button
+              type="button"
+              onClick={onCreateEvent}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 shrink-0"
+            >
+              <PlusIcon className="w-3.5 h-3.5" />
+              Event
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Events Table */}
       {filteredAndSortedEvents.length === 0 ? (
@@ -760,7 +866,7 @@ export default function CalendarTableReusable({
               </tr>
             </thead>
             <tbody className="bg-white">
-              {filteredAndSortedEvents.map((event) => (
+              {paginatedEvents.map((event) => (
                 <tr
                   key={event.id}
                   className="group hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-b-0 cursor-pointer"
@@ -822,35 +928,39 @@ export default function CalendarTableReusable({
                   </td>
                   <td className="px-3 py-2">{getStatusBadge(event)}</td>
                   <td className="px-3 py-2">
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex items-center justify-end gap-1.5">
                       {!event.meeting_completed && allowEdit && (
                         <>
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (onEditEvent) onEditEvent(event);
-                            }}
-                            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                            title="Edit event"
-                          >
-                            <PencilIcon className="w-4 h-4" />
-                          </button>
-                          <button
                             onClick={(e) => handleCompleteEvent(event, e)}
-                            className="p-1 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                            className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-green-50 text-green-600 border-green-200 hover:bg-green-100 hover:border-green-300 transition-all"
                             title="Mark as completed"
                           >
-                            <CheckCircleIcon className="w-4 h-4" />
+                            <CheckIcon className="w-3.5 h-3.5" />
                           </button>
+                          {/* A derived row has no calendar_events record to
+                              edit - it belongs to a note or a task. */}
+                          {!event.is_derived && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (onEditEvent) onEditEvent(event);
+                              }}
+                              className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-all"
+                              title="Edit event"
+                            >
+                              <PencilSquareIcon className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </>
                       )}
-                      {allowDelete && (
+                      {allowDelete && !event.is_derived && (
                         <button
                           onClick={(e) => handleDeleteEvent(event, e)}
-                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                          className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 transition-all"
                           title="Delete event"
                         >
-                          <TrashIcon className="w-4 h-4" />
+                          <TrashIcon className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
@@ -861,6 +971,92 @@ export default function CalendarTableReusable({
           </table>
         </div>
       )}
+
+      {/* Pagination, matching the notes and tasks tables. Shown whenever there
+          are rows - a short list still reports its total and keeps the page
+          size selector reachable, as the notes table does. */}
+      {filteredAndSortedEvents.length > 0 && (
+        <div className="border-t border-slate-200 px-3 py-2 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-slate-500">
+              Showing{" "}
+              <span className="font-medium">
+                {Math.min(
+                  (currentPage - 1) * pageSize + 1,
+                  filteredAndSortedEvents.length
+                )}
+              </span>
+              {"-"}
+              <span className="font-medium">
+                {Math.min(
+                  currentPage * pageSize,
+                  filteredAndSortedEvents.length
+                )}
+              </span>
+              {" of "}
+              <span className="font-medium">
+                {filteredAndSortedEvents.length}
+              </span>
+            </span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="px-1.5 py-0.5 text-[10px] border border-slate-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              {[10, 25, 50, 100].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-2 py-1 text-[10px] font-medium text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Prev
+            </button>
+            <div className="flex items-center gap-0.5 mx-1">
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                let n = i + 1;
+                if (totalPages > 5) {
+                  if (currentPage <= 3) n = i + 1;
+                  else if (currentPage >= totalPages - 2)
+                    n = totalPages - 4 + i;
+                  else n = currentPage - 2 + i;
+                }
+                return (
+                  <button
+                    key={n}
+                    onClick={() => setCurrentPage(n)}
+                    className={`w-6 h-6 text-[10px] font-medium rounded transition-colors ${
+                      currentPage === n
+                        ? "bg-blue-600 text-white"
+                        : "text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-2 py-1 text-[10px] font-medium text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+      {confirmDialog}
     </div>
   );
 }
