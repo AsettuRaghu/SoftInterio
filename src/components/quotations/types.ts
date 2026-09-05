@@ -69,6 +69,19 @@ export interface LineItem {
   quantity?: number;
   amount?: number;
   notes?: string;
+  /**
+   * Whether this line takes its dimensions from the component's size.
+   *
+   * Defaults to true for measured lines: a wardrobe's shutters, back panel and
+   * carcass are all the size of the wardrobe, so typing that size into every
+   * line is pure repetition. Editing a line by hand clears the flag and the
+   * typed value wins from then on - the spreadsheet rule, where entering a
+   * value replaces the formula.
+   *
+   * Count-based lines (hinges, handles) never follow; a quantity is a decision,
+   * not a measurement.
+   */
+  followsComponent?: boolean;
 }
 
 export interface BuilderComponent {
@@ -79,6 +92,15 @@ export interface BuilderComponent {
   description?: string;
   lineItems: LineItem[];
   expanded: boolean;
+  /**
+   * The component's own size, entered once and pushed down to every line that
+   * follows it. These columns have existed on quotation_components all along
+   * and were set on 0 of 169 rows, because nothing in the builder ever offered
+   * them - so every dimension was typed line by line instead.
+   */
+  width?: number | null;
+  height?: number | null;
+  measurementUnit?: MeasurementUnit;
 }
 
 export interface BuilderSpace {

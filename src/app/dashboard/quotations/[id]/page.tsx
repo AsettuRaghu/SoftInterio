@@ -1,8 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { ShareQuotationModal } from "@/components/quotations/ShareQuotationModal";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { QuotationBuilder } from "@/components/quotations/QuotationBuilder";
+import { useUserPermissions } from "@/hooks/useUserPermissions";
 
 // ============================================================================
 // V2 Types - Using Cost Items with Calculated Amounts
@@ -28,6 +31,9 @@ interface CostItem {
 
 interface QuotationLineItem {
   id: string;
+  /** Present only when the API decided this user may see costs. */
+  company_cost?: number;
+  margin_amount?: number;
   quotation_id: string;
   quotation_space_id?: string;
   quotation_component_id?: string;
@@ -98,6 +104,8 @@ interface Quotation {
   title?: string;
   description?: string;
   client_name?: string;
+  /** Returned by the API already; used for the WhatsApp share. */
+  client_phone?: string | null;
   property_name?: string;
   property_address?: string;
   property_city?: string;
@@ -121,15 +129,34 @@ interface Quotation {
   created_user?: User;
   updated_user?: User;
   assigned_user?: User;
+  /** Set once the quotation is copied into a project; the DB refuses edits. */
+  is_locked?: boolean;
+  linked_to_project_id?: string | null;
   lead?: {
     id: string;
+    lead_number?: string;
     stage: string;
+  };
+  project_id?: string;
+  project?: {
+    id: string;
+    project_number?: string;
+    name?: string;
+    status?: string;
   };
 }
 
 // ============================================================================
 // Display Helpers
 // ============================================================================
+
+/** "proposal_discussion" -> "Proposal Discussion". */
+const humaniseStage = (stage?: string) =>
+  (stage || "")
+    .split("_")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> =
   {
@@ -445,12 +472,119 @@ export default function QuotationDetailPage() {
     return false;
   }, [spaces, orphanComponents, expandedSpaces, expandedComponents]);
 
+  /**
+   * Whether this quotation can still be changed in place.
+   *
+   * Read and edit are one route now, so the Edit button has to be governed by
+   * the same rules the API enforces rather than always being available and
+   * failing on save. Each of these is refused server-side:
+   *
+   *   - approved / rejected      "Create a revision instead"
+   *   - sent                     the client already has this document
+   *   - lead won / lost / disqualified
+   *   - locked, or copied into a project (a database trigger)
+   *
+   * Anything blocked here offers Revise instead, which is the supported way to
+   * change a quotation that has left the building.
+   */
+  /**
+   * Margin across the whole quotation.
+   *
+   * The document view is where the decision to send actually gets made, and it
+   * had no cost awareness at all - one incidental reference against nine in
+   * the builder. Sums the per-line margin the API already stores; when the
+   * viewer is not permitted to see costs those fields never arrive, and the
+   * panel hides itself rather than reporting zero.
+   */
+  const marginTotals = useMemo(() => {
+    // Same traversal as calculatedTotals: line items hang off a space, off a
+    // component within a space, off a component with no space, or off nothing.
+    const all: QuotationLineItem[] = [];
+    spaces.forEach((space) => {
+      space.lineItems?.forEach((i) => all.push(i));
+      space.components?.forEach((comp) =>
+        comp.lineItems?.forEach((i) => all.push(i))
+      );
+    });
+    orphanComponents.forEach((comp) =>
+      comp.lineItems?.forEach((i) => all.push(i))
+    );
+    orphanLineItems.forEach((i) => all.push(i));
+
+    // A line with no company_cost is "cost unknown", not "cost nothing".
+    // Counting those as fully profitable is how a quotation ends up reporting
+    // a confident 100% margin - QT-20251216-001 does exactly that today.
+    const withCost = all.filter(
+      (i) => i.margin_amount != null && (i.company_cost || 0) > 0
+    );
+    if (withCost.length === 0) return null;
+    const margin = withCost.reduce((n, i) => n + (i.margin_amount || 0), 0);
+    // Measured over the costed lines only, so the percentage means something.
+    const revenue = withCost.reduce((n, i) => n + (i.amount || 0), 0);
+    return {
+      margin,
+      percent: revenue > 0 ? (margin / revenue) * 100 : 0,
+      // A partial answer is worse than a flagged one.
+      complete: withCost.length === all.length,
+      costedCount: withCost.length,
+      totalCount: all.length,
+    };
+  }, [spaces, orphanComponents, orphanLineItems]);
+
+  const { hasPermission } = useUserPermissions();
+  const editBlockedReason = useMemo(() => {
+    if (!quotation) return null;
+    if (!hasPermission("quotations.edit")) {
+      return "You do not have permission to edit quotations";
+    }
+    if (quotation.is_locked || quotation.linked_to_project_id) {
+      return "This quotation belongs to a project and is read-only";
+    }
+    if (["approved", "rejected"].includes(quotation.status)) {
+      return `This quotation is ${quotation.status}. Create a revision to make changes.`;
+    }
+    if (quotation.status === "sent") {
+      return "This quotation has been sent to the client. Create a revision to make changes.";
+    }
+    if (
+      quotation.lead &&
+      ["won", "lost", "disqualified"].includes(quotation.lead.stage)
+    ) {
+      return `The lead is ${quotation.lead.stage}, so this quotation is archived`;
+    }
+    return null;
+  }, [quotation, hasPermission]);
+
+  const canEdit = !!quotation && !editBlockedReason;
+
+  /**
+   * Reading and editing share this route, and the state decides which you get.
+   *
+   * A draft opens straight in the builder - that is what you came to do, and
+   * making you click Edit first is the extra step this merge was meant to
+   * remove. Anything sent, approved, locked or on a closed lead opens as the
+   * document instead, because it cannot be edited at all.
+   *
+   * ?view=1 forces the document for an editable quotation, which is how
+   * Preview works from inside the builder.
+   */
+  const searchParams = useSearchParams();
+  const [isEditing, setIsEditing] = useState(false);
+  useEffect(() => {
+    if (!quotation) return;
+    if (searchParams.get("view") === "1") {
+      setIsEditing(false);
+      return;
+    }
+    if (canEdit) setIsEditing(true);
+  }, [quotation, searchParams, canEdit]);
+
   // Revision state
   const [isCreatingRevision, setIsCreatingRevision] = useState(false);
 
   // PDF and Share state
   const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
-  const [isGeneratingShareLink, setIsGeneratingShareLink] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   // Create a new revision and open it for editing
   const handleCreateRevision = async () => {
@@ -469,7 +603,7 @@ export default function QuotationDetailPage() {
 
       const data = await response.json();
       // Redirect to edit the new revision
-      router.push(`/dashboard/quotations/${data.quotation.id}/edit`);
+      router.push(`/dashboard/quotations/${data.quotation.id}?edit=1`);
     } catch (err) {
       console.error("Error creating revision:", err);
       alert(err instanceof Error ? err.message : "Failed to create revision");
@@ -509,75 +643,16 @@ export default function QuotationDetailPage() {
     }
   };
 
-  // Share quotation - generate link and copy to clipboard
-  const handleShareQuotation = async () => {
-    if (!quotation) return;
-
-    try {
-      setIsGeneratingShareLink(true);
-      const response = await fetch(`/api/quotations/${quotation.id}/share`, {
-        method: "POST",
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to generate share link");
-      }
-
-      const data = await response.json();
-
-      // Copy link to clipboard
-      await navigator.clipboard.writeText(data.share_url);
-      alert("Share link copied to clipboard!");
-    } catch (err) {
-      console.error("Error generating share link:", err);
-      alert(
-        err instanceof Error ? err.message : "Failed to generate share link"
-      );
-    } finally {
-      setIsGeneratingShareLink(false);
-    }
-  };
-
-  // Send to client - for now, generate share link and show it
-  const handleSendToClient = async () => {
-    if (!quotation) return;
-
-    try {
-      setIsGeneratingShareLink(true);
-      const response = await fetch(`/api/quotations/${quotation.id}/share`, {
-        method: "POST",
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to generate share link");
-      }
-
-      const data = await response.json();
-
-      // For now, show the link in an alert. Later we can add email sending.
-      const shareUrl = data.share_url;
-      const subject = encodeURIComponent(
-        `Quotation ${quotation.quotation_number} - ${
-          quotation.client_name || "Your Quotation"
-        }`
-      );
-      const body = encodeURIComponent(
-        `Dear ${
-          quotation.client_name || "Client"
-        },\n\nPlease find your quotation at the link below:\n\n${shareUrl}\n\nBest regards`
-      );
-
-      // Open email client
-      window.location.href = `mailto:?subject=${subject}&body=${body}`;
-    } catch (err) {
-      console.error("Error sending to client:", err);
-      alert(err instanceof Error ? err.message : "Failed to send to client");
-    } finally {
-      setIsGeneratingShareLink(false);
-    }
-  };
+  /**
+   * Sharing now runs through ShareQuotationModal.
+   *
+   * The two handlers that used to live here each did half the job: one copied
+   * a link and announced it with alert(), the other opened a mailto: that does
+   * nothing on a machine without a desktop mail client. Neither moved the
+   * quotation out of draft, so the client portal refused every approval with
+   * "current status: draft" - which is why no quotation here has ever reached
+   * sent or viewed.
+   */
 
   // Loading state
   if (loading) {
@@ -641,6 +716,21 @@ export default function QuotationDetailPage() {
           </Link>
         </div>
       </div>
+    );
+  }
+
+  // The builder takes the whole screen. Leaving it refetches, so the document
+  // below always reflects what was just saved.
+  if (isEditing) {
+    return (
+      <QuotationBuilder
+        quotationId={quotation.id}
+        onExit={() => {
+          setIsEditing(false);
+          router.replace(`/dashboard/quotations/${quotation.id}?view=1`);
+          void fetchQuotation();
+        }}
+      />
     );
   }
 
@@ -710,6 +800,42 @@ export default function QuotationDetailPage() {
               v{quotation.version}
             </span>
 
+            {/* Where this quotation came from. The header used to show only the
+                client name and property, which are not enough to tell two
+                quotations apart - and the lead number is what people actually
+                search and talk by. Links through to whichever record owns it. */}
+            {quotation.lead_id && quotation.lead?.lead_number && (
+              <Link
+                href={`/dashboard/sales/leads/${quotation.lead_id}`}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded-lg shrink-0 bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                title={`Lead ${quotation.lead.lead_number}`}
+              >
+                <span className="font-medium">{quotation.lead.lead_number}</span>
+                {quotation.lead.stage && (
+                  <span className="hidden lg:inline text-slate-400">
+                    · {humaniseStage(quotation.lead.stage)}
+                  </span>
+                )}
+              </Link>
+            )}
+
+            {quotation.project_id && quotation.project && (
+              <Link
+                href={`/dashboard/projects/${quotation.project_id}`}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded-lg shrink-0 bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                title={quotation.project.name || "Project"}
+              >
+                <span className="font-medium">
+                  {quotation.project.project_number || "Project"}
+                </span>
+                {quotation.project.name && (
+                  <span className="hidden lg:inline max-w-[160px] truncate text-slate-400">
+                    · {quotation.project.name}
+                  </span>
+                )}
+              </Link>
+            )}
+
             {/* Property */}
             {quotation.property_name && (
               <span className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-lg shrink-0">
@@ -756,14 +882,16 @@ export default function QuotationDetailPage() {
                 View Lead
               </Link>
             )}
-            {/* Only show Edit and Revise buttons if lead is not closed (won/lost/disqualified) */}
-            {(!quotation.lead ||
-              !["won", "lost", "disqualified"].includes(
-                quotation.lead.stage
-              )) && (
+            {/* Edit is offered only when the API would actually accept the
+                save; everything else routes to Revise, which is the supported
+                way to change a quotation that has already gone out. */}
+            {canEdit && (
               <>
-                <Link
-                  href={`/dashboard/quotations/${params.id}/edit`}
+                <button
+                  onClick={() => {
+                    router.replace(`/dashboard/quotations/${quotation.id}`);
+                    setIsEditing(true);
+                  }}
                   className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
                 >
                   <svg
@@ -780,7 +908,22 @@ export default function QuotationDetailPage() {
                     />
                   </svg>
                   Edit
-                </Link>
+                </button>
+              </>
+            )}
+            {/* Hiding Edit without saying why reads as a missing feature. */}
+            {editBlockedReason && (
+              <span className="hidden lg:inline text-xs text-slate-500 max-w-[260px]">
+                {editBlockedReason}
+              </span>
+            )}
+            {/* Revise stays available while the lead is open, whatever the
+                quotation's own status - that is the point of it. */}
+            {(!quotation.lead ||
+              !["won", "lost", "disqualified"].includes(
+                quotation.lead.stage
+              )) && (
+              <>
                 <button
                   onClick={handleCreateRevision}
                   disabled={isCreatingRevision}
@@ -831,32 +974,11 @@ export default function QuotationDetailPage() {
               )}
               {isDownloadingPDF ? "Generating..." : "PDF"}
             </button>
+            {/* One action instead of two half-working ones. The modal mints
+                the link, offers WhatsApp / email / copy, and marks the
+                quotation sent so the client can actually act on it. */}
             <button
-              onClick={handleShareQuotation}
-              disabled={isGeneratingShareLink}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isGeneratingShareLink ? (
-                <div className="w-4 h-4 border-2 border-slate-600 border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-                  />
-                </svg>
-              )}
-              {isGeneratingShareLink ? "Generating..." : "Share"}
-            </button>
-            <button
-              onClick={handleSendToClient}
+              onClick={() => setShowShareModal(true)}
               className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
             >
               <svg
@@ -869,10 +991,10 @@ export default function QuotationDetailPage() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                  d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
                 />
               </svg>
-              Send to Client
+              Share with Client
             </button>
           </div>
         </div>
@@ -1014,8 +1136,9 @@ export default function QuotationDetailPage() {
                   Kitchen) and then add components and cost items to each space.
                 </p>
                 <div className="flex items-center justify-center gap-3">
-                  <Link
-                    href={`/dashboard/quotations/${params.id}/edit`}
+                  {canEdit && (
+                  <button
+                    onClick={() => setIsEditing(true)}
                     className="inline-flex items-center gap-2 px-4 py-2.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                   >
                     <svg
@@ -1032,9 +1155,16 @@ export default function QuotationDetailPage() {
                       />
                     </svg>
                     Add Spaces
-                  </Link>
-                  <Link
-                    href={`/dashboard/quotations/${params.id}/edit?useTemplate=true`}
+                  </button>
+                  )}
+                  {canEdit && (
+                  <button
+                    onClick={() => {
+                      router.replace(
+                        `/dashboard/quotations/${quotation.id}?edit=1&useTemplate=true`
+                      );
+                      setIsEditing(true);
+                    }}
                     className="inline-flex items-center gap-2 px-4 py-2.5 text-sm border border-purple-300 text-purple-600 rounded-lg hover:bg-purple-50 transition-colors font-medium"
                   >
                     <svg
@@ -1051,7 +1181,8 @@ export default function QuotationDetailPage() {
                       />
                     </svg>
                     Use Template
-                  </Link>
+                  </button>
+                  )}
                 </div>
               </div>
             ) : (
@@ -1659,6 +1790,19 @@ export default function QuotationDetailPage() {
                   {formatCurrency(total)}
                 </span>
               </div>
+              {marginTotals && (
+                <div className="flex items-center justify-between pt-2 mt-1 border-t border-dashed border-slate-200">
+                  <span className="text-xs text-slate-500">
+                    Margin
+                    {!marginTotals.complete &&
+                      ` (${marginTotals.costedCount} of ${marginTotals.totalCount} lines costed)`}
+                  </span>
+                  <span className="text-xs font-medium text-slate-700 tabular-nums">
+                    {formatCurrency(marginTotals.margin)} (
+                    {marginTotals.percent.toFixed(1)}%)
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1777,6 +1921,13 @@ export default function QuotationDetailPage() {
           </div>
         </div>
       </div>
+
+      <ShareQuotationModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        quotation={quotation}
+        onShared={fetchQuotation}
+      />
     </div>
   );
 }

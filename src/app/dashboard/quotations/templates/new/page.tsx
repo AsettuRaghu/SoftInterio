@@ -4,6 +4,10 @@ import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  TEMPLATE_LEVELS,
+  type TemplateLevel,
+} from "@/types/quotations";
+import {
   BuilderSpace,
   BuilderComponent,
   LineItem,
@@ -24,6 +28,10 @@ export default function NewTemplatePage() {
 
   // Template data
   const [templateName, setTemplateName] = useState("");
+  // What this is a template of. Chosen first, because it decides what the rest
+  // of this screen should even ask for - a wardrobe template has no business
+  // asking which rooms are in it.
+  const [level, setLevel] = useState<TemplateLevel>("quotation");
   const [templateDescription, setTemplateDescription] = useState("");
   const [propertyType, setPropertyType] = useState("3bhk");
   const [qualityTier, setQualityTier] = useState("standard");
@@ -522,6 +530,7 @@ export default function NewTemplatePage() {
 
       const payload = {
         name: templateName,
+        level,
         description: templateDescription,
         property_type: propertyType,
         quality_tier: qualityTier,
@@ -623,6 +632,42 @@ export default function NewTemplatePage() {
       <div className="flex">
         {/* Main Content */}
         <div className="flex-1 p-4 overflow-auto">
+          {/* What is being templated. First, because it decides what the rest
+              of the screen asks for. */}
+          <div className="bg-white rounded-lg border border-slate-200 p-4 mb-4">
+            <label className="block text-xs font-medium text-slate-600 mb-2">
+              What is this a template of?
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+              {TEMPLATE_LEVELS.map((option) => {
+                const active = level === option.key;
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => setLevel(option.key)}
+                    className={`text-left px-3 py-2 rounded-lg border transition-colors ${
+                      active
+                        ? "bg-blue-50 border-blue-400 ring-1 ring-blue-200"
+                        : "bg-white border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span
+                      className={`block text-sm font-medium ${
+                        active ? "text-blue-800" : "text-slate-700"
+                      }`}
+                    >
+                      {option.label}
+                    </span>
+                    <span className="block text-[11px] text-slate-500 mt-0.5">
+                      {option.description}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Template Details - Compact */}
           <div className="bg-white rounded-lg border border-slate-200 p-4 mb-4">
             <div className="flex flex-wrap items-end gap-4">
@@ -638,6 +683,7 @@ export default function NewTemplatePage() {
                   className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-500 focus:border-slate-500"
                 />
               </div>
+              {level === "quotation" && (
               <div className="w-32">
                 <label className="block text-xs font-medium text-slate-600 mb-1">
                   Property Type
@@ -656,6 +702,8 @@ export default function NewTemplatePage() {
                   <option value="commercial">Commercial</option>
                 </select>
               </div>
+              )}
+              {level === "quotation" && (
               <div className="w-28">
                 <label className="block text-xs font-medium text-slate-600 mb-1">
                   Quality Tier
@@ -665,12 +713,13 @@ export default function NewTemplatePage() {
                   onChange={(e) => setQualityTier(e.target.value)}
                   className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-500 focus:border-slate-500"
                 >
-                  <option value="budget">Budget</option>
+                  <option value="basic">Basic</option>
                   <option value="standard">Standard</option>
                   <option value="premium">Premium</option>
                   <option value="luxury">Luxury</option>
                 </select>
               </div>
+              )}
               <div className="flex-1 min-w-[200px]">
                 <label className="block text-xs font-medium text-slate-600 mb-1">
                   Description

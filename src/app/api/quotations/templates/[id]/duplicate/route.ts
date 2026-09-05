@@ -10,7 +10,9 @@ interface RouteParams {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["quotations.templates.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -57,6 +59,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         tenant_id: user!.tenantId,
         name: newName,
         description: originalTemplate.description,
+        // Without this the column takes its 'quotation' default, so
+        // duplicating a component template produced a whole-quotation one -
+        // which then opened the full editor asking for a property type.
+        level: originalTemplate.level || "quotation",
         property_type: originalTemplate.property_type,
         quality_tier: originalTemplate.quality_tier,
         base_price: originalTemplate.base_price,

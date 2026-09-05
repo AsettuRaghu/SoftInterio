@@ -1,6 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import {
+  canViewCosts,
+  stripCostFields,
+} from "@/lib/quotations/cost-visibility";
+
+/** Coerces the builder's mixed string/number payload to a number or null. */
+function toNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Profit on one line, at the moment it was priced.
+ *
+ * Derived from amount rather than by re-deriving the measurement: amount is
+ * already rate x measure, so measure = amount / rate. That avoids repeating
+ * the unit conversion the client owns (mm/cm/inch/ft, area vs length vs
+ * count), and - more importantly - guarantees the margin reconciles with the
+ * total the client is being shown. A margin computed from an independently
+ * derived measure could disagree with the quotation it belongs to.
+ *
+ * Null when the cost is unknown. Null is not zero margin, and reporting must
+ * be able to tell the difference.
+ */
+function computeMargin(
+  rate: number | null,
+  amount: number | null,
+  quantity: number | null,
+  companyCost: number | null
+): number | null {
+  if (companyCost === null || rate === null) return null;
+
+  // A free line has no rate to divide by, so fall back to the count.
+  if (rate === 0) {
+    return quantity === null ? null : -companyCost * quantity;
+  }
+  if (amount === null) return null;
+
+  const measure = amount / rate;
+  return (rate - companyCost) * measure;
+}
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -26,6 +68,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         *,
         lead:leads!lead_id(
           id,
+          lead_number,
           stage,
           property:properties(
             id,
@@ -72,8 +115,27 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const property = lead?.property as Record<string, unknown> | null;
     const client = quotation.client as { name?: string; email?: string; phone?: string } | null;
     
+    // quotations.project_id carries no foreign key (only linked_to_project_id
+    // has one), so PostgREST cannot embed the project - it has to be read
+    // separately. Only quotations that belong to a project pay for this.
+    let project: {
+      id: string;
+      project_number?: string;
+      name?: string;
+      status?: string;
+    } | null = null;
+    if (quotation.project_id) {
+      const { data } = await supabase
+        .from("projects")
+        .select("id, project_number, name, status")
+        .eq("id", quotation.project_id)
+        .maybeSingle();
+      project = data;
+    }
+
     const flattenedQuotation = {
       ...quotation,
+      project,
       // Client data from relation
       client_name: client?.name || null,
       client_email: client?.email || null,
@@ -157,11 +219,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         : Promise.resolve({ data: null }),
     ]);
 
+    // Strip internal costs before anything is organised, so every shape they
+    // appear in - nested under a component, orphaned, or the flat list - is
+    // covered by the one check rather than three.
+    const showCosts = await canViewCosts();
+    const visibleLineItems = stripCostFields(lineItems || [], showCosts);
+
     // Organize line items by space and component for hierarchical view
     const organizedData = organizeQuotationData(
       spaces || [],
       components || [],
-      lineItems || []
+      visibleLineItems
     );
 
     // Build assigned_user from joined data
@@ -184,8 +252,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       spaces: organizedData.spaces,
       components: organizedData.orphanComponents, // Components without a space
       lineItems: organizedData.orphanLineItems, // Line items without space or component
-      allLineItems: lineItems || [], // Flat list of all line items
+      allLineItems: visibleLineItems, // Flat list of all line items
       versions: versions || [],
+      // Lets the builder decide whether to render the margin panel at all,
+      // without it having to guess from whether the fields came back.
+      can_view_costs: showCosts,
     });
   } catch (error) {
     console.error("Get quotation API error:", error);
@@ -634,8 +705,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Prevent modification of approved/rejected quotations (unless creating a new version)
-    if (["approved", "rejected"].includes(existingQuotation.status) && !create_new_version) {
+    // A quotation that has left the building is revision-only.
+    //
+    // "sent" joins approved and rejected here: the client is holding that
+    // document, and editing it in place silently changes what they are looking
+    // at while the quotation number and version stay the same. A revision
+    // makes the change visible on both sides.
+    if (
+      ["sent", "approved", "rejected"].includes(existingQuotation.status) &&
+      !create_new_version
+    ) {
       return NextResponse.json(
         {
           error: `Cannot modify a ${existingQuotation.status} quotation. Create a revision instead.`,
@@ -810,6 +889,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
                       description: comp.description || null,
                       subtotal: comp.subtotal || 0,
                       display_order: comp.sort_order ?? compIndex,
+                      // The component's own size, entered once and pushed down
+                      // to its lines. These columns existed all along and were
+                      // set on 0 of 169 rows because nothing ever wrote them.
+                      width: comp.width ?? null,
+                      height: comp.height ?? null,
+                      metadata: comp.metadata ?? null,
                     },
                     spaceIndex,
                     compIndex,
@@ -869,6 +954,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
                       `${spaceIndex}-${compIndex}`
                     );
 
+                    const companyCost = toNumber(
+                      item.company_cost ?? item.companyCost
+                    );
+                    const vendorCost = toNumber(
+                      item.vendor_cost ?? item.vendorCost
+                    );
                     allLineItems.push({
                       quotation_id: id,
                       quotation_space_id: newSpaceId || null,
@@ -881,6 +972,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
                       unit_code: item.unit_code,
                       rate: item.rate,
                       amount: item.amount,
+                      company_cost: companyCost,
+                      vendor_cost: vendorCost,
+                      margin_amount: computeMargin(
+                        toNumber(item.rate),
+                        toNumber(item.amount),
+                        toNumber(item.quantity),
+                        companyCost
+                      ),
                       measurement_unit: item.measurement_unit || "mm",
                       display_order: displayOrder++,
                       notes: item.notes,
@@ -915,23 +1014,44 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         .eq("quotation_id", id);
 
       if (lineItems.length > 0) {
+        // Internal costs are captured alongside the client rate.
+        //
+        // The columns have always existed and the builder has always loaded
+        // them, but the insert dropped them - so all 415 existing line items
+        // carry a rate and no cost, and "what did we make on this quotation?"
+        // had no answer. They are snapshotted here rather than joined at read
+        // time on purpose: a cost item's price moves, and a quotation's margin
+        // must reflect what things cost when it was priced, not today.
         const lineItemsToInsert = lineItems.map(
-          (item: Record<string, unknown>, index: number) => ({
-            quotation_id: id,
-            quotation_space_id: item.quotation_space_id,
-            quotation_component_id: item.quotation_component_id,
-            quotation_cost_item_id: item.quotation_cost_item_id || item.cost_item_id,
-            name: item.name,
-            length: item.length,
-            width: item.width,
-            quantity: item.quantity,
-            unit_code: item.unit_code,
-            rate: item.rate,
-            amount: item.amount,
-            display_order: item.display_order ?? index,
-            notes: item.notes,
-            metadata: item.metadata,
-          })
+          (item: Record<string, unknown>, index: number) => {
+            const companyCost = toNumber(item.company_cost ?? item.companyCost);
+            const vendorCost = toNumber(item.vendor_cost ?? item.vendorCost);
+            return {
+              quotation_id: id,
+              quotation_space_id: item.quotation_space_id,
+              quotation_component_id: item.quotation_component_id,
+              quotation_cost_item_id:
+                item.quotation_cost_item_id || item.cost_item_id,
+              name: item.name,
+              length: item.length,
+              width: item.width,
+              quantity: item.quantity,
+              unit_code: item.unit_code,
+              rate: item.rate,
+              amount: item.amount,
+              company_cost: companyCost,
+              vendor_cost: vendorCost,
+              margin_amount: computeMargin(
+                toNumber(item.rate),
+                toNumber(item.amount),
+                toNumber(item.quantity),
+                companyCost
+              ),
+              display_order: item.display_order ?? index,
+              notes: item.notes,
+              metadata: item.metadata,
+            };
+          }
         );
 
         const { error: lineItemsError } = await supabase

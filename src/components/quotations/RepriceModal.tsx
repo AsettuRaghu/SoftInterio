@@ -20,7 +20,16 @@ import {
 
 type ActiveTab = "adjustments" | "swaps";
 
-interface PricingScenariosModalProps {
+/** The ladder, cheapest first. Order matters: it drives the tier buttons. */
+const TIER_ORDER = ["basic", "standard", "premium", "luxury"] as const;
+const TIER_LABEL: Record<string, string> = {
+  basic: "Basic",
+  standard: "Standard",
+  premium: "Premium",
+  luxury: "Luxury",
+};
+
+interface RepriceModalProps {
   isOpen: boolean;
   onClose: () => void;
   spaces: BuilderSpace[];
@@ -32,7 +41,7 @@ interface PricingScenariosModalProps {
   formatCurrency: (amount: number) => string;
 }
 
-export function PricingScenariosModal({
+export function RepriceModal({
   isOpen,
   onClose,
   spaces,
@@ -42,7 +51,7 @@ export function PricingScenariosModal({
   onApply,
   onSaveAsNewVersion,
   formatCurrency,
-}: PricingScenariosModalProps) {
+}: RepriceModalProps) {
   // Active tab
   const [activeTab, setActiveTab] = useState<ActiveTab>("adjustments");
 
@@ -63,6 +72,7 @@ export function PricingScenariosModal({
 
   // === SWAPS STATE ===
   const [swaps, setSwaps] = useState<Record<string, string>>({});
+  const [categoryTiers, setCategoryTiers] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("");
 
@@ -238,6 +248,8 @@ export function PricingScenariosModal({
         currentRate: number;
         usageCount: number;
         totalAmount: number;
+        qualityTier: string | null;
+        companyCost: number;
       }
     > = {};
 
@@ -250,32 +262,50 @@ export function PricingScenariosModal({
 
           if (!usage[item.costItemId]) {
             const costItem = costItems.find((ci) => ci.id === item.costItemId);
-            const category = categories.find(
-              (c) => c.name === item.categoryName
-            );
+            // The cost item's own category_id, not a lookup on the display
+            // name. categoryName falls back to "Other" whenever a line loads
+            // without its category joined, and "Other" matches no category -
+            // which left categoryId empty and the replacement list permanently
+            // showing "No alternatives available".
+            const category = categories.find((c) => c.id === costItem?.category_id);
 
             usage[item.costItemId] = {
               costItemId: item.costItemId,
               costItemName: item.costItemName || costItem?.name || "Unknown",
-              categoryId: category?.id || "",
+              categoryId: costItem?.category_id || category?.id || "",
+              qualityTier: costItem?.quality_tier || null,
               categoryName: item.categoryName || "Other",
               categoryColor: item.categoryColor || "#718096",
               unitCode: item.unitCode,
               currentRate: item.rate,
               usageCount: 0,
               totalAmount: 0,
+              companyCost: 0,
             };
           }
 
           const amount = calculateItemAmount(item);
           usage[item.costItemId].usageCount += 1;
           usage[item.costItemId].totalAmount += amount;
+          // Cost scales with the same measure as the price, so the margin on a
+          // line is amount - (companyCost measured the same way).
+          usage[item.costItemId].companyCost += calculateItemAmountWithRate(
+            item,
+            item.companyCost || 0
+          );
         });
       });
     });
 
     return Object.values(usage);
-  }, [spaces, costItems, categories, scope, calculateItemAmount]);
+  }, [
+    spaces,
+    costItems,
+    categories,
+    scope,
+    calculateItemAmount,
+    calculateItemAmountWithRate,
+  ]);
 
   // Calculate swapped amounts
   const materialUsageWithSwaps = useMemo(() => {
@@ -365,6 +395,69 @@ export function PricingScenariosModal({
     [costItems]
   );
 
+  /**
+   * Categories that can be moved as a whole up or down the ladder.
+   *
+   * A category qualifies only when every item in it carries a tier and each
+   * tier appears once - that is what makes "take Carcass to Premium"
+   * unambiguous. Categories where grade is not the axis (Labour, Service,
+   * Accessories) have no tiers and are simply absent from this list, so a
+   * corner carousel can never be offered as the premium organiser basket.
+   */
+  const tierLadders = useMemo(() => {
+    const inScopeCategoryIds = new Set(
+      materialUsage.map((m) => m.categoryId).filter(Boolean)
+    );
+
+    return categories
+      .filter((c) => inScopeCategoryIds.has(c.id))
+      .map((category) => {
+        const items = costItems.filter(
+          (ci) => ci.category_id === category.id && ci.quality_tier
+        );
+        const byTier: Record<string, (typeof items)[0]> = {};
+        items.forEach((ci) => {
+          if (ci.quality_tier) byTier[ci.quality_tier] = ci;
+        });
+        const rungs = TIER_ORDER.filter((t) => byTier[t]);
+        return { category, byTier, rungs };
+      })
+      .filter((ladder) => ladder.rungs.length >= 2);
+  }, [categories, costItems, materialUsage]);
+
+  /**
+   * Points every in-scope line in a category at that category's item for the
+   * chosen tier, by writing ordinary per-item swaps. Nothing special happens
+   * at apply time - the tier control is a faster way to fill in the same
+   * swaps a user could set one at a time.
+   */
+  const applyCategoryTier = useCallback(
+    (categoryId: string, tier: string) => {
+      const ladder = tierLadders.find((l) => l.category.id === categoryId);
+      if (!ladder) return;
+
+      setSwaps((prev) => {
+        const next = { ...prev };
+        materialUsage
+          .filter((m) => m.categoryId === categoryId)
+          .forEach((m) => {
+            const target = tier ? ladder.byTier[tier] : null;
+            if (!target || target.id === m.costItemId) {
+              // Already the right tier, or the tier was cleared: drop the swap
+              // rather than recording a no-op that reads as a pending change.
+              delete next[m.costItemId];
+            } else {
+              next[m.costItemId] = target.id;
+            }
+          });
+        return next;
+      });
+
+      setCategoryTiers((prev) => ({ ...prev, [categoryId]: tier }));
+    },
+    [tierLadders, materialUsage]
+  );
+
   // Used categories for filter
   const usedCategories = useMemo(() => {
     const cats = new Set<string>();
@@ -451,9 +544,35 @@ export function PricingScenariosModal({
       });
     });
 
+    // Margin, before and after. A price screen that cannot show what a change
+    // does to margin is the one place it is most needed - a 10% discount and a
+    // swap to a cheaper material look identical on the total and are nothing
+    // alike underneath.
+    let originalCost = 0;
+    let finalCost = 0;
+    spaces.forEach((space) => {
+      space.components.forEach((comp) => {
+        if (!isInScope(space.id, comp.id, scope)) return;
+        comp.lineItems.forEach((item) => {
+          originalCost += calculateItemAmountWithRate(item, item.companyCost || 0);
+          const swapId = swaps[item.costItemId];
+          const swapItem = swapId ? costItems.find((ci) => ci.id === swapId) : null;
+          // An adjustment moves the price, never the cost: discounting comes
+          // out of margin, which is the point of showing this.
+          finalCost += calculateItemAmountWithRate(
+            item,
+            swapItem?.company_cost ?? item.companyCost ?? 0
+          );
+        });
+      });
+    });
+
     const difference = finalTotal - originalTotal;
     const percentageChange =
       originalTotal > 0 ? (difference / originalTotal) * 100 : 0;
+
+    const originalMargin = originalTotal - originalCost;
+    const finalMargin = finalTotal - finalCost;
 
     return {
       originalTotal,
@@ -462,6 +581,11 @@ export function PricingScenariosModal({
       finalTotal,
       difference,
       percentageChange,
+      originalMargin,
+      finalMargin,
+      originalMarginPercent:
+        originalTotal > 0 ? (originalMargin / originalTotal) * 100 : 0,
+      finalMarginPercent: finalTotal > 0 ? (finalMargin / finalTotal) * 100 : 0,
     };
   }, [
     spaces,
@@ -500,9 +624,22 @@ export function PricingScenariosModal({
     } else {
       setSwaps((prev) => ({ ...prev, [costItemId]: replacementId }));
     }
+
+    // Overriding one line breaks the category's "everything at this tier"
+    // claim, so the tier button stops showing as selected. The swap itself
+    // stands - the button was only ever a shortcut for setting these.
+    const material = materialUsage.find((m) => m.costItemId === costItemId);
+    if (material?.categoryId && categoryTiers[material.categoryId]) {
+      setCategoryTiers((prev) => {
+        const next = { ...prev };
+        delete next[material.categoryId];
+        return next;
+      });
+    }
   };
 
   const handleReset = () => {
+    setCategoryTiers({});
     setCategoryAdjustments({});
     setComponentAdjustments({});
     setGlobalAdjustment(0);
@@ -539,6 +676,13 @@ export function PricingScenariosModal({
                   categoryColor: category?.color || item.categoryColor,
                   rate: swapItem.default_rate,
                   defaultRate: swapItem.default_rate,
+                  // Cost has to travel with the material. Without these the
+                  // line sold at the new item's rate while still carrying the
+                  // old item's cost, so every margin figure downstream was
+                  // wrong - and swapping *down* to a cheaper material made
+                  // reported margin go up.
+                  companyCost: swapItem.company_cost ?? newItem.companyCost,
+                  vendorCost: swapItem.vendor_cost ?? newItem.vendorCost,
                 };
               }
             }
@@ -582,10 +726,10 @@ export function PricingScenariosModal({
   ]);
 
   const handleApply = () => {
-    console.log("[PricingScenariosModal] handleApply called");
+    console.log("[RepriceModal] handleApply called");
     const modifiedSpaces = getModifiedSpaces();
     console.log(
-      "[PricingScenariosModal] Modified spaces:",
+      "[RepriceModal] Modified spaces:",
       modifiedSpaces.length
     );
     onApply(modifiedSpaces);
@@ -593,14 +737,14 @@ export function PricingScenariosModal({
   };
 
   const handleSaveAsNewVersion = () => {
-    console.log("[PricingScenariosModal] handleSaveAsNewVersion called");
-    console.log("[PricingScenariosModal] Version notes:", versionNotes);
+    console.log("[RepriceModal] handleSaveAsNewVersion called");
+    console.log("[RepriceModal] Version notes:", versionNotes);
     const modifiedSpaces = getModifiedSpaces();
     console.log(
-      "[PricingScenariosModal] Modified spaces count:",
+      "[RepriceModal] Modified spaces count:",
       modifiedSpaces.length
     );
-    console.log("[PricingScenariosModal] Calling onSaveAsNewVersion...");
+    console.log("[RepriceModal] Calling onSaveAsNewVersion...");
     onSaveAsNewVersion(modifiedSpaces, versionNotes);
     onClose();
   };
@@ -621,11 +765,10 @@ export function PricingScenariosModal({
         <div className="px-6 py-4 border-b border-slate-200">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">
-                Pricing Scenarios
-              </h2>
+              <h2 className="text-lg font-semibold text-slate-900">Reprice</h2>
               <p className="text-sm text-slate-500">
-                Adjust prices or swap materials to explore different options
+                Change the specification level or apply an adjustment, then
+                apply it here or save it as a new version
               </p>
             </div>
             <button
@@ -707,10 +850,13 @@ export function PricingScenariosModal({
 
         {/* Main Content */}
         <div className="flex-1 overflow-hidden flex">
-          {/* Left Panel - Scope Selection */}
-          <div className="w-72 border-r border-slate-200 bg-slate-50 p-4 overflow-y-auto">
-            <h3 className="text-sm font-medium text-slate-700 mb-3">
-              Apply To
+          {/* Left Panel - Scope Selection.
+              The panel itself no longer scrolls: the tree inside it does, so
+              the heading stays put and the list uses the full modal height
+              rather than a fixed box with space left under it. */}
+          <div className="w-80 shrink-0 border-r border-slate-200 bg-slate-50 p-4 flex flex-col min-h-0">
+            <h3 className="text-sm font-medium text-slate-700 mb-2 shrink-0">
+              Apply to
             </h3>
             <ScopeSelector spaces={spaces} value={scope} onChange={setScope} />
           </div>
@@ -720,232 +866,289 @@ export function PricingScenariosModal({
             {activeTab === "adjustments" ? (
               <>
                 {/* Adjustments Controls */}
-                <div className="px-6 py-4 bg-white border-b border-slate-200">
-                  <div className="flex items-center justify-between">
-                    <div className="flex gap-2">
+                <div className="px-6 py-3 bg-white border-b border-slate-200">
+                  {/* Matched to the tab pills above rather than the chunkier
+                      buttons these were - the header is chrome, not content. */}
+                  <div className="flex gap-1 p-0.5 bg-slate-100 rounded-lg w-fit">
+                    {(["category", "component"] as const).map((m) => (
                       <button
-                        onClick={() => setAdjustmentMode("category")}
-                        className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                          adjustmentMode === "category"
-                            ? "bg-blue-600 text-white"
-                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        key={m}
+                        onClick={() => setAdjustmentMode(m)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                          adjustmentMode === m
+                            ? "bg-white text-slate-900 shadow-sm"
+                            : "text-slate-600 hover:text-slate-900"
                         }`}
                       >
-                        By Category
+                        By {m === "category" ? "Category" : "Component"}
                       </button>
-                      <button
-                        onClick={() => setAdjustmentMode("component")}
-                        className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                          adjustmentMode === "component"
-                            ? "bg-blue-600 text-white"
-                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                        }`}
-                      >
-                        By Component
-                      </button>
-                    </div>
+                    ))}
+                  </div>
 
-                    {/* Global Adjustment */}
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-slate-600">Global:</span>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="range"
-                          min="-50"
-                          max="50"
-                          step="1"
-                          value={globalAdjustment}
-                          onChange={(e) =>
-                            setGlobalAdjustment(Number(e.target.value))
-                          }
-                          className="w-24 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                        />
-                        <div className="flex items-center">
-                          <input
-                            type="number"
-                            value={globalAdjustment}
-                            onChange={(e) =>
-                              setGlobalAdjustment(Number(e.target.value) || 0)
-                            }
-                            className="w-16 px-2 py-1 text-sm text-center border border-slate-200 rounded-l-lg focus:ring-1 focus:ring-blue-500"
-                          />
-                          <span className="px-2 py-1 text-sm bg-slate-100 border border-l-0 border-slate-200 rounded-r-lg">
-                            %
-                          </span>
-                        </div>
-                      </div>
+                  {/* Global adjustment.
+                      One row on purpose: this modal's job is comparing the
+                      list below, so the control that drives it should not eat
+                      the space that list needs. */}
+                  <div className="mt-2.5 pt-2.5 border-t border-slate-100 flex items-center gap-3">
+                    <span
+                      className="text-sm text-slate-600 shrink-0"
+                      title={`Applies on top of the per-${adjustmentMode} changes below`}
+                    >
+                      Adjust all in scope
+                    </span>
+                    <input
+                      type="range"
+                      min="-50"
+                      max="50"
+                      step="1"
+                      value={globalAdjustment}
+                      onChange={(e) =>
+                        setGlobalAdjustment(Number(e.target.value))
+                      }
+                      className="flex-1 min-w-0 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                    <div className="flex items-center shrink-0">
+                      <input
+                        type="number"
+                        min="-50"
+                        max="50"
+                        value={globalAdjustment}
+                        onChange={(e) =>
+                          setGlobalAdjustment(
+                            Math.max(
+                              -50,
+                              Math.min(50, Number(e.target.value) || 0)
+                            )
+                          )
+                        }
+                        className="w-14 px-1.5 py-1 text-sm text-center border border-slate-200 rounded-l-md focus:ring-1 focus:ring-blue-500 outline-none tabular-nums"
+                      />
+                      <span className="px-1.5 py-1 text-sm bg-slate-100 border border-l-0 border-slate-200 rounded-r-md text-slate-500">
+                        %
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Adjustment Items */}
-                <div className="flex-1 overflow-auto p-6">
-                  {adjustmentMode === "category" ? (
-                    <div className="space-y-3">
-                      {categoryAnalysis.length === 0 ? (
-                        <div className="text-center py-12 text-slate-500">
-                          <p>No items in selected scope</p>
-                        </div>
-                      ) : (
-                        categoryAnalysis.map((cat) => (
-                          <div
-                            key={cat.categoryId}
-                            className="bg-white border border-slate-200 rounded-lg p-4"
-                          >
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center gap-3">
-                                <div
-                                  className="w-3 h-3 rounded-full"
-                                  style={{ backgroundColor: cat.categoryColor }}
-                                />
-                                <div>
-                                  <span className="font-medium text-slate-900">
-                                    {cat.categoryName}
-                                  </span>
-                                  <span className="text-xs text-slate-500 ml-2">
-                                    ({cat.itemCount} items)
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <div className="text-sm text-slate-500">
-                                  {formatCurrency(cat.originalTotal)}
-                                </div>
-                                {(cat.percentage !== 0 ||
-                                  globalAdjustment !== 0) && (
-                                  <div
-                                    className={`text-sm font-medium ${
-                                      cat.adjustedTotal > cat.originalTotal
-                                        ? "text-red-600"
-                                        : cat.adjustedTotal < cat.originalTotal
-                                        ? "text-green-600"
-                                        : "text-slate-600"
-                                    }`}
-                                  >
-                                    → {formatCurrency(cat.adjustedTotal)}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-4">
-                              <input
-                                type="range"
-                                min="-50"
-                                max="50"
-                                step="1"
-                                value={cat.percentage}
-                                onChange={(e) =>
-                                  handleCategoryAdjustment(
-                                    cat.categoryId,
-                                    Number(e.target.value)
-                                  )
-                                }
-                                className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                              />
-                              <div className="flex items-center">
-                                <input
-                                  type="number"
-                                  value={cat.percentage}
-                                  onChange={(e) =>
-                                    handleCategoryAdjustment(
-                                      cat.categoryId,
-                                      Number(e.target.value) || 0
-                                    )
-                                  }
-                                  className="w-16 px-2 py-1 text-sm text-center border border-slate-200 rounded-l-lg focus:ring-1 focus:ring-blue-500"
-                                />
-                                <span className="px-2 py-1 text-sm bg-slate-100 border border-l-0 border-slate-200 rounded-r-lg">
-                                  %
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                      )}
+                {/* Adjustment Items.
+                    One line each: name, price, slider, percentage. These were
+                    bordered two-row cards about a hundred pixels tall, so a
+                    nine-category quotation could not be seen at once - which
+                    defeats the point of a screen for comparing them. */}
+                <div className="flex-1 overflow-auto px-6 py-3">
+                  {(adjustmentMode === "category"
+                    ? categoryAnalysis.map((c) => ({
+                        key: c.categoryId,
+                        name: c.categoryName,
+                        color: c.categoryColor,
+                        itemCount: c.itemCount,
+                        percentage: c.percentage,
+                        originalTotal: c.originalTotal,
+                        adjustedTotal: c.adjustedTotal,
+                        onChange: (v: number) =>
+                          handleCategoryAdjustment(c.categoryId, v),
+                      }))
+                    : componentAnalysis.map((c) => ({
+                        key: c.componentTypeId,
+                        name: c.componentTypeName,
+                        color: undefined as string | undefined,
+                        itemCount: c.itemCount,
+                        percentage: c.percentage,
+                        originalTotal: c.originalTotal,
+                        adjustedTotal: c.adjustedTotal,
+                        onChange: (v: number) =>
+                          handleComponentAdjustment(c.componentTypeId, v),
+                      }))
+                  ).length === 0 ? (
+                    <div className="text-center py-12 text-slate-500">
+                      <p>
+                        {adjustmentMode === "category"
+                          ? "No items in selected scope"
+                          : "No components in selected scope"}
+                      </p>
                     </div>
                   ) : (
-                    <div className="space-y-3">
-                      {componentAnalysis.length === 0 ? (
-                        <div className="text-center py-12 text-slate-500">
-                          <p>No components in selected scope</p>
-                        </div>
-                      ) : (
-                        componentAnalysis.map((comp) => (
+                    <div className="divide-y divide-slate-100">
+                      {(adjustmentMode === "category"
+                        ? categoryAnalysis.map((c) => ({
+                            key: c.categoryId,
+                            name: c.categoryName,
+                            color: c.categoryColor as string | undefined,
+                            itemCount: c.itemCount,
+                            percentage: c.percentage,
+                            originalTotal: c.originalTotal,
+                            adjustedTotal: c.adjustedTotal,
+                            onChange: (v: number) =>
+                              handleCategoryAdjustment(c.categoryId, v),
+                          }))
+                        : componentAnalysis.map((c) => ({
+                            key: c.componentTypeId,
+                            name: c.componentTypeName,
+                            color: undefined as string | undefined,
+                            itemCount: c.itemCount,
+                            percentage: c.percentage,
+                            originalTotal: c.originalTotal,
+                            adjustedTotal: c.adjustedTotal,
+                            onChange: (v: number) =>
+                              handleComponentAdjustment(c.componentTypeId, v),
+                          }))
+                      ).map((row) => {
+                        const changed =
+                          row.percentage !== 0 || globalAdjustment !== 0;
+                        return (
                           <div
-                            key={comp.componentTypeId}
-                            className="bg-white border border-slate-200 rounded-lg p-4"
+                            key={row.key}
+                            className="flex items-center gap-3 py-2"
                           >
-                            <div className="flex items-center justify-between mb-3">
-                              <div>
-                                <span className="font-medium text-slate-900">
-                                  {comp.componentTypeName}
-                                </span>
-                                <span className="text-xs text-slate-500 ml-2">
-                                  ({comp.itemCount} items)
-                                </span>
-                              </div>
-                              <div className="text-right">
-                                <div className="text-sm text-slate-500">
-                                  {formatCurrency(comp.originalTotal)}
-                                </div>
-                                {(comp.percentage !== 0 ||
-                                  globalAdjustment !== 0) && (
-                                  <div
-                                    className={`text-sm font-medium ${
-                                      comp.adjustedTotal > comp.originalTotal
-                                        ? "text-red-600"
-                                        : comp.adjustedTotal <
-                                          comp.originalTotal
-                                        ? "text-green-600"
-                                        : "text-slate-600"
-                                    }`}
-                                  >
-                                    → {formatCurrency(comp.adjustedTotal)}
-                                  </div>
-                                )}
-                              </div>
+                            <div className="flex items-center gap-2 w-48 shrink-0 min-w-0">
+                              {row.color && (
+                                <span
+                                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: row.color }}
+                                />
+                              )}
+                              <span
+                                className="text-sm text-slate-800 truncate"
+                                title={row.name}
+                              >
+                                {row.name}
+                              </span>
+                              <span className="text-[11px] text-slate-400 shrink-0">
+                                {row.itemCount}
+                              </span>
                             </div>
-                            <div className="flex items-center gap-4">
+
+                            <div className="w-40 shrink-0 text-right tabular-nums">
+                              <span
+                                className={`text-xs ${
+                                  changed
+                                    ? "text-slate-400 line-through"
+                                    : "text-slate-500"
+                                }`}
+                              >
+                                {formatCurrency(row.originalTotal)}
+                              </span>
+                              {changed && (
+                                <span
+                                  className={`ml-1.5 text-xs font-medium ${
+                                    row.adjustedTotal > row.originalTotal
+                                      ? "text-red-600"
+                                      : row.adjustedTotal < row.originalTotal
+                                      ? "text-green-600"
+                                      : "text-slate-600"
+                                  }`}
+                                >
+                                  {formatCurrency(row.adjustedTotal)}
+                                </span>
+                              )}
+                            </div>
+
+                            <input
+                              type="range"
+                              min="-50"
+                              max="50"
+                              step="1"
+                              value={row.percentage}
+                              onChange={(e) =>
+                                row.onChange(Number(e.target.value))
+                              }
+                              className="flex-1 min-w-0 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                            />
+
+                            <div className="flex items-center shrink-0">
                               <input
-                                type="range"
+                                type="number"
                                 min="-50"
                                 max="50"
-                                step="1"
-                                value={comp.percentage}
+                                value={row.percentage}
                                 onChange={(e) =>
-                                  handleComponentAdjustment(
-                                    comp.componentTypeId,
-                                    Number(e.target.value)
+                                  row.onChange(
+                                    Math.max(
+                                      -50,
+                                      Math.min(50, Number(e.target.value) || 0)
+                                    )
                                   )
                                 }
-                                className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                                className="w-14 px-1.5 py-1 text-sm text-center border border-slate-200 rounded-l-md focus:ring-1 focus:ring-blue-500 outline-none tabular-nums"
                               />
-                              <div className="flex items-center">
-                                <input
-                                  type="number"
-                                  value={comp.percentage}
-                                  onChange={(e) =>
-                                    handleComponentAdjustment(
-                                      comp.componentTypeId,
-                                      Number(e.target.value) || 0
-                                    )
-                                  }
-                                  className="w-16 px-2 py-1 text-sm text-center border border-slate-200 rounded-l-lg focus:ring-1 focus:ring-blue-500"
-                                />
-                                <span className="px-2 py-1 text-sm bg-slate-100 border border-l-0 border-slate-200 rounded-r-lg">
-                                  %
-                                </span>
-                              </div>
+                              <span className="px-1.5 py-1 text-sm bg-slate-100 border border-l-0 border-slate-200 rounded-r-md text-slate-500">
+                                %
+                              </span>
                             </div>
                           </div>
-                        ))
-                      )}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
               </>
             ) : (
               <>
+                {/* Move a whole category up or down the ladder. This is the
+                    operation clients actually ask for - "same design, cheaper
+                    shutters" - and doing it here saves setting the same swap on
+                    every line by hand. */}
+                {tierLadders.length > 0 && (
+                  <div className="px-6 py-4 bg-slate-50 border-b border-slate-200">
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500 mb-3">
+                      Specification level by category
+                    </p>
+                    <div className="space-y-2">
+                      {tierLadders.map(({ category, byTier, rungs }) => (
+                        <div
+                          key={category.id}
+                          className="flex items-center gap-3"
+                        >
+                          <span className="w-36 shrink-0 text-sm text-slate-700 truncate">
+                            {category.name}
+                          </span>
+                          <div className="flex items-center gap-1 p-0.5 bg-white border border-slate-200 rounded-lg">
+                            {rungs.map((tier) => {
+                              const isActive = categoryTiers[category.id] === tier;
+                              return (
+                                <button
+                                  key={tier}
+                                  type="button"
+                                  onClick={() =>
+                                    applyCategoryTier(
+                                      category.id,
+                                      isActive ? "" : tier
+                                    )
+                                  }
+                                  title={`${byTier[tier].name} - ${formatCurrency(
+                                    byTier[tier].default_rate
+                                  )}/${byTier[tier].unit_code}`}
+                                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                                    isActive
+                                      ? "bg-orange-600 text-white"
+                                      : "text-slate-600 hover:bg-slate-100"
+                                  }`}
+                                >
+                                  {TIER_LABEL[tier] || tier}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {categoryTiers[category.id] && (
+                            <button
+                              type="button"
+                              onClick={() => applyCategoryTier(category.id, "")}
+                              className="text-xs text-slate-400 hover:text-slate-600"
+                            >
+                              Reset
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-3 text-[11px] text-slate-400">
+                      Only categories with a full ladder appear here. Labour,
+                      services and one-off accessories are never swapped by
+                      tier - use the list below for those.
+                    </p>
+                  </div>
+                )}
+
                 {/* Swaps Search/Filter */}
                 <div className="px-6 py-4 bg-white border-b border-slate-200">
                   <div className="flex items-center gap-4">
@@ -989,14 +1192,15 @@ export function PricingScenariosModal({
                   </div>
                 </div>
 
-                {/* Materials List */}
-                <div className="flex-1 overflow-auto p-6">
+                {/* Materials List. Same row shape as the adjustments tab:
+                    name, current price, the control, the effect. */}
+                <div className="flex-1 overflow-auto px-6 py-3">
                   {filteredMaterials.length === 0 ? (
                     <div className="text-center py-12 text-slate-500">
                       <p>No materials found in selected scope</p>
                     </div>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="divide-y divide-slate-100">
                       {filteredMaterials.map((material) => {
                         const replacements = getReplacements(material);
                         const hasSwap = swaps[material.costItemId];
@@ -1008,124 +1212,98 @@ export function PricingScenariosModal({
                         return (
                           <div
                             key={material.costItemId}
-                            className={`border rounded-lg p-4 transition-colors ${
-                              hasSwap
-                                ? "border-orange-300 bg-orange-50"
-                                : "border-slate-200 bg-white"
+                            className={`flex items-center gap-3 py-2 px-2 -mx-2 rounded ${
+                              hasSwap ? "bg-orange-50" : ""
                             }`}
                           >
-                            <div className="flex items-start gap-4">
-                              {/* Current Material Info */}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span
-                                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                                    style={{
-                                      backgroundColor: material.categoryColor,
-                                    }}
-                                  />
-                                  <span className="text-xs font-medium text-slate-500 uppercase">
-                                    {material.categoryName}
-                                  </span>
-                                </div>
-                                <h4 className="font-medium text-slate-900 truncate">
-                                  {material.costItemName}
-                                </h4>
-                                <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
-                                  <span>
-                                    ₹
-                                    {material.currentRate.toLocaleString(
-                                      "en-IN"
-                                    )}
-                                    /{material.unitCode}
-                                  </span>
-                                  <span>•</span>
-                                  <span>Used {material.usageCount}x</span>
-                                  <span>•</span>
-                                  <span className="font-medium text-slate-700">
-                                    {formatCurrency(material.totalAmount)}
-                                  </span>
-                                </div>
-                              </div>
+                            {/* Name and where it is used */}
+                            <div className="flex items-center gap-2 w-56 shrink-0 min-w-0">
+                              <span
+                                className="w-2.5 h-2.5 rounded-full shrink-0"
+                                style={{
+                                  backgroundColor: material.categoryColor,
+                                }}
+                              />
+                              <span
+                                className="text-sm text-slate-800 truncate"
+                                title={`${material.costItemName} - ${material.categoryName}`}
+                              >
+                                {material.costItemName}
+                              </span>
+                              <span className="text-[11px] text-slate-400 shrink-0">
+                                {material.usageCount}
+                              </span>
+                            </div>
 
-                              {/* Swap Arrow */}
-                              <div className="flex items-center px-2">
-                                <svg
-                                  className={`w-6 h-6 ${
-                                    hasSwap
-                                      ? "text-orange-500"
-                                      : "text-slate-300"
-                                  }`}
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M17 8l4 4m0 0l-4 4m4-4H3"
-                                  />
-                                </svg>
-                              </div>
-
-                              {/* Replacement Selector */}
-                              <div className="w-64 shrink-0">
-                                <select
-                                  value={swaps[material.costItemId] || ""}
-                                  onChange={(e) =>
-                                    handleSwap(
-                                      material.costItemId,
-                                      e.target.value
-                                    )
-                                  }
-                                  className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-orange-500 ${
-                                    hasSwap
-                                      ? "border-orange-300 bg-white"
-                                      : "border-slate-200 bg-slate-50"
+                            {/* What it costs, and what it would cost */}
+                            <div className="w-40 shrink-0 text-right tabular-nums">
+                              <span
+                                className={`text-xs ${
+                                  hasSwap
+                                    ? "text-slate-400 line-through"
+                                    : "text-slate-500"
+                                }`}
+                              >
+                                {formatCurrency(material.totalAmount)}
+                              </span>
+                              {hasSwap && material.newTotalAmount !== null && (
+                                <span
+                                  className={`ml-1.5 text-xs font-medium ${
+                                    priceDiff > 0
+                                      ? "text-red-600"
+                                      : priceDiff < 0
+                                      ? "text-green-600"
+                                      : "text-slate-600"
                                   }`}
                                 >
-                                  <option value="">Keep original</option>
-                                  {replacements.map((rep) => (
-                                    <option key={rep.id} value={rep.id}>
-                                      {rep.name} (₹
-                                      {rep.default_rate.toLocaleString("en-IN")}
-                                      )
-                                    </option>
-                                  ))}
-                                </select>
-                                {replacements.length === 0 && (
-                                  <p className="text-xs text-slate-400 mt-1">
-                                    No alternatives available
-                                  </p>
-                                )}
-                              </div>
+                                  {formatCurrency(material.newTotalAmount)}
+                                </span>
+                              )}
+                            </div>
 
-                              {/* Price Difference */}
-                              <div className="w-28 text-right shrink-0">
-                                {hasSwap &&
-                                  material.newTotalAmount !== null && (
-                                    <div>
-                                      <div className="text-sm font-medium text-slate-900">
-                                        {formatCurrency(
-                                          material.newTotalAmount
-                                        )}
-                                      </div>
-                                      <div
-                                        className={`text-xs font-medium ${
-                                          priceDiff > 0
-                                            ? "text-red-600"
-                                            : priceDiff < 0
-                                            ? "text-green-600"
-                                            : "text-slate-500"
-                                        }`}
-                                      >
-                                        {priceDiff >= 0 ? "+" : ""}
-                                        {formatCurrency(priceDiff)}
-                                      </div>
-                                    </div>
-                                  )}
-                              </div>
+                            {/* Replace with. Takes the middle, like the slider
+                                does on the adjustments tab, so both lists read
+                                as the same shape of row. */}
+                            <select
+                              value={swaps[material.costItemId] || ""}
+                              onChange={(e) =>
+                                handleSwap(material.costItemId, e.target.value)
+                              }
+                              disabled={replacements.length === 0}
+                              className={`flex-1 min-w-0 px-2 py-1 border rounded-md text-sm outline-none focus:ring-1 focus:ring-orange-500 disabled:text-slate-400 ${
+                                hasSwap
+                                  ? "border-orange-300 bg-white"
+                                  : "border-slate-200 bg-white"
+                              }`}
+                            >
+                              <option value="">
+                                {replacements.length === 0
+                                  ? "No alternatives"
+                                  : "Keep original"}
+                              </option>
+                              {replacements.map((rep) => (
+                                <option key={rep.id} value={rep.id}>
+                                  {rep.name} (
+                                  {rep.default_rate.toLocaleString("en-IN")})
+                                </option>
+                              ))}
+                            </select>
+
+                            {/* Difference, so a swap's effect is readable
+                                without comparing the two figures yourself. */}
+                            <div className="w-24 shrink-0 text-right tabular-nums">
+                              {hasSwap && priceDiff !== 0 && (
+                                <span
+                                  className={`text-xs font-medium ${
+                                    priceDiff > 0
+                                      ? "text-red-600"
+                                      : "text-green-600"
+                                  }`}
+                                >
+                                  {priceDiff > 0 ? "+" : ""}
+                                  {formatCurrency(priceDiff)}
+                                </span>
+                              )}
                             </div>
                           </div>
                         );
@@ -1236,6 +1414,34 @@ export function PricingScenariosModal({
               )}
             </div>
           </div>
+
+          {/* Margin. Without this the two ways of reaching the same total look
+              identical: a discount comes straight out of margin, while moving
+              down a tier takes cost out with it. */}
+          {totals.originalTotal > 0 && (
+            <div className="flex items-center gap-2 pb-3 text-xs">
+              <span className="text-slate-500">Margin</span>
+              <span className="text-slate-600 tabular-nums">
+                {formatCurrency(totals.originalMargin)} (
+                {totals.originalMarginPercent.toFixed(1)}%)
+              </span>
+              {hasAnyChange && (
+                <>
+                  <span className="text-slate-400">&rarr;</span>
+                  <span
+                    className={`font-medium tabular-nums ${
+                      totals.finalMargin < totals.originalMargin
+                        ? "text-red-600"
+                        : "text-green-600"
+                    }`}
+                  >
+                    {formatCurrency(totals.finalMargin)} (
+                    {totals.finalMarginPercent.toFixed(1)}%)
+                  </span>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Action Buttons */}
           {showSaveOptions ? (

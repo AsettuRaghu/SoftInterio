@@ -15,307 +15,153 @@ interface ScopeSelectorProps {
   spaces: BuilderSpace[];
   value: ScopeSelection;
   onChange: (selection: ScopeSelection) => void;
-  compact?: boolean;
 }
 
+export const defaultScope: ScopeSelection = {
+  mode: "all",
+  selectedSpaceIds: [],
+  selectedComponentIds: [],
+};
+
+/**
+ * Whether a component is inside the current selection.
+ *
+ * Unchanged, so anything already reading a ScopeSelection keeps working: the
+ * selector below writes "all" or "components", and "spaces" is still honoured
+ * for a selection made before the modes were merged.
+ */
+export function isInScope(
+  spaceId: string,
+  componentId: string | undefined,
+  scope: ScopeSelection
+): boolean {
+  if (scope.mode === "all") return true;
+  if (scope.mode === "spaces") return scope.selectedSpaceIds.includes(spaceId);
+  if (scope.mode === "components" && componentId) {
+    return scope.selectedComponentIds.includes(`${spaceId}:${componentId}`);
+  }
+  return false;
+}
+
+const key = (spaceId: string, componentId: string) => `${spaceId}:${componentId}`;
+
+/**
+ * Picks what a repricing applies to.
+ *
+ * One tree rather than the previous All / By Space / By Component tabs. Those
+ * three were really one thing: "By Space" was a flat list of the same rooms
+ * "By Component" already showed, so the middle mode taught the user nothing
+ * and cost a decision. Here a room's checkbox stands for everything in it, and
+ * expanding it lets you disagree with that on individual components.
+ *
+ * The mode is derived rather than chosen: everything ticked is "all", anything
+ * less is an explicit component list.
+ */
 export function ScopeSelector({
   spaces,
   value,
   onChange,
-  compact = false,
 }: ScopeSelectorProps) {
-  const [expandedSpaces, setExpandedSpaces] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  // Toggle space expansion for component selection
-  const toggleSpaceExpand = (spaceId: string) => {
-    const newExpanded = new Set(expandedSpaces);
-    if (newExpanded.has(spaceId)) {
-      newExpanded.delete(spaceId);
-    } else {
-      newExpanded.add(spaceId);
-    }
-    setExpandedSpaces(newExpanded);
-  };
-
-  // Handle mode change
-  const handleModeChange = (mode: ScopeMode) => {
-    if (mode === "all") {
-      onChange({ mode, selectedSpaceIds: [], selectedComponentIds: [] });
-    } else if (mode === "spaces") {
-      // Select all spaces by default when switching to spaces mode
-      onChange({
-        mode,
-        selectedSpaceIds: spaces.map((s) => s.id),
-        selectedComponentIds: [],
-      });
-    } else {
-      // Select all components by default when switching to components mode
-      const allComponentIds = spaces.flatMap((s) =>
-        s.components.map((c) => `${s.id}:${c.id}`)
-      );
-      onChange({
-        mode,
-        selectedSpaceIds: [],
-        selectedComponentIds: allComponentIds,
-      });
-    }
-  };
-
-  // Toggle space selection
-  const toggleSpace = (spaceId: string) => {
-    const newSelected = value.selectedSpaceIds.includes(spaceId)
-      ? value.selectedSpaceIds.filter((id) => id !== spaceId)
-      : [...value.selectedSpaceIds, spaceId];
-    onChange({ ...value, selectedSpaceIds: newSelected });
-  };
-
-  // Toggle component selection
-  const toggleComponent = (spaceId: string, componentId: string) => {
-    const key = `${spaceId}:${componentId}`;
-    const newSelected = value.selectedComponentIds.includes(key)
-      ? value.selectedComponentIds.filter((id) => id !== key)
-      : [...value.selectedComponentIds, key];
-    onChange({ ...value, selectedComponentIds: newSelected });
-  };
-
-  // Toggle all components in a space
-  const toggleAllComponentsInSpace = (spaceId: string) => {
-    const space = spaces.find((s) => s.id === spaceId);
-    if (!space) return;
-
-    const spaceComponentKeys = space.components.map(
-      (c) => `${spaceId}:${c.id}`
-    );
-    const allSelected = spaceComponentKeys.every((key) =>
-      value.selectedComponentIds.includes(key)
-    );
-
-    let newSelected: string[];
-    if (allSelected) {
-      // Deselect all in this space
-      newSelected = value.selectedComponentIds.filter(
-        (key) => !key.startsWith(`${spaceId}:`)
-      );
-    } else {
-      // Select all in this space
-      const existing = value.selectedComponentIds.filter(
-        (key) => !key.startsWith(`${spaceId}:`)
-      );
-      newSelected = [...existing, ...spaceComponentKeys];
-    }
-    onChange({ ...value, selectedComponentIds: newSelected });
-  };
-
-  // Select/Deselect all
-  const selectAll = () => {
-    if (value.mode === "spaces") {
-      onChange({
-        ...value,
-        selectedSpaceIds: spaces.map((s) => s.id),
-      });
-    } else if (value.mode === "components") {
-      onChange({
-        ...value,
-        selectedComponentIds: spaces.flatMap((s) =>
-          s.components.map((c) => `${s.id}:${c.id}`)
-        ),
-      });
-    }
-  };
-
-  const deselectAll = () => {
-    if (value.mode === "spaces") {
-      onChange({ ...value, selectedSpaceIds: [] });
-    } else if (value.mode === "components") {
-      onChange({ ...value, selectedComponentIds: [] });
-    }
-  };
-
-  // Count selections
-  const selectionCount = useMemo(() => {
-    if (value.mode === "all") {
-      const totalSpaces = spaces.length;
-      const totalComponents = spaces.reduce(
-        (acc, s) => acc + s.components.length,
-        0
-      );
-      return { spaces: totalSpaces, components: totalComponents };
-    } else if (value.mode === "spaces") {
-      const selectedComponents = spaces
-        .filter((s) => value.selectedSpaceIds.includes(s.id))
-        .reduce((acc, s) => acc + s.components.length, 0);
-      return {
-        spaces: value.selectedSpaceIds.length,
-        components: selectedComponents,
-      };
-    } else {
-      const uniqueSpaces = new Set(
-        value.selectedComponentIds.map((key) => key.split(":")[0])
-      );
-      return {
-        spaces: uniqueSpaces.size,
-        components: value.selectedComponentIds.length,
-      };
-    }
-  }, [spaces, value]);
-
-  const totalSpaces = spaces.length;
-  const totalComponents = spaces.reduce(
-    (acc, s) => acc + s.components.length,
-    0
+  const allKeys = useMemo(
+    () => spaces.flatMap((s) => s.components.map((c) => key(s.id, c.id))),
+    [spaces]
   );
 
+  // "all" carries no ids, so expand it into the real set before editing.
+  const selected = useMemo(
+    () => new Set(value.mode === "all" ? allKeys : value.selectedComponentIds),
+    [value, allKeys]
+  );
+
+  const commit = (next: Set<string>) => {
+    const isEverything =
+      allKeys.length > 0 && allKeys.every((k) => next.has(k));
+    onChange(
+      isEverything
+        ? defaultScope
+        : {
+            mode: "components",
+            selectedSpaceIds: [],
+            selectedComponentIds: [...next],
+          }
+    );
+  };
+
+  const toggleComponent = (spaceId: string, componentId: string) => {
+    const next = new Set(selected);
+    const k = key(spaceId, componentId);
+    next.has(k) ? next.delete(k) : next.add(k);
+    commit(next);
+  };
+
+  const toggleSpace = (space: BuilderSpace) => {
+    const keys = space.components.map((c) => key(space.id, c.id));
+    const allOn = keys.length > 0 && keys.every((k) => selected.has(k));
+    const next = new Set(selected);
+    keys.forEach((k) => (allOn ? next.delete(k) : next.add(k)));
+    commit(next);
+  };
+
+  const toggleExpand = (spaceId: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(spaceId) ? next.delete(spaceId) : next.add(spaceId);
+      return next;
+    });
+
+  const selectedCount = selected.size;
+  const isAll = value.mode === "all" || selectedCount === allKeys.length;
+
   return (
-    <div className={`${compact ? "" : "space-y-3"}`}>
-      {/* Mode Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
-        <button
-          onClick={() => handleModeChange("all")}
-          className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-            value.mode === "all"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-600 hover:text-slate-900"
-          }`}
-        >
-          All
-        </button>
-        <button
-          onClick={() => handleModeChange("spaces")}
-          className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-            value.mode === "spaces"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-600 hover:text-slate-900"
-          }`}
-        >
-          By Space
-        </button>
-        <button
-          onClick={() => handleModeChange("components")}
-          className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-            value.mode === "components"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-600 hover:text-slate-900"
-          }`}
-        >
-          By Component
-        </button>
-      </div>
-
-      {/* Selection Summary */}
-      <div className="flex items-center justify-between text-xs text-slate-500">
-        <span>
-          {selectionCount.spaces}/{totalSpaces} spaces,{" "}
-          {selectionCount.components}/{totalComponents} components
+    <div className="flex flex-col h-full min-h-0 gap-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-xs text-slate-500">
+          {isAll
+            ? `All ${allKeys.length} components`
+            : `${selectedCount} of ${allKeys.length} components`}
         </span>
-        {value.mode !== "all" && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={selectAll}
-              className="text-blue-600 hover:text-blue-700"
-            >
-              Select All
-            </button>
-            <span className="text-slate-300">|</span>
-            <button
-              onClick={deselectAll}
-              className="text-slate-500 hover:text-slate-700"
-            >
-              Clear
-            </button>
-          </div>
-        )}
+        <button
+          onClick={() => commit(isAll ? new Set() : new Set(allKeys))}
+          className="text-xs text-blue-600 hover:text-blue-700 shrink-0"
+        >
+          {isAll ? "Clear" : "Select all"}
+        </button>
       </div>
 
-      {/* Space/Component Selection */}
-      {value.mode === "spaces" && (
-        <div className="max-h-48 overflow-y-auto space-y-1 border border-slate-200 rounded-lg p-2">
-          {spaces.map((space) => (
-            <label
-              key={space.id}
-              className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer"
-            >
-              <input
-                type="checkbox"
-                checked={value.selectedSpaceIds.includes(space.id)}
-                onChange={() => toggleSpace(space.id)}
-                className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
-              />
-              <span className="text-sm text-slate-700">
-                {space.defaultName || space.name}
-              </span>
-              <span className="text-xs text-slate-400 ml-auto">
-                {space.components.length} components
-              </span>
-            </label>
-          ))}
-        </div>
-      )}
+      {/* Fills the panel instead of the old fixed 192px / 256px caps, which
+          made a 14-room quotation scroll inside a box with empty space
+          underneath it. */}
+      <div className="flex-1 min-h-0 overflow-y-auto border border-slate-200 rounded-lg bg-white divide-y divide-slate-100">
+        {spaces.map((space) => {
+          const keys = space.components.map((c) => key(space.id, c.id));
+          const on = keys.filter((k) => selected.has(k)).length;
+          const isOpen = expanded.has(space.id);
 
-      {value.mode === "components" && (
-        <div className="max-h-64 overflow-y-auto border border-slate-200 rounded-lg">
-          {spaces.map((space) => {
-            const isExpanded = expandedSpaces.has(space.id);
-            const spaceComponentKeys = space.components.map(
-              (c) => `${space.id}:${c.id}`
-            );
-            const selectedInSpace = spaceComponentKeys.filter((key) =>
-              value.selectedComponentIds.includes(key)
-            ).length;
-            const allInSpaceSelected =
-              selectedInSpace === space.components.length;
-            const someInSpaceSelected =
-              selectedInSpace > 0 && !allInSpaceSelected;
-
-            return (
-              <div
-                key={space.id}
-                className="border-b border-slate-100 last:border-b-0"
-              >
-                {/* Space Header */}
-                <div
-                  className="flex items-center gap-2 px-3 py-2 bg-slate-50 cursor-pointer hover:bg-slate-100"
-                  onClick={() => toggleSpaceExpand(space.id)}
+          return (
+            <div key={space.id}>
+              <div className="flex items-center gap-1.5 px-2 py-1.5">
+                <input
+                  type="checkbox"
+                  checked={keys.length > 0 && on === keys.length}
+                  ref={(el) => {
+                    // Partly-selected rooms read as neither on nor off.
+                    if (el) el.indeterminate = on > 0 && on < keys.length;
+                  }}
+                  onChange={() => toggleSpace(space)}
+                  disabled={keys.length === 0}
+                  className="w-4 h-4 shrink-0 text-blue-600 border-slate-300 rounded focus:ring-blue-500 disabled:opacity-40"
+                />
+                <button
+                  onClick={() => toggleExpand(space.id)}
+                  disabled={keys.length === 0}
+                  className="flex-1 flex items-center gap-1.5 min-w-0 text-left disabled:cursor-default"
                 >
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleAllComponentsInSpace(space.id);
-                    }}
-                    className="flex items-center justify-center w-4 h-4"
-                  >
-                    <div
-                      className={`w-4 h-4 border rounded flex items-center justify-center ${
-                        allInSpaceSelected
-                          ? "bg-blue-600 border-blue-600"
-                          : someInSpaceSelected
-                          ? "bg-blue-200 border-blue-400"
-                          : "border-slate-300"
-                      }`}
-                    >
-                      {allInSpaceSelected && (
-                        <svg
-                          className="w-3 h-3 text-white"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={3}
-                            d="M5 13l4 4L19 7"
-                          />
-                        </svg>
-                      )}
-                      {someInSpaceSelected && (
-                        <div className="w-2 h-0.5 bg-blue-600 rounded" />
-                      )}
-                    </div>
-                  </button>
                   <svg
-                    className={`w-4 h-4 text-slate-400 transition-transform ${
-                      isExpanded ? "rotate-90" : ""
-                    }`}
+                    className={`w-3 h-3 shrink-0 text-slate-400 transition-transform ${
+                      isOpen ? "rotate-90" : ""
+                    } ${keys.length === 0 ? "invisible" : ""}`}
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -327,73 +173,54 @@ export function ScopeSelector({
                       d="M9 5l7 7-7 7"
                     />
                   </svg>
-                  <span className="text-sm font-medium text-slate-700">
+                  <span
+                    className="text-sm text-slate-700 truncate"
+                    title={space.defaultName || space.name}
+                  >
                     {space.defaultName || space.name}
                   </span>
-                  <span className="text-xs text-slate-400 ml-auto">
-                    {selectedInSpace}/{space.components.length}
+                  <span className="ml-auto shrink-0 text-[11px] text-slate-400 tabular-nums">
+                    {on}/{keys.length}
                   </span>
-                </div>
-
-                {/* Components */}
-                {isExpanded && (
-                  <div className="pl-8 py-1">
-                    {space.components.map((comp) => {
-                      const key = `${space.id}:${comp.id}`;
-                      const isSelected =
-                        value.selectedComponentIds.includes(key);
-                      return (
-                        <label
-                          key={comp.id}
-                          className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleComponent(space.id, comp.id)}
-                            className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
-                          />
-                          <span className="text-sm text-slate-600">
-                            {comp.name}
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
+                </button>
               </div>
-            );
-          })}
-        </div>
-      )}
+
+              {isOpen && keys.length > 0 && (
+                <div className="pb-1">
+                  {space.components.map((component) => (
+                    <label
+                      key={component.id}
+                      className="flex items-center gap-1.5 pl-8 pr-2 py-1 hover:bg-slate-50 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected.has(key(space.id, component.id))}
+                        onChange={() => toggleComponent(space.id, component.id)}
+                        className="w-3.5 h-3.5 shrink-0 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                      />
+                      <span
+                        className="text-xs text-slate-600 truncate"
+                        title={component.name}
+                      >
+                        {component.name}
+                      </span>
+                      <span className="ml-auto shrink-0 text-[11px] text-slate-400 tabular-nums">
+                        {component.lineItems.length}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {spaces.length === 0 && (
+          <p className="px-3 py-6 text-center text-sm text-slate-400">
+            Nothing to reprice yet.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
-
-// Helper function to check if a component is in scope
-export function isInScope(
-  spaceId: string,
-  componentId: string | undefined,
-  scope: ScopeSelection
-): boolean {
-  if (scope.mode === "all") {
-    return true;
-  }
-
-  if (scope.mode === "spaces") {
-    return scope.selectedSpaceIds.includes(spaceId);
-  }
-
-  if (scope.mode === "components" && componentId) {
-    return scope.selectedComponentIds.includes(`${spaceId}:${componentId}`);
-  }
-
-  return false;
-}
-
-// Default scope (all selected)
-export const defaultScope: ScopeSelection = {
-  mode: "all",
-  selectedSpaceIds: [],
-  selectedComponentIds: [],
-};

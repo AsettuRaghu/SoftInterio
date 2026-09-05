@@ -4,8 +4,10 @@ import React from "react";
 import {
   BuilderComponent,
   LineItem,
+  MeasurementUnit,
   calculateSqft,
   convertToFeet,
+  getMeasurementInfo,
 } from "./types";
 import { LineItemRow } from "./LineItemRow";
 
@@ -16,7 +18,19 @@ interface ComponentCardProps {
   onDelete: () => void;
   onUpdateDescription?: (description: string) => void;
   onAddCostItem: () => void;
+  /** Opens the template picker filtered to cost item bundles. */
+  onAddFromBundle?: () => void;
+  /** Keeps this component, with its cost items, as a template. */
+  onSaveAsTemplate?: () => void;
+  /** Keeps just its cost items as a reusable bundle. */
+  onSaveAsBundle?: () => void;
   onUpdateLineItem: (lineItemId: string, updates: Partial<LineItem>) => void;
+  /** Sets the component's own size and pushes it to every following line. */
+  onUpdateDimensions?: (
+    dimensions: Pick<BuilderComponent, "width" | "height" | "measurementUnit">
+  ) => void;
+  /** Whether internal cost and margin may be shown on this component. */
+  canViewCosts?: boolean;
   onDeleteLineItem: (lineItemId: string) => void;
   formatCurrency: (amount: number) => string;
   onDuplicate?: () => void;
@@ -35,7 +49,12 @@ export function ComponentCard({
   onDelete,
   onUpdateDescription,
   onAddCostItem,
+  onAddFromBundle,
+  onSaveAsTemplate,
+  onSaveAsBundle,
   onUpdateLineItem,
+  onUpdateDimensions,
+  canViewCosts = false,
   onDeleteLineItem,
   formatCurrency,
   onDuplicate,
@@ -46,6 +65,18 @@ export function ComponentCard({
   onMoveLineItemDown,
   showValidation = false,
 }: ComponentCardProps) {
+  // Only area and length lines take a size from the component. A count - four
+  // hinges, two handles - is a decision, not a measurement, so it is never
+  // driven from here.
+  const isMeasured = (item: LineItem) => {
+    const type = getMeasurementInfo(item.unitCode).type;
+    return type === "area" || type === "length";
+  };
+  const hasMeasuredLines = component.lineItems.some(isMeasured);
+  const followingCount = component.lineItems.filter(
+    (i) => isMeasured(i) && i.followsComponent !== false
+  ).length;
+
   // Calculate component total and sqft
   const calculateTotalAndSqft = () => {
     if (mode === "template") return { total: 0, sqft: 0 };
@@ -82,6 +113,27 @@ export function ComponentCard({
   };
 
   const { total, sqft: totalSqft } = calculateTotalAndSqft();
+
+  // Margin on this component. Cost is company_cost against the same measure
+  // that produced the line's amount, so it reconciles with the total above.
+  // Lines with no recorded cost are skipped rather than treated as free.
+  const componentMargin = (() => {
+    if (!canViewCosts || mode === "template") return null;
+    let cost = 0;
+    let costedRevenue = 0;
+    for (const item of component.lineItems) {
+      const c = item.companyCost ?? 0;
+      if (!c) continue;
+      const amount = item.amount ?? 0;
+      const rate = item.rate ?? 0;
+      const measure = rate > 0 ? amount / rate : item.quantity ?? 0;
+      cost += c * measure;
+      costedRevenue += amount;
+    }
+    if (costedRevenue <= 0) return null;
+    const margin = costedRevenue - cost;
+    return { margin, percent: (margin / costedRevenue) * 100 };
+  })();
   const costPerSqft = totalSqft > 0 ? total / totalSqft : 0;
 
   return (
@@ -150,6 +202,20 @@ export function ComponentCard({
               {totalSqft > 0 && costPerSqft > 0 && (
                 <span className="text-xs text-slate-500 bg-purple-50 px-2 py-0.5 rounded">
                   {formatCurrency(costPerSqft)}/sqft
+                </span>
+              )}
+              {componentMargin && (
+                <span
+                  title="Margin on this component — internal, never printed for the client"
+                  className={`text-xs px-2 py-0.5 rounded border ${
+                    componentMargin.percent < 15
+                      ? "bg-red-50 text-red-700 border-red-200"
+                      : componentMargin.percent < 30
+                      ? "bg-orange-50 text-orange-700 border-orange-200"
+                      : "bg-green-50 text-green-700 border-green-200"
+                  }`}
+                >
+                  {componentMargin.percent.toFixed(0)}% margin
                 </span>
               )}
               <span className="font-semibold text-purple-600">
@@ -278,6 +344,82 @@ export function ComponentCard({
             </div>
           )}
 
+          {/* Component size.
+              Entered once here instead of repeated on every line: a wardrobe's
+              shutters, back panel and carcass all share the wardrobe's size.
+              Only shown when the component actually holds measured lines - a
+              component made purely of counted items has no size worth asking
+              for. */}
+          {mode === "quotation" && onUpdateDimensions && hasMeasuredLines && (
+            <div className="flex flex-wrap items-end gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+              <div>
+                <label className="block text-[10px] font-medium text-slate-500 mb-1">
+                  Width
+                </label>
+                <input
+                  type="number"
+                  value={component.width ?? ""}
+                  onChange={(e) =>
+                    onUpdateDimensions({
+                      width: e.target.value === "" ? null : Number(e.target.value),
+                      height: component.height ?? null,
+                      measurementUnit: component.measurementUnit || "mm",
+                    })
+                  }
+                  placeholder="—"
+                  className="w-24 px-2 py-1.5 text-sm border border-slate-200 rounded-md focus:ring-1 focus:ring-purple-500 outline-none"
+                />
+              </div>
+              <span className="pb-2 text-slate-400 text-sm">×</span>
+              <div>
+                <label className="block text-[10px] font-medium text-slate-500 mb-1">
+                  Height
+                </label>
+                <input
+                  type="number"
+                  value={component.height ?? ""}
+                  onChange={(e) =>
+                    onUpdateDimensions({
+                      width: component.width ?? null,
+                      height: e.target.value === "" ? null : Number(e.target.value),
+                      measurementUnit: component.measurementUnit || "mm",
+                    })
+                  }
+                  placeholder="—"
+                  className="w-24 px-2 py-1.5 text-sm border border-slate-200 rounded-md focus:ring-1 focus:ring-purple-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-medium text-slate-500 mb-1">
+                  Unit
+                </label>
+                <select
+                  value={component.measurementUnit || "mm"}
+                  onChange={(e) =>
+                    onUpdateDimensions({
+                      width: component.width ?? null,
+                      height: component.height ?? null,
+                      measurementUnit: e.target.value as MeasurementUnit,
+                    })
+                  }
+                  className="px-2 py-1.5 text-sm border border-slate-200 rounded-md bg-white focus:ring-1 focus:ring-purple-500 outline-none"
+                >
+                  <option value="mm">mm</option>
+                  <option value="cm">cm</option>
+                  <option value="inch">inch</option>
+                  <option value="ft">ft</option>
+                </select>
+              </div>
+              <p className="flex-1 min-w-40 pb-1.5 text-[11px] text-slate-500">
+                {followingCount > 0
+                  ? `Applies to ${followingCount} line${
+                      followingCount === 1 ? "" : "s"
+                    }. Typing a size on a line stops it following.`
+                  : "Every line here has its own size typed in, so nothing follows this."}
+              </p>
+            </div>
+          )}
+
           {/* Line Items */}
           {component.lineItems.length > 0 && (
             <div className="space-y-2">
@@ -326,9 +468,10 @@ export function ComponentCard({
           )}
 
           {/* Add Cost Item Button */}
+          <div className="flex gap-2">
           <button
             onClick={onAddCostItem}
-            className="w-full py-2 text-sm text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg border border-dashed border-amber-300 flex items-center justify-center gap-1"
+            className="flex-1 py-2 text-sm text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg border border-dashed border-amber-300 flex items-center justify-center gap-1"
           >
             <svg
               className="w-4 h-4"
@@ -345,6 +488,36 @@ export function ComponentCard({
             </svg>
             Add Cost Item
           </button>
+          {/* A saved set of items that always go together - drawer hardware,
+              say - rather than picking them one at a time. */}
+          {onSaveAsTemplate && (
+            <button
+              onClick={onSaveAsTemplate}
+              title="Save this component and its cost items as a template"
+              className="shrink-0 px-3 py-2 text-sm text-slate-500 hover:text-slate-700 rounded-lg border border-dashed border-slate-300 hover:bg-slate-50"
+            >
+              Save
+            </button>
+          )}
+          {onSaveAsBundle && (
+            <button
+              onClick={onSaveAsBundle}
+              title="Save just these cost items as a reusable bundle"
+              className="shrink-0 px-3 py-2 text-sm text-slate-500 hover:text-slate-700 rounded-lg border border-dashed border-slate-300 hover:bg-slate-50"
+            >
+              Save bundle
+            </button>
+          )}
+          {onAddFromBundle && (
+            <button
+              onClick={onAddFromBundle}
+              title="Add a saved cost item bundle"
+              className="shrink-0 px-3 py-2 text-sm text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded-lg border border-dashed border-purple-300"
+            >
+              From bundle
+            </button>
+          )}
+          </div>
         </div>
       )}
     </div>

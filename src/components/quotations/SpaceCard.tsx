@@ -2,6 +2,7 @@
 
 import React from "react";
 import {
+  BuilderComponent,
   BuilderSpace,
   LineItem,
   MasterData,
@@ -17,6 +18,14 @@ interface SpaceCardProps {
   onDelete: () => void;
   onUpdateName: (name: string) => void;
   onAddComponent: () => void;
+  /** Opens the template picker filtered to component templates. */
+  onAddComponentFromTemplate?: () => void;
+  /** Keeps this space, with its components, as a reusable template. */
+  onSaveAsTemplate?: () => void;
+  /** Keeps one component as a template, or its items as a bundle. */
+  onSaveComponentAsTemplate?: (componentId: string, asBundle: boolean) => void;
+  /** Opens it filtered to cost item bundles, for one component. */
+  onAddBundleToComponent?: (componentId: string, componentName: string) => void;
   onToggleComponentExpand: (componentId: string) => void;
   onDeleteComponent: (componentId: string) => void;
   onUpdateComponentDescription?: (
@@ -26,6 +35,11 @@ interface SpaceCardProps {
   onUpdateComponentName?: (componentId: string, name: string) => void;
   masterData?: MasterData;
   onAddCostItem: (componentId: string) => void;
+  onUpdateDimensions?: (
+    componentId: string,
+    dimensions: Pick<BuilderComponent, "width" | "height" | "measurementUnit">
+  ) => void;
+  canViewCosts?: boolean;
   onUpdateLineItem: (
     componentId: string,
     lineItemId: string,
@@ -64,12 +78,18 @@ export function SpaceCard({
   onDelete,
   onUpdateName,
   onAddComponent,
+  onAddComponentFromTemplate,
+  onSaveAsTemplate,
+  onSaveComponentAsTemplate,
+  onAddBundleToComponent,
   onToggleComponentExpand,
   onDeleteComponent,
   onUpdateComponentDescription,
   onUpdateComponentName,
   masterData,
   onAddCostItem,
+  onUpdateDimensions,
+  canViewCosts = false,
   onUpdateLineItem,
   onDeleteLineItem,
   formatCurrency,
@@ -343,6 +363,28 @@ export function SpaceCard({
                   : undefined
               }
               onAddCostItem={() => onAddCostItem(component.id)}
+              canViewCosts={canViewCosts}
+              onSaveAsTemplate={
+                onSaveComponentAsTemplate
+                  ? () => onSaveComponentAsTemplate(component.id, false)
+                  : undefined
+              }
+              onSaveAsBundle={
+                onSaveComponentAsTemplate
+                  ? () => onSaveComponentAsTemplate(component.id, true)
+                  : undefined
+              }
+              onAddFromBundle={
+                onAddBundleToComponent
+                  ? () => onAddBundleToComponent(component.id, component.name)
+                  : undefined
+              }
+              onUpdateDimensions={
+                onUpdateDimensions
+                  ? (dimensions) =>
+                      onUpdateDimensions(component.id, dimensions)
+                  : undefined
+              }
               onUpdateLineItem={(lineItemId, updates) =>
                 onUpdateLineItem(component.id, lineItemId, updates)
               }
@@ -381,6 +423,24 @@ export function SpaceCard({
 
           {/* Action Buttons */}
           <div className="flex gap-2">
+            {onSaveAsTemplate && (
+              <button
+                onClick={onSaveAsTemplate}
+                title="Save this room and its components as a template"
+                className="shrink-0 px-3 py-3 text-sm text-slate-500 hover:text-slate-700 rounded-lg border border-dashed border-slate-300 hover:bg-slate-50"
+              >
+                Save as template
+              </button>
+            )}
+            {onAddComponentFromTemplate && (
+              <button
+                onClick={onAddComponentFromTemplate}
+                title="Add a saved component, such as a standard wardrobe"
+                className="shrink-0 px-3 py-3 text-sm text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded-lg border border-dashed border-purple-300"
+              >
+                From template
+              </button>
+            )}
             <button
               onClick={onAddComponent}
               className="flex-1 py-3 text-sm text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded-lg border border-dashed border-purple-300 flex items-center justify-center gap-1"

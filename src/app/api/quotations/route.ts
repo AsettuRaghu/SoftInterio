@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { copyScopeToQuotation } from "@/lib/quotations/scope-to-quotation";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { getQuotationNumberAndVersion } from "@/utils/quotation-number-generator";
 
@@ -227,7 +228,7 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
     const body = await request.json();
 
-    const { lead_id, project_id, template_id } = body;
+    const { lead_id, project_id, template_id , from_scope } = body;
 
     // Standalone quotations are allowed (no lead_id or project_id required)
 
@@ -378,9 +379,24 @@ export async function POST(request: NextRequest) {
       await copyTemplateToQuotation(supabase, template_id, newQuotation.id);
     }
 
+    // Otherwise, build it from the property's Spaces if asked to. Templates
+    // win when both are given: a template is a deliberate choice of contents,
+    // while scope is the fallback structure.
+    let generated = { spaces: 0, components: 0 };
+    if (!template_id && from_scope && newQuotation) {
+      generated = await copyScopeToQuotation(
+        supabase,
+        userData.tenant_id,
+        newQuotation.id,
+        lead_id || null,
+        project_id || null
+      );
+    }
+
     return NextResponse.json({
       success: true,
       quotation: newQuotation,
+      generated_from_scope: generated,
       message: "Quotation created successfully",
     });
   } catch (error) {
@@ -658,3 +674,18 @@ async function copyTemplateToQuotation(
   console.log(`Line items created: ${totalLineItemsCreated}`);
   console.log(`=============================================\n`);
 }
+
+/**
+ * Build a quotation's spaces and components from the property's Spaces tab.
+ *
+ * A one-time copy, deliberately: see the decision note on
+ * src/types/property-scope.ts. Nothing links the two afterwards, so the
+ * quotation can be negotiated, revised and reshaped without the scope list
+ * arguing with it, and a space can later be deleted without touching any
+ * quotation built from it.
+ *
+ * Dimensions land at the level they were measured at. A room's length x width
+ * describes a floor plan and belongs on the space; a wardrobe's width x height
+ * describes a face and belongs on the component, where it also feeds the
+ * builder's dimension inheritance down to that component's cost items.
+ */

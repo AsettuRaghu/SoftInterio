@@ -17,6 +17,13 @@ interface BuilderSidebarProps {
   total?: number;
   taxPercent?: number;
   onTaxPercentChange?: (percent: number) => void;
+  /**
+   * Whether this user may see internal costs. Comes from the quotation API,
+   * which strips the underlying figures for anyone without cost_items.pricing
+   * - so a false here means the numbers are genuinely absent, not merely
+   * hidden.
+   */
+  canViewCosts?: boolean;
 }
 
 export function BuilderSidebar({
@@ -27,6 +34,7 @@ export function BuilderSidebar({
   total = 0,
   taxPercent = 18,
   onTaxPercentChange,
+  canViewCosts = false,
 }: BuilderSidebarProps) {
   const totalSpaces = spaces.length;
   const totalComponents = spaces.reduce(
@@ -38,6 +46,43 @@ export function BuilderSidebar({
       sum + s.components.reduce((cSum, c) => cSum + c.lineItems.length, 0),
     0
   );
+
+  /**
+   * What the work costs us, and therefore what we make.
+   *
+   * Cost is company_cost multiplied by the same measure that produced the
+   * line's amount - measure = amount / rate - so the two reconcile. Lines with
+   * no recorded cost are counted separately rather than treated as free, which
+   * would overstate the margin.
+   */
+  const allLineItems = spaces.flatMap((sp) =>
+    sp.components.flatMap((c) => c.lineItems)
+  );
+
+  let totalCost = 0;
+  let costedRevenue = 0;
+  let costedLineCount = 0;
+  let uncostedLineCount = 0;
+
+  for (const item of allLineItems) {
+    const amount = item.amount ?? 0;
+    const rate = item.rate ?? 0;
+    const cost = item.companyCost ?? 0;
+    if (!cost) {
+      if (amount) uncostedLineCount += 1;
+      continue;
+    }
+    const measure = rate > 0 ? amount / rate : item.quantity ?? 0;
+    totalCost += cost * measure;
+    costedRevenue += amount;
+    costedLineCount += 1;
+  }
+
+  const totalMargin = costedRevenue - totalCost;
+  // Measured against the revenue we actually have costs for, not the whole
+  // quotation - mixing the two would flatter the percentage.
+  const marginPercent =
+    costedRevenue > 0 ? (totalMargin / costedRevenue) * 100 : null;
 
   // Calculate space totals for quotation mode
   const getSpaceTotal = (space: BuilderSpace) => {
@@ -247,6 +292,60 @@ export function BuilderSidebar({
           </span>
         </div>
       </div>
+
+      {/* Profitability.
+          Only rendered for users allowed to see costs, and only once some
+          cost is actually known - a panel reading "0% margin" on a quotation
+          whose costs were never captured would be read as a loss rather than
+          as missing data. */}
+      {canViewCosts && costedLineCount > 0 && (
+        <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium text-amber-900">
+              Profitability
+            </h3>
+            <span className="text-[10px] font-medium text-amber-700 bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5">
+              Internal
+            </span>
+          </div>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-amber-800">Our cost</span>
+              <span className="font-medium text-amber-900">
+                {formatCurrency(totalCost)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-amber-800">Margin</span>
+              <span className="font-semibold text-amber-900">
+                {formatCurrency(totalMargin)}
+              </span>
+            </div>
+            <div className="flex justify-between pt-2 border-t border-amber-200">
+              <span className="text-amber-800">Margin %</span>
+              <span
+                className={`font-bold ${
+                  marginPercent === null
+                    ? "text-slate-400"
+                    : marginPercent < 15
+                    ? "text-red-600"
+                    : marginPercent < 30
+                    ? "text-orange-600"
+                    : "text-green-700"
+                }`}
+              >
+                {marginPercent === null ? "—" : `${marginPercent.toFixed(1)}%`}
+              </span>
+            </div>
+          </div>
+          {uncostedLineCount > 0 && (
+            <p className="mt-2 text-[11px] text-amber-700">
+              {uncostedLineCount} line{uncostedLineCount === 1 ? "" : "s"} have
+              no cost recorded, so the real margin is lower than this.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Quick Stats */}
       <div className="mt-6 p-4 bg-blue-50 rounded-lg">

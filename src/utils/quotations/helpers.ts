@@ -220,3 +220,27 @@ export function truncateString(str: string, length: number): string {
   if (str.length <= length) return str;
   return str.substring(0, length) + "...";
 }
+
+/**
+ * First free name in the "_copy", "_copy_2", "_copy_3" sequence.
+ *
+ * Both quotation libraries enforce unique names per tenant, case-insensitively,
+ * so duplicating something twice would otherwise fail on the second attempt
+ * with a constraint error instead of doing the obvious thing. Shared between
+ * the print format and terms clause duplicate routes so the two cannot drift.
+ *
+ * `taken` must already be lower-cased.
+ */
+export function nextAvailableCopyName(
+  base: string,
+  taken: Set<string>
+): string {
+  const candidate = `${base}_copy`;
+  if (!taken.has(candidate.toLowerCase())) return candidate;
+  for (let n = 2; n < 100; n++) {
+    const numbered = `${base}_copy_${n}`;
+    if (!taken.has(numbered.toLowerCase())) return numbered;
+  }
+  // Astronomically unlikely; a timestamp still beats a 500.
+  return `${base}_copy_${Date.now()}`;
+}

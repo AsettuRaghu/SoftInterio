@@ -1,590 +1,893 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
+import { useUserPermissions } from "@/hooks/useUserPermissions";
+import {
+  BuilderSpace,
+  BuilderComponent,
+  LineItem,
+  MasterData,
+  SpaceType,
+  ComponentType,
+  CostItem,
+  generateId,
+  formatCurrency,
+} from "@/components/quotations";
+import { AddSpaceModal } from "@/components/quotations/AddSpaceModal";
+import { AddComponentModal } from "@/components/quotations/AddComponentModal";
+import { AddCostItemModal } from "@/components/quotations/AddCostItemModal";
+import { SpaceCard } from "@/components/quotations/SpaceCard";
 
-// ============================================================================
-// V2 Types - Using Cost Items with Flexible Hierarchy
-// ============================================================================
+const formatDate = (value?: string) =>
+  value
+    ? new Date(value).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : "—";
 
-interface CostItemCategory {
-  id: string;
-  name: string;
-  slug: string;
-  color?: string;
-  icon?: string;
-}
-
-interface CostItem {
-  id: string;
-  name: string;
-  slug: string;
-  unit_code: string;
-  default_rate: number;
-  quality_tier?: string;
-  category?: CostItemCategory;
-}
-
-interface ComponentType {
-  id: string;
-  name: string;
-  slug: string;
-  icon?: string;
-}
-
-interface SpaceType {
-  id: string;
-  name: string;
-  slug: string;
-  icon?: string;
-}
-
-interface TemplateSpace {
-  id: string;
-  template_id: string;
-  space_type_id: string;
-  default_name?: string;
-  display_order: number;
-  space_type?: SpaceType;
-}
-
-interface TemplateLineItem {
-  id: string;
-  template_id: string;
-  space_type_id?: string;
-  component_type_id?: string;
-  cost_item_id: string;
-  rate?: number;
-  display_order: number;
-  notes?: string;
-  // Joined relations
-  space_type?: SpaceType;
-  component_type?: ComponentType;
-  cost_item?: CostItem;
-}
-
-interface QuotationTemplate {
-  id: string;
-  name: string;
-  description?: string;
-  property_type: string;
-  quality_tier: string;
-  base_price: number;
-  is_active: boolean;
-  is_featured: boolean;
-  usage_count: number;
-  spaces: TemplateSpace[];
-  line_items: TemplateLineItem[];
-  created_at: string;
-  updated_at: string;
-  created_by?: string;
-}
-
-// ============================================================================
-// Display Helpers
-// ============================================================================
-
-const STATUS_COLORS = {
-  active: { bg: "bg-green-100", text: "text-green-700", dot: "bg-green-500" },
-  draft: { bg: "bg-yellow-100", text: "text-yellow-700", dot: "bg-yellow-500" },
-  archived: { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-500" },
+const LEVEL_LABELS: Record<string, string> = {
+  quotation: "Quotation",
+  space: "Space",
+  component: "Component",
+  cost_items: "Cost items",
 };
 
-const QUALITY_TIER_COLORS: Record<string, string> = {
-  luxury: "bg-purple-100 text-purple-700",
-  premium: "bg-blue-100 text-blue-700",
-  standard: "bg-green-100 text-green-700",
-  basic: "bg-slate-100 text-slate-700",
-};
-
-const PROPERTY_TYPES: Record<string, string> = {
-  "1bhk": "1BHK Apartment",
-  "2bhk": "2BHK Apartment",
-  "3bhk": "3BHK Apartment",
-  "4bhk": "4BHK Apartment",
-  studio: "Studio",
-  villa: "Villa",
-  penthouse: "Penthouse",
-  office: "Commercial Office",
-  retail: "Retail",
-};
-
-const CATEGORY_COLORS: Record<string, string> = {
-  carcass: "bg-amber-100 text-amber-700",
-  shutter: "bg-blue-100 text-blue-700",
-  hardware: "bg-purple-100 text-purple-700",
-  finish: "bg-pink-100 text-pink-700",
-  labour: "bg-green-100 text-green-700",
-  accessories: "bg-indigo-100 text-indigo-700",
-  countertop: "bg-teal-100 text-teal-700",
-  appliances: "bg-orange-100 text-orange-700",
-  default: "bg-slate-100 text-slate-600",
-};
-
-function getCategoryColor(categorySlug?: string): string {
-  if (!categorySlug) return CATEGORY_COLORS.default;
-  return CATEGORY_COLORS[categorySlug.toLowerCase()] || CATEGORY_COLORS.default;
-}
-
-// ============================================================================
-// Helper to organize line items into hierarchy
-// ============================================================================
-
-interface ComponentGroup {
-  componentTypeId: string;
-  componentTypeName: string;
-  componentTypeIcon?: string;
-  lineItems: TemplateLineItem[];
-}
-
-interface SpaceGroup {
-  templateSpaceId: string; // Database ID of the template_space instance
-  spaceTypeId: string;
-  spaceTypeName: string;
-  spaceTypeIcon?: string;
-  defaultName?: string;
-  displayOrder: number;
-  components: ComponentGroup[];
-  directLineItems: TemplateLineItem[]; // Line items not grouped under a component
-}
-
-function organizeLineItems(
-  spaces: TemplateSpace[],
-  lineItems: TemplateLineItem[]
-): {
-  spaceGroups: SpaceGroup[];
-  ungroupedLineItems: TemplateLineItem[];
-} {
-  const spaceMap = new Map<string, SpaceGroup>();
-  const ungroupedLineItems: TemplateLineItem[] = [];
-
-  // Initialize space groups from template_spaces - use space.id as the key
-  // This ensures each space instance (e.g., Bedroom 1, Bedroom 2) is separate
-  spaces.forEach((space) => {
-    spaceMap.set(space.id, {
-      templateSpaceId: space.id,
-      spaceTypeId: space.space_type_id,
-      spaceTypeName: space.space_type?.name || space.space_type_id,
-      spaceTypeIcon: space.space_type?.icon,
-      defaultName: space.default_name,
-      displayOrder: space.display_order,
-      components: [],
-      directLineItems: [],
-    });
-  });
-
-  // Group line items by template_space_id first, then fall back to space_type_id
-  lineItems.forEach((item) => {
-    // First try to match by template_space_id (new schema)
-    const templateSpaceId = (item as any).template_space_id;
-    if (templateSpaceId && spaceMap.has(templateSpaceId)) {
-      const spaceGroup = spaceMap.get(templateSpaceId)!;
-      addLineItemToSpaceGroup(spaceGroup, item);
-      return;
-    }
-
-    // Fall back to space_type_id matching (legacy)
-    if (item.space_type_id) {
-      // Find a space group with matching space_type_id
-      // If there are multiple, use the first one (legacy behavior)
-      const matchingSpace = Array.from(spaceMap.values()).find(
-        (sg) => sg.spaceTypeId === item.space_type_id
-      );
-
-      if (matchingSpace) {
-        addLineItemToSpaceGroup(matchingSpace, item);
-        return;
-      }
-
-      // Create a new space group if none exists (in case spaces array is incomplete)
-      const newSpaceGroup: SpaceGroup = {
-        templateSpaceId: `legacy-${item.space_type_id}`,
-        spaceTypeId: item.space_type_id,
-        spaceTypeName: item.space_type?.name || item.space_type_id,
-        spaceTypeIcon: item.space_type?.icon,
-        displayOrder: spaceMap.size,
-        components: [],
-        directLineItems: [],
-      };
-      spaceMap.set(newSpaceGroup.templateSpaceId, newSpaceGroup);
-      addLineItemToSpaceGroup(newSpaceGroup, item);
-      return;
-    }
-
-    // No space - ungrouped
-    ungroupedLineItems.push(item);
-  });
-
-  // Sort by display order
-  const sortedGroups = Array.from(spaceMap.values()).sort(
-    (a, b) => a.displayOrder - b.displayOrder
-  );
-
-  return {
-    spaceGroups: sortedGroups,
-    ungroupedLineItems,
-  };
-}
-
-// Helper function to add a line item to a space group
-function addLineItemToSpaceGroup(
-  spaceGroup: SpaceGroup,
-  item: TemplateLineItem
-) {
-  if (item.component_type_id) {
-    // Find or create component group within space
-    let componentGroup = spaceGroup.components.find(
-      (c) => c.componentTypeId === item.component_type_id
-    );
-
-    if (!componentGroup) {
-      componentGroup = {
-        componentTypeId: item.component_type_id,
-        componentTypeName: item.component_type?.name || item.component_type_id,
-        componentTypeIcon: item.component_type?.icon,
-        lineItems: [],
-      };
-      spaceGroup.components.push(componentGroup);
-    }
-
-    componentGroup.lineItems.push(item);
-  } else {
-    // Line item directly under space (no component)
-    spaceGroup.directLineItems.push(item);
-  }
-}
-
-// ============================================================================
-// Main Component
-// ============================================================================
-
-export default function TemplateDetailPage() {
-  const params = useParams();
+export default function EditTemplatePage() {
   const router = useRouter();
-  const [template, setTemplate] = useState<QuotationTemplate | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [expandedSpaces, setExpandedSpaces] = useState<Set<string>>(new Set());
-  const [expandedComponents, setExpandedComponents] = useState<Set<string>>(
-    new Set()
-  );
-  const [duplicating, setDuplicating] = useState(false);
+  const params = useParams();
+  const templateId = params.id as string;
 
-  // Duplicate template handler
-  const handleDuplicate = async () => {
-    if (!template) return;
+  // Loading states
+  /**
+   * Whether this user may change the template.
+   *
+   * The page is one surface for reading and editing, so the read-only case is
+   * handled by disabling rather than by a different page. The API enforces the
+   * same permission on PUT - this only decides what is worth showing.
+   */
+  const { hasPermission } = useUserPermissions();
+  const canEdit = hasPermission("quotations.templates.update");
 
-    try {
-      setDuplicating(true);
-      const response = await fetch(
-        `/api/quotations/templates/${template.id}/duplicate`,
-        {
-          method: "POST",
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Template data
+  const [templateName, setTemplateName] = useState("");
+  const [templateDescription, setTemplateDescription] = useState("");
+  const [propertyType, setPropertyType] = useState("3bhk");
+  /**
+   * What this template is a template of.
+   *
+   * The page used to ignore it entirely and always render the whole-quotation
+   * editor, so a component template opened here offered a property type and an
+   * Add Space button - and saving stamped property_type onto a template that
+   * should not carry one.
+   */
+  const [level, setLevel] = useState<string>("quotation");
+  // A property type and multiple rooms only mean something for a template that
+  // covers a whole quotation. Narrower levels are one component or one bundle.
+  const isWholeQuotation = level === "quotation" || level === "space";
+  const [qualityTier, setQualityTier] = useState("standard");
+  /** Fields the summary panel shows but nothing on this page edits. */
+  /** Set by every edit, cleared on save - drives the leave warning. */
+  const [isDirty, setIsDirty] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [meta, setMeta] = useState<{
+    created_at?: string;
+    updated_at?: string;
+    is_featured?: boolean;
+    usage_count?: number;
+  }>({});
+  const [spaces, setSpaces] = useState<BuilderSpace[]>([]);
+
+  // Master data
+  const [masterData, setMasterData] = useState<MasterData>({
+    units: [],
+    space_types: [],
+    component_types: [],
+    quotation_cost_item_categories: [],
+    quotation_cost_items: [],
+  });
+  const [isLoadingMasterData, setIsLoadingMasterData] = useState(true);
+
+  // Drag and drop states
+  const [draggedSpaceId, setDraggedSpaceId] = useState<string | null>(null);
+  const [dragOverSpaceId, setDragOverSpaceId] = useState<string | null>(null);
+
+  // Modal states
+  const [showAddSpaceModal, setShowAddSpaceModal] = useState(false);
+  const [showAddComponentModal, setShowAddComponentModal] = useState<
+    string | null
+  >(null);
+  const [showAddCostItemModal, setShowAddCostItemModal] = useState<{
+    spaceId: string;
+    componentId: string;
+  } | null>(null);
+
+  // Fetch master data
+  useEffect(() => {
+    const fetchMasterData = async () => {
+      try {
+        const response = await fetch("/api/quotations/master-data");
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.data) {
+            setMasterData({
+              units: result.data.units || [],
+              space_types: result.data.space_types || [],
+              component_types: result.data.component_types || [],
+              quotation_cost_item_categories:
+                result.data.quotation_cost_item_categories ||
+                result.data.cost_item_categories ||
+                [],
+              quotation_cost_items:
+                result.data.quotation_cost_items ||
+                result.data.cost_items ||
+                [],
+              items_by_category: result.grouped?.items_by_category || {},
+            });
+          }
         }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to duplicate template");
+      } catch (error) {
+        console.error("Error fetching master data:", error);
+      } finally {
+        setIsLoadingMasterData(false);
       }
+    };
+    fetchMasterData();
+  }, []);
 
-      const data = await response.json();
-      if (data.success && data.template) {
-        // Navigate to the new template's edit page
-        router.push(`/dashboard/quotations/templates/${data.template.id}/edit`);
-      } else {
-        throw new Error(data.error || "Failed to duplicate template");
-      }
-    } catch (err) {
-      console.error("Error duplicating template:", err);
-      alert(
-        err instanceof Error ? err.message : "Failed to duplicate template"
-      );
-    } finally {
-      setDuplicating(false);
-    }
-  };
-
-  // Fetch template
-  const fetchTemplate = useCallback(async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`/api/quotations/templates/${params.id}`);
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch template");
-      }
-
-      const data = await response.json();
-      if (data.success && data.template) {
-        setTemplate(data.template);
-        // Expand all spaces by default
-        if (data.template.spaces) {
-          setExpandedSpaces(
-            new Set(
-              data.template.spaces.map((s: TemplateSpace) => s.space_type_id)
-            )
-          );
-        }
-      } else {
-        throw new Error(data.error || "Template not found");
-      }
-    } catch (err) {
-      console.error("Error fetching template:", err);
-      setError(err instanceof Error ? err.message : "Failed to load template");
-    } finally {
-      setLoading(false);
-    }
-  }, [params.id]);
+  /**
+   * Guards the dirty flag against the initial load.
+   *
+   * Watching the editable state is far more reliable than marking dirty at
+   * each of the thirty-odd setters - one missed call there means a silent
+   * loss of work when the user navigates away.
+   */
+  const hasLoaded = useRef(false);
 
   useEffect(() => {
-    fetchTemplate();
-  }, [fetchTemplate]);
+    if (!hasLoaded.current) return;
+    setIsDirty(true);
+  }, [spaces, templateName, templateDescription, qualityTier, propertyType]);
 
-  // Organize line items into hierarchy
-  const { spaceGroups, ungroupedLineItems } = useMemo(() => {
-    if (!template) return { spaceGroups: [], ungroupedLineItems: [] };
-    return organizeLineItems(template.spaces || [], template.line_items || []);
-  }, [template]);
+  // The browser's own leave prompt. It is the only thing that catches a tab
+  // close or a hard reload; in-app navigation is covered by the header state.
+  useEffect(() => {
+    if (!isDirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [isDirty]);
 
-  // Statistics
-  const stats = useMemo(() => {
-    if (!template) return { spaces: 0, components: 0, lineItems: 0 };
-    const totalComponents = spaceGroups.reduce(
-      (sum, s) => sum + s.components.length,
-      0
-    );
-    return {
-      spaces: spaceGroups.length,
-      components: totalComponents,
-      lineItems: template.line_items?.length || 0,
-    };
-  }, [template, spaceGroups]);
+  // Fetch template data
+  useEffect(() => {
+    const fetchTemplate = async () => {
+      if (!templateId || isLoadingMasterData) return;
 
-  const toggleSpace = (spaceId: string) => {
-    setExpandedSpaces((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(spaceId)) {
-        newSet.delete(spaceId);
-      } else {
-        newSet.add(spaceId);
+      try {
+        setIsLoading(true);
+        const response = await fetch(`/api/quotations/templates/${templateId}`);
+        if (!response.ok) throw new Error("Failed to load template");
+
+        const result = await response.json();
+        if (!result.success || !result.template)
+          throw new Error("Template not found");
+
+        const template = result.template;
+
+        setTemplateName(template.name || "");
+        setTemplateDescription(template.description || "");
+        setLevel(template.level || "quotation");
+        setPropertyType(template.property_type || "3bhk");
+        setQualityTier(template.quality_tier || "standard");
+        setMeta({
+          created_at: template.created_at,
+          updated_at: template.updated_at,
+          is_featured: template.is_featured,
+          usage_count: template.usage_count,
+        });
+
+        // Convert API structure to builder format
+        // Use template_space.id (database ID) as the key to properly distinguish multiple spaces of the same type
+        const spaceMap = new Map<string, BuilderSpace>();
+        const componentMap = new Map<string, BuilderComponent>();
+
+        // Create spaces from template spaces - using the actual space instance ID (ts.id) as key
+        // This ensures each space (e.g., Bedroom 1, Bedroom 2) is treated separately
+        (template.spaces || []).forEach((ts: any) => {
+          const spaceType = masterData.space_types.find(
+            (st) => st.id === ts.space_type_id
+          );
+          const spaceId = generateId();
+          // Use ts.id (template_space database id) as the key, NOT space_type_id
+          spaceMap.set(ts.id, {
+            id: spaceId,
+            spaceTypeId: ts.space_type_id,
+            templateSpaceId: ts.id, // Store the database ID for reference
+            name: spaceType?.name || ts.space_type?.name || "Space",
+            defaultName: ts.default_name || spaceType?.name || "Space",
+            components: [],
+            expanded: true,
+          });
+        });
+
+        // Process line items to create components
+        // Match line items to spaces using template_space_id first (new schema), then fall back to space_type_id
+        (template.line_items || []).forEach((item: any) => {
+          if (!item.component_type_id) return;
+
+          // First try to match by template_space_id (links to specific space instance)
+          let spaceKey = item.template_space_id;
+          let space = spaceKey ? spaceMap.get(spaceKey) : undefined;
+
+          // Fall back to space_type_id if no template_space_id (legacy data)
+          // Find the first space with matching space_type_id
+          if (!space && item.space_type_id) {
+            const matchingEntry = Array.from(spaceMap.entries()).find(
+              ([, s]) => s.spaceTypeId === item.space_type_id
+            );
+            if (matchingEntry) {
+              spaceKey = matchingEntry[0];
+              space = matchingEntry[1];
+            } else {
+              // Create a new space if none exists
+              const spaceType = masterData.space_types.find(
+                (st) => st.id === item.space_type_id
+              );
+              spaceKey = `legacy-${item.space_type_id}`;
+              space = {
+                id: generateId(),
+                spaceTypeId: item.space_type_id,
+                name: spaceType?.name || item.space_type?.name || "Space",
+                defaultName:
+                  spaceType?.name || item.space_type?.name || "Space",
+                components: [],
+                expanded: true,
+              };
+              spaceMap.set(spaceKey, space);
+            }
+          }
+
+          if (!space) return;
+
+          // Create component key using the resolved space key (unique per space instance)
+          const componentKey = `${spaceKey}-${item.component_type_id}`;
+          let component = componentMap.get(componentKey);
+          if (!component) {
+            const componentType = masterData.component_types.find(
+              (ct) => ct.id === item.component_type_id
+            );
+
+            component = {
+              id: generateId(),
+              componentTypeId: item.component_type_id,
+              name:
+                componentType?.name || item.component_type?.name || "Component",
+              lineItems: [],
+              expanded: true,
+            };
+            componentMap.set(componentKey, component);
+            space.components.push(component);
+          }
+
+          const costItemsData =
+            masterData.quotation_cost_items || masterData.cost_items || [];
+          const categoriesData =
+            masterData.quotation_cost_item_categories ||
+            masterData.cost_item_categories ||
+            [];
+          const costItem = costItemsData.find(
+            (ci) =>
+              ci.id === item.cost_item_id ||
+              ci.id === item.quotation_cost_item_id
+          );
+          const category = costItem?.category_id
+            ? categoriesData.find((c) => c.id === costItem.category_id)
+            : null;
+
+          component.lineItems.push({
+            id: generateId(),
+            costItemId: item.cost_item_id,
+            costItemName: costItem?.name || item.cost_item?.name || "Cost Item",
+            categoryName:
+              category?.name ||
+              item.cost_item?.category?.name ||
+              "Uncategorized",
+            categoryColor:
+              category?.color || item.cost_item?.category?.color || "#718096",
+            unitCode: costItem?.unit_code || item.cost_item?.unit_code || "nos",
+            rate:
+              item.rate ||
+              costItem?.default_rate ||
+              item.cost_item?.default_rate ||
+              0,
+            defaultRate:
+              costItem?.default_rate || item.cost_item?.default_rate || 0,
+            companyCost:
+              costItem?.company_cost || item.cost_item?.company_cost || 0,
+            vendorCost:
+              costItem?.vendor_cost || item.cost_item?.vendor_cost || 0,
+          });
+        });
+
+        setSpaces(Array.from(spaceMap.values()));
+        setLoadError(null);
+      } catch (error) {
+        console.error("Error loading template:", error);
+        setLoadError(
+          error instanceof Error ? error.message : "Failed to load template"
+        );
+      } finally {
+        setIsLoading(false);
+        // Anything that changes state from here on is a real edit.
+        setTimeout(() => {
+          hasLoaded.current = true;
+        }, 0);
       }
-      return newSet;
-    });
+    };
+
+    fetchTemplate();
+  }, [templateId, isLoadingMasterData, masterData]);
+
+  // Space operations
+  const addSpace = (spaceType: SpaceType) => {
+    const existingCount = spaces.filter(
+      (s) => s.spaceTypeId === spaceType.id
+    ).length;
+    const defaultName =
+      existingCount > 0
+        ? `${spaceType.name} ${existingCount + 1}`
+        : spaceType.name;
+
+    const newSpace: BuilderSpace = {
+      id: generateId(),
+      spaceTypeId: spaceType.id,
+      name: spaceType.name,
+      defaultName,
+      components: [],
+      expanded: true,
+    };
+    setSpaces([...spaces, newSpace]);
+    setShowAddSpaceModal(false);
   };
 
-  const toggleComponent = (componentKey: string) => {
-    setExpandedComponents((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(componentKey)) {
-        newSet.delete(componentKey);
-      } else {
-        newSet.add(componentKey);
-      }
-      return newSet;
-    });
+  const updateSpaceName = (spaceId: string, name: string) => {
+    setSpaces(
+      spaces.map((s) => (s.id === spaceId ? { ...s, defaultName: name } : s))
+    );
+  };
+
+  const deleteSpace = (spaceId: string) => {
+    setSpaces(spaces.filter((s) => s.id !== spaceId));
+  };
+
+  const toggleSpaceExpand = (spaceId: string) => {
+    setSpaces(
+      spaces.map((s) =>
+        s.id === spaceId ? { ...s, expanded: !s.expanded } : s
+      )
+    );
   };
 
   // Collapse/Expand all spaces and components
   const collapseAll = () => {
-    setExpandedSpaces(new Set());
-    setExpandedComponents(new Set());
+    setSpaces(
+      spaces.map((space) => ({
+        ...space,
+        expanded: false,
+        components: space.components.map((comp) => ({
+          ...comp,
+          expanded: false,
+        })),
+      }))
+    );
   };
 
   const expandAll = () => {
-    const allSpaces = new Set(spaceGroups.map((s) => s.templateSpaceId));
-    const allComponents = new Set<string>();
-    spaceGroups.forEach((space) => {
-      space.components.forEach((comp) => {
-        const componentKey = `${space.templateSpaceId}-${comp.componentTypeId}`;
-        allComponents.add(componentKey);
-      });
-    });
-    setExpandedSpaces(allSpaces);
-    setExpandedComponents(allComponents);
+    setSpaces(
+      spaces.map((space) => ({
+        ...space,
+        expanded: true,
+        components: space.components.map((comp) => ({
+          ...comp,
+          expanded: true,
+        })),
+      }))
+    );
   };
 
   // Check if any spaces are collapsed
-  const hasCollapsedItems =
-    spaceGroups.length > 0 &&
-    (expandedSpaces.size < spaceGroups.length ||
-      expandedComponents.size <
-        spaceGroups.reduce((sum, s) => sum + s.components.length, 0));
+  const hasCollapsedSpaces = spaces.some(
+    (s) => !s.expanded || s.components.some((c) => !c.expanded)
+  );
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 0,
-    }).format(amount);
+  // Move space up/down
+  const moveSpace = (spaceId: string, direction: "up" | "down") => {
+    const index = spaces.findIndex((s) => s.id === spaceId);
+    if (index === -1) return;
+
+    const newIndex = direction === "up" ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= spaces.length) return;
+
+    const newSpaces = [...spaces];
+    [newSpaces[index], newSpaces[newIndex]] = [
+      newSpaces[newIndex],
+      newSpaces[index],
+    ];
+    setSpaces(newSpaces);
   };
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return "—";
-    return new Date(dateString).toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
+  // Move component up/down within a space
+  const moveComponent = (
+    spaceId: string,
+    componentId: string,
+    direction: "up" | "down"
+  ) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id !== spaceId) return space;
+
+        const compIndex = space.components.findIndex(
+          (c) => c.id === componentId
+        );
+        if (compIndex === -1) return space;
+
+        const newIndex = direction === "up" ? compIndex - 1 : compIndex + 1;
+        if (newIndex < 0 || newIndex >= space.components.length) return space;
+
+        const newComponents = [...space.components];
+        [newComponents[compIndex], newComponents[newIndex]] = [
+          newComponents[newIndex],
+          newComponents[compIndex],
+        ];
+        return { ...space, components: newComponents };
+      })
+    );
   };
 
-  // Loading state
-  if (loading) {
+  // Move line item up/down within a component
+  const moveLineItem = (
+    spaceId: string,
+    componentId: string,
+    lineItemId: string,
+    direction: "up" | "down"
+  ) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id !== spaceId) return space;
+
+        const updatedComponents = space.components.map((component) => {
+          if (component.id !== componentId) return component;
+
+          const itemIndex = component.lineItems.findIndex(
+            (li) => li.id === lineItemId
+          );
+          if (itemIndex === -1) return component;
+
+          const newIndex = direction === "up" ? itemIndex - 1 : itemIndex + 1;
+          if (newIndex < 0 || newIndex >= component.lineItems.length)
+            return component;
+
+          const newLineItems = [...component.lineItems];
+          [newLineItems[itemIndex], newLineItems[newIndex]] = [
+            newLineItems[newIndex],
+            newLineItems[itemIndex],
+          ];
+          return { ...component, lineItems: newLineItems };
+        });
+
+        return { ...space, components: updatedComponents };
+      })
+    );
+  };
+
+  // Drag & drop handlers for spaces
+  const handleSpaceDragStart = (spaceId: string) => {
+    setDraggedSpaceId(spaceId);
+  };
+
+  const handleSpaceDragOver = (e: React.DragEvent, spaceId: string) => {
+    e.preventDefault();
+    if (draggedSpaceId && draggedSpaceId !== spaceId) {
+      setDragOverSpaceId(spaceId);
+    }
+  };
+
+  const handleSpaceDragLeave = () => {
+    setDragOverSpaceId(null);
+  };
+
+  const handleSpaceDrop = (targetSpaceId: string) => {
+    if (!draggedSpaceId || draggedSpaceId === targetSpaceId) {
+      setDraggedSpaceId(null);
+      setDragOverSpaceId(null);
+      return;
+    }
+
+    const draggedIndex = spaces.findIndex((s) => s.id === draggedSpaceId);
+    const targetIndex = spaces.findIndex((s) => s.id === targetSpaceId);
+
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    const newSpaces = [...spaces];
+    const [draggedSpace] = newSpaces.splice(draggedIndex, 1);
+    newSpaces.splice(targetIndex, 0, draggedSpace);
+
+    setSpaces(newSpaces);
+    setDraggedSpaceId(null);
+    setDragOverSpaceId(null);
+  };
+
+  const handleSpaceDragEnd = () => {
+    setDraggedSpaceId(null);
+    setDragOverSpaceId(null);
+  };
+
+  // Duplicate space with all components and line items
+  const duplicateSpace = (spaceId: string) => {
+    const spaceIndex = spaces.findIndex((s) => s.id === spaceId);
+    if (spaceIndex === -1) return;
+
+    const originalSpace = spaces[spaceIndex];
+    const existingCount = spaces.filter(
+      (s) => s.spaceTypeId === originalSpace.spaceTypeId
+    ).length;
+
+    const newSpace: BuilderSpace = {
+      id: generateId(),
+      spaceTypeId: originalSpace.spaceTypeId,
+      name: originalSpace.name,
+      defaultName: `${originalSpace.name} ${existingCount + 1}`,
+      components: originalSpace.components.map((comp) => ({
+        ...comp,
+        id: generateId(),
+        lineItems: comp.lineItems.map((item) => ({
+          ...item,
+          id: generateId(),
+        })),
+      })),
+      expanded: true,
+    };
+
+    const newSpaces = [...spaces];
+    newSpaces.splice(spaceIndex + 1, 0, newSpace);
+    setSpaces(newSpaces);
+  };
+
+  // Duplicate component with all line items
+  const duplicateComponent = (spaceId: string, componentId: string) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id !== spaceId) return space;
+
+        const compIndex = space.components.findIndex(
+          (c) => c.id === componentId
+        );
+        if (compIndex === -1) return space;
+
+        const originalComp = space.components[compIndex];
+        const newComponent: BuilderComponent = {
+          ...originalComp,
+          id: generateId(),
+          lineItems: originalComp.lineItems.map((item) => ({
+            ...item,
+            id: generateId(),
+          })),
+        };
+
+        const newComponents = [...space.components];
+        newComponents.splice(compIndex + 1, 0, newComponent);
+        return { ...space, components: newComponents };
+      })
+    );
+  };
+
+  // Component operations
+  const addComponent = (spaceId: string, componentType: ComponentType) => {
+    const newComponent: BuilderComponent = {
+      id: generateId(),
+      componentTypeId: componentType.id,
+      name: componentType.name,
+      lineItems: [],
+      expanded: true,
+    };
+
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id === spaceId) {
+          return { ...space, components: [...space.components, newComponent] };
+        }
+        return space;
+      })
+    );
+    setShowAddComponentModal(null);
+  };
+
+  const deleteComponent = (spaceId: string, componentId: string) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id === spaceId) {
+          return {
+            ...space,
+            components: space.components.filter((c) => c.id !== componentId),
+          };
+        }
+        return space;
+      })
+    );
+  };
+
+  const toggleComponentExpand = (spaceId: string, componentId: string) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id === spaceId) {
+          return {
+            ...space,
+            components: space.components.map((c) =>
+              c.id === componentId ? { ...c, expanded: !c.expanded } : c
+            ),
+          };
+        }
+        return space;
+      })
+    );
+  };
+
+  // Update component custom name
+  const updateComponentName = (
+    spaceId: string,
+    componentId: string,
+    customName: string
+  ) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id === spaceId) {
+          return {
+            ...space,
+            components: space.components.map((c) =>
+              c.id === componentId ? { ...c, customName } : c
+            ),
+          };
+        }
+        return space;
+      })
+    );
+  };
+
+  // Cost item operations
+  const addCostItem = (
+    spaceId: string,
+    componentId: string,
+    costItem: CostItem
+  ) => {
+    const categoriesData =
+      masterData.quotation_cost_item_categories ||
+      masterData.cost_item_categories ||
+      [];
+    const category = categoriesData.find((c) => c.id === costItem.category_id);
+
+    const newLineItem: LineItem = {
+      id: generateId(),
+      costItemId: costItem.id,
+      costItemName: costItem.name,
+      categoryName: category?.name || "Uncategorized",
+      categoryColor: category?.color || "#718096",
+      unitCode: costItem.unit_code,
+      rate: costItem.default_rate,
+      defaultRate: costItem.default_rate,
+      companyCost: costItem.company_cost || 0,
+      vendorCost: costItem.vendor_cost || 0,
+    };
+
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id === spaceId) {
+          return {
+            ...space,
+            components: space.components.map((comp) => {
+              if (comp.id === componentId) {
+                return { ...comp, lineItems: [...comp.lineItems, newLineItem] };
+              }
+              return comp;
+            }),
+          };
+        }
+        return space;
+      })
+    );
+    setShowAddCostItemModal(null);
+  };
+
+  const updateLineItem = (
+    spaceId: string,
+    componentId: string,
+    lineItemId: string,
+    updates: Partial<LineItem>
+  ) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id === spaceId) {
+          return {
+            ...space,
+            components: space.components.map((comp) => {
+              if (comp.id === componentId) {
+                return {
+                  ...comp,
+                  lineItems: comp.lineItems.map((item) =>
+                    item.id === lineItemId ? { ...item, ...updates } : item
+                  ),
+                };
+              }
+              return comp;
+            }),
+          };
+        }
+        return space;
+      })
+    );
+  };
+
+  const deleteLineItem = (
+    spaceId: string,
+    componentId: string,
+    lineItemId: string
+  ) => {
+    setSpaces(
+      spaces.map((space) => {
+        if (space.id === spaceId) {
+          return {
+            ...space,
+            components: space.components.map((comp) => {
+              if (comp.id === componentId) {
+                return {
+                  ...comp,
+                  lineItems: comp.lineItems.filter(
+                    (li) => li.id !== lineItemId
+                  ),
+                };
+              }
+              return comp;
+            }),
+          };
+        }
+        return space;
+      })
+    );
+  };
+
+  // Save template
+  const saveTemplate = async () => {
+    if (!templateName.trim()) {
+      alert("Please enter a template name");
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      // Include client_id so the API can map spaces to line items
+      const templateSpaces = spaces.map((space, idx) => ({
+        client_id: space.id, // Frontend-generated ID for mapping
+        space_type_id: space.spaceTypeId,
+        default_name: space.defaultName,
+        display_order: idx,
+      }));
+
+      const templateLineItems: any[] = [];
+      let lineItemOrder = 0;
+
+      spaces.forEach((space) => {
+        space.components.forEach((component) => {
+          component.lineItems.forEach((lineItem) => {
+            templateLineItems.push({
+              client_space_id: space.id, // Reference to specific space instance
+              space_type_id: space.spaceTypeId,
+              component_type_id: component.componentTypeId,
+              cost_item_id: lineItem.costItemId,
+              rate:
+                lineItem.rate !== lineItem.defaultRate ? lineItem.rate : null,
+              display_order: lineItemOrder++,
+            });
+          });
+        });
+      });
+
+      const response = await fetch(`/api/quotations/templates/${templateId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: templateName,
+          description: templateDescription,
+          // Only sent for levels where it means something. Sending it
+          // unconditionally is what silently set 3bhk on component templates.
+          ...(isWholeQuotation ? { property_type: propertyType } : {}),
+          quality_tier: qualityTier,
+          spaces: templateSpaces,
+          line_items: templateLineItems,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to update template");
+      }
+
+      // Editing and viewing are the same page now, so a save has nowhere to
+      // navigate to - it just stops being dirty.
+      setIsDirty(false);
+      setSavedAt(Date.now());
+    } catch (error) {
+      console.error("Error saving template:", error);
+      alert(error instanceof Error ? error.message : "Failed to save template");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (isLoadingMasterData || isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-sm text-slate-600">Loading template...</p>
+          <div className="w-8 h-8 border-4 border-slate-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading template...</p>
         </div>
       </div>
     );
   }
 
-  // Error state
-  if (error || !template) {
+  if (loadError) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
-        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
-          <svg
-            className="w-8 h-8 text-red-500"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg
+              className="w-8 h-8 text-red-600"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">
+            Failed to load template
+          </h2>
+          <p className="text-slate-600 mb-4">{loadError}</p>
+          <Link
+            href="/dashboard/quotations/templates"
+            className="inline-flex items-center px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            />
-          </svg>
+            Back to Templates
+          </Link>
         </div>
-        <p className="text-lg font-medium text-slate-900 mb-2">
-          {error || "Template not found"}
-        </p>
-        <Link
-          href="/dashboard/quotations/templates"
-          className="text-blue-600 hover:underline"
-        >
-          ← Back to Templates
-        </Link>
       </div>
     );
   }
-
-  const status = template.is_active ? "active" : "archived";
-  const statusColors = STATUS_COLORS[status];
 
   return (
-    <div className="space-y-4">
+    <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <div className="bg-white rounded-lg border border-slate-200 px-5 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4 min-w-0">
-            {/* Breadcrumb */}
-            <div className="flex items-center gap-2 text-sm text-slate-500 shrink-0">
-              <Link
-                href="/dashboard/quotations"
-                className="hover:text-blue-600"
-              >
-                Quotations
-              </Link>
-              <span>/</span>
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
+        <div className="px-5 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
               <Link
                 href="/dashboard/quotations/templates"
-                className="hover:text-blue-600"
+                className="text-slate-600 hover:text-slate-900"
               >
-                Templates
-              </Link>
-              <span>/</span>
-              <span className="text-slate-700 font-medium truncate max-w-[200px]">
-                {template.name}
-              </span>
-            </div>
-
-            {/* Separator */}
-            <div className="h-5 w-px bg-slate-200 shrink-0" />
-
-            {/* Title */}
-            <h1 className="text-xl font-bold text-slate-900 truncate">
-              {template.name}
-            </h1>
-
-            {/* Status Badge */}
-            <span
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full shrink-0 ${statusColors.bg} ${statusColors.text}`}
-            >
-              <span
-                className={`w-2 h-2 rounded-full ${statusColors.dot}`}
-              ></span>
-              {status.charAt(0).toUpperCase() + status.slice(1)}
-            </span>
-
-            {/* Quality Tier Badge */}
-            <span
-              className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium shrink-0 ${
-                QUALITY_TIER_COLORS[template.quality_tier?.toLowerCase()] ||
-                QUALITY_TIER_COLORS.standard
-              }`}
-            >
-              {template.quality_tier?.charAt(0).toUpperCase() +
-                template.quality_tier?.slice(1) || "Standard"}
-            </span>
-
-            {/* Property Type */}
-            <span className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-lg shrink-0">
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                />
-              </svg>
-              {PROPERTY_TYPES[template.property_type] || template.property_type}
-            </span>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() =>
-                router.push(
-                  `/dashboard/quotations/templates/${template.id}/edit`
-                )
-              }
-              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                />
-              </svg>
-              Edit
-            </button>
-            <button
-              onClick={handleDuplicate}
-              disabled={duplicating}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {duplicating ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (
                 <svg
-                  className="w-4 h-4"
+                  className="w-5 h-5"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -593,543 +896,416 @@ export default function TemplateDetailPage() {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
                   />
                 </svg>
-              )}
-              {duplicating ? "Duplicating..." : "Duplicate"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex gap-4">
-        {/* Main Content */}
-        <div className="flex-1 space-y-4">
-          {/* Template Info Card - Compact */}
-          <div className="bg-white rounded-lg border border-slate-200 px-4 py-3">
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">Type:</span>
-                <span className="text-sm font-medium text-slate-900">
-                  {PROPERTY_TYPES[template.property_type] ||
-                    template.property_type}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">Tier:</span>
-                <span className="text-sm font-medium text-slate-900">
-                  {template.quality_tier?.charAt(0).toUpperCase() +
-                    template.quality_tier?.slice(1) || "Standard"}
-                </span>
-              </div>
-              {template.description && (
-                <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-                  <span className="text-xs text-slate-500">Desc:</span>
-                  <span className="text-sm text-slate-600 truncate">
-                    {template.description}
+              </Link>
+              <div className="flex items-center gap-2 min-w-0">
+                <h1 className="text-lg font-bold text-slate-900 truncate">
+                  {templateName || "Template"}
+                </h1>
+                {level !== "quotation" && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200 shrink-0">
+                    {LEVEL_LABELS[level] || level}
                   </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Template Structure - V2 with Cost Items */}
-          <div className="bg-white rounded-lg border border-slate-200 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-slate-900">
-                Template Structure
-              </h3>
-              {spaceGroups.length > 0 && (
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-slate-500">
-                    {spaceGroups.length} spaces •{" "}
-                    {spaceGroups.reduce(
-                      (sum, s) => sum + s.components.length,
-                      0
-                    )}{" "}
-                    components
-                  </span>
-                  <button
-                    onClick={hasCollapsedItems ? expandAll : collapseAll}
-                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
-                  >
-                    {hasCollapsedItems ? (
-                      <>
-                        <svg
-                          className="w-3.5 h-3.5"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
-                          />
-                        </svg>
-                        Expand All
-                      </>
-                    ) : (
-                      <>
-                        <svg
-                          className="w-3.5 h-3.5"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"
-                          />
-                        </svg>
-                        Collapse All
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {spaceGroups.length === 0 && ungroupedLineItems.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <svg
-                    className="w-6 h-6 text-slate-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                    />
-                  </svg>
-                </div>
-                <h4 className="text-sm font-medium text-slate-900 mb-1">
-                  No Cost Items Defined
-                </h4>
-                <p className="text-sm text-slate-500 mb-4">
-                  This template doesn&apos;t have any cost items configured yet.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {/* Space Groups */}
-                {spaceGroups.map((space) => (
-                  <div
-                    key={space.templateSpaceId}
-                    className="border border-slate-200 rounded-lg overflow-hidden"
-                  >
-                    {/* Space Header */}
-                    <div
-                      className="flex items-center justify-between px-4 py-3 bg-slate-50 cursor-pointer"
-                      onClick={() => toggleSpace(space.templateSpaceId)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <button className="text-slate-600">
-                          <svg
-                            className={`w-5 h-5 transition-transform ${
-                              expandedSpaces.has(space.templateSpaceId)
-                                ? "rotate-90"
-                                : ""
-                            }`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M9 5l7 7-7 7"
-                            />
-                          </svg>
-                        </button>
-                        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                          <svg
-                            className="w-4 h-4 text-white"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                            />
-                          </svg>
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-semibold text-slate-900">
-                            {space.defaultName || space.spaceTypeName}
-                          </h4>
-                          <p className="text-xs text-slate-500">
-                            {space.spaceTypeName} • {space.components.length}{" "}
-                            components •{" "}
-                            {space.components.reduce(
-                              (sum, c) => sum + c.lineItems.length,
-                              0
-                            ) + space.directLineItems.length}{" "}
-                            cost items
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Space Content */}
-                    {expandedSpaces.has(space.templateSpaceId) && (
-                      <div className="p-4 space-y-3 border-t border-slate-100">
-                        {/* Components within Space */}
-                        {space.components.map((component, idx) => {
-                          const componentKey = `${space.templateSpaceId}-${component.componentTypeId}`;
-                          return (
-                            <div
-                              key={componentKey}
-                              className="border border-slate-200 rounded-lg overflow-hidden"
-                            >
-                              {/* Component Header */}
-                              <div
-                                className="flex items-center justify-between px-4 py-2.5 bg-slate-50 cursor-pointer"
-                                onClick={() => toggleComponent(componentKey)}
-                              >
-                                <div className="flex items-center gap-3">
-                                  <button className="text-slate-500">
-                                    <svg
-                                      className={`w-4 h-4 transition-transform ${
-                                        expandedComponents.has(componentKey)
-                                          ? "rotate-90"
-                                          : ""
-                                      }`}
-                                      fill="none"
-                                      viewBox="0 0 24 24"
-                                      stroke="currentColor"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M9 5l7 7-7 7"
-                                      />
-                                    </svg>
-                                  </button>
-                                  <div className="w-6 h-6 bg-purple-600 rounded flex items-center justify-center">
-                                    <svg
-                                      className="w-3 h-3 text-white"
-                                      fill="none"
-                                      viewBox="0 0 24 24"
-                                      stroke="currentColor"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                                      />
-                                    </svg>
-                                  </div>
-                                  <div>
-                                    <h5 className="text-sm font-medium text-slate-900">
-                                      {component.componentTypeName}
-                                    </h5>
-                                    <p className="text-xs text-slate-500">
-                                      {component.lineItems.length} cost items
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Component Line Items */}
-                              {expandedComponents.has(componentKey) && (
-                                <div className="p-3 border-t border-slate-100">
-                                  <table className="w-full text-sm">
-                                    <thead className="bg-slate-50">
-                                      <tr>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">
-                                          Cost Item
-                                        </th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">
-                                          Category
-                                        </th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">
-                                          Unit
-                                        </th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase">
-                                          Rate
-                                        </th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                      {component.lineItems.map(
-                                        (item, itemIdx) => (
-                                          <tr
-                                            key={`${item.id}-${itemIdx}`}
-                                            className="hover:bg-slate-50"
-                                          >
-                                            <td className="px-3 py-2">
-                                              <span className="font-medium text-slate-900">
-                                                {item.cost_item?.name ||
-                                                  item.cost_item_id}
-                                              </span>
-                                            </td>
-                                            <td className="px-3 py-2">
-                                              <span
-                                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getCategoryColor(
-                                                  item.cost_item?.category?.slug
-                                                )}`}
-                                              >
-                                                {item.cost_item?.category
-                                                  ?.name || "—"}
-                                              </span>
-                                            </td>
-                                            <td className="px-3 py-2 text-slate-600">
-                                              {item.cost_item?.unit_code || "—"}
-                                            </td>
-                                            <td className="px-3 py-2 text-right font-medium text-slate-900">
-                                              {formatCurrency(
-                                                item.rate ||
-                                                  item.cost_item
-                                                    ?.default_rate ||
-                                                  0
-                                              )}
-                                              <span className="text-slate-500 font-normal">
-                                                /
-                                                {item.cost_item?.unit_code ||
-                                                  "unit"}
-                                              </span>
-                                            </td>
-                                          </tr>
-                                        )
-                                      )}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-
-                        {/* Direct line items (not under component) */}
-                        {space.directLineItems.length > 0 && (
-                          <div className="border border-dashed border-slate-300 rounded-lg p-3">
-                            <h5 className="text-xs font-medium text-slate-500 uppercase mb-2">
-                              Direct Cost Items (No Component)
-                            </h5>
-                            <table className="w-full text-sm">
-                              <tbody className="divide-y divide-slate-100">
-                                {space.directLineItems.map((item, itemIdx) => (
-                                  <tr
-                                    key={`${item.id}-${itemIdx}`}
-                                    className="hover:bg-slate-50"
-                                  >
-                                    <td className="px-3 py-2">
-                                      <span className="font-medium text-slate-900">
-                                        {item.cost_item?.name ||
-                                          item.cost_item_id}
-                                      </span>
-                                    </td>
-                                    <td className="px-3 py-2">
-                                      <span
-                                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getCategoryColor(
-                                          item.cost_item?.category?.slug
-                                        )}`}
-                                      >
-                                        {item.cost_item?.category?.name || "—"}
-                                      </span>
-                                    </td>
-                                    <td className="px-3 py-2 text-right font-medium text-slate-900">
-                                      {formatCurrency(
-                                        item.rate ||
-                                          item.cost_item?.default_rate ||
-                                          0
-                                      )}
-                                      /{item.cost_item?.unit_code || "unit"}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-
-                        {space.components.length === 0 &&
-                          space.directLineItems.length === 0 && (
-                            <p className="text-sm text-slate-500 text-center py-4">
-                              No cost items in this space
-                            </p>
-                          )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                {/* Ungrouped Line Items */}
-                {ungroupedLineItems.length > 0 && (
-                  <div className="border border-dashed border-slate-300 rounded-lg p-4">
-                    <h4 className="text-sm font-medium text-slate-700 mb-3">
-                      Ungrouped Cost Items
-                    </h4>
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">
-                            Cost Item
-                          </th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">
-                            Category
-                          </th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">
-                            Unit
-                          </th>
-                          <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase">
-                            Rate
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {ungroupedLineItems.map((item, itemIdx) => (
-                          <tr
-                            key={`${item.id}-${itemIdx}`}
-                            className="hover:bg-slate-50"
-                          >
-                            <td className="px-3 py-2">
-                              <span className="font-medium text-slate-900">
-                                {item.cost_item?.name || item.cost_item_id}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2">
-                              <span
-                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getCategoryColor(
-                                  item.cost_item?.category?.slug
-                                )}`}
-                              >
-                                {item.cost_item?.category?.name || "—"}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2 text-slate-600">
-                              {item.cost_item?.unit_code || "—"}
-                            </td>
-                            <td className="px-3 py-2 text-right font-medium text-slate-900">
-                              {formatCurrency(
-                                item.rate || item.cost_item?.default_rate || 0
-                              )}
-                              /{item.cost_item?.unit_code || "unit"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
                 )}
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right Sidebar */}
-        <div className="w-80 shrink-0 space-y-4">
-          {/* Summary Card */}
-          <div className="bg-white rounded-lg border border-slate-200 p-5">
-            <h3 className="text-sm font-semibold text-slate-900 mb-4">
-              Template Summary
-            </h3>
-
-            {spaceGroups.length > 0 ? (
-              <div className="space-y-2 mb-4">
-                {spaceGroups.map((space) => (
-                  <div
-                    key={space.templateSpaceId}
-                    className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0"
-                  >
-                    <span className="text-sm text-slate-600">
-                      {space.defaultName || space.spaceTypeName}
-                    </span>
-                    <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                      {space.components.reduce(
-                        (sum, c) => sum + c.lineItems.length,
-                        0
-                      ) + space.directLineItems.length}{" "}
-                      items
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-slate-500 mb-4">
-                No spaces defined yet.
-              </p>
-            )}
-          </div>
-
-          {/* Statistics Card */}
-          <div className="bg-white rounded-lg border border-slate-200 p-5">
-            <h3 className="text-sm font-semibold text-slate-900 mb-4">
-              Statistics
-            </h3>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-600">Total Spaces</span>
-                <span className="font-medium text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
-                  {stats.spaces}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-600">Total Components</span>
-                <span className="font-medium text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
-                  {stats.components}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-600">Total Cost Items</span>
-                <span className="font-medium text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
-                  {stats.lineItems}
-                </span>
-              </div>
             </div>
-          </div>
-
-          {/* Info Card */}
-          <div className="bg-white rounded-lg border border-slate-200 p-5">
-            <h3 className="text-sm font-semibold text-slate-900 mb-4">
-              Information
-            </h3>
-            <div className="space-y-3 text-sm">
-              <div>
-                <span className="text-slate-500">Created</span>
-                <p className="text-slate-900">
-                  {formatDate(template.created_at)}
-                </p>
-              </div>
-              <div>
-                <span className="text-slate-500">Last Updated</span>
-                <p className="text-slate-900">
-                  {formatDate(template.updated_at)}
-                </p>
-              </div>
-              {template.is_featured && (
-                <div className="pt-2">
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">
-                    <svg
-                      className="w-3 h-3"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                    >
-                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                    </svg>
-                    Featured Template
-                  </span>
-                </div>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/dashboard/quotations/templates"
+                className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg hover:bg-slate-50"
+              >
+                Close
+              </Link>
+              {/* Says which of the three states the page is in, so "did that
+                  save?" never has to be answered by leaving and coming back. */}
+              {!canEdit ? (
+                <span className="text-xs text-slate-500">
+                  View only &mdash; you do not have permission to edit templates
+                </span>
+              ) : (
+                <>
+                  {isDirty ? (
+                    <span className="text-xs text-amber-600">
+                      Unsaved changes
+                    </span>
+                  ) : savedAt ? (
+                    <span className="text-xs text-green-600">Saved</span>
+                  ) : null}
+                  <button
+                    onClick={saveTemplate}
+                    disabled={isSaving || !isDirty}
+                    className="px-3 py-1.5 text-sm bg-slate-800 text-white rounded-lg hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSaving ? "Saving..." : "Save Changes"}
+                  </button>
+                </>
               )}
             </div>
           </div>
         </div>
       </div>
+
+      <div className="flex">
+        {/* Main Content */}
+        <div className="flex-1 p-4 overflow-auto">
+          {/* A disabled fieldset turns every input, select and button inside
+              read-only without SpaceCard needing to know about permissions -
+              and SpaceCard is shared with the quotation builder, so leaving it
+              alone is worth a little bluntness here. Spaces load expanded, so
+              a reader still sees the whole tree; they just cannot collapse it. */}
+          <fieldset
+            disabled={!canEdit}
+            className="min-w-0 border-0 p-0 m-0 disabled:opacity-100"
+          >
+          {/* Template Details - Compact */}
+          <div className="bg-white rounded-lg border border-slate-200 p-4 mb-4">
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Template Name *
+                </label>
+                <input
+                  type="text"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  placeholder="e.g., Premium 3BHK Package"
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-500 focus:border-slate-500"
+                />
+              </div>
+              {isWholeQuotation && (
+              <div className="w-32">
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Property Type
+                </label>
+                <select
+                  value={propertyType}
+                  onChange={(e) => setPropertyType(e.target.value)}
+                  className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-500 focus:border-slate-500"
+                >
+                  <option value="1bhk">1 BHK</option>
+                  <option value="2bhk">2 BHK</option>
+                  <option value="3bhk">3 BHK</option>
+                  <option value="4bhk">4 BHK</option>
+                  <option value="villa">Villa</option>
+                  <option value="penthouse">Penthouse</option>
+                  <option value="office">Office</option>
+                  <option value="retail">Retail</option>
+                </select>
+              </div>
+              )}
+              <div className="w-28">
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Quality Tier
+                </label>
+                <select
+                  value={qualityTier}
+                  onChange={(e) => setQualityTier(e.target.value)}
+                  className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-500 focus:border-slate-500"
+                >
+                  <option value="basic">Basic</option>
+                  <option value="standard">Standard</option>
+                  <option value="premium">Premium</option>
+                  <option value="luxury">Luxury</option>
+                </select>
+              </div>
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Description
+                </label>
+                <input
+                  type="text"
+                  value={templateDescription}
+                  onChange={(e) => setTemplateDescription(e.target.value)}
+                  placeholder="Brief description..."
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-500 focus:border-slate-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Spaces Header with Collapse All */}
+          {spaces.length > 0 && (
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-slate-700">
+                  {spaces.length} Space{spaces.length !== 1 ? "s" : ""}
+                </span>
+                <span className="text-xs text-slate-400">
+                  • {spaces.reduce((sum, s) => sum + s.components.length, 0)}{" "}
+                  Components
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={hasCollapsedSpaces ? expandAll : collapseAll}
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
+                >
+                  {hasCollapsedSpaces ? (
+                    <>
+                      <svg
+                        className="w-3.5 h-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                        />
+                      </svg>
+                      Expand All
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        className="w-3.5 h-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"
+                        />
+                      </svg>
+                      Collapse All
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Spaces */}
+          <div className="space-y-4">
+            {spaces.map((space, spaceIndex) => (
+              <SpaceCard
+                key={space.id}
+                space={space}
+                mode="template"
+                onToggleExpand={() => toggleSpaceExpand(space.id)}
+                onDelete={() => deleteSpace(space.id)}
+                onUpdateName={(name) => updateSpaceName(space.id, name)}
+                onAddComponent={() => setShowAddComponentModal(space.id)}
+                onToggleComponentExpand={(componentId) =>
+                  toggleComponentExpand(space.id, componentId)
+                }
+                onDeleteComponent={(componentId) =>
+                  deleteComponent(space.id, componentId)
+                }
+                onUpdateComponentName={(componentId, name) =>
+                  updateComponentName(space.id, componentId, name)
+                }
+                masterData={masterData}
+                onAddCostItem={(componentId) =>
+                  setShowAddCostItemModal({ spaceId: space.id, componentId })
+                }
+                onUpdateLineItem={(componentId, lineItemId, updates) =>
+                  updateLineItem(space.id, componentId, lineItemId, updates)
+                }
+                onDeleteLineItem={(componentId, lineItemId) =>
+                  deleteLineItem(space.id, componentId, lineItemId)
+                }
+                formatCurrency={formatCurrency}
+                // Drag and drop
+                onDragStart={() => handleSpaceDragStart(space.id)}
+                onDragOver={(e) => handleSpaceDragOver(e, space.id)}
+                onDragLeave={handleSpaceDragLeave}
+                onDrop={() => handleSpaceDrop(space.id)}
+                onDragEnd={handleSpaceDragEnd}
+                isDragging={draggedSpaceId === space.id}
+                isDragOver={dragOverSpaceId === space.id}
+                // Duplicate
+                onDuplicateSpace={() => duplicateSpace(space.id)}
+                onDuplicateComponent={(componentId) =>
+                  duplicateComponent(space.id, componentId)
+                }
+                onMoveComponentUp={(componentId) =>
+                  moveComponent(space.id, componentId, "up")
+                }
+                onMoveComponentDown={(componentId) =>
+                  moveComponent(space.id, componentId, "down")
+                }
+                onMoveLineItemUp={(componentId, lineItemId) =>
+                  moveLineItem(space.id, componentId, lineItemId, "up")
+                }
+                onMoveLineItemDown={(componentId, lineItemId) =>
+                  moveLineItem(space.id, componentId, lineItemId, "down")
+                }
+              />
+            ))}
+
+{isWholeQuotation && canEdit && (
+            <button
+              onClick={() => setShowAddSpaceModal(true)}
+              className="w-full py-4 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-xl border-2 border-dashed border-blue-300 flex items-center justify-center gap-2"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              Add Space
+            </button>
+)}
+          </div>
+          </fieldset>
+        </div>
+
+        {/* Summary. This used to live on a separate read-only page, which meant
+            the counts were only visible somewhere you could not change
+            anything. Here they are derived from the editor's own state, so
+            they move as you add and remove rows rather than after a save. */}
+        <div className="w-72 shrink-0 p-4 pl-0 space-y-4">
+          {isWholeQuotation && (
+            <div className="bg-white rounded-lg border border-slate-200 p-4">
+              <h3 className="text-sm font-semibold text-slate-900 mb-3">
+                Spaces
+              </h3>
+              {spaces.length > 0 ? (
+                <div className="space-y-1">
+                  {spaces.map((space) => (
+                    <div
+                      key={space.id}
+                      className="flex items-center justify-between gap-2 py-1.5 border-b border-slate-100 last:border-0"
+                    >
+                      <span className="text-sm text-slate-600 truncate">
+                        {space.defaultName || space.name}
+                      </span>
+                      <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded shrink-0">
+                        {space.components.reduce(
+                          (sum, c) => sum + c.lineItems.length,
+                          0
+                        )}{" "}
+                        items
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">No spaces yet.</p>
+              )}
+            </div>
+          )}
+
+          <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <h3 className="text-sm font-semibold text-slate-900 mb-3">
+              Statistics
+            </h3>
+            <div className="space-y-2.5 text-sm">
+              {isWholeQuotation && (
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-600">Spaces</span>
+                  <span className="font-medium text-slate-900 bg-slate-100 px-2 py-0.5 rounded tabular-nums">
+                    {spaces.length}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600">Components</span>
+                <span className="font-medium text-slate-900 bg-slate-100 px-2 py-0.5 rounded tabular-nums">
+                  {spaces.reduce((n, s) => n + s.components.length, 0)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600">Cost items</span>
+                <span className="font-medium text-slate-900 bg-slate-100 px-2 py-0.5 rounded tabular-nums">
+                  {spaces.reduce(
+                    (n, s) =>
+                      n +
+                      s.components.reduce((m, c) => m + c.lineItems.length, 0),
+                    0
+                  )}
+                </span>
+              </div>
+              {meta.usage_count !== undefined && (
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-600">Used in quotations</span>
+                  <span className="font-medium text-slate-900 bg-slate-100 px-2 py-0.5 rounded tabular-nums">
+                    {meta.usage_count}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <h3 className="text-sm font-semibold text-slate-900 mb-3">
+              Information
+            </h3>
+            <div className="space-y-2.5 text-sm">
+              <div>
+                <span className="text-slate-500 text-xs">Created</span>
+                <p className="text-slate-900">{formatDate(meta.created_at)}</p>
+              </div>
+              <div>
+                <span className="text-slate-500 text-xs">Last updated</span>
+                <p className="text-slate-900">{formatDate(meta.updated_at)}</p>
+              </div>
+              {meta.is_featured && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">
+                  Featured template
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Modals */}
+      <AddSpaceModal
+        isOpen={showAddSpaceModal}
+        onClose={() => setShowAddSpaceModal(false)}
+        onAdd={addSpace}
+        spaceTypes={masterData.space_types}
+      />
+
+      {showAddComponentModal && (
+        <AddComponentModal
+          isOpen={true}
+          onClose={() => setShowAddComponentModal(null)}
+          onAdd={(componentType) =>
+            addComponent(showAddComponentModal, componentType)
+          }
+          componentTypes={masterData.component_types}
+        />
+      )}
+
+      {showAddCostItemModal && (
+        <AddCostItemModal
+          isOpen={true}
+          onClose={() => setShowAddCostItemModal(null)}
+          onAdd={(costItem) =>
+            addCostItem(
+              showAddCostItemModal.spaceId,
+              showAddCostItemModal.componentId,
+              costItem
+            )
+          }
+          costItems={
+            masterData.quotation_cost_items || masterData.cost_items || []
+          }
+          categories={
+            masterData.quotation_cost_item_categories ||
+            masterData.cost_item_categories ||
+            []
+          }
+        />
+      )}
     </div>
   );
 }

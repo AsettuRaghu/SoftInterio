@@ -47,6 +47,7 @@ interface CreateQuotationModalProps {
     leadId?: string;
     projectId?: string;
     templateId?: string;
+    fromScope?: boolean;
   }) => Promise<void>;
   leads: Lead[];
   projects: Project[];
@@ -71,6 +72,10 @@ export function CreateQuotationModal({
   const [selectedLeadId, setSelectedLeadId] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  // On by default: a lead that reached this point usually has its rooms listed,
+  // and starting from them beats an empty quotation. A template overrides it,
+  // since choosing one is a deliberate statement about contents.
+  const [useScope, setUseScope] = useState(true);
 
   if (!isOpen) return null;
 
@@ -90,12 +95,14 @@ export function CreateQuotationModal({
         leadId: selectedLeadId || undefined,
         projectId: selectedProjectId || undefined,
         templateId: selectedTemplateId || undefined,
+        fromScope: useScope && !selectedTemplateId,
       });
       // Reset form
       setSource("lead");
       setSelectedLeadId("");
       setSelectedProjectId("");
       setSelectedTemplateId("");
+      setUseScope(true);
     } catch (error) {
       console.error("Error creating quotation:", error);
     }
@@ -293,6 +300,29 @@ export function CreateQuotationModal({
                     </p>
                   )}
                 </div>
+
+                {/* Only meaningful without a template, and only for a lead or
+                    project - a standalone quotation has no property to read. */}
+                {!selectedTemplateId && source !== "standalone" && (
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useScope}
+                      onChange={(e) => setUseScope(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>
+                      <span className="block text-sm text-slate-700">
+                        Build from the Spaces tab
+                      </span>
+                      <span className="block text-[11px] text-slate-400">
+                        Creates the rooms and components already listed there,
+                        with their measurements. You can change anything
+                        afterwards without affecting the Spaces tab.
+                      </span>
+                    </span>
+                  </label>
+                )}
               </>
             )}
           </div>

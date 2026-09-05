@@ -11,7 +11,10 @@ export { TemplateSelector, TemplateModal } from "./TemplateSelector";
 export type { Template } from "./TemplateSelector";
 export { ScopeSelector, isInScope, defaultScope } from "./ScopeSelector";
 export type { ScopeMode, ScopeSelection } from "./ScopeSelector";
-export { PricingScenariosModal } from "./PricingScenariosModal";
-// Legacy exports (deprecated - use PricingScenariosModal instead)
-export { PriceAdjustmentModal } from "./PriceAdjustmentModal";
-export { MaterialSwapModal } from "./MaterialSwapModal";
+export { RepriceModal } from "./RepriceModal";
+export { QuotationBuilder } from "./QuotationBuilder";
+export { PrintQuotationModal } from "./PrintQuotationModal";
+export { ShareQuotationModal } from "./ShareQuotationModal";
+export { PrintFormatModal } from "./PrintFormatModal";
+export { TermsClauseModal } from "./TermsClauseModal";
+export { SaveAsTemplateModal } from "./SaveAsTemplateModal";

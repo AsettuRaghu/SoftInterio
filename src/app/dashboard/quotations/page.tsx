@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useRouter } from "next/navigation";
 import type { Quotation, QuotationStatus } from "@/types/quotations";
 import {
@@ -25,6 +26,8 @@ import {
   ArrowPathIcon,
   PlusIcon,
   XMarkIcon,
+  PencilIcon,
+  EyeIcon,
 } from "@heroicons/react/24/outline";
 import { CreateQuotationModal } from "@/components/quotations/CreateQuotationModal";
 import {
@@ -89,10 +92,22 @@ const ALLOWED_STATUS_FILTER_OPTIONS = QUOTATION_STATUS_OPTIONS.filter((opt) =>
   ].includes(opt.value)
 );
 
+/**
+ * A best guess at whether this row will open editable.
+ *
+ * Deliberately only what a list row knows - status and the lead's stage. The
+ * detail page makes the real decision with is_locked and the project link as
+ * well, so this only picks an icon; it never grants anything.
+ */
+const isEditableStatus = (q: { status: string; lead_stage?: string | null }) =>
+  !["sent", "approved", "rejected"].includes(q.status) &&
+  !["won", "lost", "disqualified"].includes(q.lead_stage || "");
+
 // Active statuses constant
 const ACTIVE_STATUSES = ACTIVE_QUOTATION_STATUSES;
 
 export default function QuotationsListPage() {
+  const { confirm, confirmDialog } = useConfirm();
   const router = useRouter();
   const [allQuotations, setAllQuotations] = useState<Quotation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -342,11 +357,14 @@ export default function QuotationsListPage() {
     leadId?: string;
     projectId?: string;
     templateId?: string;
+    fromScope?: boolean;
   }) => {
     const leadId = data?.leadId || selectedLeadId;
     const projectId = data?.projectId || selectedProjectId;
     const templateId = data?.templateId || selectedTemplateId;
     const source = data?.source || createSource;
+    // Read here because `data` is shadowed further down by the response body.
+    const fromScope = data?.fromScope === true;
 
     // For lead/project source, require selection
     if (source === "lead" && !leadId) {
@@ -360,7 +378,7 @@ export default function QuotationsListPage() {
 
     setIsCreating(true);
     try {
-      const payload: Record<string, string> = {};
+      const payload: Record<string, string | boolean> = {};
       if (source === "lead" && leadId) {
         payload.lead_id = leadId;
       } else if (source === "project" && projectId) {
@@ -369,6 +387,11 @@ export default function QuotationsListPage() {
       // For standalone, we don't add lead_id or project_id
       if (templateId) {
         payload.template_id = templateId;
+      }
+      // Builds the quotation's rooms and components from the property's
+      // Spaces tab. Ignored server-side when a template is chosen.
+      if (fromScope) {
+        payload.from_scope = true;
       }
 
       const response = await fetch("/api/quotations", {
@@ -384,7 +407,7 @@ export default function QuotationsListPage() {
 
       const data = await response.json();
       setShowCreateModal(false);
-      router.push(`/dashboard/quotations/${data.quotation.id}/edit`);
+      router.push(`/dashboard/quotations/${data.quotation.id}?edit=1`);
     } catch (err) {
       console.error("Error creating quotation:", err);
       alert(err instanceof Error ? err.message : "Failed to create quotation");
@@ -486,7 +509,7 @@ export default function QuotationsListPage() {
       }
 
       const data = await response.json();
-      router.push(`/dashboard/quotations/${data.quotation.id}/edit`);
+      router.push(`/dashboard/quotations/${data.quotation.id}?edit=1`);
     } catch (err) {
       console.error("Error creating revision:", err);
       alert(err instanceof Error ? err.message : "Failed to create revision");
@@ -537,16 +560,25 @@ export default function QuotationsListPage() {
     if (validIds.length < ids.length) {
       const skipped = ids.length - validIds.length;
       if (
-        !confirm(
-          `${skipped} quotation(s) will be skipped (closed leads). Continue with ${validIds.length} quotation(s)?`
-        )
+        !(await confirm({
+          title: `Continue with ${validIds.length} quotation${
+            validIds.length === 1 ? "" : "s"
+          }?`,
+          message: `${skipped} will be skipped because their leads are closed.`,
+          confirmLabel: "Continue",
+          tone: "warning",
+        }))
       ) {
         return;
       }
     } else {
-      const confirmed = confirm(
-        `Are you sure you want to mark ${validIds.length} quotation(s) as ${newStatus}?`
-      );
+      const confirmed = await confirm({
+        title: `Mark ${validIds.length} quotation${
+          validIds.length === 1 ? "" : "s"
+        } as ${newStatus}?`,
+        confirmLabel: "Confirm",
+        tone: "warning",
+      });
       if (!confirmed) return;
     }
 
@@ -743,14 +775,23 @@ export default function QuotationsListPage() {
       width: "13%",
       render: (quotation) => (
         <div className="flex items-center justify-end gap-1">
+          {/* One destination either way - viewing and editing are the same
+              route now, and it decides which to open from the quotation's own
+              state. The icon just sets the expectation. A quotation that has
+              been sent or approved is revision-only, so it reads. */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               router.push(`/dashboard/quotations/${quotation.id}`);
             }}
-            className="px-2 py-1 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded font-medium"
+            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+            title={isEditableStatus(quotation) ? "Edit" : "View"}
           >
-            View
+            {isEditableStatus(quotation) ? (
+              <PencilIcon className="w-4 h-4" />
+            ) : (
+              <EyeIcon className="w-4 h-4" />
+            )}
           </button>
           {/* Only show Revise button if lead is not closed (won/lost/disqualified) */}
           {(!quotation.lead_stage ||
@@ -1137,6 +1178,7 @@ export default function QuotationsListPage() {
         isLoading={isLoadingModalData}
         isCreating={isCreating}
       />
+      {confirmDialog}
     </PageLayout>
   );
 }

@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { TEMPLATE_LEVELS } from "@/types/quotations";
 import {
   PageLayout,
   PageHeader,
@@ -23,8 +25,11 @@ import {
   ListBulletIcon,
   StarIcon,
   TrashIcon,
+  PencilIcon,
+  EyeIcon,
 } from "@heroicons/react/24/outline";
 import { StarIcon as StarIconSolid } from "@heroicons/react/24/solid";
+import { useUserPermissions } from "@/hooks/useUserPermissions";
 
 // Template status types
 type TemplateStatus = "active" | "archived" | "draft";
@@ -82,7 +87,14 @@ const PROPERTY_TYPE_LABELS: Record<string, string> = {
 };
 
 export default function QuotationTemplatesPage() {
+  const { confirm, confirmDialog } = useConfirm();
   const router = useRouter();
+  // Write actions are hidden rather than shown-then-refused. The API guards
+  // each of these independently; this only keeps the list honest.
+  const { hasPermission } = useUserPermissions();
+  const canEditTemplates = hasPermission("quotations.templates.update");
+  const canCreateTemplates = hasPermission("quotations.templates.create");
+  const canDeleteTemplates = hasPermission("quotations.templates.delete");
   const [templates, setTemplates] = useState<QuotationTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -205,7 +217,15 @@ export default function QuotationTemplatesPage() {
     }, {} as Record<string, number>);
 
     // Count by property type
+    // Only templates that actually carry a property type get a bucket.
+    //
+    // Component and cost-item templates have none, and indexing an object with
+    // null coerces the key to the string "null" - which produced a real
+    // dropdown option labelled "null" that matched nothing when picked, since
+    // the filter then compared property_type === "null" against an actual
+    // null. Property type is meaningless for those levels anyway.
     const propertyTypeCounts = templates.reduce((acc, t) => {
+      if (!t.property_type) return acc;
       acc[t.property_type] = (acc[t.property_type] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
@@ -234,7 +254,7 @@ export default function QuotationTemplatesPage() {
 
       const data = await response.json();
       if (data.success && data.template) {
-        router.push(`/dashboard/quotations/templates/${data.template.id}/edit`);
+        router.push(`/dashboard/quotations/templates/${data.template.id}`);
       } else {
         throw new Error(data.error || "Failed to duplicate template");
       }
@@ -255,9 +275,10 @@ export default function QuotationTemplatesPage() {
     e.stopPropagation();
 
     if (
-      !confirm(
-        `Are you sure you want to delete "${templateName}"? This action cannot be undone.`
-      )
+      !(await confirm({
+        title: `Delete "${templateName}"?`,
+        message: "This template cannot be recovered.",
+      }))
     ) {
       return;
     }
@@ -297,26 +318,47 @@ export default function QuotationTemplatesPage() {
       header: "Template Name",
       width: "25%",
       sortable: true,
-      render: (template) => (
-        <div>
-          <p className="text-sm font-medium text-slate-900">{template.name}</p>
-          {template.description && (
-            <p className="text-xs text-slate-500 truncate max-w-[200px]">
-              {template.description}
-            </p>
-          )}
-        </div>
-      ),
+      render: (template) => {
+        // The level is shown beside the name rather than as a column of its
+        // own: it changes what the row *is*, and a reader needs it before the
+        // property type or tier make any sense.
+        const level = (template as { level?: string }).level || "quotation";
+        const levelLabel =
+          TEMPLATE_LEVELS.find((l) => l.key === level)?.label || level;
+        return (
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-slate-900">
+                {template.name}
+              </p>
+              {level !== "quotation" && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200">
+                  {levelLabel}
+                </span>
+              )}
+            </div>
+            {template.description && (
+              <p className="text-xs text-slate-500 truncate max-w-[200px]">
+                {template.description}
+              </p>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "property_type",
       header: "Property Type",
       width: "15%",
       sortable: true,
+      // Only a whole-quotation template has a property type; the narrower
+      // levels are one component or one bundle and carry none.
       render: (template) => (
         <p className="text-sm text-slate-700">
-          {PROPERTY_TYPE_LABELS[template.property_type] ||
-            template.property_type}
+          {template.property_type
+            ? PROPERTY_TYPE_LABELS[template.property_type] ||
+              template.property_type
+            : "—"}
         </p>
       ),
     },
@@ -384,15 +426,24 @@ export default function QuotationTemplatesPage() {
       width: "10%",
       render: (template) => (
         <div className="flex items-center justify-end gap-1">
+          {/* Editing used to mean opening the template, then clicking Edit
+              there. Both are one click from here now, matching every other
+              table in the app. */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               router.push(`/dashboard/quotations/templates/${template.id}`);
             }}
-            className="px-2 py-1 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded font-medium"
+            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+            title={canEditTemplates ? "Edit" : "View"}
           >
-            View
+            {canEditTemplates ? (
+              <PencilIcon className="w-4 h-4" />
+            ) : (
+              <EyeIcon className="w-4 h-4" />
+            )}
           </button>
+          {canCreateTemplates && (
           <button
             onClick={(e) => handleDuplicate(template.id, e)}
             className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded"
@@ -400,6 +451,8 @@ export default function QuotationTemplatesPage() {
           >
             <DocumentDuplicateIcon className="w-4 h-4" />
           </button>
+          )}
+          {canDeleteTemplates && (
           <button
             onClick={(e) => handleDelete(template.id, template.name, e)}
             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
@@ -407,6 +460,7 @@ export default function QuotationTemplatesPage() {
           >
             <TrashIcon className="w-4 h-4" />
           </button>
+          )}
         </div>
       ),
     },
@@ -444,13 +498,15 @@ export default function QuotationTemplatesPage() {
                 <Squares2X2Icon className="w-4 h-4" />
               </button>
             </div>
-            <Link
-              href="/dashboard/quotations/templates/new"
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm font-medium"
-            >
-              <PlusIcon className="w-4 h-4" />
-              Create Template
-            </Link>
+            {canCreateTemplates && (
+              <Link
+                href="/dashboard/quotations/templates/new"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm font-medium"
+              >
+                <PlusIcon className="w-4 h-4" />
+                Create Template
+              </Link>
+            )}
           </div>
         }
         stats={
@@ -596,8 +652,9 @@ export default function QuotationTemplatesPage() {
                         }}
                         className="flex-1 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
                       >
-                        View Details
+                        {canEditTemplates ? "Edit" : "View"}
                       </button>
+                      {canCreateTemplates && (
                       <button
                         onClick={(e) => handleDuplicate(template.id, e)}
                         className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
@@ -605,6 +662,8 @@ export default function QuotationTemplatesPage() {
                       >
                         <DocumentDuplicateIcon className="w-4 h-4" />
                       </button>
+                      )}
+                      {canDeleteTemplates && (
                       <button
                         onClick={(e) =>
                           handleDelete(template.id, template.name, e)
@@ -614,6 +673,7 @@ export default function QuotationTemplatesPage() {
                       >
                         <TrashIcon className="w-4 h-4" />
                       </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -645,6 +705,7 @@ export default function QuotationTemplatesPage() {
           />
         )}
       </PageContent>
+      {confirmDialog}
     </PageLayout>
   );
 }

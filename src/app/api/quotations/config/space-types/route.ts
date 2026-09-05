@@ -87,6 +87,15 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
+      // 23505 is the (tenant_id, slug) unique index. The slug is derived from
+      // the name, so this always means "that name is already taken" - which is
+      // a correction the user can make, not a server fault.
+      if (error.code === '23505') {
+        return NextResponse.json(
+          { error: `A space type called "${name.trim()}" already exists` },
+          { status: 409 }
+        );
+      }
       console.error('Error creating space type:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
@@ -144,6 +153,12 @@ export async function PATCH(request: NextRequest) {
       .single();
 
     if (error) {
+      if (error.code === '23505') {
+        return NextResponse.json(
+          { error: `Another space type already uses that name` },
+          { status: 409 }
+        );
+      }
       console.error('Error updating space type:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
@@ -182,6 +197,32 @@ export async function DELETE(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json({ error: 'ID is required' }, { status: 400 });
+    }
+
+    // Same reasoning as component types: the foreign keys null out rather
+    // than blocking, so a quotation would quietly lose its space type.
+    const [{ count: usedInQuotations }, { count: usedInScope }] =
+      await Promise.all([
+        supabase
+          .from('quotation_spaces')
+          .select('*', { count: 'exact', head: true })
+          .eq('space_type_id', id),
+        supabase
+          .from('property_scope_items')
+          .select('*', { count: 'exact', head: true })
+          .eq('space_type_id', id),
+      ]);
+
+    const inUse = (usedInQuotations || 0) + (usedInScope || 0);
+    if (inUse > 0) {
+      return NextResponse.json(
+        {
+          error: `This space is used in ${inUse} place${
+            inUse === 1 ? '' : 's'
+          } and cannot be deleted. Mark it inactive instead to hide it from new quotations.`,
+        },
+        { status: 409 }
+      );
     }
 
     const { error } = await supabase

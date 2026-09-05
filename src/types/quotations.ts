@@ -20,7 +20,16 @@ export type QuotationStatus =
   | "linked_to_project"
   | "project_baseline";
 
-export type QualityTier = "budget" | "standard" | "premium" | "luxury";
+/**
+ * The specification ladder a cost item sits on.
+ *
+ * Not a database constraint - quotation_cost_items.quality_tier is plain text
+ * and each tenant's catalogue defines what it actually sells. These four are
+ * the ladder the seeded catalogue uses and the one the tier controls offer;
+ * an item carrying anything else simply falls outside those controls rather
+ * than being invalid.
+ */
+export type QualityTier = "basic" | "standard" | "premium" | "luxury";
 
 export type DiscountType = "percentage" | "fixed";
 
@@ -167,13 +176,54 @@ export type CostItem = QuotationCostItem;
 /**
  * Quotation Template
  */
+/**
+ * What a template is a template *of*.
+ *
+ * The line item table already carries both space_type_id and
+ * component_type_id on every row, so all four shapes fit the existing schema -
+ * a component template is one with no template_spaces and a single
+ * component_type_id across its lines. This records which shape it is, so the
+ * UI can ask for the right depth when creating and offer the right insertion
+ * point when applying.
+ */
+export type TemplateLevel = "quotation" | "space" | "component" | "cost_items";
+
+export const TEMPLATE_LEVELS: {
+  key: TemplateLevel;
+  label: string;
+  description: string;
+}[] = [
+  {
+    key: "quotation",
+    label: "Whole quotation",
+    description: "Rooms, their components and all cost items. Use to start a new quotation.",
+  },
+  {
+    key: "space",
+    label: "Space",
+    description: "One room with its components. Added alongside existing rooms.",
+  },
+  {
+    key: "component",
+    label: "Component",
+    description: "One component and its cost items — a standard wardrobe, say. Added into a room.",
+  },
+  {
+    key: "cost_items",
+    label: "Cost item bundle",
+    description: "A set of cost items that go together, such as drawer hardware. Added into a component.",
+  },
+];
+
 export interface QuotationTemplate {
   id: string;
   tenant_id: string;
   name: string;
   description?: string;
-  property_type?: PropertyType;
-  quality_tier: QualityTier;
+  level: TemplateLevel;
+  /** Only meaningful on a whole-quotation template; null on the others. */
+  property_type?: PropertyType | null;
+  quality_tier: QualityTier | null;
   base_price?: number;
   template_data: Record<string, unknown>; // Legacy JSONB field
   is_active: boolean;
@@ -686,7 +736,7 @@ export const QuotationStatusColors: Record<
 };
 
 export const QualityTierLabels: Record<QualityTier, string> = {
-  budget: "Budget",
+  basic: "Basic",
   standard: "Standard",
   premium: "Premium",
   luxury: "Luxury",
@@ -717,3 +767,84 @@ export const CalculationTypeLabels: Record<CalculationType, string> = {
   quantity: "Quantity",
   fixed: "Fixed/Lump Sum",
 };
+
+// ============================================================================
+// PRINT LIBRARY & TERMS LIBRARY
+// ============================================================================
+
+/** How far down the hierarchy a printed quotation itemises. */
+export type ItemiseLevel = "space" | "component" | "category" | "cost_item";
+
+/**
+ * Where money is printed. Deliberately separate from ItemiseLevel: showing
+ * every component while pricing only at the space level is the arrangement
+ * interior sellers ask for most, and a single ladder cannot express it.
+ * "none" produces a scope document with no figures at all.
+ */
+export type PriceAtLevel = ItemiseLevel | "none";
+
+export const ITEMISE_LEVEL_LABELS: Record<ItemiseLevel, string> = {
+  space: "Spaces only",
+  component: "Spaces & components",
+  category: "Down to cost categories",
+  cost_item: "Full detail (every cost item)",
+};
+
+export const PRICE_AT_LABELS: Record<PriceAtLevel, string> = {
+  none: "No prices (scope only)",
+  space: "Price per space",
+  component: "Price per component",
+  category: "Price per category",
+  cost_item: "Price every line item",
+};
+
+export interface QuotationPrintFormat {
+  id: string;
+  tenant_id: string;
+  name: string;
+  description?: string | null;
+
+  cover_enabled: boolean;
+  /** Storage path, not a URL - the bucket is private. */
+  cover_image_path?: string | null;
+  /** Short-lived signed URL, attached by the API on read. */
+  cover_preview_url?: string | null;
+
+  itemise_to: ItemiseLevel;
+  price_at: PriceAtLevel;
+
+  show_descriptions: boolean;
+  show_specifications: boolean;
+  show_dimensions: boolean;
+  show_quantities: boolean;
+
+  show_company_details: boolean;
+  show_bank_details: boolean;
+  show_payment_terms: boolean;
+  show_terms: boolean;
+
+  header_color: string;
+  footer_text?: string | null;
+
+  is_default: boolean;
+  is_active: boolean;
+  display_order: number;
+
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuotationTermsClause {
+  id: string;
+  tenant_id: string;
+  title: string;
+  content: string;
+  category?: string | null;
+  is_default: boolean;
+  is_active: boolean;
+  display_order: number;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}

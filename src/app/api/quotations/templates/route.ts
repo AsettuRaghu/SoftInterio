@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
         // Get line items to count unique components per template
         supabase
           .from("quotation_template_line_items")
-          .select("template_id, component_type_id")
+          .select("template_id, component_type_id, space_type_id")
           .in("template_id", templateIds),
         // Count quotations that use each template
         supabase
@@ -121,13 +121,86 @@ export async function GET(request: NextRequest) {
         }
       });
 
+      // What each template is *for*, so the picker can put the right ones
+      // first. Two signals, and they are not equal:
+      //
+      //   applicable_space_types on the component type is the deliberate
+      //   mapping configured in Quotation Config - the intent.
+      //
+      //   space_type_id on the template's own rows is merely where it happened
+      //   to be built first. A wardrobe saved from a study does not make
+      //   wardrobes a study item, so it is only a fallback for component types
+      //   with no mapping configured.
+      const componentTypesByTemplate: Record<string, Set<string>> = {};
+      const spaceTypesByTemplate: Record<string, Set<string>> = {};
+      (lineItemsResult.data || []).forEach((item) => {
+        if (item.component_type_id) {
+          (componentTypesByTemplate[item.template_id] ||= new Set()).add(
+            item.component_type_id
+          );
+        }
+        if (item.space_type_id) {
+          (spaceTypesByTemplate[item.template_id] ||= new Set()).add(
+            item.space_type_id
+          );
+        }
+      });
+
+      const referencedComponentTypes = [
+        ...new Set(
+          Object.values(componentTypesByTemplate).flatMap((set) => [...set])
+        ),
+      ];
+
+      const componentTypeById: Record<
+        string,
+        { name: string; applicable_space_types: string[] | null }
+      > = {};
+      if (referencedComponentTypes.length > 0) {
+        const { data: componentTypes } = await supabase
+          .from("component_types")
+          .select("id, name, applicable_space_types")
+          .in("id", referencedComponentTypes);
+        (componentTypes || []).forEach((ct) => {
+          componentTypeById[ct.id] = {
+            name: ct.name,
+            applicable_space_types: ct.applicable_space_types,
+          };
+        });
+      }
+
       // Attach counts to templates
-      templatesWithCounts = templates.map((template) => ({
-        ...template,
-        spaces_count: spacesCountByTemplate[template.id] || 0,
-        components_count: componentsCountByTemplate[template.id] || 0,
-        usage_count: usageCountByTemplate[template.id] || 0,
-      }));
+      templatesWithCounts = templates.map((template) => {
+        const componentTypeIds = [
+          ...(componentTypesByTemplate[template.id] || []),
+        ];
+        const recordedSpaceTypeIds = [
+          ...(spaceTypesByTemplate[template.id] || []),
+        ];
+
+        // Where this template belongs. Falls back to the rooms it was built in
+        // only when no component type carries a configured mapping - two of
+        // the seeded component types have none, and their templates should
+        // still land somewhere sensible rather than nowhere.
+        const mapped = componentTypeIds.flatMap(
+          (id) => componentTypeById[id]?.applicable_space_types || []
+        );
+        const applicableSpaceTypeIds = [
+          ...new Set(mapped.length > 0 ? mapped : recordedSpaceTypeIds),
+        ];
+
+        return {
+          ...template,
+          spaces_count: spacesCountByTemplate[template.id] || 0,
+          components_count: componentsCountByTemplate[template.id] || 0,
+          usage_count: usageCountByTemplate[template.id] || 0,
+          component_type_ids: componentTypeIds,
+          component_type_names: componentTypeIds
+            .map((id) => componentTypeById[id]?.name)
+            .filter(Boolean) as string[],
+          applicable_space_type_ids: applicableSpaceTypeIds,
+        };
+      });
     }
 
     // If details requested, fetch full spaces and line items for each template
@@ -226,6 +299,7 @@ export async function POST(request: NextRequest) {
       spaces, // V2: Array of template spaces
       line_items, // V2: Array of template line items
       is_featured,
+      level, // What this is a template of: quotation | space | component | cost_items
     } = body;
 
     if (!name) {
@@ -235,6 +309,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const VALID_LEVELS = ["quotation", "space", "component", "cost_items"];
+    const templateLevel = level || "quotation";
+    if (!VALID_LEVELS.includes(templateLevel)) {
+      return NextResponse.json(
+        { error: "Unknown template level" },
+        { status: 400 }
+      );
+    }
+
+    // Property type and quality tier describe a whole job, so they only mean
+    // something on a quotation-level template. Storing them on a wardrobe
+    // template would imply it only suits a 3BHK, which is not the intent.
+    const isWholeQuotation = templateLevel === "quotation";
+
     // Create the template using the user's tenant from guard
     const { data: template, error } = await supabase
       .from("quotation_templates")
@@ -242,8 +330,9 @@ export async function POST(request: NextRequest) {
         tenant_id: user!.tenantId,
         name,
         description,
-        property_type,
-        quality_tier: quality_tier || "standard",
+        level: templateLevel,
+        property_type: isWholeQuotation ? property_type : null,
+        quality_tier: isWholeQuotation ? quality_tier || "standard" : null,
         base_price,
         template_data: template_data || {}, // Legacy field, can be empty
         is_active: true,

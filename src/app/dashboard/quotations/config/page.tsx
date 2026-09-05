@@ -90,7 +90,17 @@ interface DeleteModalState {
 
 export default function QuotationsConfigPage() {
   const [activeTab, setActiveTab] = useState<TabType>("spaces");
+  // Set from the cost items response. Users without cost_items.pricing get no
+  // company cost at all, so the column and its form field are hidden rather
+  // than shown empty - a blank column invites people to fill it in.
+  const [canViewCosts, setCanViewCosts] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  // Extra filters, each only meaningful on one tab.
+  const [spaceFilter, setSpaceFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -135,6 +145,18 @@ export default function QuotationsConfigPage() {
   const [formCompanyCost, setFormCompanyCost] = useState("");
   const [formDefaultRate, setFormDefaultRate] = useState("");
   const [formIsActive, setFormIsActive] = useState(true);
+  // Which spaces a component type suits. Empty means no restriction, which is
+  // the right default - a component nobody has classified should still be
+  // offered rather than hidden.
+  const [formSpaceTypeIds, setFormSpaceTypeIds] = useState<string[]>([]);
+  // Separate from the page banner, which sits behind the modal overlay and so
+  // is invisible exactly when a save fails.
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  // For outcomes that are not failures but are not what was asked either -
+  // a cost item in use is deactivated rather than deleted, and saying nothing
+  // leaves the user staring at a row they thought they had removed.
+  const [notice, setNotice] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const fetchSpaces = useCallback(async () => {
@@ -193,6 +215,7 @@ export default function QuotationsConfigPage() {
       if (!res.ok) throw new Error("Failed to fetch cost items");
       const data = await res.json();
       setCostItems(data.quotationCostItems || data.costItems || []);
+      setCanViewCosts(!!data.can_view_costs);
       uiLogger.info("Cost items fetched successfully", {
         count: (data.quotationCostItems || data.costItems)?.length || 0,
       });
@@ -228,30 +251,48 @@ export default function QuotationsConfigPage() {
     setActiveTab(tabId);
   };
 
+  /** Active / inactive, applied the same way on every tab. */
+  const matchesStatus = (isActive: boolean) =>
+    statusFilter === "all" ||
+    (statusFilter === "active" ? isActive : !isActive);
+
   const filteredSpaces = spaces.filter(
     (s) =>
-      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.description?.toLowerCase().includes(searchQuery.toLowerCase())
+      matchesStatus(s.is_active) &&
+      (s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        !!s.description?.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  const filteredComponents = components.filter(
-    (c) =>
+  const filteredComponents = components.filter((c) => {
+    if (!matchesStatus(c.is_active)) return false;
+    if (spaceFilter !== "all") {
+      const ids =
+        (c as { applicable_space_types?: string[] | null })
+          .applicable_space_types || [];
+      // Unrestricted components suit every space, so they match any filter.
+      if (ids.length > 0 && !ids.includes(spaceFilter)) return false;
+    }
+    return (
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.description?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      !!c.description?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  });
 
   const filteredCategories = categories.filter(
     (c) =>
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.description?.toLowerCase().includes(searchQuery.toLowerCase())
+      matchesStatus(c.is_active) &&
+      (c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        !!c.description?.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const filteredCostItems = costItems.filter(
     (item) =>
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      matchesStatus(item.is_active) &&
+      (categoryFilter === "all" || item.category_id === categoryFilter) &&
+      (item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.category?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.unit_code.toLowerCase().includes(searchQuery.toLowerCase())
+        item.unit_code.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   // Sorting functions
@@ -438,6 +479,36 @@ export default function QuotationsConfigPage() {
     [filteredCostItems, costItemsSort, categories]
   );
 
+  /**
+   * One pager for all four tabs.
+   *
+   * Each tab keeps its own sorted list, but only one is on screen, so the
+   * paging state is shared - and reset whenever the view underneath it
+   * changes, or a filter could leave the user on a page that no longer exists.
+   */
+  const activeRows =
+    activeTab === "spaces"
+      ? sortedSpaces
+      : activeTab === "components"
+      ? sortedComponents
+      : activeTab === "categories"
+      ? sortedCategories
+      : sortedCostItems;
+
+  const totalPages = Math.max(1, Math.ceil(activeRows.length / pageSize));
+  const pageStart = (page - 1) * pageSize;
+
+  useEffect(() => {
+    setPage(1);
+  }, [activeTab, searchQuery, statusFilter, spaceFilter, categoryFilter, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(1);
+  }, [page, totalPages]);
+
+  const paginate = <T,>(rows: T[]): T[] =>
+    rows.slice(pageStart, pageStart + pageSize);
+
   // Handle sort click
   const handleSort = (column: SortColumn) => {
     if (!column) return;
@@ -506,6 +577,8 @@ export default function QuotationsConfigPage() {
     setFormCompanyCost("");
     setFormDefaultRate("");
     setFormIsActive(true);
+    setFormSpaceTypeIds([]);
+    setModalError(null);
     setModal({ isOpen: true, mode: "add", item: null });
   };
 
@@ -515,6 +588,11 @@ export default function QuotationsConfigPage() {
     setFormName(item.name);
     setFormDescription(item.description || "");
     setFormIsActive(item.is_active);
+    setFormSpaceTypeIds(
+      (item as { applicable_space_types?: string[] | null })
+        .applicable_space_types || []
+    );
+    setModalError(null);
     if ("category_id" in item) {
       setFormCategoryId(item.category_id || "");
       setFormUnitCode(item.unit_code || "sqft");
@@ -524,16 +602,23 @@ export default function QuotationsConfigPage() {
     setModal({ isOpen: true, mode: "edit", item });
   };
 
-  const closeModal = () => setModal({ isOpen: false, mode: "add", item: null });
+  const closeModal = () => {
+    setModalError(null);
+    setModal({ isOpen: false, mode: "add", item: null });
+  };
 
   const openDeleteModal = (
     item: SpaceType | ComponentType | CostItemCategory | QuotationCostItem
   ) => {
+    setDeleteError(null);
+    setNotice(null);
     setDeleteModal({ isOpen: true, item, type: activeTab });
   };
 
-  const closeDeleteModal = () =>
+  const closeDeleteModal = () => {
+    setDeleteError(null);
     setDeleteModal({ isOpen: false, item: null, type: "spaces" });
+  };
 
   const handleSave = async () => {
     if (!formName.trim()) return;
@@ -550,15 +635,21 @@ export default function QuotationsConfigPage() {
         endpoint = "/api/quotations/config/space-types";
       } else if (activeTab === "components") {
         endpoint = "/api/quotations/config/component-types";
+        body.applicable_space_types = formSpaceTypeIds;
       } else if (activeTab === "categories") {
         endpoint = "/api/settings/quotation-cost-item-categories";
       } else if (activeTab === "costItems") {
         endpoint = "/api/settings/quotation-cost-items";
         body.category_id = formCategoryId || null;
         body.unit_code = formUnitCode;
-        body.company_cost = formCompanyCost
-          ? parseFloat(formCompanyCost)
-          : null;
+        // Only sent when the user can actually see it. Omitting the key
+        // leaves the stored value alone; sending null would wipe a cost the
+        // user was never shown, just by saving an unrelated edit.
+        if (canViewCosts) {
+          body.company_cost = formCompanyCost
+            ? parseFloat(formCompanyCost)
+            : null;
+        }
         body.default_rate = formDefaultRate
           ? parseFloat(formDefaultRate)
           : null;
@@ -587,7 +678,10 @@ export default function QuotationsConfigPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        if (!res.ok) throw new Error("Failed to update");
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Failed to update");
+        }
         uiLogger.info("Item updated successfully", {
           type: activeTab,
           id: modal.item.id,
@@ -599,7 +693,10 @@ export default function QuotationsConfigPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        if (!res.ok) throw new Error("Failed to create");
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Failed to create");
+        }
         uiLogger.info("Item created successfully", {
           type: activeTab,
           name: formName,
@@ -613,7 +710,9 @@ export default function QuotationsConfigPage() {
       else if (activeTab === "costItems") await fetchCostItems();
     } catch (err) {
       uiLogger.error("Error saving item", { type: activeTab, error: err });
-      setError("Failed to save. Please try again.");
+      setModalError(
+        err instanceof Error ? err.message : "Failed to save. Please try again."
+      );
     } finally {
       setIsSaving(false);
     }
@@ -647,7 +746,16 @@ export default function QuotationsConfigPage() {
           ? { body: JSON.stringify({ id: deleteModal.item.id }) }
           : {}),
       });
-      if (!res.ok) throw new Error("Failed to delete");
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(result.error || "Failed to delete");
+      }
+
+      setNotice(
+        result.deactivated
+          ? `"${deleteModal.item.name}" is used by existing quotations, so it has been marked inactive instead of deleted. It will no longer be offered on new ones.`
+          : null
+      );
 
       uiLogger.info("Item deleted successfully", {
         type: deleteModal.type,
@@ -663,7 +771,11 @@ export default function QuotationsConfigPage() {
         type: deleteModal.type,
         error: err,
       });
-      setError("Failed to delete. Please try again.");
+      // The server explains why - usually "it is in use" - and "try again"
+      // would be wrong advice for that.
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete. Please try again."
+      );
     } finally {
       setIsSaving(false);
     }
@@ -806,7 +918,7 @@ export default function QuotationsConfigPage() {
               </tr>
             </thead>
             <tbody>
-              {sortedSpaces.map((space) => (
+              {paginate(sortedSpaces).map((space) => (
                 <tr
                   key={space.id}
                   className="group border-b border-slate-100 hover:bg-slate-50/50 transition-colors"
@@ -829,18 +941,20 @@ export default function QuotationsConfigPage() {
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-right">
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex items-center justify-end gap-1.5">
                       <button
                         onClick={() => openEditModal(space)}
-                        className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                        title="Edit"
+                        className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-all"
                       >
-                        <PencilSquareIcon className="w-4 h-4" />
+                        <PencilSquareIcon className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => openDeleteModal(space)}
-                        className="p-1.5 rounded-lg hover:bg-red-100 text-slate-500 hover:text-red-600 transition-colors"
+                        title="Delete"
+                        className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 transition-all"
                       >
-                        <TrashIcon className="w-4 h-4" />
+                        <TrashIcon className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </td>
@@ -879,6 +993,9 @@ export default function QuotationsConfigPage() {
                     />
                   </span>
                 </th>
+                <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                  Applicable Spaces
+                </th>
                 <th
                   onClick={() => handleSort("is_active")}
                   className="px-4 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors select-none"
@@ -897,7 +1014,7 @@ export default function QuotationsConfigPage() {
               </tr>
             </thead>
             <tbody>
-              {sortedComponents.map((component) => (
+              {paginate(sortedComponents).map((component) => (
                 <tr
                   key={component.id}
                   className="group border-b border-slate-100 hover:bg-slate-50/50 transition-colors"
@@ -907,6 +1024,46 @@ export default function QuotationsConfigPage() {
                   </td>
                   <td className="px-4 py-2.5 text-xs text-slate-600">
                     {component.description || "-"}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {/* An empty mapping means no restriction, so it is spelled
+                        out rather than shown as a dash - "any space" and "not
+                        configured" look identical otherwise. */}
+                    {(() => {
+                      const ids =
+                        (component as { applicable_space_types?: string[] | null })
+                          .applicable_space_types || [];
+                      if (ids.length === 0) {
+                        return (
+                          <span className="text-[10px] text-slate-400 italic">
+                            Any space
+                          </span>
+                        );
+                      }
+                      const names = ids
+                        .map((id) => spaces.find((sp) => sp.id === id)?.name)
+                        .filter(Boolean) as string[];
+                      return (
+                        <span className="inline-flex flex-wrap gap-1">
+                          {names.slice(0, 3).map((n) => (
+                            <span
+                              key={n}
+                              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200"
+                            >
+                              {n}
+                            </span>
+                          ))}
+                          {names.length > 3 && (
+                            <span
+                              className="text-[10px] text-slate-400"
+                              title={names.join(", ")}
+                            >
+                              +{names.length - 3}
+                            </span>
+                          )}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-2.5">
                     <span
@@ -920,18 +1077,20 @@ export default function QuotationsConfigPage() {
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-right">
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex items-center justify-end gap-1.5">
                       <button
                         onClick={() => openEditModal(component)}
-                        className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                        title="Edit"
+                        className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-all"
                       >
-                        <PencilSquareIcon className="w-4 h-4" />
+                        <PencilSquareIcon className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => openDeleteModal(component)}
-                        className="p-1.5 rounded-lg hover:bg-red-100 text-slate-500 hover:text-red-600 transition-colors"
+                        title="Delete"
+                        className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 transition-all"
                       >
-                        <TrashIcon className="w-4 h-4" />
+                        <TrashIcon className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </td>
@@ -989,7 +1148,7 @@ export default function QuotationsConfigPage() {
               </tr>
             </thead>
             <tbody>
-              {sortedCategories.map((category) => (
+              {paginate(sortedCategories).map((category) => (
                 <tr
                   key={category.id}
                   className="group border-b border-slate-100 hover:bg-slate-50/50 transition-colors"
@@ -1012,18 +1171,20 @@ export default function QuotationsConfigPage() {
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-right">
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex items-center justify-end gap-1.5">
                       <button
                         onClick={() => openEditModal(category)}
-                        className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                        title="Edit"
+                        className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-all"
                       >
-                        <PencilSquareIcon className="w-4 h-4" />
+                        <PencilSquareIcon className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => openDeleteModal(category)}
-                        className="p-1.5 rounded-lg hover:bg-red-100 text-slate-500 hover:text-red-600 transition-colors"
+                        title="Delete"
+                        className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 transition-all"
                       >
-                        <TrashIcon className="w-4 h-4" />
+                        <TrashIcon className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </td>
@@ -1068,6 +1229,7 @@ export default function QuotationsConfigPage() {
                   <SortIndicator column="unit_code" sortState={costItemsSort} />
                 </span>
               </th>
+              {canViewCosts && (
               <th
                 onClick={() => handleSort("company_cost")}
                 className="px-4 py-2 text-right text-[10px] font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors select-none"
@@ -1080,6 +1242,7 @@ export default function QuotationsConfigPage() {
                   />
                 </span>
               </th>
+              )}
               <th
                 onClick={() => handleSort("default_rate")}
                 className="px-4 py-2 text-right text-[10px] font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors select-none"
@@ -1107,7 +1270,7 @@ export default function QuotationsConfigPage() {
             </tr>
           </thead>
           <tbody>
-            {sortedCostItems.map((item) => (
+            {paginate(sortedCostItems).map((item) => (
               <tr
                 key={item.id}
                 className="group border-b border-slate-100 hover:bg-slate-50/50 transition-colors"
@@ -1123,11 +1286,13 @@ export default function QuotationsConfigPage() {
                 <td className="px-4 py-2.5 text-xs text-slate-600">
                   {item.unit_code}
                 </td>
-                <td className="px-4 py-2.5 text-xs text-slate-600 text-right">
-                  {item.company_cost != null
-                    ? `₹${item.company_cost.toLocaleString()}`
-                    : "-"}
-                </td>
+                {canViewCosts && (
+                  <td className="px-4 py-2.5 text-xs text-slate-600 text-right">
+                    {item.company_cost != null
+                      ? `₹${item.company_cost.toLocaleString()}`
+                      : "-"}
+                  </td>
+                )}
                 <td className="px-4 py-2.5 text-xs text-slate-600 text-right">
                   {item.default_rate != null
                     ? `₹${item.default_rate.toLocaleString()}`
@@ -1224,6 +1389,66 @@ export default function QuotationsConfigPage() {
                 })}
               </div>
 
+              {/* Status applies to every tab; the pills match the notes and
+                  tasks tables so the whole app filters the same way. */}
+              <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-lg shrink-0">
+                {(["all", "active", "inactive"] as const).map((key) => {
+                  const isActive = statusFilter === key;
+                  const label =
+                    key === "all"
+                      ? "All"
+                      : key === "active"
+                      ? "Active"
+                      : "Inactive";
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setStatusFilter(key)}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                        isActive
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {activeTab === "components" && (
+                <select
+                  value={spaceFilter}
+                  onChange={(e) => setSpaceFilter(e.target.value)}
+                  className="px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                >
+                  <option value="all">All spaces</option>
+                  {spaces
+                    .filter((sp) => sp.is_active)
+                    .map((sp) => (
+                      <option key={sp.id} value={sp.id}>
+                        {sp.name}
+                      </option>
+                    ))}
+                </select>
+              )}
+
+              {activeTab === "costItems" && (
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                >
+                  <option value="all">All categories</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+
               {/* Search */}
               <div className="relative">
                 <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -1237,6 +1462,18 @@ export default function QuotationsConfigPage() {
               </div>
             </div>
           </div>
+
+          {notice && (
+            <div className="mx-4 mt-3 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start justify-between gap-3">
+              <span>{notice}</span>
+              <button
+                onClick={() => setNotice(null)}
+                className="shrink-0 text-amber-500 hover:text-amber-700"
+              >
+                <XMarkIcon className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           {/* Error Message */}
           {error && (
@@ -1253,6 +1490,79 @@ export default function QuotationsConfigPage() {
 
           {/* Table Content */}
           {renderTable()}
+
+          {/* Pagination, in the same shape as the notes, tasks, calendar and
+              timeline tables. Shown whenever there are rows, so a short list
+              still reports its total and the page size stays reachable. */}
+          {activeRows.length > 0 && (
+            <div className="border-t border-slate-200 px-4 py-2 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-500">
+                  Showing{" "}
+                  <span className="font-medium">
+                    {Math.min(pageStart + 1, activeRows.length)}
+                  </span>
+                  {"-"}
+                  <span className="font-medium">
+                    {Math.min(pageStart + pageSize, activeRows.length)}
+                  </span>
+                  {" of "}
+                  <span className="font-medium">{activeRows.length}</span>
+                </span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                  className="px-1.5 py-0.5 text-[10px] border border-slate-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  {[10, 25, 50, 100].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-0.5">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-2 py-1 text-[10px] font-medium text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Prev
+                </button>
+                <div className="flex items-center gap-0.5 mx-1">
+                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                    let n = i + 1;
+                    if (totalPages > 5) {
+                      if (page <= 3) n = i + 1;
+                      else if (page >= totalPages - 2) n = totalPages - 4 + i;
+                      else n = page - 2 + i;
+                    }
+                    return (
+                      <button
+                        key={n}
+                        onClick={() => setPage(n)}
+                        className={`w-6 h-6 text-[10px] font-medium rounded transition-colors ${
+                          page === n
+                            ? "bg-blue-600 text-white"
+                            : "text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="px-2 py-1 text-[10px] font-medium text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </SettingsPageContent>
 
@@ -1326,7 +1636,8 @@ export default function QuotationsConfigPage() {
                       <option value="ltr">Litre (ltr)</option>
                     </select>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className={canViewCosts ? "grid grid-cols-2 gap-4" : ""}>
+                    {canViewCosts && (
                     <div>
                       <label className="block text-xs font-medium text-slate-700 mb-1.5">
                         Company Cost
@@ -1340,6 +1651,7 @@ export default function QuotationsConfigPage() {
                         className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
                       />
                     </div>
+                    )}
                     <div>
                       <label className="block text-xs font-medium text-slate-700 mb-1.5">
                         Default Rate
@@ -1386,7 +1698,61 @@ export default function QuotationsConfigPage() {
                 </button>
                 <span className="text-xs text-slate-600">Active</span>
               </div>
+
+              {/* Which spaces this component belongs in. Selecting none means
+                  no restriction - a component nobody has classified is still
+                  offered everywhere, which is safer than hiding it. */}
+              {activeTab === "components" && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                    Belongs in these spaces
+                    <span className="ml-1 font-normal text-slate-400">
+                      leave empty for any space
+                    </span>
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-2 border border-slate-200 rounded-lg">
+                    {spaces
+                      .filter((sp) => sp.is_active)
+                      .map((sp) => {
+                        const picked = formSpaceTypeIds.includes(sp.id);
+                        return (
+                          <button
+                            key={sp.id}
+                            type="button"
+                            onClick={() =>
+                              setFormSpaceTypeIds((prev) =>
+                                picked
+                                  ? prev.filter((x) => x !== sp.id)
+                                  : [...prev, sp.id]
+                              )
+                            }
+                            className={`px-2 py-1 text-xs font-medium rounded-md border transition-colors ${
+                              picked
+                                ? "bg-blue-600 text-white border-blue-600"
+                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                            }`}
+                          >
+                            {sp.name}
+                          </button>
+                        );
+                      })}
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    {formSpaceTypeIds.length === 0
+                      ? "Offered in every space."
+                      : `Offered only in ${formSpaceTypeIds.length} space${
+                          formSpaceTypeIds.length === 1 ? "" : "s"
+                        }.`}
+                  </p>
+                </div>
+              )}
             </div>
+
+            {modalError && (
+              <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-200">
+                <p className="text-xs text-red-700">{modalError}</p>
+              </div>
+            )}
 
             <div className="flex items-center gap-3 mt-5">
               <button
@@ -1426,6 +1792,11 @@ export default function QuotationsConfigPage() {
                 This action cannot be undone. This will permanently delete the{" "}
                 {getDeleteItemType()}.
               </p>
+              {deleteError && (
+                <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-left">
+                  <p className="text-xs text-red-700">{deleteError}</p>
+                </div>
+              )}
               <div className="flex items-center gap-3">
                 <button
                   onClick={closeDeleteModal}
