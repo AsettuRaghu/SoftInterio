@@ -167,4 +167,57 @@ node scripts/deactivate-user.js employee@company.com <tenant-id>
 
 ---
 
-That's it! Just these 3 scripts. No confusion.
+## seed-quotation-catalogue.js
+
+Reshapes the quotation catalogue into a Basic / Standard / Premium / Luxury
+ladder so the Scenarios modal can move a whole category up or down a grade.
+
+```bash
+node scripts/seed-quotation-catalogue.js --dry   # show what would change
+node scripts/seed-quotation-catalogue.js         # apply
+```
+
+Runs for every tenant that already has a catalogue. Safe to re-run: rows are
+matched by slug, then by the legacy name they replace, and updated **in place**
+so template and quotation references keep resolving. Anything the catalogue no
+longer covers is deactivated rather than deleted - `goods_receipt_items`
+references cost items with `ON DELETE RESTRICT`.
+
+Categories where grade is not a real axis - Labour, Service, Accessories - are
+seeded without tiers on purpose, which is what keeps them out of tier swaps.
+
+---
+
+## seed-quotation-settings.js
+
+Fills `tenant_quotation_settings` — the letterhead and bank block on every
+quotation PDF — from the tenant's own company record. Without a row here the
+PDF prints anonymous.
+
+```bash
+node scripts/seed-quotation-settings.js --dry
+node scripts/seed-quotation-settings.js
+```
+
+Only fills blanks on an existing row, so hand-edited settings survive. Bank
+details are a clearly-fake placeholder until the real account is supplied.
+
+---
+
+## seed-print-formats.js
+
+Seeds the ladder of print formats — room totals, components, cost categories,
+every cost item, plus the Client and Internal BOQ layouts.
+
+```bash
+node scripts/seed-print-formats.js --dry
+node scripts/seed-print-formats.js
+```
+
+Matched by name, and takes over the older format it replaces, so a format
+already used for a print keeps its id. Re-run after applying migration
+`20260906090000` to backfill `show_tax`.
+
+---
+
+That's it. Run `--dry` first on anything that writes.
