@@ -19,6 +19,7 @@ import {
   BudgetRangeLabels,
 } from "@/types/leads";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { todayISO } from "@/lib/dates/lead-dates";
 
 interface TeamMember {
   id: string;
@@ -136,11 +137,13 @@ export function CreateLeadModal({
     });
   };
 
+  // End must be after start - nothing more. This previously demanded a full
+  // month between the two, which made a three-week job impossible to enter.
   const getMinEndDate = () => {
     if (!formData.target_start_date) return "";
-    const startDate = new Date(formData.target_start_date);
-    startDate.setMonth(startDate.getMonth() + 1);
-    return startDate.toISOString().split("T")[0];
+    const next = new Date(formData.target_start_date);
+    next.setDate(next.getDate() + 1);
+    return next.toISOString().slice(0, 10);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -633,6 +636,7 @@ export function CreateLeadModal({
                 <input
                   type="date"
                   value={formData.target_start_date}
+                  min={todayISO()}
                   onChange={(e) =>
                     updateField("target_start_date", e.target.value)
                   }

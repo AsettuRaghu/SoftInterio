@@ -277,7 +277,7 @@ export function useLeadDetail() {
         }
 
         const data = await response.json();
-        router.push(`/dashboard/quotations/${data.id}/edit`);
+        router.push(`/dashboard/quotations/${data.id}?edit=1`);
       } catch (err) {
         console.error("Error creating revision:", err);
         throw err;

@@ -2,6 +2,7 @@ import type { LeadStage } from "@/types/leads";
 
 export type TabType =
   | "overview"
+  | "spaces"
   | "timeline"
   | "calendar"
   | "tasks"
@@ -11,6 +12,7 @@ export type TabType =
 
 export const LEAD_DETAIL_TABS: TabType[] = [
   "overview",
+  "spaces",
   "quotations",
   "tasks",
   "notes",

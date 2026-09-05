@@ -12,6 +12,7 @@ import {
   PropertyCategory,
 } from "@/types/leads";
 import React, { useEffect, useState } from "react";
+import { todayISO } from "@/lib/dates/lead-dates";
 
 /**
  * Who may own a lead. Both spellings of sales-manager exist as roles in the
@@ -147,19 +148,25 @@ export function EditLeadModal({
     onSave();
   };
 
+  // Today is the floor for a new value. A lead already carrying a past target
+  // keeps that as its floor instead, so the stored value stays valid and an
+  // edit to some unrelated field is not blocked by a date that was perfectly
+  // reasonable when it was set. The server is the real guard: it applies the
+  // "not in the past" rule only to dates a save actually changes.
   const getMinStartDate = () => {
-    const today = new Date().toISOString().split("T")[0];
-    if (lead.target_start_date) {
-      return lead.target_start_date;
-    }
-    return today;
+    const today = todayISO();
+    return lead.target_start_date && lead.target_start_date < today
+      ? lead.target_start_date
+      : today;
   };
 
+  // End must be after start - nothing more. This previously demanded a full
+  // month between the two, which made a three-week job impossible to enter.
   const getMinEndDate = () => {
     if (!editForm.target_start_date) return "";
-    const startDate = new Date(editForm.target_start_date);
-    startDate.setMonth(startDate.getMonth() + 1);
-    return startDate.toISOString().split("T")[0];
+    const next = new Date(editForm.target_start_date);
+    next.setDate(next.getDate() + 1);
+    return next.toISOString().slice(0, 10);
   };
 
   const handleEditStartDateChange = (value: string) => {

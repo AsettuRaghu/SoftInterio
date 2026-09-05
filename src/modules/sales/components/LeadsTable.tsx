@@ -46,6 +46,20 @@ export function LeadsTable({
   emptyState,
   stickyHeader,
 }: LeadsTableProps) {
+  /**
+   * dd-mm-yy, matching the notes table. Built from the parts rather than a
+   * locale format so the padding is stable - en-IN gives "4/9/26", which does
+   * not line up in a column.
+   */
+  const shortDate = useCallback((iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${pad(
+      d.getFullYear() % 100
+    )}`;
+  }, []);
+
   /** Whole days between then and now. Null when there is no date at all. */
   const daysSince = useCallback((dateString?: string | null) => {
     if (!dateString) return null;
@@ -96,7 +110,7 @@ export function LeadsTable({
       {
         key: "property_name",
         header: "Property",
-        width: "12%",
+        width: "11%",
         sortable: true,
         render: (lead) => (
           <div>
@@ -122,7 +136,7 @@ export function LeadsTable({
       {
         key: "budget_range",
         header: "Budget",
-        width: "10%",
+        width: "9%",
         sortable: true,
         render: (lead) => (
           <div className="space-y-0.5">
@@ -139,7 +153,7 @@ export function LeadsTable({
       {
         key: "stage",
         header: "Stage",
-        width: "12%",
+        width: "11%",
         sortable: true,
         render: (lead) => {
           const colors = StageColors[lead.stage];
@@ -157,7 +171,7 @@ export function LeadsTable({
       {
         key: "status",
         header: "Status",
-        width: "9%",
+        width: "8%",
         sortable: true,
         render: (lead) => {
           const getStatusLabel = (stage: LeadStage) => {
@@ -192,7 +206,7 @@ export function LeadsTable({
       {
         key: "priority",
         header: "Priority",
-        width: "8%",
+        width: "7%",
         sortable: true,
         render: (lead) => {
           const priorityColors: Record<string, string> = {
@@ -225,7 +239,7 @@ export function LeadsTable({
       {
         key: "assigned_to",
         header: "Assigned",
-        width: "11%",
+        width: "10%",
         sortable: true,
         render: (lead) => {
           const displayUser = lead.assigned_user || lead.created_user;
@@ -257,33 +271,39 @@ export function LeadsTable({
       {
         key: "last_activity_at",
         header: "Last Activity",
-        width: "11%",
+        width: "19%",
         sortable: true,
         render: (lead) => {
           const days = daysSince(lead.last_activity_at);
-          if (days === null) {
-            return <span className="text-sm text-slate-400 italic">Never</span>;
-          }
-          // The colour is the signal: a lead untouched for over a week is the
-          // one rotting quietly at the bottom of the list.
-          const tone =
-            days > 7
-              ? "text-red-600"
-              : days > 3
-              ? "text-amber-600"
-              : "text-slate-900";
+
+          // Three bands only: green means acted on, orange means going cold,
+          // red means abandoned. More gradations than that stop reading as a
+          // signal and start reading as decoration.
+          const { label, tone } =
+            days === null
+              ? { label: "Never", tone: "text-red-600" }
+              : days === 0
+              ? { label: "Today", tone: "text-emerald-600" }
+              : days === 1
+              ? { label: "Yesterday", tone: "text-emerald-600" }
+              : days <= 15
+              ? { label: `${days}d ago`, tone: "text-orange-600" }
+              : { label: `${days}d ago`, tone: "text-red-600" };
+
           return (
             <div>
-              <p className={`text-sm font-medium ${tone}`}>
-                {days === 0 ? "Today" : `${days}d ago`}
-              </p>
+              <p className={`text-sm font-medium ${tone}`}>{label}</p>
               {/* The activity's own words where we have them - "Budget range:
                   5L-10L → 10L-15L" tells a seller far more than "Lead
-                  Updated". The type label is the fallback. Full text on hover
-                  via the native title attribute, since the column is narrow. */}
+                  Updated". The type label is the fallback.
+
+                  Wrapped and shown in full, never cropped: a seller reading
+                  this column needs the whole context, and half a sentence is
+                  worse than none. Long entries make the row taller rather than
+                  widening the column. */}
               {(lead.last_activity_detail || lead.last_activity_type) && (
                 <p
-                  className="text-xs text-slate-500 truncate"
+                  className="text-xs text-slate-500 break-words whitespace-normal leading-snug"
                   title={
                     lead.last_activity_detail
                       ? `${
@@ -308,7 +328,7 @@ export function LeadsTable({
       {
         key: "next_follow_up_at",
         header: "Follow-up",
-        width: "10%",
+        width: "9%",
         sortable: true,
         render: (lead) => {
           if (!lead.next_follow_up_at) {
@@ -331,18 +351,23 @@ export function LeadsTable({
             return <p className="text-sm font-medium text-amber-600">Today</p>;
           }
           return (
-            <p className="text-sm text-slate-700">
-              {formatDate(lead.next_follow_up_at)}
+            <p className="text-sm text-slate-700 tabular-nums">
+              {shortDate(lead.next_follow_up_at)}
             </p>
           );
         },
       },
     ],
-    [formatDate, daysSince, getInitials]
+    [formatDate, daysSince, shortDate, getInitials]
   );
 
   return (
     <AppTable
+      // Without table-fixed the browser uses auto layout, where the column
+      // widths above are only hints - a long activity description stretches
+      // its column and squeezes the rest. Fixed layout makes the percentages
+      // authoritative, so long text wraps within its column instead.
+      className="table-fixed"
       data={data}
       columns={columns}
       keyExtractor={(lead) => lead.id}

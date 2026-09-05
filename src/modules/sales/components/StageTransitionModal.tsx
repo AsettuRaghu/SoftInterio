@@ -1,6 +1,18 @@
 "use client";
 
 import React, { useState } from "react";
+import { todayISO } from "@/lib/dates/lead-dates";
+
+/**
+ * Carries a stored date into the form only while it still makes sense.
+ *
+ * A lead qualified in January holds a February target start. By the time it is
+ * won in September that date is stale, and prefilling it would either be saved
+ * unchanged or leave the form quietly failing a min= check with no visible
+ * explanation. Blank reads as "pick one", which is what is actually needed.
+ */
+const futureOnly = (value?: string | null) =>
+  value && value >= todayISO() ? value : "";
 import type {
   Lead,
   LeadStage,
@@ -73,8 +85,8 @@ export function StageTransitionModal({
   const [formData, setFormData] = useState<StageTransitionFormData>({
     service_type: lead.service_type || "",
     lead_source: lead.lead_source || "",
-    target_start_date: lead.target_start_date || "",
-    target_end_date: lead.target_end_date || "",
+    target_start_date: futureOnly(lead.target_start_date),
+    target_end_date: futureOnly(lead.target_end_date),
     budget_range: lead.budget_range || "",
     project_scope: "", // project_scope is not available on leads table
     property_name: lead.property?.property_name || "",
@@ -89,8 +101,8 @@ export function StageTransitionModal({
     lost_notes: "",
     won_amount: "",
     contract_signed_date: "",
-    expected_project_start: lead.target_start_date || "",
-    expected_project_end: lead.target_end_date || "",
+    expected_project_start: futureOnly(lead.target_start_date),
+    expected_project_end: futureOnly(lead.target_end_date),
     change_reason: "",
     selected_quotation_id: "",
     project_manager_id: "",
@@ -160,34 +172,42 @@ export function StageTransitionModal({
 
   // Get minimum start date - cannot go earlier than original start date (if exists)
   // or today's date
-  const getMinStartDate = () => {
-    const today = new Date().toISOString().split("T")[0];
-    // If lead already has a start date, it cannot be changed to an earlier date
-    if (lead.target_start_date) {
-      return lead.target_start_date;
-    }
-    return today;
-  };
+  // A target start is forward-looking, so today is the floor. This used to
+  // return the lead's existing start date instead, which meant a lead already
+  // carrying a past target let you pick another past date - the floor was
+  // whatever stale value was already stored.
+  const getMinStartDate = () => todayISO();
 
   // Calculate minimum end date (start date + 1 month)
+  /** The day after `from`, as YYYY-MM-DD - the floor for any "must be after" pair. */
+  const dayAfter = (from: string) => {
+    const next = new Date(from);
+    next.setDate(next.getDate() + 1);
+    return next.toISOString().slice(0, 10);
+  };
+
+  // End must simply be after start. This previously forced a full month
+  // between the two, so a three-week job could not be entered at all.
   const getMinEndDate = () => {
     if (!formData.target_start_date) return "";
-    const startDate = new Date(formData.target_start_date);
-    startDate.setMonth(startDate.getMonth() + 1);
-    return startDate.toISOString().split("T")[0];
+    return dayAfter(formData.target_start_date);
   };
 
   // When start date changes, auto-set end date if needed
   const handleStartDateChange = (value: string) => {
     setFormData((prev) => {
       const newData = { ...prev, target_start_date: value };
-      // If end date is not set or is before the new minimum, set it to start + 1 month
+      // Only move the end date when the new start would leave it invalid.
+      // A month's default is offered when there is no end date yet; an end
+      // date the user already chose is left alone unless it is now in the past
+      // relative to the new start.
       if (value) {
-        const minEnd = new Date(value);
-        minEnd.setMonth(minEnd.getMonth() + 1);
-        const minEndStr = minEnd.toISOString().split("T")[0];
-        if (!prev.target_end_date || prev.target_end_date < minEndStr) {
-          newData.target_end_date = minEndStr;
+        if (!prev.target_end_date) {
+          const suggested = new Date(value);
+          suggested.setMonth(suggested.getMonth() + 1);
+          newData.target_end_date = suggested.toISOString().slice(0, 10);
+        } else if (prev.target_end_date <= value) {
+          newData.target_end_date = dayAfter(value);
         }
       }
       return newData;
@@ -651,14 +671,6 @@ export function StageTransitionModal({
                           }
                           className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                         />
-                        {lead.target_start_date && (
-                          <p className="text-xs text-slate-500 mt-1">
-                            Cannot be earlier than:{" "}
-                            {new Date(
-                              lead.target_start_date
-                            ).toLocaleDateString()}
-                          </p>
-                        )}
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -969,6 +981,7 @@ export function StageTransitionModal({
                     type="date"
                     required
                     value={formData.contract_signed_date}
+                    max={todayISO()}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
@@ -1041,6 +1054,7 @@ export function StageTransitionModal({
                     type="date"
                     required
                     value={formData.expected_project_start}
+                    min={todayISO()}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
@@ -1058,6 +1072,11 @@ export function StageTransitionModal({
                     type="date"
                     required
                     value={formData.expected_project_end}
+                    min={
+                      formData.expected_project_start
+                        ? dayAfter(formData.expected_project_start)
+                        : todayISO()
+                    }
                     onChange={(e) =>
                       setFormData({
                         ...formData,

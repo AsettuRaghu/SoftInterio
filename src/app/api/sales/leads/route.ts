@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { generateUniqueLeadNumber } from "@/utils/lead-number-generator";
 import type { CreateLeadInput, LeadStage } from "@/types/leads";
+import { validateLeadDates, type LeadDateFields } from "@/lib/dates/lead-dates";
 
 // GET /api/sales/leads - List leads with filters
 export async function GET(request: NextRequest) {
@@ -255,6 +256,16 @@ export async function POST(request: NextRequest) {
       console.log("[POST /api/sales/leads] Validation failed: phone required");
       return NextResponse.json(
         { error: "Phone number is required" },
+        { status: 400 }
+      );
+    }
+
+    // A new lead has nothing to compare against, so every date it carries is
+    // treated as newly set and held to the full rules.
+    const dateProblems = validateLeadDates(body as LeadDateFields);
+    if (dateProblems.length > 0) {
+      return NextResponse.json(
+        { error: dateProblems.join(". "), invalidDates: dateProblems },
         { status: 400 }
       );
     }

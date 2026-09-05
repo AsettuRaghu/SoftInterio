@@ -8,6 +8,7 @@ import {
   LEAD_FIELD_LABELS,
 } from "@/lib/activity/log";
 import type { UpdateLeadInput } from "@/types/leads";
+import { validateLeadDates, type LeadDateFields } from "@/lib/dates/lead-dates";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -390,6 +391,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       expected_project_start: (existingLead as any).expected_project_start ?? null,
       priority: (existingLead as any).priority ?? null,
     };
+
+    // Reject nonsensical dates before any write runs. The property update in
+    // STEP 2 lands before the lead update, so failing later than this would
+    // leave half the change applied.
+    const dateProblems = validateLeadDates(
+      body as LeadDateFields,
+      existingLead as LeadDateFields
+    );
+    if (dateProblems.length > 0) {
+      return NextResponse.json(
+        { error: dateProblems.join(". "), invalidDates: dateProblems },
+        { status: 400 }
+      );
+    }
 
     // Initialize lead update data object (may be populated by property creation below)
     const leadUpdateData: Record<string, unknown> = {};

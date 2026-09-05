@@ -45,8 +45,6 @@ export default function CalendarTab({
     <CalendarTableReusable
       linkedType="lead"
       linkedId={leadId}
-      showHeader={false}
-      compact={true}
       readOnly={leadClosed}
       allowCreate={!leadClosed}
       allowEdit={!leadClosed}

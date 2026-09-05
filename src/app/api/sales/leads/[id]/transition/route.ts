@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { validateLeadDates } from "@/lib/dates/lead-dates";
+import { copyScopeToQuotation } from "@/lib/quotations/scope-to-quotation";
 import type { StageTransitionInput, LeadStage } from "@/types/leads";
 import {
   isValidStageTransition,
@@ -202,6 +204,28 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Every date this transition would write has to make sense before anything
+    // is persisted. The modal guards these too, but min= on a date input is a
+    // browser courtesy rather than a constraint, and it is absent entirely for
+    // anything calling this route directly.
+    const dateProblems = validateLeadDates(
+      {
+        target_start_date: body.target_start_date,
+        target_end_date: body.target_end_date,
+        contract_signed_date: body.contract_signed_date,
+        expected_project_start: body.expected_project_start,
+        expected_project_end: body.expected_project_end,
+      },
+      lead
+    );
+
+    if (dateProblems.length > 0) {
+      return NextResponse.json(
+        { error: dateProblems.join(". "), invalidDates: dateProblems },
+        { status: 400 }
+      );
+    }
+
     // VALIDATION: For "won" stage, validate the selected quotation
     if (to_stage === "won" && body.selected_quotation_id) {
       const { data: selectedQuotation, error: quotationError } = await supabase
@@ -356,6 +380,51 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { error: "Failed to update lead stage" },
         { status: 500 }
       );
+    }
+
+    // Reaching proposal_discussion auto-creates a quotation, but not here -
+    // the trg_lead_stage_change trigger does it inside the UPDATE above, by
+    // calling create_quotation_for_lead(). That function knows nothing about
+    // the Spaces tab, so what it produces is an empty shell.
+    //
+    // Rather than reimplement the copy in PL/pgSQL and keep two versions in
+    // step, we fill the shell here using the same routine the manual create
+    // flow uses. It only ever touches a quotation the trigger just made
+    // (auto_created, still empty), so re-running a transition cannot disturb
+    // work someone has already done in the builder.
+    if (to_stage === "proposal_discussion") {
+      try {
+        const { data: autoQuotation } = await supabase
+          .from("quotations")
+          .select("id")
+          .eq("lead_id", id)
+          .eq("auto_created", true)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (autoQuotation) {
+          const { count: existingSpaces } = await supabase
+            .from("quotation_spaces")
+            .select("*", { count: "exact", head: true })
+            .eq("quotation_id", autoQuotation.id);
+
+          if (!existingSpaces) {
+            await copyScopeToQuotation(
+              supabase,
+              lead.tenant_id,
+              autoQuotation.id,
+              id,
+              null
+            );
+          }
+        }
+      } catch (scopeErr) {
+        // The stage change itself has already succeeded and must stand. An
+        // empty quotation is recoverable in the builder; a failed transition
+        // is not.
+        console.error("Error building quotation from scope:", scopeErr);
+      }
     }
 
     // Note: Stage change is automatically recorded in lead_stage_history table via database trigger
