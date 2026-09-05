@@ -1,4 +1,14 @@
-"use client";
+/**
+ * The quotation document, rendered by @react-pdf/renderer.
+ *
+ * Deliberately NOT a client component. It is only ever rendered server-side by
+ * renderToBuffer in the two PDF route handlers, and marking it "use client"
+ * made Next hand those routes a client-reference proxy instead of the
+ * component - react-pdf then walked it and died with "Cannot read properties
+ * of null (reading 'props')", so PDF generation failed for every quotation.
+ * It uses no hooks, no browser APIs and no event handlers; there is nothing
+ * here that needs the directive.
+ */
 
 import React from "react";
 import {
@@ -29,6 +39,13 @@ interface LineItemData {
   quantity?: number;
   rate: number;
   amount: number;
+  /** Cost category, used when the format itemises to category level. */
+  category_name?: string;
+  category_order?: number;
+  /** Spec text from the catalogue; the Material column is built from these. */
+  description?: string | null;
+  /** Delivery, cleanup and the like - shown apart from quoted scope. */
+  is_charge?: boolean;
 }
 
 interface ComponentData {
@@ -43,6 +60,8 @@ interface SpaceData {
   space_type_name?: string;
   components: ComponentData[];
   subtotal: number;
+  /** Prints below the room totals rather than as a numbered room. */
+  is_charges?: boolean;
 }
 
 interface CompanyDetails {
@@ -100,7 +119,28 @@ interface QuotationPDFData {
   terms_and_conditions?: string;
   notes?: string;
 
-  // Settings
+  // Settings from the tenant's print format.
+  //
+  // itemise_to is how deep the breakdown goes; price_at is the deepest level a
+  // money figure appears. They are separate on purpose: "show the client the
+  // categories inside each wardrobe, but only price the wardrobe" is the whole
+  // reason the print library exists.
+  /** Every active clause, each printed as its own headed section. */
+  terms_sections?: Array<{ title: string; content: string }>;
+  show_tax?: boolean;
+
+  itemise_to?: "space" | "component" | "category" | "cost_item";
+  price_at?: "space" | "component" | "category" | "cost_item" | "none";
+  show_descriptions?: boolean;
+  show_specifications?: boolean;
+  show_quantities?: boolean;
+  show_payment_terms?: boolean;
+  show_terms?: boolean;
+  cover_enabled?: boolean;
+  cover_image_path?: string;
+  terms_title?: string;
+
+  /** Fallback for a tenant with no print format configured. */
   presentation_level?: string;
   hide_dimensions?: boolean;
   header_color?: string;
@@ -517,13 +557,203 @@ const formatDimensions = (
   return "-";
 };
 
+/**
+ * The Indian reading of a rupee figure, for the "amount in words" line.
+ *
+ * Lakh and crore rather than million: a quotation checked by an Indian client
+ * is read in those units, and getting it wrong is the kind of error that stops
+ * a signature. Paise are dropped - quotations are whole rupees.
+ */
+function amountInWords(amount: number): string {
+  const ONES = [
+    "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+    "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
+    "Seventeen", "Eighteen", "Nineteen",
+  ];
+  const TENS = [
+    "", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy",
+    "Eighty", "Ninety",
+  ];
+
+  const underThousand = (n: number): string => {
+    if (n === 0) return "";
+    if (n < 20) return ONES[n];
+    if (n < 100) {
+      return TENS[Math.floor(n / 10)] + (n % 10 ? " " + ONES[n % 10] : "");
+    }
+    return (
+      ONES[Math.floor(n / 100)] +
+      " Hundred" +
+      (n % 100 ? " and " + underThousand(n % 100) : "")
+    );
+  };
+
+  const value = Math.round(Math.abs(amount));
+  if (value === 0) return "Rupees Zero Only";
+
+  // Indian grouping: crore, lakh, thousand, then the last three digits.
+  const parts: string[] = [];
+  const crore = Math.floor(value / 10000000);
+  const lakh = Math.floor((value % 10000000) / 100000);
+  const thousand = Math.floor((value % 100000) / 1000);
+  const rest = value % 1000;
+
+  if (crore) parts.push(`${underThousand(crore)} Crore`);
+  if (lakh) parts.push(`${underThousand(lakh)} Lakh`);
+  if (thousand) parts.push(`${underThousand(thousand)} Thousand`);
+  if (rest) parts.push(underThousand(rest));
+
+  return `Rupees ${parts.join(" ")} Only`;
+}
+
+/**
+ * Flattens the clause library's rich text into blocks react-pdf can render.
+ *
+ * Deliberately small: headings, paragraphs and list items, with inline markup
+ * stripped. react-pdf has no HTML renderer, and pulling one in to honour
+ * arbitrary markup would be a lot of weight for terms that are, in practice,
+ * headings and bullet points. Anything exotic flattens to a paragraph rather
+ * than breaking the document.
+ */
+function richTextToBlocks(
+  html: string
+): Array<{ type: "heading" | "paragraph" | "listItem"; text: string }> {
+  const decode = (t: string) =>
+    t
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+
+  const strip = (t: string) => decode(t.replace(/<[^>]+>/g, "")).trim();
+
+  // Plain text, which is what the clause editor actually stores today.
+  // Structure is inferred from the conventions people type: a numbered or
+  // fully capitalised line is a heading, and a line opening with >, - or a
+  // bullet is a list item. Without this the whole document prints as one
+  // undifferentiated block with literal ">" characters down the margin.
+  if (!/<[a-z][\s\S]*>/i.test(html)) {
+    return html
+      .split(/\n+/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const bullet = line.match(/^[>\-\u2022]\s*(.+)$/);
+        if (bullet) return { type: "listItem" as const, text: bullet[1] };
+        const numbered = /^\d+[.)]\s+\S/.test(line);
+        const shouty = line.length < 60 && line === line.toUpperCase() && /[A-Z]/.test(line);
+        if (numbered || shouty) return { type: "heading" as const, text: line };
+        return { type: "paragraph" as const, text: line };
+      });
+  }
+
+  const blocks: Array<{
+    type: "heading" | "paragraph" | "listItem";
+    text: string;
+  }> = [];
+  const pattern = /<(h[1-6]|p|li|blockquote)[^>]*>([\s\S]*?)<\/\1>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(html)) !== null) {
+    const tag = match[1].toLowerCase();
+    const text = strip(match[2].replace(/<br\s*\/?>/gi, " "));
+    if (!text) continue;
+    blocks.push({
+      type: tag.startsWith("h")
+        ? "heading"
+        : tag === "li"
+        ? "listItem"
+        : "paragraph",
+      text,
+    });
+  }
+
+  // No recognised block tags - fall back to the stripped text rather than
+  // printing nothing.
+  if (blocks.length === 0) {
+    const text = strip(html);
+    if (text) blocks.push({ type: "paragraph", text });
+  }
+  return blocks;
+}
+
 // ============================================================================
 // DOCUMENT COMPONENT
 // ============================================================================
 
 export function QuotationPDF({ data }: { data: QuotationPDFData }) {
-  const showFullDetail = data.presentation_level === "full_detail";
-  const showComponents = data.presentation_level !== "space_only";
+  // The print format governs. presentation_level is only consulted when no
+  // format exists, so an unconfigured tenant keeps the old behaviour.
+  const itemiseTo =
+    data.itemise_to ||
+    (data.presentation_level === "full_detail"
+      ? "cost_item"
+      : data.presentation_level === "space_only"
+      ? "space"
+      : "component");
+  const priceAt =
+    data.price_at || (itemiseTo === "cost_item" ? "cost_item" : "component");
+
+  const showComponents = itemiseTo !== "space";
+  const showCategories = itemiseTo === "category";
+  const showFullDetail = itemiseTo === "cost_item";
+  // A component's price is hidden when the format prices at space level only,
+  // or when it says to print no prices at all.
+  const showComponentPrice = priceAt !== "space" && priceAt !== "none";
+  // Prices below the component: on category rows, and on each cost item.
+  const showCategoryPrice = priceAt === "category" || priceAt === "cost_item";
+  const showItemPrice = priceAt === "cost_item";
+
+  /**
+   * The Material column: what a component is actually made of, assembled from
+   * the catalogue descriptions of the cost items inside it.
+   *
+   * Built rather than typed, so it cannot describe a material the quotation no
+   * longer uses - swap the carcass to Luxury and this sentence changes with
+   * it. Ordered by cost category so it always reads carcass, then shutters,
+   * then hardware, and de-duplicated so a material used on three lines is
+   * named once.
+   */
+  const materialText = (items: LineItemData[]) => {
+    const seen = new Set<string>();
+    return [...items]
+      .sort((a, b) => (a.category_order ?? 99) - (b.category_order ?? 99))
+      .map((item) => item.description?.trim())
+      .filter((text): text is string => {
+        if (!text || seen.has(text)) return false;
+        seen.add(text);
+        return true;
+      })
+      .join(" ");
+  };
+
+  // Charges are quoted the same way as anything else - they are simply shown
+  // after the rooms, where a transport line belongs on a client document.
+  const quotedSpaces = data.spaces.filter((s) => !s.is_charges);
+  const chargeSpaces = data.spaces.filter((s) => s.is_charges);
+  const chargesTotal = chargeSpaces.reduce((n, s) => n + s.subtotal, 0);
+  const roomsTotal = quotedSpaces.reduce((n, s) => n + s.subtotal, 0);
+  // A document that does not print tax must not include it in the total it
+  // does print, or the client adds up the visible rows and gets a different
+  // number from the one they are asked to agree to.
+  const grandTotal =
+    data.show_tax === false
+      ? roomsTotal + chargesTotal - (data.discount_amount ?? 0)
+      : data.grand_total;
+
+  /** Line items rolled up to their cost category, for itemise_to="category". */
+  const groupByCategory = (items: LineItemData[]) => {
+    const byName = new Map<string, { name: string; amount: number; count: number }>();
+    items.forEach((item) => {
+      const name = item.category_name || "Other";
+      const row = byName.get(name) || { name, amount: 0, count: 0 };
+      row.amount += item.amount || 0;
+      row.count += 1;
+      byName.set(name, row);
+    });
+    return [...byName.values()];
+  };
 
   return (
     <Document>
@@ -614,7 +844,7 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
                 {data.property_type?.toUpperCase() || "-"}
               </Text>
             </View>
-            {data.carpet_area && (
+            {!!data.carpet_area && (
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Carpet Area</Text>
                 <Text style={styles.infoValue}>{data.carpet_area} sq.ft</Text>
@@ -633,11 +863,11 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
         )}
 
         {/* Spaces & Components */}
-        {data.spaces.map((space, spaceIdx) => (
-          <View key={spaceIdx} style={styles.spaceSection} wrap={false}>
+        {quotedSpaces.map((space, spaceIdx) => (
+          <View key={spaceIdx} style={styles.spaceSection}>
             <View style={styles.spaceHeader}>
               <Text style={styles.spaceTitle}>
-                {space.name || space.space_type_name}
+                {spaceIdx + 1}. {space.name || space.space_type_name}
               </Text>
               <Text style={styles.spaceSubtotal}>
                 Subtotal: {formatCurrency(space.subtotal)}
@@ -651,15 +881,57 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
                     <View style={styles.flexRow}>
                       <Text style={styles.componentName}>{component.name}</Text>
                     </View>
-                    <Text style={styles.componentTotal}>
-                      {formatCurrency(component.subtotal)}
-                    </Text>
+                    {showComponentPrice && (
+                      <Text style={styles.componentTotal}>
+                        {formatCurrency(component.subtotal)}
+                      </Text>
+                    )}
                   </View>
 
-                  {component.description && (
-                    <Text style={styles.componentDescription}>
-                      {component.description}
-                    </Text>
+                  {/* Material: the component's own note if someone wrote one,
+                      otherwise assembled from its cost items. */}
+                  {data.show_descriptions !== false &&
+                    (() => {
+                      const material =
+                        component.description || materialText(component.line_items);
+                      return material ? (
+                        <Text style={styles.componentDescription}>{material}</Text>
+                      ) : null;
+                    })()}
+
+                  {/* Category level: what the component is made of, without
+                      exposing the rate of each cost item inside it. This is the
+                      middle ground the print format exists to express. */}
+                  {showCategories && component.line_items.length > 0 && (
+                    <View style={styles.lineItemsTable}>
+                      {groupByCategory(component.line_items).map((cat, i) => (
+                        <View key={i} style={styles.lineItemRow}>
+                          <Text style={[styles.lineItemCell, styles.flex3]}>
+                            {cat.name}
+                          </Text>
+                          {data.show_quantities !== false && (
+                            <Text
+                              style={[
+                                styles.lineItemCell,
+                                styles.flex1,
+                                { textAlign: "center" },
+                              ]}
+                            >
+                              {cat.count}
+                            </Text>
+                          )}
+                          <Text
+                            style={[
+                              styles.lineItemCell,
+                              styles.flex2,
+                              { textAlign: "right" },
+                            ]}
+                          >
+                            {showCategoryPrice ? formatCurrency(cat.amount) : ""}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
                   )}
 
                   {showFullDetail && component.line_items.length > 0 && (
@@ -765,7 +1037,7 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
             </Text>
           </View>
 
-          {data.discount_amount && data.discount_amount > 0 && (
+          {(data.discount_amount ?? 0) > 0 && (
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>
                 Discount (
@@ -775,18 +1047,33 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
                 )
               </Text>
               <Text style={[styles.totalValue, { color: "#16a34a" }]}>
-                -{formatCurrency(data.discount_amount)}
+                -{formatCurrency(data.discount_amount ?? 0)}
               </Text>
             </View>
           )}
 
-          {data.tax_amount && data.tax_amount > 0 && (
+          {/* Charges sit between the room totals and the grand total, each
+              named, so the client can see what was added and why. */}
+          {chargeSpaces.map((space, idx) =>
+            space.components.map((component) =>
+              component.line_items.map((item, itemIdx) => (
+                <View key={`${idx}-${itemIdx}`} style={styles.totalRow}>
+                  <Text style={styles.totalLabel}>{item.name}</Text>
+                  <Text style={styles.totalValue}>
+                    {formatCurrency(item.amount)}
+                  </Text>
+                </View>
+              ))
+            )
+          )}
+
+          {data.show_tax !== false && (data.tax_amount ?? 0) > 0 && (
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>
                 GST ({data.tax_percent || 18}%)
               </Text>
               <Text style={styles.totalValue}>
-                {formatCurrency(data.tax_amount)}
+                {formatCurrency(data.tax_amount ?? 0)}
               </Text>
             </View>
           )}
@@ -794,14 +1081,24 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
           <View style={styles.grandTotalRow}>
             <Text style={styles.grandTotalLabel}>GRAND TOTAL</Text>
             <Text style={styles.grandTotalValue}>
-              {formatCurrency(data.grand_total)}
+              {formatCurrency(grandTotal)}
+            </Text>
+          </View>
+
+          {/* Amount in words is how an Indian quotation is checked - the
+              figure and the words have to agree before anyone signs. */}
+          <View style={styles.totalRow}>
+            <Text style={[styles.totalLabel, { fontFamily: "Helvetica-Oblique" }]}>
+              {amountInWords(grandTotal)}
             </Text>
           </View>
         </View>
 
         {/* Payment Terms */}
-        {data.payment_terms && data.payment_terms.length > 0 && (
-          <View style={styles.paymentSection} wrap={false}>
+        {data.show_payment_terms !== false &&
+          data.payment_terms &&
+          data.payment_terms.length > 0 && (
+          <View style={styles.paymentSection}>
             <Text style={styles.sectionTitle}>Payment Terms</Text>
             <View style={styles.paymentTable}>
               {data.payment_terms.map((term, idx) => (
@@ -833,6 +1130,10 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
         )}
 
         {/* Bank Details */}
+        {/* The one section that keeps wrap={false}: it is a handful of fixed
+            rows and account details split across a page break are genuinely
+            hard to read. Everything else can grow past a page, and react-pdf
+            silently drops - not truncates - any unwrappable view that does. */}
         {data.show_bank_details !== false && data.bank && (
           <View style={styles.bankSection} wrap={false}>
             <Text style={styles.sectionTitle}>Bank Details for Payment</Text>
@@ -873,17 +1174,38 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
           </View>
         )}
 
-        {/* Terms & Conditions */}
-        {data.terms_and_conditions && (
-          <View style={styles.termsSection} wrap={false}>
-            <Text style={styles.sectionTitle}>Terms & Conditions</Text>
-            <Text style={styles.termsText}>{data.terms_and_conditions}</Text>
+        {/* Terms & Conditions.
+            The clause library stores rich text, and react-pdf renders no HTML
+            at all - passing it straight through printed the tags. */}
+        {data.show_terms !== false &&
+          (data.terms_sections?.length
+            ? data.terms_sections
+            : data.terms_and_conditions
+            ? [{ title: "Terms & Conditions", content: data.terms_and_conditions }]
+            : []
+          ).map((section, sectionIdx) => (
+          <View key={sectionIdx} style={styles.termsSection}>
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+            {richTextToBlocks(section.content).map((block, i) => (
+              <Text
+                key={i}
+                style={[
+                  styles.termsText,
+                  block.type === "heading"
+                    ? { fontFamily: "Helvetica-Bold", marginTop: 6 }
+                    : {},
+                  block.type === "listItem" ? { marginLeft: 10 } : {},
+                ]}
+              >
+                {block.type === "listItem" ? `\u2022  ${block.text}` : block.text}
+              </Text>
+            ))}
           </View>
-        )}
+        ))}
 
         {/* Notes */}
         {data.notes && (
-          <View style={styles.termsSection} wrap={false}>
+          <View style={styles.termsSection}>
             <Text style={styles.sectionTitle}>Notes</Text>
             <Text style={styles.termsText}>{data.notes}</Text>
           </View>

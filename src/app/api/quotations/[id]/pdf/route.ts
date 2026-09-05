@@ -113,7 +113,7 @@ export async function GET(
       .order("display_order");
 
     // Get line items
-    const { data: lineItemsData } = await supabase
+    const { data: lineItemsData, error: lineItemsError } = await supabase
       .from("quotation_line_items")
       .select(`
         id,
@@ -127,17 +127,63 @@ export async function GET(
         rate,
         amount,
         display_order,
-        cost_item:cost_item_id (id, name, category_id)
+        cost_item:quotation_cost_item_id (
+          id, name, description, category_id,
+          category:quotation_cost_item_categories (id, name, display_order, is_charge)
+        )
       `)
       .eq("quotation_id", id)
       .order("display_order");
 
+    // A silent failure here printed a document with every price at zero, which
+    // is far worse than not printing at all.
+    if (lineItemsError) {
+      console.error("Error loading line items for PDF:", lineItemsError);
+      return NextResponse.json(
+        { error: "Could not read the quotation's line items" },
+        { status: 500 }
+      );
+    }
     // Get tenant settings for company/bank details
     const { data: tenantSettings } = await supabase
       .from("tenant_quotation_settings")
       .select("*")
       .eq("tenant_id", quotation.tenant_id)
       .single();
+
+    // The tenant's print format decides how much of the quotation the document
+    // shows and where prices appear. One per tenant for now: the default,
+    // falling back to whichever single format is active.
+    // ?format_id= picks one explicitly; without it the tenant's default wins.
+    // Scoped to the tenant either way, so a format id from elsewhere cannot be
+    // used to reshape someone else's document.
+    const requestedFormatId = request.nextUrl.searchParams.get("format_id");
+    let formatQuery = supabase
+      .from("quotation_print_formats")
+      .select("*")
+      .eq("tenant_id", quotation.tenant_id)
+      .eq("is_active", true);
+    if (requestedFormatId) {
+      formatQuery = formatQuery.eq("id", requestedFormatId);
+    }
+    const { data: printFormats } = await formatQuery
+      .order("is_default", { ascending: false })
+      .order("display_order", { ascending: true })
+      .limit(1);
+    const printFormat = printFormats?.[0] || null;
+
+    // The live terms, rendered at print time. Deliberately not snapshotted onto
+    // the quotation yet - that belongs with the approve-then-send flow.
+    // Every active clause, each printed as its own headed section. One clause
+    // gives one section; splitting it into Terms / Payment / Delivery / Bank
+    // later gives that layout with no code change.
+    const { data: termsClauses } = await supabase
+      .from("quotation_terms_clauses")
+      .select("title, content")
+      .eq("tenant_id", quotation.tenant_id)
+      .eq("is_active", true)
+      .order("display_order", { ascending: true })
+      .order("title", { ascending: true });
 
     // Build the spaces hierarchy
     const spaces: SpaceData[] = (spacesData || []).map((space: any) => {
@@ -158,6 +204,14 @@ export async function GET(
           quantity: item.quantity,
           rate: item.rate || 0,
           amount: item.amount || calculateLineItemAmount(item),
+          category_name: item.cost_item?.category?.name || "Other",
+          category_order: item.cost_item?.category?.display_order ?? 99,
+          // The Material column is assembled from these rather than typed by
+          // hand, so it can never describe a material the quotation no longer
+          // uses. Falls back to the cost item's name when it has no
+          // description of its own.
+          description: item.cost_item?.description || null,
+          is_charge: item.cost_item?.category?.is_charge === true,
         }));
 
         const componentSubtotal = lineItems.reduce((sum, li) => sum + li.amount, 0);
@@ -184,6 +238,14 @@ export async function GET(
           quantity: item.quantity,
           rate: item.rate || 0,
           amount: item.amount || calculateLineItemAmount(item),
+          category_name: item.cost_item?.category?.name || "Other",
+          category_order: item.cost_item?.category?.display_order ?? 99,
+          // The Material column is assembled from these rather than typed by
+          // hand, so it can never describe a material the quotation no longer
+          // uses. Falls back to the cost item's name when it has no
+          // description of its own.
+          description: item.cost_item?.description || null,
+          is_charge: item.cost_item?.category?.is_charge === true,
         }));
 
         const directSubtotal = directItems.reduce((sum, li) => sum + li.amount, 0);
@@ -197,11 +259,20 @@ export async function GET(
 
       const spaceSubtotal = components.reduce((sum, c) => sum + c.subtotal, 0);
 
+      // A space whose every line is a charge prints below the room totals
+      // rather than as a numbered room. Decided here because it is a property
+      // of the contents, not something anyone has to remember to set.
+      const allLines = components.flatMap((c) => c.line_items);
+      const isCharges =
+        allLines.length > 0 &&
+        allLines.every((li) => (li as { is_charge?: boolean }).is_charge);
+
       return {
         name: space.name,
         space_type_name: space.space_type?.name,
         components,
         subtotal: space.subtotal || spaceSubtotal,
+        is_charges: isCharges,
       };
     });
 
@@ -242,12 +313,36 @@ export async function GET(
       spaces,
 
       payment_terms: quotation.payment_terms,
-      terms_and_conditions: quotation.terms_and_conditions,
+      // A quotation carrying its own terms text overrides the library, which
+      // is what a snapshotted quotation will do once that exists.
+      terms_sections: quotation.terms_and_conditions
+        ? [{ title: "Terms & Conditions", content: quotation.terms_and_conditions }]
+        : (termsClauses || []).map((c) => ({ title: c.title, content: c.content })),
       notes: quotation.notes,
 
+      // How the document is laid out comes from the print format; the
+      // quotation's own presentation_level stays as the fallback for a tenant
+      // with no format configured.
+      itemise_to: printFormat?.itemise_to || undefined,
+      price_at: printFormat?.price_at || undefined,
+      show_descriptions: printFormat?.show_descriptions,
+      show_specifications: printFormat?.show_specifications,
+      show_quantities: printFormat?.show_quantities,
+      show_payment_terms: printFormat?.show_payment_terms,
+      show_terms: printFormat?.show_terms,
+      // Optional-chained so the document keeps working before the migration
+      // that adds the column; undefined means "print it", the old behaviour.
+      show_tax: (printFormat as { show_tax?: boolean } | null)?.show_tax,
+      cover_enabled: printFormat?.cover_enabled ?? false,
+      cover_image_path: printFormat?.cover_image_path || undefined,
+
       presentation_level: quotation.presentation_level || "space_component",
-      hide_dimensions: quotation.hide_dimensions ?? true,
-      header_color: quotation.header_color || "#1e40af",
+      hide_dimensions:
+        printFormat?.show_dimensions !== undefined
+          ? !printFormat.show_dimensions
+          : quotation.hide_dimensions ?? true,
+      header_color:
+        printFormat?.header_color || quotation.header_color || "#1e40af",
 
       company: tenantSettings ? {
         name: tenantSettings.company_name,
@@ -267,9 +362,12 @@ export async function GET(
         branch: tenantSettings.bank_branch,
       } : undefined,
 
-      show_company_details: quotation.show_company_details ?? true,
-      show_bank_details: quotation.show_bank_details ?? true,
-      custom_footer_text: quotation.custom_footer_text,
+      show_company_details:
+        printFormat?.show_company_details ?? quotation.show_company_details ?? true,
+      show_bank_details:
+        printFormat?.show_bank_details ?? quotation.show_bank_details ?? true,
+      custom_footer_text:
+        printFormat?.footer_text || quotation.custom_footer_text,
     };
 
     // Generate PDF
@@ -287,7 +385,13 @@ export async function GET(
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        // ?inline=1 renders in a viewer instead of downloading, which is what
+        // the print preview embeds.
+        "Content-Disposition": `${
+          request.nextUrl.searchParams.get("inline") === "1"
+            ? "inline"
+            : "attachment"
+        }; filename="${filename}"`,
         "Content-Length": pdfBuffer.length.toString(),
       },
     });

@@ -130,7 +130,10 @@ export async function GET(
         rate,
         amount,
         display_order,
-        cost_item:cost_item_id (id, name, category_id)
+        cost_item:quotation_cost_item_id (
+          id, name, category_id,
+          category:quotation_cost_item_categories (id, name)
+        )
       `)
       .eq("quotation_id", quotation.id)
       .order("display_order");
@@ -161,6 +164,7 @@ export async function GET(
           quantity: item.quantity,
           rate: item.rate || 0,
           amount: item.amount || calculateLineItemAmount(item),
+          category_name: item.cost_item?.category?.name || "Other",
         }));
 
         const componentSubtotal = lineItems.reduce((sum, li) => sum + li.amount, 0);
