@@ -66,6 +66,23 @@ Terms are the opposite case. A format names the clause it prints
 different terms; null falls back to the tenant default. Only one clause prints
 - rendering every active clause put V1 and V2 of the same terms back to back.
 
+### A project's Spaces are the lead's Spaces
+Scope lives on `property_scope_items`, which hangs off the property, and a
+project shares its lead's `property_id`. So the project's Spaces tab renders the
+same component against the same rows — nothing is copied at handover and the
+two never diverge.
+
+This replaced a Rooms tab that read `quotation_spaces`: a read-only view of what
+was *priced*, which the linked quotation already shows. A project needs what is
+to be *built*.
+
+### Winning a lead requires it to be clear
+Open tasks or unhandled follow-ups refuse a `won` transition with a 409 and the
+list. Lost and disqualified cancel that work instead, with the reason recorded.
+Tasks are deliberately not carried into the project — a project starts with a
+clean slate rather than a sales backlog. Note tasks link to a lead through
+`related_type`/`related_id`, not a `lead_id` column.
+
 ### Charges are ordinary line items
 Delivery, cleanup and site protection are cost items in a category marked
 `is_charge`. A space made up entirely of such items *prints* below the room

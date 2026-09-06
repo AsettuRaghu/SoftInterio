@@ -41,7 +41,6 @@ import {
   SubPhaseDetailPanel,
   ManagementTab,
   TasksTab,
-  RoomsTab,
   NotesTab,
   OverviewTab,
   DocumentsTab,
@@ -55,6 +54,7 @@ import {
 } from "@/modules/projects/components";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { formatCurrency as formatCurrencyUtil } from "@/modules/projects/utils";
+import { SpacesTab } from "@/components/property/SpacesTab";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -563,7 +563,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
       label: "Project Mgmt",
       icon: <Cog6ToothIcon className="w-4 h-4" />,
     },
-    { key: "rooms", label: "Rooms", icon: <CubeIcon className="w-4 h-4" /> },
+    { key: "spaces", label: "Spaces", icon: <CubeIcon className="w-4 h-4" /> },
     {
       key: "overview",
       label: "Overview",
@@ -744,7 +744,16 @@ export default function ProjectDetailPage({ params }: PageProps) {
             />
           )}
 
-          {activeTab === "rooms" && <RoomsTab projectId={project.id} />}
+          {/* The same Spaces the seller captured on the lead. They hang off
+              the property, which the project shares, so scope is continuous
+              from sale to site rather than restarting here.
+
+              Replaces a Rooms tab that read quotation_spaces - a read-only view
+              of what was priced, which the linked quotation already shows. What
+              a project needs is what is to be built. */}
+          {activeTab === "spaces" && (
+            <SpacesTab propertyId={project.property_id || null} />
+          )}
 
           {activeTab === "overview" && (
             <OverviewTab project={project} onUpdate={updateProject} />

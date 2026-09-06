@@ -7,7 +7,6 @@ export {
   NotesTab,
   DocumentsTab,
   TasksTab,
-  RoomsTab,
   QuotationsTab,
   CalendarTab,
   TimelineTab,

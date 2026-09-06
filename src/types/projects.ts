@@ -305,6 +305,9 @@ export interface Project {
   client_phone?: string;
 
   // Property Info (from lead or manual entry)
+  /** The property this project is for. Its Spaces live on the property, so
+   *  the same scope the seller captured on the lead is reachable here. */
+  property_id?: string | null;
   property_name?: string;
   flat_number?: string;
   carpet_area_sqft?: number;
@@ -983,7 +986,9 @@ export interface ProjectTask {
 
 export type ProjectDetailTab =
   | "project-mgmt"
-  | "rooms"
+  // Replaced "rooms", which showed quotation_spaces - what was priced. A
+  // project needs what is to be built, which is the property's Spaces.
+  | "spaces"
   | "overview"
   | "documents"
   | "tasks"

@@ -2,7 +2,7 @@ import type { ProjectStatus } from "@/types/projects";
 
 export type ProjectDetailTab =
   | "project-mgmt"
-  | "rooms"
+  | "spaces"
   | "overview"
   | "quotations"
   | "tasks"
@@ -15,7 +15,7 @@ export type ProjectDetailTab =
 
 export const PROJECT_DETAIL_TABS: ProjectDetailTab[] = [
   "project-mgmt",
-  "rooms",
+  "spaces",
   "overview",
   "quotations",
   "tasks",
