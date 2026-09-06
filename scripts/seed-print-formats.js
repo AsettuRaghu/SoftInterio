@@ -35,7 +35,6 @@ const COMMON = {
   show_payment_terms: true,
   show_terms: true,
   header_color: "#1e293b",
-  show_tax: true,
   is_active: true,
 };
 
@@ -91,7 +90,6 @@ const FORMATS = [
     show_descriptions: true,
     show_dimensions: false,
     show_quantities: false,
-    show_tax: false,
     display_order: 5,
     is_default: false,
     replaces: null,
@@ -105,7 +103,6 @@ const FORMATS = [
     show_descriptions: true,
     show_dimensions: true,
     show_quantities: true,
-    show_tax: true,
     display_order: 6,
     is_default: false,
     replaces: null,
@@ -143,16 +140,8 @@ const FORMATS = [
       // been used keeps its identity instead of being duplicated beside it.
       const target = byName[format.name] || (replaces ? byName[replaces] : null);
 
-      // show_tax arrives with migration 20260906090000. Until that has run the
-      // column does not exist, so the write is retried without it rather than
-      // failing the whole seed.
       const write = async (fn) => {
-        let { error } = await fn(row);
-        if (error && /show_tax/.test(error.message)) {
-          const { show_tax, ...withoutTax } = row;
-          console.log("    (show_tax not in the database yet - run migration 20260906090000)");
-          ({ error } = await fn(withoutTax));
-        }
+        const { error } = await fn(row);
         if (error) console.log("    ! " + error.message);
       };
 

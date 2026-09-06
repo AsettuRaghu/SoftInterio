@@ -174,16 +174,23 @@ export async function GET(
 
     // The live terms, rendered at print time. Deliberately not snapshotted onto
     // the quotation yet - that belongs with the approve-then-send flow.
-    // The clause marked default, and only that one. Printing every active
-    // clause put V1 and V2 of the same terms back to back on the document.
-    // A tenant wanting several headed sections writes them into one clause,
-    // which is how the seeded terms are already structured.
-    const { data: termsClauses } = await supabase
+    // The clause this print format attaches, falling back to the tenant's
+    // default when the format names none. One clause, not every active one -
+    // printing them all put V1 and V2 of the same terms back to back.
+    const formatClauseId = (
+      printFormat as { terms_clause_id?: string | null } | null
+    )?.terms_clause_id;
+
+    let clauseQuery = supabase
       .from("quotation_terms_clauses")
       .select("title, content")
       .eq("tenant_id", quotation.tenant_id)
-      .eq("is_active", true)
-      .order("is_default", { ascending: false })
+      .eq("is_active", true);
+    clauseQuery = formatClauseId
+      ? clauseQuery.eq("id", formatClauseId)
+      : clauseQuery.order("is_default", { ascending: false });
+
+    const { data: termsClauses } = await clauseQuery
       .order("display_order", { ascending: true })
       .limit(1);
 
@@ -345,9 +352,6 @@ export async function GET(
       show_quantities: printFormat?.show_quantities,
       show_payment_terms: printFormat?.show_payment_terms,
       show_terms: printFormat?.show_terms,
-      // Optional-chained so the document keeps working before the migration
-      // that adds the column; undefined means "print it", the old behaviour.
-      show_tax: (printFormat as { show_tax?: boolean } | null)?.show_tax,
       cover_enabled: printFormat?.cover_enabled ?? false,
       cover_image_path: printFormat?.cover_image_path || undefined,
 

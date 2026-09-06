@@ -55,6 +55,17 @@ It therefore cannot describe a material the quotation no longer uses. This is
 also why templates do **not** need a `template_components` table: templates
 carry cost items, cost items carry the descriptions.
 
+### Tax belongs to the quotation, terms belong to the format
+A quotation owns its tax: set `tax_percent` to zero and there is no GST row and
+nothing to add. A print format briefly had a `show_tax` flag as well, which is
+two switches for one outcome and how a document ends up disagreeing with the
+record behind it. It was removed.
+
+Terms are the opposite case. A format names the clause it prints
+(`terms_clause_id`), so a client document and an internal one can carry
+different terms; null falls back to the tenant default. Only one clause prints
+- rendering every active clause put V1 and V2 of the same terms back to back.
+
 ### Charges are ordinary line items
 Delivery, cleanup and site protection are cost items in a category marked
 `is_charge`. A space made up entirely of such items *prints* below the room

@@ -127,7 +127,6 @@ interface QuotationPDFData {
   // reason the print library exists.
   /** Every active clause, each printed as its own headed section. */
   terms_sections?: Array<{ title: string; content: string }>;
-  show_tax?: boolean;
 
   itemise_to?: "space" | "component" | "category" | "cost_item";
   price_at?: "space" | "component" | "category" | "cost_item" | "none";
@@ -802,15 +801,10 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
   // after the rooms, where a transport line belongs on a client document.
   const quotedSpaces = data.spaces.filter((s) => !s.is_charges);
   const chargeSpaces = data.spaces.filter((s) => s.is_charges);
-  const chargesTotal = chargeSpaces.reduce((n, s) => n + s.subtotal, 0);
-  const roomsTotal = quotedSpaces.reduce((n, s) => n + s.subtotal, 0);
-  // A document that does not print tax must not include it in the total it
-  // does print, or the client adds up the visible rows and gets a different
-  // number from the one they are asked to agree to.
-  const grandTotal =
-    data.show_tax === false
-      ? roomsTotal + chargesTotal - (data.discount_amount ?? 0)
-      : data.grand_total;
+  // The quotation's own total. Tax is the quotation's decision - set its rate
+  // to zero and there is no GST row and nothing to add - so the document does
+  // not recompute a figure the record already holds.
+  const grandTotal = data.grand_total;
 
   /** Line items rolled up to their cost category, for itemise_to="category". */
   const groupByCategory = (items: LineItemData[]) => {
@@ -1103,7 +1097,7 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
             )
           )}
 
-          {data.show_tax !== false && (data.tax_amount ?? 0) > 0 && (
+          {(data.tax_amount ?? 0) > 0 && (
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>
                 GST ({data.tax_percent || 18}%)

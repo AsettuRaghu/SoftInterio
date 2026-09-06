@@ -42,6 +42,8 @@ type FormState = {
   show_bank_details: boolean;
   show_payment_terms: boolean;
   show_terms: boolean;
+  /** Which clause this format prints. Empty means the tenant default. */
+  terms_clause_id: string;
   cover_enabled: boolean;
   cover_image_path: string;
   footer_text: string;
@@ -62,6 +64,7 @@ const BLANK: FormState = {
   show_bank_details: true,
   show_payment_terms: true,
   show_terms: true,
+  terms_clause_id: "",
   cover_enabled: false,
   cover_image_path: "",
   footer_text: "",
@@ -106,7 +109,23 @@ export function PrintFormatModal({
   onSaved,
 }: PrintFormatModalProps) {
   const [form, setForm] = useState<FormState>(BLANK);
+  // Attaching the terms here rather than relying on a tenant-wide default lets
+  // a client document and an internal one carry different terms, and stops a
+  // second active clause being a trap for whoever next changes the default.
+  const [clauses, setClauses] = useState<
+    Array<{ id: string; title: string; is_default?: boolean }>
+  >([]);
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    void (async () => {
+      const res = await fetch("/api/quotations/terms-clauses");
+      if (!res.ok) return;
+      const data = await res.json();
+      setClauses(data.clauses || []);
+    })();
+  }, [isOpen]);
   const [isUploading, setIsUploading] = useState(false);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -153,6 +172,8 @@ export function PrintFormatModal({
         show_bank_details: format.show_bank_details,
         show_payment_terms: format.show_payment_terms,
         show_terms: format.show_terms,
+        terms_clause_id:
+          (format as { terms_clause_id?: string | null }).terms_clause_id || "",
         cover_enabled: format.cover_enabled,
         cover_image_path: format.cover_image_path || "",
         footer_text: format.footer_text || "",
@@ -192,6 +213,9 @@ export function PrintFormatModal({
         body: JSON.stringify({
           ...form,
           description: form.description.trim() || null,
+          // Empty means "use the tenant default", which the column stores as
+          // null - an empty string is not a uuid and the insert would fail.
+          terms_clause_id: form.terms_clause_id || null,
           cover_image_path: form.cover_image_path.trim() || null,
           footer_text: form.footer_text.trim() || null,
         }),
@@ -379,6 +403,35 @@ export function PrintFormatModal({
                   onChange={(v) => set("show_terms", v)}
                 />
               </div>
+
+              {form.show_terms && (
+                <div className="mt-3">
+                  <label className="block text-xs font-medium text-slate-600 mb-1">
+                    Which terms
+                  </label>
+                  <select
+                    value={form.terms_clause_id}
+                    onChange={(e) => set("terms_clause_id", e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:ring-1 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="">
+                      Use the default clause
+                      {clauses.find((c) => c.is_default)
+                        ? ` (${clauses.find((c) => c.is_default)!.title})`
+                        : ""}
+                    </option>
+                    {clauses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.title}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    One clause prints, as its own section. A format with none
+                    chosen falls back to the tenant default.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Cover page */}

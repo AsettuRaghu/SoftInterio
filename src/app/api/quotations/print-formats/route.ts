@@ -28,6 +28,7 @@ const WRITABLE = [
   "show_bank_details",
   "show_payment_terms",
   "show_terms",
+  "terms_clause_id",
   "header_color",
   "footer_text",
   "is_default",
