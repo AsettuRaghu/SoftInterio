@@ -310,57 +310,79 @@ const styles = StyleSheet.create({
     marginBottom: 9,
   },
   spaceHeader: {
-    // Was a solid blue bar at 10pt padding on every room. On a quotation with
-    // eleven rooms that is a page of chrome, and it reads as a warning rather
-    // than a heading. A tint and a rule carry the same structure quietly.
-    backgroundColor: "#f1f5f9",
+    // Row, not the default column - the subtotal was stacking underneath the
+    // room name instead of sitting out at the right margin where a reader
+    // scans for it.
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    // Was a solid blue bar at 10pt padding on every room. On an eleven-room
+    // quotation that is a page of chrome, and heavy blue reads as a warning
+    // rather than a heading. A pale tint and a rule carry the same structure.
+    backgroundColor: "#f8fafc",
     borderBottomWidth: 1,
     borderBottomColor: "#cbd5e1",
-    paddingVertical: 4,
-    paddingHorizontal: 7,
-    borderTopLeftRadius: 4,
-    borderTopRightRadius: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
   },
   spaceTitle: {
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: "bold",
     color: "#0f172a",
+    flex: 1,
+    paddingRight: 8,
   },
+  // Every figure on the page shares this column, so the eye runs straight down
+  // them and a client can add the rooms up without hunting.
   spaceSubtotal: {
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: "bold",
     color: "#0f172a",
+    width: 95,
+    textAlign: "right",
   },
 
   // Component
   componentSection: {
-    borderLeftWidth: 3,
-    borderLeftColor: "#3b82f6",
+    // A 3pt blue rail down every component made the page look like a form.
+    // Indentation and a hairline between entries say the same thing without
+    // shouting.
     paddingLeft: 8,
-    marginLeft: 7,
-    marginTop: 5,
-    marginBottom: 5,
+    paddingRight: 8,
+    paddingTop: 5,
+    paddingBottom: 5,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#f1f5f9",
   },
   componentHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 8,
+    alignItems: "baseline",
   },
   componentName: {
-    fontSize: 11,
+    fontSize: 9.5,
     fontWeight: "bold",
     color: "#1e293b",
+    flex: 1,
+    paddingRight: 8,
   },
   componentTotal: {
-    fontSize: 10,
-    fontWeight: "bold",
-    color: "#1e40af",
+    fontSize: 9.5,
+    // Money is not a link. Blue on every figure reads as something to click.
+    color: "#0f172a",
+    width: 95,
+    textAlign: "right",
   },
   componentDescription: {
-    fontSize: 9,
+    // Italic at this size is harder to read, not softer - the muted colour
+    // already says "supporting detail".
+    fontSize: 8.5,
     color: "#64748b",
-    marginBottom: 8,
-    fontStyle: "italic",
+    lineHeight: 1.45,
+    marginTop: 2,
+    paddingRight: 95,
   },
 
   // Line Items
@@ -387,44 +409,59 @@ const styles = StyleSheet.create({
 
   // Totals
   totalsSection: {
-    marginTop: 12,
+    marginTop: 14,
     marginLeft: "auto",
-    width: 250,
+    width: 260,
   },
   totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "baseline",
     paddingVertical: 3,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
   },
   totalLabel: {
-    fontSize: 10,
+    fontSize: 9.5,
     color: "#64748b",
+    flex: 1,
+    paddingRight: 8,
   },
   totalValue: {
-    fontSize: 10,
+    fontSize: 9.5,
     color: "#1e293b",
-    fontWeight: "medium",
+    width: 95,
+    textAlign: "right",
   },
   grandTotalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 10,
-    backgroundColor: "#1e40af",
-    paddingHorizontal: 10,
-    borderRadius: 4,
+    alignItems: "baseline",
+    // The grand total is the answer the client came for, so it gets the one
+    // piece of emphasis on the page. A rule and larger type do that with more
+    // confidence than a filled blue block, and they survive a mono printer.
+    borderTopWidth: 1.5,
+    borderTopColor: "#0f172a",
+    paddingTop: 7,
     marginTop: 5,
   },
   grandTotalLabel: {
-    fontSize: 12,
-    color: "#ffffff",
+    fontSize: 10.5,
+    color: "#0f172a",
     fontWeight: "bold",
+    flex: 1,
+    paddingRight: 8,
   },
   grandTotalValue: {
     fontSize: 14,
-    color: "#ffffff",
+    color: "#0f172a",
     fontWeight: "bold",
+    width: 95,
+    textAlign: "right",
+  },
+  amountWords: {
+    fontSize: 8.5,
+    color: "#475569",
+    marginTop: 5,
+    textAlign: "right",
   },
 
   // Payment Terms
@@ -863,9 +900,11 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
           <View
             key={spaceIdx}
             style={styles.spaceSection}
-            // Keeps a room heading from stranding alone at the foot of a page
-            // with its contents overleaf.
-            minPresenceAhead={40}
+            // No minPresenceAhead. Reserving space for a whole room pushed it
+            // wholesale to the next page and left a hand's depth of white at
+            // the bottom of this one, which looks worse than a room that
+            // simply continues overleaf. The page frame already keeps content
+            // clear of the header and footer.
           >
             <View style={styles.spaceHeader}>
               <Text style={styles.spaceTitle}>
@@ -1087,14 +1126,13 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
             </Text>
           </View>
 
-          {/* Amount in words is how an Indian quotation is checked - the
-              figure and the words have to agree before anyone signs. */}
-          <View style={styles.totalRow}>
-            <Text style={[styles.totalLabel, { fontFamily: "Helvetica-Oblique" }]}>
-              {amountInWords(grandTotal)}
-            </Text>
-          </View>
         </View>
+
+        {/* Amount in words is how an Indian quotation is checked - the figure
+            and the words have to agree before anyone signs. Full width rather
+            than inside the totals column, where the sentence wrapped over four
+            cramped lines. */}
+        <Text style={styles.amountWords}>{amountInWords(grandTotal)}</Text>
 
         {/* Payment Terms */}
         {data.show_payment_terms !== false &&
