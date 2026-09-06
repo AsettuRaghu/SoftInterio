@@ -710,6 +710,37 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             console.log("Project created successfully:", createdProjectId);
             projectId = createdProjectId;
 
+            // Joins the two timelines. Without this the lead's history stops
+            // at "won" and the project's starts from nothing, so the handover
+            // - the moment the work changed hands - is recorded nowhere.
+            const { data: newProject } = await supabase
+              .from("projects")
+              .select("project_number, name")
+              .eq("id", createdProjectId)
+              .maybeSingle();
+            const projectLabel = newProject?.project_number || "Project";
+
+            await logLeadActivity(supabase, {
+              leadId: id,
+              tenantId: lead.tenant_id,
+              userId: user.id,
+              type: "other",
+              title: `Project ${projectLabel} created`,
+              description: newProject?.name
+                ? `The won lead became ${newProject.name}.`
+                : "The won lead became a project.",
+            });
+
+            // project_activities scopes through its project and has no
+            // tenant_id column, unlike lead_activities.
+            await supabase.from("project_activities").insert({
+              project_id: createdProjectId,
+              activity_type: "other",
+              title: `Created from lead ${lead.lead_number || ""}`.trim(),
+              description: `Carried over from the won lead, with its client, property, documents and notes.`,
+              created_by: user.id,
+            });
+
             // STEP: Copy and lock quotation for the project
             if (to_stage === "won" && winningQuotationId) {
               try {
@@ -799,23 +830,56 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         projectCreationError = projectErr;
       }
 
-      // If project creation was required but failed, rollback the lead stage update
+      // What used to happen here was called a rollback and was not one. It
+      // reset leads.stage and nothing else, while won_amount, the contract
+      // date, the stage-history row the trigger writes, the activity entries
+      // and - worse - any project the RPC had already created were all left in
+      // place. A lead sitting at proposal_discussion with a won amount and an
+      // orphaned project attached is harder to understand, and to recover
+      // from, than one that is simply won without a project yet.
+      //
+      // So the lead stays won, because it is: the client agreed, and that is a
+      // commercial fact rather than a side effect of project creation. What
+      // changes is that the response says exactly what happened.
       if (shouldCreateProject && !body.skip_project_creation && projectCreationError) {
-        console.error("Rolling back lead stage update due to project creation failure");
-        
-        // Rollback: update lead back to previous stage
-        await supabase
-          .from("leads")
-          .update({ stage: lead.stage })
-          .eq("id", id);
+        const detail =
+          projectCreationError instanceof Error
+            ? projectCreationError.message
+            : (projectCreationError as { message?: string })?.message ||
+              String(projectCreationError);
+
+        console.error("Project creation failed after winning the lead:", detail);
+
+        // Recorded on the lead so this is visible later, not only to whoever
+        // happened to be looking at the screen.
+        await logLeadActivity(supabase, {
+          leadId: id,
+          tenantId: lead.tenant_id,
+          userId: user.id,
+          type: "other",
+          title: projectId
+            ? "Project created, but setup did not finish"
+            : "Lead won, but the project was not created",
+          description: detail,
+        });
 
         return NextResponse.json(
           {
-            error: "Failed to create project from lead",
-            details: projectCreationError.message || String(projectCreationError),
-            code: projectCreationError.code || "PROJECT_CREATION_FAILED",
+            lead: updatedLead,
+            project_id: projectId,
+            project_created: projectId !== null,
+            // 200, not 400: the transition succeeded. Reporting the whole
+            // thing as a failure led people to retry a win that had already
+            // happened.
+            warning: projectId
+              ? "The project was created, but part of its setup did not finish. Open the project and check its quotation."
+              : "The lead is marked won, but the project was not created. You can create it from the project list, or retry from the lead.",
+            warning_detail: detail,
+            code: projectId
+              ? "PROJECT_SETUP_INCOMPLETE"
+              : "PROJECT_CREATION_FAILED",
           },
-          { status: 400 }
+          { status: 200 }
         );
       }
     }

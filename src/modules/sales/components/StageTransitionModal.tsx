@@ -267,19 +267,16 @@ export function StageTransitionModal({
         throw new Error(errorMessage + details);
       }
 
-      // Check if this is a "won" transition and if project was supposed to be created
-      if (selectedStage === "won" && !formData.selected_quotation_id) {
-        // If no quotation was selected, project creation might have been attempted
-        // The API should have failed if project creation was required but failed
-        // If we got here with project_created === false, it means the project wasn't created
-        if (data.project_created === false) {
-          setError(
-            "Warning: Lead marked as won, but project creation failed. Please check the projects page or try creating the project manually."
-          );
-          setSuccessMessage(null);
-          setIsSubmitting(false);
-          return;
-        }
+      // The transition succeeded even when project setup did not, so the API
+      // returns 200 with a warning rather than an error. Show it and stop -
+      // closing the modal on success would hide the fact that something needs
+      // attention.
+      if (data.warning) {
+        setError(data.warning);
+        setSuccessMessage(null);
+        setIsSubmitting(false);
+        onSuccess();
+        return;
       }
 
       // Show success message and close modal immediately

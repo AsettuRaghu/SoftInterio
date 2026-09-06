@@ -37,9 +37,10 @@ export async function logQuotationActivity(
 ): Promise<void> {
   try {
     if (quotation.project_id) {
+      // No tenant_id here, unlike lead_activities - project_activities scopes
+      // through its project. Passing one makes the insert fail.
       await supabase.from("project_activities").insert({
         project_id: quotation.project_id,
-        tenant_id: quotation.tenant_id,
         activity_type: type,
         title,
         description: description || null,
