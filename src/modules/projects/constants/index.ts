@@ -15,12 +15,9 @@ export {
   SUB_PHASE_STATUS_COLORS,
   STANDARD_PHASES,
   type TeamMember,
-  type ProjectDetailTabType,
 } from "./projectsConstants";
 
-export {
-  PROJECT_DETAIL_TABS,
-  isProjectClosed,
-  getProjectStatusColor,
-  type ProjectDetailTab,
-} from "./projectDetailConstants";
+// ProjectDetailTab lives in @/types/projects, which is where the detail page
+// reads it. Two more copies used to sit here - one an eleven-key union, one a
+// nine-key ProjectDetailTabType with its own tab array - and none of the three
+// agreed. Nothing outside this directory imported either of the local ones.

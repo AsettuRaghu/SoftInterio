@@ -262,30 +262,6 @@ export interface TeamMember {
   avatar_url?: string | null;
 }
 
-// Tabs configuration
-export type ProjectDetailTabType =
-  | "overview"
-  | "management"
-  | "notes"
-  | "documents"
-  | "tasks"
-  | "rooms"
-  | "quotations"
-  | "calendar"
-  | "timeline";
-
-export const PROJECT_DETAIL_TABS: Array<{
-  id: ProjectDetailTabType;
-  label: string;
-  icon: string;
-}> = [
-  { id: "overview", label: "Overview", icon: "home" },
-  { id: "management", label: "Management", icon: "settings" },
-  { id: "tasks", label: "Tasks", icon: "clipboard" },
-  { id: "rooms", label: "Rooms", icon: "square" },
-  { id: "notes", label: "Notes", icon: "message" },
-  { id: "documents", label: "Documents", icon: "file" },
-  { id: "calendar", label: "Calendar", icon: "calendar" },
-  { id: "quotations", label: "Quotations", icon: "file-text" },
-  { id: "timeline", label: "Timeline", icon: "trending-up" },
-];
+// Tab keys live in @/types/projects. A ProjectDetailTabType and a second
+// PROJECT_DETAIL_TABS used to sit here, still listing a Rooms tab that no
+// longer exists; nothing imported either.
