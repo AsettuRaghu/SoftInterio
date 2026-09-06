@@ -70,9 +70,24 @@ export async function GET(request: NextRequest) {
     const inRange = (iso?: string | null) =>
       !!iso && new Date(iso) >= from && new Date(iso) <= to;
 
+    // The week ahead, for the coverage panel. Bounded here rather than
+    // fetched wholesale: a calendar grows without limit and only the next
+    // seven days are ever shown.
+    const weekEnd = new Date();
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    weekEnd.setHours(23, 59, 59, 999);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
     // RLS scopes these to the caller's tenant.
-    const [{ data: leads }, { data: history }, { data: quotations }, { data: users }] =
-      await Promise.all([
+    const [
+      { data: leads },
+      { data: history },
+      { data: quotations },
+      { data: users },
+      { data: tasks },
+      { data: events },
+    ] = await Promise.all([
         supabase
           .from("leads")
           .select(
@@ -87,6 +102,18 @@ export async function GET(request: NextRequest) {
           .select("lead_id, grand_total, status")
           .not("lead_id", "is", null),
         supabase.from("users").select("id, name"),
+        supabase
+          .from("tasks")
+          .select("id, title, due_date, status, assigned_to, related_type, related_id")
+          .eq("related_type", "lead")
+          .in("status", ["todo", "in_progress", "on_hold"]),
+        supabase
+          .from("calendar_events")
+          .select("id, title, event_type, scheduled_at, linked_type, linked_id, created_by")
+          .eq("is_completed", false)
+          .gte("scheduled_at", todayStart.toISOString())
+          .lte("scheduled_at", weekEnd.toISOString())
+          .order("scheduled_at", { ascending: true }),
       ]);
 
     const allLeads = leads || [];
@@ -308,6 +335,84 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => (a.due! < b.due! ? -1 : 1));
 
+    // --- The week ahead -----------------------------------------------------
+    // Reported as coverage, not as a task list. The dashboard already owns the
+    // to-do list and the calendar owns the detail; a third copy of the same
+    // queue is worse than one. What a manager cannot get elsewhere is whether
+    // the week is covered and who is carrying it.
+    const leadOwner = Object.fromEntries(
+      allLeads.map((l) => [l.id, l.assigned_to || ""])
+    );
+    const nameOf = (id?: string | null) => userName[id || ""] || "Unassigned";
+    const tally = (rows: Array<string | null | undefined>) =>
+      Object.entries(
+        rows.reduce((acc, id) => {
+          const key = nameOf(id);
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>)
+      )
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count);
+
+    const openTasks = tasks || [];
+    const dueThisWeek = openTasks.filter(
+      (t) =>
+        t.due_date &&
+        new Date(t.due_date) >= todayStart &&
+        new Date(t.due_date) <= weekEnd
+    );
+    const overdueTasks = openTasks.filter(
+      (t) => t.due_date && new Date(t.due_date) < todayStart
+    );
+    // The finding that matters more than the counts: a "due this week" figure
+    // means nothing while most open work carries no date at all.
+    const undatedTasks = openTasks.filter((t) => !t.due_date);
+
+    const followUpsThisWeek = openLeads.filter(
+      (l) =>
+        l.next_follow_up_at &&
+        new Date(l.next_follow_up_at) >= todayStart &&
+        new Date(l.next_follow_up_at) <= weekEnd
+    );
+
+    // Only events attached to a lead - an unlinked calendar entry is somebody's
+    // personal reminder, not sales activity, and counting it would overstate
+    // the week.
+    const salesEvents = (events || []).filter((e) => e.linked_type === "lead");
+
+    const weekAhead = {
+      from: todayStart.toISOString(),
+      to: weekEnd.toISOString(),
+      events: {
+        count: salesEvents.length,
+        by_owner: tally(
+          salesEvents.map((e) => leadOwner[e.linked_id || ""] || e.created_by)
+        ),
+        items: salesEvents.slice(0, 6).map((e) => ({
+          id: e.id,
+          title: e.title,
+          type: e.event_type,
+          at: e.scheduled_at,
+          lead_id: e.linked_id,
+        })),
+      },
+      follow_ups: {
+        count: followUpsThisWeek.length,
+        by_owner: tally(followUpsThisWeek.map((l) => l.assigned_to)),
+      },
+      tasks: {
+        count: dueThisWeek.length,
+        by_owner: tally(dueThisWeek.map((t) => t.assigned_to)),
+      },
+      warnings: {
+        overdue_tasks: overdueTasks.length,
+        undated_tasks: undatedTasks.length,
+        open_tasks: openTasks.length,
+        unlinked_events: (events || []).length - salesEvents.length,
+      },
+    };
+
     // --- Trend -------------------------------------------------------------
     const months: Record<string, { created: number; won: number; won_value: number }> = {};
     const monthKey = (iso: string) => iso.slice(0, 7);
@@ -350,6 +455,7 @@ export async function GET(request: NextRequest) {
       velocity,
       loss_reasons: lossReasons,
       attention: { stale, overdue_follow_ups: overdueFollowUps },
+      week_ahead: weekAhead,
       trend,
     });
   } catch (error) {

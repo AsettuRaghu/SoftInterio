@@ -66,6 +66,23 @@ interface Analytics {
     }>;
   };
   trend: Array<{ month: string; created: number; won: number; won_value: number }>;
+  week_ahead: {
+    from: string;
+    to: string;
+    events: {
+      count: number;
+      by_owner: Array<{ name: string; count: number }>;
+      items: Array<{
+        id: string; title: string; type: string; at: string; lead_id: string | null;
+      }>;
+    };
+    follow_ups: { count: number; by_owner: Array<{ name: string; count: number }> };
+    tasks: { count: number; by_owner: Array<{ name: string; count: number }> };
+    warnings: {
+      overdue_tasks: number; undated_tasks: number;
+      open_tasks: number; unlinked_events: number;
+    };
+  };
 }
 
 /**
@@ -167,6 +184,30 @@ function Metric({
       </div>
       <p className={`text-xl font-bold tabular-nums ${tones.value}`}>{value}</p>
       {hint && <p className={`text-[11px] ${hints}`}>{hint}</p>}
+    </div>
+  );
+}
+
+function CoverageRow({
+  label,
+  count,
+  byOwner,
+  tone,
+}: {
+  label: string;
+  count: number;
+  byOwner: Array<{ name: string; count: number }>;
+  tone: string;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 py-1.5">
+      <span className="text-sm text-slate-700 shrink-0">{label}</span>
+      <span className="flex-1 text-right text-[11px] text-slate-400 truncate">
+        {byOwner.map((o) => `${o.name.split(" ")[0]} ${o.count}`).join(" · ")}
+      </span>
+      <span className={`w-8 text-right text-lg font-bold tabular-nums ${tone}`}>
+        {count}
+      </span>
     </div>
   );
 }
@@ -656,6 +697,90 @@ export default function SalesReportsPage() {
           </Panel>
         </div>
 
+
+        {/* Forward-looking, and deliberately counts rather than a list. */}
+        {data?.week_ahead && (
+          <Panel
+            title="Week ahead"
+            hint={`${new Date(data.week_ahead.from).toLocaleDateString(undefined, {
+              day: "numeric", month: "short",
+            })} – ${new Date(data.week_ahead.to).toLocaleDateString(undefined, {
+              day: "numeric", month: "short",
+            })}`}
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6">
+              <div className="divide-y divide-slate-50">
+                <CoverageRow
+                  label="Meetings & visits"
+                  count={data.week_ahead.events.count}
+                  byOwner={data.week_ahead.events.by_owner}
+                  tone="text-blue-700"
+                />
+                <CoverageRow
+                  label="Follow-ups due"
+                  count={data.week_ahead.follow_ups.count}
+                  byOwner={data.week_ahead.follow_ups.by_owner}
+                  tone="text-violet-700"
+                />
+                <CoverageRow
+                  label="Tasks due"
+                  count={data.week_ahead.tasks.count}
+                  byOwner={data.week_ahead.tasks.by_owner}
+                  tone="text-slate-800"
+                />
+              </div>
+
+              <div className="mt-3 lg:mt-0 space-y-1.5">
+                {data.week_ahead.warnings.overdue_tasks > 0 && (
+                  <div className="flex items-center gap-2 px-2.5 py-1.5 bg-red-50 border border-red-100 rounded text-xs text-red-700">
+                    <span className="font-semibold tabular-nums">
+                      {data.week_ahead.warnings.overdue_tasks}
+                    </span>
+                    <span>task(s) already overdue</span>
+                  </div>
+                )}
+                {/* The real finding: a "due this week" count means little while
+                    most open work carries no date at all. */}
+                {data.week_ahead.warnings.undated_tasks > 0 && (
+                  <div className="flex items-center gap-2 px-2.5 py-1.5 bg-amber-50 border border-amber-100 rounded text-xs text-amber-800">
+                    <span className="font-semibold tabular-nums">
+                      {data.week_ahead.warnings.undated_tasks}
+                    </span>
+                    <span>
+                      of {data.week_ahead.warnings.open_tasks} open tasks have no
+                      due date, so they cannot appear above
+                    </span>
+                  </div>
+                )}
+                {data.week_ahead.warnings.unlinked_events > 0 && (
+                  <div className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-50 border border-slate-100 rounded text-xs text-slate-600">
+                    <span className="font-semibold tabular-nums">
+                      {data.week_ahead.warnings.unlinked_events}
+                    </span>
+                    <span>calendar event(s) not linked to a lead</span>
+                  </div>
+                )}
+                {data.week_ahead.events.items.length > 0 && (
+                  <div className="pt-1">
+                    {data.week_ahead.events.items.map((e) => (
+                      <div
+                        key={e.id}
+                        className="flex items-baseline justify-between gap-3 py-1 text-xs"
+                      >
+                        <span className="truncate text-slate-600">{e.title}</span>
+                        <span className="shrink-0 text-slate-400">
+                          {new Date(e.at).toLocaleDateString(undefined, {
+                            weekday: "short", day: "numeric",
+                          })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </Panel>
+        )}
 
         {/* Deliberately last and deliberately clickable - this is the part
             somebody is meant to act on today. */}
