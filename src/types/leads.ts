@@ -724,21 +724,6 @@ export interface LeadTask {
 }
 
 // Lead Statistics
-export interface LeadStatistics {
-  total: number;
-  new: number;
-  qualified: number;
-  disqualified: number;
-  requirement_discussion: number;
-  proposal_discussion: number;
-  won: number;
-  lost: number;
-  pipeline_value: number;
-  won_value: number;
-  this_month_new: number;
-  this_month_won: number;
-  needs_followup: number;
-}
 
 // Tenant Lead Settings
 export interface TenantLeadSettings {

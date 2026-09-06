@@ -1,578 +1,506 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import type { LeadStatistics, LeadStage } from "@/types/leads";
-import { LeadStageLabels, LeadStageColors } from "@/types/leads";
-import { PageLayout, PageHeader, StatBadge } from "@/components/ui/PageLayout";
-import { ChartBarIcon } from "@heroicons/react/24/outline";
+import Link from "next/link";
+import { LeadStageLabels } from "@/types/leads";
+import { PageLayout, PageHeader } from "@/components/ui/PageLayout";
+import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 import { uiLogger } from "@/lib/logger";
 
-export default function SalesReportsPage() {
-  const [statistics, setStatistics] = useState<LeadStatistics | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [dateRange, setDateRange] = useState<
-    "week" | "month" | "quarter" | "year"
-  >("month");
+/**
+ * Sales reporting.
+ *
+ * Built around the questions a sales review actually asks - where do good leads
+ * come from, who is closing, how long it takes, why we lose - rather than a
+ * count of leads per stage, which says what the list page already shows.
+ *
+ * Everything is computed by /api/sales/leads/analytics so the figures on this
+ * page cannot disagree with each other.
+ */
 
-  // Fetch statistics
-  const fetchStatistics = useCallback(async () => {
+type Preset = "30d" | "90d" | "ytd" | "all";
+
+interface Analytics {
+  range: { from: string; to: string };
+  headline: {
+    new_leads: number;
+    won_leads: number;
+    lost_leads: number;
+    open_leads: number;
+    won_value: number;
+    pipeline_value: number;
+    unvalued_open_leads: number;
+    avg_deal_size: number;
+    win_rate: number;
+    closed_in_range: number;
+  };
+  funnel: Array<{
+    stage: string;
+    reached: number;
+    conversion_from_previous: number;
+    conversion_from_start: number;
+  }>;
+  by_source: Array<{
+    source: string; total: number; won: number; lost: number; open: number;
+    won_value: number; pipeline_value: number; win_rate: number;
+  }>;
+  by_owner: Array<{
+    user_id: string; name: string; total: number; won: number; lost: number;
+    open: number; won_value: number; pipeline_value: number; win_rate: number;
+  }>;
+  velocity: {
+    avg_days_to_win: number;
+    median_days_to_win: number;
+    won_sample: number;
+    stages: Array<{ stage: string; avg_days: number; sample: number }>;
+  };
+  loss_reasons: Array<{ reason: string; count: number }>;
+  attention: {
+    stale: Array<{
+      id: string; lead_number: string | null; client: string | null;
+      stage: string; owner: string; days_quiet: number; value: number;
+    }>;
+    overdue_follow_ups: Array<{
+      id: string; lead_number: string | null; client: string | null;
+      owner: string; due: string | null;
+    }>;
+  };
+  trend: Array<{ month: string; created: number; won: number; won_value: number }>;
+}
+
+const PRESETS: Array<{ key: Preset; label: string }> = [
+  { key: "30d", label: "30 days" },
+  { key: "90d", label: "90 days" },
+  { key: "ytd", label: "Year to date" },
+  { key: "all", label: "All time" },
+];
+
+const rangeFor = (preset: Preset) => {
+  const to = new Date();
+  if (preset === "all") return { from: "2000-01-01", to: to.toISOString().slice(0, 10) };
+  if (preset === "ytd")
+    return { from: `${to.getFullYear()}-01-01`, to: to.toISOString().slice(0, 10) };
+  const days = preset === "30d" ? 30 : 90;
+  return {
+    from: new Date(to.getTime() - days * 86400000).toISOString().slice(0, 10),
+    to: to.toISOString().slice(0, 10),
+  };
+};
+
+/** Lakhs and crores - a rupee figure in millions reads as a foreign currency. */
+const money = (amount: number) => {
+  if (!amount) return "₹0";
+  if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
+  if (amount >= 100000) return `₹${(amount / 100000).toFixed(1)} L`;
+  return `₹${Math.round(amount).toLocaleString("en-IN")}`;
+};
+
+const humanise = (value: string) =>
+  value
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+
+function Metric({
+  label,
+  value,
+  hint,
+  tone = "slate",
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: "slate" | "green" | "blue" | "amber";
+}) {
+  const tones = {
+    slate: "text-slate-900",
+    green: "text-green-700",
+    blue: "text-blue-700",
+    amber: "text-amber-700",
+  };
+  return (
+    <div className="bg-white rounded-lg border border-slate-200 p-4">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className={`mt-1 text-2xl font-semibold tabular-nums ${tones[tone]}`}>
+        {value}
+      </p>
+      {hint && <p className="mt-0.5 text-[11px] text-slate-400">{hint}</p>}
+    </div>
+  );
+}
+
+function Panel({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-white rounded-lg border border-slate-200 p-4">
+      <div className="flex items-baseline justify-between gap-3 mb-3">
+        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+        {hint && <span className="text-[11px] text-slate-400">{hint}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+export default function SalesReportsPage() {
+  const [data, setData] = useState<Analytics | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [preset, setPreset] = useState<Preset>("90d");
+
+  const load = useCallback(async () => {
     try {
       setIsLoading(true);
-      uiLogger.info("Fetching sales statistics...", {
-        module: "SalesReportsPage",
-        action: "fetch_statistics",
-      });
-      const response = await fetch("/api/sales/leads/statistics");
-      if (!response.ok) throw new Error("Failed to fetch statistics");
-
-      const data = await response.json();
-      setStatistics(data.statistics);
-      uiLogger.info("Statistics loaded successfully", {
-        module: "SalesReportsPage",
-        action: "statistics_loaded",
-      });
-    } catch (err) {
-      uiLogger.error("Failed to fetch statistics", err as Error, {
-        module: "SalesReportsPage",
-      });
+      const { from, to } = rangeFor(preset);
+      const response = await fetch(
+        `/api/sales/leads/analytics?from=${from}&to=${to}`
+      );
+      if (!response.ok) throw new Error("Failed to load analytics");
+      setData(await response.json());
+    } catch (error) {
+      uiLogger.error("Error loading sales analytics", error);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [preset]);
 
   useEffect(() => {
-    fetchStatistics();
-  }, [fetchStatistics]);
+    void load();
+  }, [load]);
 
-  // Format currency
-  const formatCurrency = (amount: number | null) => {
-    if (!amount) return "₹0";
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  // Calculate conversion rate
-  const conversionRate = statistics
-    ? statistics.total > 0
-      ? ((statistics.won / statistics.total) * 100).toFixed(1)
-      : "0.0"
-    : "0.0";
-
-  // Calculate pipeline stages for funnel
-  const pipelineStages: {
-    stage: LeadStage;
-    count: number;
-    percentage: number;
-  }[] = statistics
-    ? [
-        {
-          stage: "new",
-          count: statistics.new,
-          percentage:
-            statistics.total > 0
-              ? (statistics.new / statistics.total) * 100
-              : 0,
-        },
-        {
-          stage: "qualified",
-          count: statistics.qualified,
-          percentage:
-            statistics.total > 0
-              ? (statistics.qualified / statistics.total) * 100
-              : 0,
-        },
-        {
-          stage: "requirement_discussion",
-          count: statistics.requirement_discussion,
-          percentage:
-            statistics.total > 0
-              ? (statistics.requirement_discussion / statistics.total) * 100
-              : 0,
-        },
-        {
-          stage: "proposal_discussion",
-          count: statistics.proposal_discussion,
-          percentage:
-            statistics.total > 0
-              ? (statistics.proposal_discussion / statistics.total) * 100
-              : 0,
-        },
-        {
-          stage: "won",
-          count: statistics.won,
-          percentage:
-            statistics.total > 0
-              ? (statistics.won / statistics.total) * 100
-              : 0,
-        },
-      ]
-    : [];
+  const h = data?.headline;
+  const maxFunnel = data?.funnel?.[0]?.reached || 1;
 
   return (
-    <PageLayout isLoading={isLoading} loadingText="Loading reports...">
-      {/* Header */}
+    <PageLayout isLoading={isLoading && !data} loadingText="Loading reports...">
       <PageHeader
         title="Sales Reports"
-        subtitle="Analytics and insights for your sales pipeline"
+        subtitle="Pipeline, sources, and what needs attention"
         breadcrumbs={[{ label: "Reports" }]}
         basePath={{ label: "Sales", href: "/dashboard/sales" }}
-        icon={<ChartBarIcon className="w-5 h-5 text-white" />}
-        iconBgClass="from-purple-500 to-purple-600"
-        stats={
-          statistics ? (
-            <>
-              <StatBadge label="Leads" value={statistics.total} color="slate" />
-              <StatBadge
-                label="Conv."
-                value={`${conversionRate}%`}
-                color="green"
-              />
-              <StatBadge
-                label="Pipeline"
-                value={formatCurrency(statistics.pipeline_value)}
-                color="blue"
-              />
-            </>
-          ) : undefined
-        }
         actions={
-          <div className="flex items-center gap-1.5">
-            {(["week", "month", "quarter", "year"] as const).map((range) => (
-              <button
-                key={range}
-                onClick={() => setDateRange(range)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  dateRange === range
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-                }`}
-              >
-                {range.charAt(0).toUpperCase() + range.slice(1)}
-              </button>
-            ))}
-          </div>
+          <a
+            href="/api/sales/leads/export"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium"
+          >
+            <ArrowDownTrayIcon className="w-4 h-4" />
+            Export CSV
+          </a>
         }
       />
 
-      {statistics && (
-        <>
-          {/* Key Metrics - More compact */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-slate-500 text-xs">Total Leads</span>
-                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                  <svg
-                    className="w-4 h-4 text-blue-600"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
-                  </svg>
-                </div>
-              </div>
-              <p className="text-2xl font-bold text-slate-900">
-                {statistics?.total || 0}
-              </p>
-              <p className="text-xs text-green-600">
-                +{statistics?.this_month_new || 0} this month
-              </p>
-            </div>
+      <div className="p-4 space-y-4">
+        {/* The range applies to intake and revenue, not to the whole page -
+            pipeline and what needs attention are always "right now". */}
+        <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-lg w-fit">
+          {PRESETS.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => setPreset(p.key)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                preset === p.key
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
 
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-slate-500 text-xs">Pipeline Value</span>
-                <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
-                  <svg
-                    className="w-4 h-4 text-purple-600"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                </div>
-              </div>
-              <p className="text-2xl font-bold text-slate-900">
-                {formatCurrency(statistics?.pipeline_value || 0)}
-              </p>
-              <p className="text-xs text-slate-500">In active stages</p>
-            </div>
-
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-slate-500 text-xs">Won Value</span>
-                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
-                  <svg
-                    className="w-4 h-4 text-green-600"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                </div>
-              </div>
-              <p className="text-2xl font-bold text-green-600">
-                {formatCurrency(statistics?.won_value || 0)}
-              </p>
-              <p className="text-xs text-green-600">
-                {statistics?.this_month_won || 0} won this month
-              </p>
-            </div>
-
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-slate-500 text-xs">Conversion Rate</span>
-                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
-                  <svg
-                    className="w-4 h-4 text-amber-600"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                    />
-                  </svg>
-                </div>
-              </div>
-              <p className="text-2xl font-bold text-slate-900">
-                {conversionRate}%
-              </p>
-              <p className="text-xs text-slate-500">Leads to Won</p>
-            </div>
+        {h && (
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <Metric
+              label="Open pipeline"
+              value={money(h.pipeline_value)}
+              hint={
+                h.unvalued_open_leads
+                  ? `${h.open_leads} leads · ${h.unvalued_open_leads} not yet valued`
+                  : `${h.open_leads} open leads`
+              }
+              tone="blue"
+            />
+            <Metric
+              label="Won in period"
+              value={money(h.won_value)}
+              hint={`${h.won_leads} deal${h.won_leads === 1 ? "" : "s"}`}
+              tone="green"
+            />
+            <Metric
+              label="Win rate"
+              value={`${h.win_rate.toFixed(0)}%`}
+              hint={`${h.won_leads} of ${h.closed_in_range} closed`}
+            />
+            <Metric
+              label="Average deal"
+              value={money(h.avg_deal_size)}
+              hint="Won in period"
+            />
+            <Metric
+              label="New leads"
+              value={String(h.new_leads)}
+              hint="Created in period"
+            />
           </div>
+        )}
 
-          {/* Charts Row - More compact */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Sales Funnel */}
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
-              <h3 className="text-sm font-semibold text-slate-900 mb-4">
-                Sales Funnel
-              </h3>
-              <div className="space-y-3">
-                {pipelineStages.map((item, index) => {
-                  const colors = LeadStageColors[item.stage];
-                  const widthPercent = Math.max(item.percentage, 10);
-
-                  return (
-                    <div key={item.stage}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-medium text-slate-700">
-                          {LeadStageLabels[item.stage]}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Funnel from stage history: a won lead passed through qualified, so
+              counting where leads sit today understates every earlier stage. */}
+          <Panel title="Funnel" hint="Leads that ever reached each stage">
+            <div className="space-y-2">
+              {data?.funnel.map((step, i) => (
+                <div key={step.stage}>
+                  <div className="flex items-baseline justify-between text-sm">
+                    <span className="text-slate-700">
+                      {LeadStageLabels[step.stage as keyof typeof LeadStageLabels] ||
+                        humanise(step.stage)}
+                    </span>
+                    <span className="tabular-nums text-slate-900 font-medium">
+                      {step.reached}
+                      {i > 0 && (
+                        <span className="ml-2 text-xs font-normal text-slate-400">
+                          {step.conversion_from_previous.toFixed(0)}%
                         </span>
-                        <span className="text-xs text-slate-500">
-                          {item.count} ({item.percentage.toFixed(1)}%)
+                      )}
+                    </span>
+                  </div>
+                  <div className="mt-1 h-2 bg-slate-100 rounded">
+                    <div
+                      className="h-2 bg-blue-500 rounded"
+                      style={{
+                        width: `${Math.max((step.reached / maxFunnel) * 100, 2)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel
+            title="How long it takes"
+            hint={`${data?.velocity.won_sample || 0} won deals`}
+          >
+            <div className="flex gap-6 mb-3">
+              <div>
+                <p className="text-2xl font-semibold text-slate-900 tabular-nums">
+                  {Math.round(data?.velocity.median_days_to_win || 0)}
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  median days to win
+                </p>
+              </div>
+              <div>
+                <p className="text-2xl font-semibold text-slate-400 tabular-nums">
+                  {Math.round(data?.velocity.avg_days_to_win || 0)}
+                </p>
+                <p className="text-[11px] text-slate-400">average</p>
+              </div>
+            </div>
+            {data?.velocity.stages.length ? (
+              <div className="space-y-1.5 pt-3 border-t border-slate-100">
+                {data.velocity.stages.map((s) => (
+                  <div
+                    key={s.stage}
+                    className="flex items-baseline justify-between text-sm"
+                  >
+                    <span className="text-slate-600">
+                      {LeadStageLabels[s.stage as keyof typeof LeadStageLabels] ||
+                        humanise(s.stage)}
+                    </span>
+                    <span className="tabular-nums text-slate-700">
+                      {s.avg_days.toFixed(1)} days
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">
+                Not enough stage history yet.
+              </p>
+            )}
+          </Panel>
+        </div>
+
+        {/* The most consequential table on the page: it decides where the next
+            marketing rupee goes. */}
+        <Panel title="Where leads come from" hint="Win rate is won ÷ closed">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
+                  <th className="py-2 font-medium">Source</th>
+                  <th className="py-2 font-medium text-right">Leads</th>
+                  <th className="py-2 font-medium text-right">Open</th>
+                  <th className="py-2 font-medium text-right">Won</th>
+                  <th className="py-2 font-medium text-right">Win rate</th>
+                  <th className="py-2 font-medium text-right">Won value</th>
+                  <th className="py-2 font-medium text-right">In pipeline</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {data?.by_source.map((row) => (
+                  <tr key={row.source}>
+                    <td className="py-2 text-slate-800">{humanise(row.source)}</td>
+                    <td className="py-2 text-right tabular-nums">{row.total}</td>
+                    <td className="py-2 text-right tabular-nums text-slate-500">
+                      {row.open}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">{row.won}</td>
+                    <td className="py-2 text-right tabular-nums">
+                      {row.won + row.lost ? `${row.win_rate.toFixed(0)}%` : "—"}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">
+                      {row.won_value ? money(row.won_value) : "—"}
+                    </td>
+                    <td className="py-2 text-right tabular-nums text-slate-500">
+                      {row.pipeline_value ? money(row.pipeline_value) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Panel title="By owner" hint="Win rate is won ÷ closed">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
+                  <th className="py-2 font-medium">Owner</th>
+                  <th className="py-2 font-medium text-right">Open</th>
+                  <th className="py-2 font-medium text-right">Won</th>
+                  <th className="py-2 font-medium text-right">Rate</th>
+                  <th className="py-2 font-medium text-right">Value</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {data?.by_owner.map((row) => (
+                  <tr key={row.user_id}>
+                    <td className="py-2 text-slate-800 truncate max-w-[140px]">
+                      {row.name}
+                    </td>
+                    <td className="py-2 text-right tabular-nums text-slate-500">
+                      {row.open}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">{row.won}</td>
+                    <td className="py-2 text-right tabular-nums">
+                      {row.won + row.lost ? `${row.win_rate.toFixed(0)}%` : "—"}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">
+                      {row.won_value ? money(row.won_value) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Panel>
+
+          <Panel title="Why we lose" hint="Lost and disqualified">
+            {data?.loss_reasons.length ? (
+              <div className="space-y-1.5">
+                {data.loss_reasons.map((r) => {
+                  const top = data.loss_reasons[0].count || 1;
+                  return (
+                    <div key={r.reason}>
+                      <div className="flex items-baseline justify-between text-sm">
+                        <span className="text-slate-700">
+                          {humanise(r.reason)}
+                        </span>
+                        <span className="tabular-nums text-slate-900">
+                          {r.count}
                         </span>
                       </div>
-                      <div className="h-6 bg-slate-100 rounded overflow-hidden">
+                      <div className="mt-1 h-1.5 bg-slate-100 rounded">
                         <div
-                          className={`h-full ${colors.bg} ${colors.text} flex items-center justify-center text-[10px] font-medium transition-all duration-500`}
-                          style={{ width: `${widthPercent}%` }}
-                        >
-                          {item.count}
-                        </div>
+                          className="h-1.5 bg-red-400 rounded"
+                          style={{ width: `${(r.count / top) * 100}%` }}
+                        />
                       </div>
                     </div>
                   );
                 })}
               </div>
-            </div>
+            ) : (
+              <p className="text-sm text-slate-400">Nothing lost yet.</p>
+            )}
+          </Panel>
+        </div>
 
-            {/* Stage Distribution */}
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
-              <h3 className="text-sm font-semibold text-slate-900 mb-4">
-                Lead Status Overview
-              </h3>
-              <div className="grid grid-cols-2 gap-2">
-                {statistics &&
-                  [
-                    { label: "New", count: statistics.new, color: "purple" },
-                    {
-                      label: "Qualified",
-                      count: statistics.qualified,
-                      color: "blue",
-                    },
-                    {
-                      label: "In Discussion",
-                      count:
-                        statistics.requirement_discussion +
-                        statistics.proposal_discussion,
-                      color: "cyan",
-                    },
-                    { label: "Won", count: statistics.won, color: "green" },
-                    { label: "Lost", count: statistics.lost, color: "red" },
-                    {
-                      label: "Disqualified",
-                      count: statistics.disqualified,
-                      color: "gray",
-                    },
-                    {
-                      label: "Follow-up",
-                      count: statistics.needs_followup,
-                      color: "amber",
-                    },
-                  ].map((item) => (
-                    <div
-                      key={item.label}
-                      className="p-3 rounded-lg"
-                      style={{
-                        backgroundColor:
-                          item.color === "purple"
-                            ? "#f3e8ff"
-                            : item.color === "blue"
-                            ? "#dbeafe"
-                            : item.color === "cyan"
-                            ? "#cffafe"
-                            : item.color === "orange"
-                            ? "#ffedd5"
-                            : item.color === "green"
-                            ? "#dcfce7"
-                            : item.color === "red"
-                            ? "#fee2e2"
-                            : item.color === "amber"
-                            ? "#fef3c7"
-                            : "#f3f4f6",
-                      }}
-                    >
-                      <p className="text-xl font-bold text-slate-900">
-                        {item.count}
-                      </p>
-                      <p className="text-xs text-slate-600">{item.label}</p>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Performance Metrics - Compact */}
-          <div className="bg-white rounded-lg border border-slate-200 p-4">
-            <h3 className="text-sm font-semibold text-slate-900 mb-4">
-              Performance Metrics
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Win Rate */}
-              <div className="text-center p-4 bg-green-50 rounded-lg">
-                <div className="w-20 h-20 mx-auto mb-3 relative">
-                  <svg className="w-20 h-20 transform -rotate-90">
-                    <circle
-                      cx="40"
-                      cy="40"
-                      r="32"
-                      stroke="#e5e7eb"
-                      strokeWidth="6"
-                      fill="none"
-                    />
-                    <circle
-                      cx="40"
-                      cy="40"
-                      r="32"
-                      stroke="#22c55e"
-                      strokeWidth="6"
-                      fill="none"
-                      strokeDasharray={`${
-                        parseFloat(conversionRate) * 2.01
-                      } 201`}
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-lg font-bold text-green-600">
-                      {conversionRate}%
+        {/* Deliberately last and deliberately clickable - this is the part
+            somebody is meant to act on today. */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Panel
+            title="Gone quiet"
+            hint="Open, no activity for 14 days"
+          >
+            {data?.attention.stale.length ? (
+              <div className="divide-y divide-slate-50">
+                {data.attention.stale.slice(0, 8).map((l) => (
+                  <Link
+                    key={l.id}
+                    href={`/dashboard/sales/leads/${l.id}`}
+                    className="flex items-baseline justify-between gap-3 py-2 text-sm hover:bg-slate-50 -mx-2 px-2 rounded"
+                  >
+                    <span className="truncate text-slate-800">
+                      {l.client || l.lead_number || "Lead"}
+                      <span className="ml-2 text-xs text-slate-400">
+                        {l.owner}
+                      </span>
                     </span>
-                  </div>
-                </div>
-                <p className="text-sm font-medium text-slate-900">Win Rate</p>
-                <p className="text-xs text-slate-500">
-                  {statistics?.won || 0} of {statistics?.total || 0}
-                </p>
+                    <span className="shrink-0 text-xs text-amber-600 tabular-nums">
+                      {l.days_quiet}d
+                    </span>
+                  </Link>
+                ))}
+                {data.attention.stale.length > 8 && (
+                  <p className="pt-2 text-xs text-slate-400">
+                    and {data.attention.stale.length - 8} more
+                  </p>
+                )}
               </div>
+            ) : (
+              <p className="text-sm text-slate-400">
+                Every open lead has been touched recently.
+              </p>
+            )}
+          </Panel>
 
-              {/* Loss Rate */}
-              <div className="text-center p-4 bg-red-50 rounded-lg">
-                {(() => {
-                  const lossRate =
-                    statistics && statistics.total > 0
-                      ? ((statistics.lost / statistics.total) * 100).toFixed(1)
-                      : "0.0";
-                  return (
-                    <>
-                      <div className="w-20 h-20 mx-auto mb-3 relative">
-                        <svg className="w-20 h-20 transform -rotate-90">
-                          <circle
-                            cx="40"
-                            cy="40"
-                            r="32"
-                            stroke="#e5e7eb"
-                            strokeWidth="6"
-                            fill="none"
-                          />
-                          <circle
-                            cx="40"
-                            cy="40"
-                            r="32"
-                            stroke="#ef4444"
-                            strokeWidth="6"
-                            fill="none"
-                            strokeDasharray={`${
-                              parseFloat(lossRate) * 2.01
-                            } 201`}
-                          />
-                        </svg>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-lg font-bold text-red-600">
-                            {lossRate}%
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-sm font-medium text-slate-900">
-                        Loss Rate
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {statistics?.lost || 0} of {statistics?.total || 0}
-                      </p>
-                    </>
-                  );
-                })()}
-              </div>
-
-              {/* Active Pipeline */}
-              <div className="text-center p-4 bg-blue-50 rounded-lg">
-                {(() => {
-                  const activeCount = statistics
-                    ? statistics.total -
-                      statistics.won -
-                      statistics.lost -
-                      statistics.disqualified
-                    : 0;
-                  const activeRate =
-                    statistics && statistics.total > 0
-                      ? ((activeCount / statistics.total) * 100).toFixed(1)
-                      : "0.0";
-                  return (
-                    <>
-                      <div className="w-20 h-20 mx-auto mb-3 relative">
-                        <svg className="w-20 h-20 transform -rotate-90">
-                          <circle
-                            cx="40"
-                            cy="40"
-                            r="32"
-                            stroke="#e5e7eb"
-                            strokeWidth="6"
-                            fill="none"
-                          />
-                          <circle
-                            cx="40"
-                            cy="40"
-                            r="32"
-                            stroke="#3b82f6"
-                            strokeWidth="6"
-                            fill="none"
-                            strokeDasharray={`${
-                              parseFloat(activeRate) * 2.01
-                            } 201`}
-                          />
-                        </svg>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-lg font-bold text-blue-600">
-                            {activeRate}%
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-sm font-medium text-slate-900">
-                        Active Pipeline
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {activeCount} leads
-                      </p>
-                    </>
-                  );
-                })()}
-              </div>
-            </div>
-          </div>
-
-          {/* Action Items - Compact */}
-          <div className="bg-white rounded-lg border border-slate-200 p-4">
-            <h3 className="text-sm font-semibold text-slate-900 mb-3">
-              Action Required
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-                  <svg
-                    className="w-5 h-5 text-amber-600"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
+          <Panel title="Follow-ups overdue" hint="Scheduled, not yet done">
+            {data?.attention.overdue_follow_ups.length ? (
+              <div className="divide-y divide-slate-50">
+                {data.attention.overdue_follow_ups.slice(0, 8).map((l) => (
+                  <Link
+                    key={l.id}
+                    href={`/dashboard/sales/leads/${l.id}`}
+                    className="flex items-baseline justify-between gap-3 py-2 text-sm hover:bg-slate-50 -mx-2 px-2 rounded"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-xl font-bold text-amber-700">
-                    {statistics?.needs_followup || 0}
-                  </p>
-                  <p className="text-xs text-amber-600">
-                    Leads need follow-up (3+ days)
-                  </p>
-                </div>
+                    <span className="truncate text-slate-800">
+                      {l.client || l.lead_number || "Lead"}
+                      <span className="ml-2 text-xs text-slate-400">
+                        {l.owner}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-xs text-red-600">
+                      {l.due ? new Date(l.due).toLocaleDateString() : ""}
+                    </span>
+                  </Link>
+                ))}
               </div>
-
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-                  <svg
-                    className="w-5 h-5 text-blue-600"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-xl font-bold text-blue-700">
-                    {statistics?.new || 0}
-                  </p>
-                  <p className="text-xs text-blue-600">New leads to qualify</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
+            ) : (
+              <p className="text-sm text-slate-400">Nothing overdue.</p>
+            )}
+          </Panel>
+        </div>
+      </div>
     </PageLayout>
   );
 }
