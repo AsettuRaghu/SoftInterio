@@ -220,4 +220,20 @@ already used for a print keeps its id. Re-run after applying migration
 
 ---
 
+## backfill-lead-numbers.js
+
+Gives a lead number to leads created before numbering was applied.
+
+```bash
+node scripts/backfill-lead-numbers.js --dry
+node scripts/backfill-lead-numbers.js
+```
+
+Uses the existing `LD-YYYYMM-NNN` format, taking the month from the lead's own
+creation date and filling the lowest sequence numbers still free for that
+tenant and month. Only touches rows where `lead_number` is null, so it is safe
+to re-run.
+
+---
+
 That's it. Run `--dry` first on anything that writes.
