@@ -1,12 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import {
+  logQuotationActivity,
+  quotationLabel,
+} from "@/lib/quotations/log-activity";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
 // PATCH /api/quotations/[id]/status - Update quotation status
+/** Reads as an event on a timeline rather than a state name. */
+const STATUS_WORDING: Record<string, string> = {
+  draft: "moved back to draft",
+  sent: "sent to the client",
+  viewed: "viewed by the client",
+  approved: "approved",
+  rejected: "rejected",
+  expired: "marked expired",
+  cancelled: "cancelled",
+};
+
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     // Protect API route
@@ -115,6 +130,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         { status: 500 }
       );
     }
+
+    // A status move is the event people ask about afterwards - when did this
+    // go out, when was it approved - so it belongs on the timeline of whatever
+    // the quotation hangs off.
+    await logQuotationActivity(supabase, {
+      quotation: updated,
+      type: "quotation_status_changed",
+      title: `${quotationLabel(updated)} ${STATUS_WORDING[status] || status}`,
+      description: notes || undefined,
+      userId: user.id,
+    });
 
     return NextResponse.json({
       success: true,

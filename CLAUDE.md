@@ -26,6 +26,12 @@ runs. Searching the TypeScript for quotation creation finds nothing. Anything
 that should shape a new quotation has to fill the shell afterwards; see the
 `proposal_discussion` block in the lead transition route.
 
+The same function writes the timeline entry for it. Quotation events reach a
+timeline through `src/lib/quotations/log-activity.ts`, which picks the lead or
+project table for you — three events are recorded: created, revised, and status
+changed. Editing a quotation is deliberately not logged; the builder saves
+often and one entry per save would bury everything else.
+
 ### One family per cost item category, four tiers
 Categories that carry a Basic/Standard/Premium/Luxury ladder hold exactly one
 family, because Reprice moves a whole category up or down a grade. Hardware was

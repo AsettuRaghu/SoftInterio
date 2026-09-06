@@ -3,6 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { copyScopeToQuotation } from "@/lib/quotations/scope-to-quotation";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { getQuotationNumberAndVersion } from "@/utils/quotation-number-generator";
+import {
+  logQuotationActivity,
+  quotationLabel,
+} from "@/lib/quotations/log-activity";
 
 // GET /api/quotations - List all quotations with lead data
 export async function GET(request: NextRequest) {
@@ -392,6 +396,18 @@ export async function POST(request: NextRequest) {
         project_id || null
       );
     }
+
+    await logQuotationActivity(supabase, {
+      quotation: newQuotation,
+      type: "quotation_created",
+      title: `${quotationLabel(newQuotation)} created`,
+      description: template_id
+        ? "Created from a template"
+        : from_scope
+        ? `Built from the Spaces tab - ${generated.spaces} space(s), ${generated.components} component(s)`
+        : undefined,
+      userId: user.id,
+    });
 
     return NextResponse.json({
       success: true,

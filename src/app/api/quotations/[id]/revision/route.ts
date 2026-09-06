@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import {
+  logQuotationActivity,
+  quotationLabel,
+} from "@/lib/quotations/log-activity";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -67,13 +71,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           .single();
 
         if (userData?.tenant_id) {
-          await supabase.from("lead_activities").insert({
-            lead_id: newQuotation.lead_id,
-            tenant_id: userData.tenant_id,
-            activity_type: "quotation_created",
-            title: `Quotation revision v${newQuotation.version} created`,
-            description: `Created new version (v${newQuotation.version}) of quotation ${newQuotation.quotation_number}`,
-            created_by: user.id,
+          // Was activity_type "quotation_created", which is not a value the
+          // lead_activity_type_enum accepts - the insert failed every time and
+          // the surrounding catch swallowed it, so revisions have never
+          // appeared on a timeline.
+          await logQuotationActivity(supabase, {
+            quotation: { ...newQuotation, tenant_id: userData.tenant_id },
+            type: "quotation_revised",
+            title: `${quotationLabel(newQuotation)} created as a revision`,
+            description: `Revision of ${newQuotation.quotation_number}`,
+            userId: user.id,
           });
         }
       } catch (activityError) {
