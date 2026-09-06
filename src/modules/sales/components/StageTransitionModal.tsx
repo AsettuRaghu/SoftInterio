@@ -79,6 +79,11 @@ export function StageTransitionModal({
   const [selectedStage, setSelectedStage] = useState<LeadStage | "">("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Set when the API refuses a win because work is still open on the lead. */
+  const [pendingWork, setPendingWork] = useState<{
+    tasks: Array<{ id: string; title: string; status: string; due_date?: string | null }>;
+    followUps: Array<{ id: string; follow_up_at: string; excerpt: string }>;
+  } | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [projectManagers, setProjectManagers] = useState<any[]>([]);
   const [loadingManagers, setLoadingManagers] = useState(false);
@@ -222,6 +227,7 @@ export function StageTransitionModal({
 
     setIsSubmitting(true);
     setError(null);
+    setPendingWork(null);
     setSuccessMessage(null);
 
     try {
@@ -244,7 +250,17 @@ export function StageTransitionModal({
       const data = await response.json();
 
       if (!response.ok) {
-        // Handle both error and non-200 responses
+        // Outstanding work gets its own treatment: the seller needs the list,
+        // not a sentence saying a list exists.
+        if (data.code === "LEAD_HAS_PENDING_WORK") {
+          setPendingWork({
+            tasks: data.pending_tasks || [],
+            followUps: data.pending_follow_ups || [],
+          });
+          setIsSubmitting(false);
+          return;
+        }
+
         const errorMessage =
           data.error || data.message || "Failed to transition stage";
         const details = data.details ? `\n${data.details}` : "";
@@ -320,6 +336,63 @@ export function StageTransitionModal({
           {error && (
             <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
               {error}
+            </div>
+          )}
+
+          {/* Names what is outstanding. A seller told "there is pending work"
+              has to go and find it; a seller shown the list can act on it. */}
+          {pendingWork && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-sm font-medium text-amber-900">
+                Finish these before marking the lead won
+              </p>
+              <p className="mt-0.5 text-xs text-amber-700">
+                Complete them, or cancel the ones that no longer apply.
+              </p>
+
+              {pendingWork.tasks.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-amber-700">
+                    Open tasks ({pendingWork.tasks.length})
+                  </p>
+                  <ul className="mt-1 space-y-1">
+                    {pendingWork.tasks.map((task) => (
+                      <li
+                        key={task.id}
+                        className="flex items-baseline justify-between gap-3 text-sm text-amber-900"
+                      >
+                        <span className="truncate">{task.title}</span>
+                        <span className="shrink-0 text-xs text-amber-600">
+                          {task.due_date
+                            ? new Date(task.due_date).toLocaleDateString()
+                            : task.status.replace("_", " ")}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {pendingWork.followUps.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-amber-700">
+                    Follow-ups not yet dealt with ({pendingWork.followUps.length})
+                  </p>
+                  <ul className="mt-1 space-y-1">
+                    {pendingWork.followUps.map((note) => (
+                      <li
+                        key={note.id}
+                        className="flex items-baseline justify-between gap-3 text-sm text-amber-900"
+                      >
+                        <span className="truncate">{note.excerpt}</span>
+                        <span className="shrink-0 text-xs text-amber-600">
+                          {new Date(note.follow_up_at).toLocaleDateString()}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 

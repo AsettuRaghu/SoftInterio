@@ -11,6 +11,10 @@ import {
 } from "@/types/leads";
 import { logLeadActivity } from "@/lib/activity/log";
 import { generateUniqueProjectNumber } from "@/utils/project-number-generator";
+import {
+  getPendingLeadWork,
+  cancelPendingLeadWork,
+} from "@/lib/leads/pending-work";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -204,6 +208,41 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Winning a lead closes it, so nothing may be left hanging on it. Checked
+    // before any write: a lead that is half-won with a project half-created is
+    // far harder to recover from than one that was simply refused.
+    //
+    // Only for "won". A lost or disqualified lead has outstanding work too, and
+    // demanding someone tick off tasks for a deal that is dead is busywork -
+    // those are cancelled further down instead.
+    if (to_stage === "won") {
+      const pending = await getPendingLeadWork(supabase, id);
+      if (pending.tasks.length > 0 || pending.followUps.length > 0) {
+        return NextResponse.json(
+          {
+            error:
+              "This lead still has work outstanding. Complete or cancel it before marking the lead won.",
+            code: "LEAD_HAS_PENDING_WORK",
+            pending_tasks: pending.tasks.map((t) => ({
+              id: t.id,
+              title: t.title,
+              status: t.status,
+              due_date: t.due_date,
+            })),
+            pending_follow_ups: pending.followUps.map((n) => ({
+              id: n.id,
+              follow_up_at: n.follow_up_at,
+              excerpt:
+                n.content.length > 80
+                  ? `${n.content.slice(0, 80)}...`
+                  : n.content,
+            })),
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     // Every date this transition would write has to make sense before anything
     // is persisted. The modal guards these too, but min= on a date input is a
     // browser courtesy rather than a constraint, and it is absent entirely for
@@ -380,6 +419,38 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { error: "Failed to update lead stage" },
         { status: 500 }
       );
+    }
+
+    // A dead lead's tasks are not still to do. Cancelling them with the reason
+    // keeps the record that they existed while taking them off everyone's list,
+    // which is better than leaving them to sit as permanently overdue work on
+    // a deal nobody is pursuing.
+    if (["lost", "disqualified"].includes(to_stage)) {
+      const reasonText =
+        to_stage === "lost"
+          ? body.lost_reason || "Lead lost"
+          : body.disqualification_reason || "Lead disqualified";
+      const cancelled = await cancelPendingLeadWork(
+        supabase,
+        id,
+        user.id,
+        `Lead ${to_stage}: ${reasonText}`
+      );
+
+      if (cancelled.tasks > 0 || cancelled.followUps > 0) {
+        const parts = [];
+        if (cancelled.tasks) parts.push(`${cancelled.tasks} task(s) cancelled`);
+        if (cancelled.followUps)
+          parts.push(`${cancelled.followUps} follow-up(s) closed`);
+        await logLeadActivity(supabase, {
+          leadId: id,
+          tenantId: lead.tenant_id,
+          userId: user.id,
+          type: "other",
+          title: "Outstanding work closed",
+          description: `${parts.join(", ")} because the lead was marked ${to_stage}.`,
+        });
+      }
     }
 
     // Reaching proposal_discussion auto-creates a quotation, but not here -
