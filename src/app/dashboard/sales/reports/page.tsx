@@ -315,19 +315,26 @@ function Panel({
 export default function SalesReportsPage() {
   const [data, setData] = useState<Analytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [preset, setPreset] = useState<Preset>("90d");
 
   const load = useCallback(async () => {
     try {
       setIsLoading(true);
+      setError(null);
       const { from, to } = rangeFor(preset);
       const response = await fetch(
         `/api/sales/leads/analytics?from=${from}&to=${to}`
       );
       if (!response.ok) throw new Error("Failed to load analytics");
       setData(await response.json());
-    } catch (error) {
-      uiLogger.error("Error loading sales analytics", error);
+    } catch (err) {
+      // Logging alone left a failed load looking like a tenant with no data -
+      // empty panels, no explanation, nothing to click.
+      uiLogger.error("Error loading sales analytics", err);
+      setError(
+        err instanceof Error ? err.message : "Could not load the report"
+      );
     } finally {
       setIsLoading(false);
     }
@@ -359,6 +366,18 @@ export default function SalesReportsPage() {
       />
 
       <div className="p-4 space-y-3">
+        {error && (
+          <div className="flex items-center justify-between gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-700">{error}</p>
+            <button
+              onClick={() => void load()}
+              className="shrink-0 px-3 py-1.5 text-sm font-medium text-red-700 border border-red-300 rounded-md hover:bg-red-100"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* The range applies to intake and revenue, not to the whole page -
             pipeline and what needs attention are always "right now". */}
         <div className="flex items-center gap-1.5">
@@ -366,7 +385,8 @@ export default function SalesReportsPage() {
             <button
               key={p.key}
               onClick={() => setPreset(p.key)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              disabled={isLoading}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-60 ${
                 preset === p.key
                   ? "bg-blue-600 text-white"
                   : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
@@ -377,6 +397,10 @@ export default function SalesReportsPage() {
           ))}
         </div>
 
+        {/* A refetch keeps the previous figures on screen, which is better than
+            a blank page - but they belong to the old range until the new ones
+            land, so they are dimmed rather than presented as current. */}
+        <div className={isLoading && data ? "opacity-50 transition-opacity" : ""}>
         {h && (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             <Metric
@@ -559,6 +583,13 @@ export default function SalesReportsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
+                {!data?.by_source.length && (
+                  <tr>
+                    <td colSpan={7} className="py-6 text-center text-sm text-slate-400">
+                      No leads in this period yet.
+                    </td>
+                  </tr>
+                )}
                 {data?.by_source.map((row) => (
                   <tr key={row.source}>
                     <td className="py-1.5 text-slate-800">{humanise(row.source)}</td>
@@ -595,7 +626,10 @@ export default function SalesReportsPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Panel title="By owner" hint="Win rate is won ÷ closed">
-            <table className="w-full text-sm">
+            {/* Five columns in half a row: narrow enough on a laptop, tight on
+                a phone, so it scrolls rather than squashing the numbers. */}
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[320px]">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
                   <th className="py-1.5 font-medium">Owner</th>
@@ -606,6 +640,13 @@ export default function SalesReportsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
+                {!data?.by_owner.length && (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-sm text-slate-400">
+                      No leads assigned yet.
+                    </td>
+                  </tr>
+                )}
                 {data?.by_owner.map((row) => (
                   <tr key={row.user_id}>
                     <td className="py-1.5 text-slate-800 truncate max-w-[140px]">
@@ -635,6 +676,7 @@ export default function SalesReportsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </Panel>
 
         <Panel title="Download" hint="Opens in Excel or Sheets">
@@ -846,6 +888,7 @@ export default function SalesReportsPage() {
               <p className="text-sm text-slate-400">Nothing overdue.</p>
             )}
           </Panel>
+        </div>
         </div>
       </div>
     </PageLayout>
