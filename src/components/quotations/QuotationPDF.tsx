@@ -185,6 +185,8 @@ const styles = StyleSheet.create({
   },
   headerRight: {
     alignItems: "flex-end",
+    // Capped so a long client email cannot squeeze the company block beside it.
+    maxWidth: 250,
   },
   logo: {
     width: 120,
@@ -209,7 +211,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   quotationNumber: {
-    fontSize: 12,
+    fontSize: 10.5,
     color: "#475569",
   },
   quotationMeta: {
@@ -292,18 +294,17 @@ const styles = StyleSheet.create({
   },
 
   // Space Section
-  clientBar: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    backgroundColor: "#f8fafc",
-    paddingVertical: 7,
-    paddingHorizontal: 9,
-    borderRadius: 3,
-    marginBottom: 12,
+  headerClient: {
+    marginTop: 6,
+    paddingTop: 5,
+    borderTopWidth: 0.5,
+    borderTopColor: "#cbd5e1",
+    alignItems: "flex-end",
   },
-  clientField: {
-    width: "25%",
-    paddingRight: 8,
+  headerClientName: {
+    fontSize: 10,
+    fontWeight: "bold",
+    color: "#0f172a",
   },
 
   spaceSection: {
@@ -576,9 +577,14 @@ const styles = StyleSheet.create({
   textRight: { textAlign: "right" },
   textCenter: { textAlign: "center" },
   flexRow: { flexDirection: "row" },
-  flex1: { flex: 1 },
-  flex2: { flex: 2 },
-  flex3: { flex: 3 },
+  // Itemised table columns. Fixed rather than flexed: at 8pt "Dimensions" and
+  // "Amount" wrapped onto two lines in a flex-1 share, and a fixed Amount
+  // column keeps these figures in the same place as the component and room
+  // totals above them.
+  colItem: { flex: 1, paddingRight: 6 },
+  colMeasure: { width: 92, textAlign: "center" },
+  colRate: { width: 58, textAlign: "right" },
+  colAmount: { width: 95, textAlign: "right" },
 });
 
 // ============================================================================
@@ -852,38 +858,40 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
               </>
             )}
           </View>
+          {/* Who it is for and what it is, beside who it is from. These were a
+              separate band under the header, which cost a strip of the first
+              page to repeat what a letterhead already implies. */}
           <View style={styles.headerRight}>
             <Text style={styles.quotationTitle}>QUOTATION</Text>
             <Text style={styles.quotationNumber}>
-              {data.quotation_number} (v{data.version})
+              {data.quotation_number} &middot; v{data.version}
             </Text>
             <Text style={styles.quotationMeta}>
-              Date: {formatDate(data.valid_from)}
+              {formatDate(data.valid_from)} &middot; valid until{" "}
+              {formatDate(data.valid_until)}
             </Text>
-            <Text style={styles.quotationMeta}>
-              Valid Until: {formatDate(data.valid_until)}
-            </Text>
-          </View>
-        </View>
 
-        {/* Client details: name, phone, email, property. The separate property
-            panel beside this one repeated the address, type and carpet area,
-            which nobody reads on a quotation and which cost a third of the
-            first page. */}
-        <View style={styles.clientBar}>
-          {[
-            ["Client", data.client_name],
-            ["Phone", data.client_phone],
-            ["Email", data.client_email],
-            ["Property", data.property_name],
-          ]
-            .filter(([, value]) => !!value)
-            .map(([label, value]) => (
-              <View key={label as string} style={styles.clientField}>
-                <Text style={styles.infoLabel}>{label}</Text>
-                <Text style={styles.infoValue}>{value}</Text>
+            {(data.client_name ||
+              data.client_phone ||
+              data.client_email ||
+              data.property_name) && (
+              <View style={styles.headerClient}>
+                {data.client_name && (
+                  <Text style={styles.headerClientName}>{data.client_name}</Text>
+                )}
+                {(data.client_phone || data.client_email) && (
+                  <Text style={styles.quotationMeta}>
+                    {[data.client_phone, data.client_email]
+                      .filter(Boolean)
+                      .join("  ·  ")}
+                  </Text>
+                )}
+                {data.property_name && (
+                  <Text style={styles.quotationMeta}>{data.property_name}</Text>
+                )}
               </View>
-            ))}
+            )}
+          </View>
         </View>
 
         {/* Quotation Title */}
@@ -947,27 +955,18 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
                     <View style={styles.lineItemsTable}>
                       {groupByCategory(component.line_items).map((cat, i) => (
                         <View key={i} style={styles.lineItemRow}>
-                          <Text style={[styles.lineItemCell, styles.flex3]}>
+                          {/* Same columns as the itemised table above, so a
+                              category row and a cost item row line up when a
+                              reader flips between two formats. */}
+                          <Text style={[styles.lineItemCell, styles.colItem]}>
                             {cat.name}
                           </Text>
                           {data.show_quantities !== false && (
-                            <Text
-                              style={[
-                                styles.lineItemCell,
-                                styles.flex1,
-                                { textAlign: "center" },
-                              ]}
-                            >
+                            <Text style={[styles.lineItemCell, styles.colMeasure]}>
                               {cat.count}
                             </Text>
                           )}
-                          <Text
-                            style={[
-                              styles.lineItemCell,
-                              styles.flex2,
-                              { textAlign: "right" },
-                            ]}
-                          >
+                          <Text style={[styles.lineItemCell, styles.colAmount]}>
                             {showCategoryPrice ? formatCurrency(cat.amount) : ""}
                           </Text>
                         </View>
@@ -981,7 +980,7 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
                         <Text
                           style={[
                             styles.lineItemCell,
-                            styles.flex3,
+                            styles.colItem,
                             { fontWeight: "bold", color: "#475569" },
                           ]}
                         >
@@ -990,8 +989,7 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
                         <Text
                           style={[
                             styles.lineItemCell,
-                            styles.flex1,
-                            styles.textCenter,
+                            styles.colMeasure,
                             { fontWeight: "bold", color: "#475569" },
                           ]}
                         >
@@ -1000,8 +998,7 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
                         <Text
                           style={[
                             styles.lineItemCell,
-                            styles.flex1,
-                            styles.textRight,
+                            styles.colRate,
                             { fontWeight: "bold", color: "#475569" },
                           ]}
                         >
@@ -1010,8 +1007,7 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
                         <Text
                           style={[
                             styles.lineItemCell,
-                            styles.flex1,
-                            styles.textRight,
+                            styles.colAmount,
                             { fontWeight: "bold", color: "#475569" },
                           ]}
                         >
@@ -1029,14 +1025,13 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
                               : {},
                           ]}
                         >
-                          <View style={styles.flex3}>
+                          <View style={styles.colItem}>
                             <Text style={styles.lineItemCell}>{item.name}</Text>
                           </View>
                           <Text
                             style={[
                               styles.lineItemCell,
-                              styles.flex1,
-                              styles.textCenter,
+                              styles.colMeasure,
                             ]}
                           >
                             {formatDimensions(item, data.hide_dimensions)}
@@ -1044,8 +1039,7 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
                           <Text
                             style={[
                               styles.lineItemCell,
-                              styles.flex1,
-                              styles.textRight,
+                              styles.colRate,
                             ]}
                           >
                             {formatCurrency(item.rate)}/{item.unit_code}
@@ -1053,8 +1047,7 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
                           <Text
                             style={[
                               styles.lineItemCell,
-                              styles.flex1,
-                              styles.textRight,
+                              styles.colAmount,
                               { fontWeight: "medium" },
                             ]}
                           >
