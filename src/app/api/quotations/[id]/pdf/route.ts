@@ -174,16 +174,18 @@ export async function GET(
 
     // The live terms, rendered at print time. Deliberately not snapshotted onto
     // the quotation yet - that belongs with the approve-then-send flow.
-    // Every active clause, each printed as its own headed section. One clause
-    // gives one section; splitting it into Terms / Payment / Delivery / Bank
-    // later gives that layout with no code change.
+    // The clause marked default, and only that one. Printing every active
+    // clause put V1 and V2 of the same terms back to back on the document.
+    // A tenant wanting several headed sections writes them into one clause,
+    // which is how the seeded terms are already structured.
     const { data: termsClauses } = await supabase
       .from("quotation_terms_clauses")
       .select("title, content")
       .eq("tenant_id", quotation.tenant_id)
       .eq("is_active", true)
+      .order("is_default", { ascending: false })
       .order("display_order", { ascending: true })
-      .order("title", { ascending: true });
+      .limit(1);
 
     // Build the spaces hierarchy
     const spaces: SpaceData[] = (spacesData || []).map((space: any) => {
@@ -289,8 +291,21 @@ export async function GET(
       version: quotation.version || 1,
       title: quotation.title,
       status: quotation.status,
-      valid_from: quotation.valid_from,
-      valid_until: quotation.valid_until,
+      // The document is dated when it was raised, and its validity is counted
+      // from the day it is printed. A stored valid_until that has already
+      // passed would otherwise hand the client a quotation that expired before
+      // they received it - QT-20251216-001 was offering 15 January.
+      valid_from: quotation.valid_from || quotation.created_at,
+      valid_until: (() => {
+        const stored = quotation.valid_until;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (stored && new Date(stored) >= today) return stored;
+        const days = tenantSettings?.default_validity_days ?? 15;
+        const until = new Date(today);
+        until.setDate(until.getDate() + days);
+        return until.toISOString().slice(0, 10);
+      })(),
 
       client_name: client?.name || undefined,
       client_email: client?.email || undefined,

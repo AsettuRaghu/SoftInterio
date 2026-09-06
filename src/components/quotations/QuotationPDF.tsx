@@ -161,7 +161,12 @@ const styles = StyleSheet.create({
   page: {
     flexDirection: "column",
     backgroundColor: "#ffffff",
-    padding: 40,
+    // The footer is fixed at bottom: 24 and about 22pt tall, so the text
+    // frame has to stop above it. With a uniform 40pt padding the last lines
+    // of every page ran underneath the footer rule.
+    paddingTop: 30,
+    paddingBottom: 58,
+    paddingHorizontal: 34,
     fontFamily: "Helvetica",
     fontSize: 10,
   },
@@ -170,8 +175,8 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 30,
-    paddingBottom: 20,
+    marginBottom: 12,
+    paddingBottom: 8,
     borderBottomWidth: 2,
     borderBottomColor: "#1e40af",
   },
@@ -198,7 +203,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   quotationTitle: {
-    fontSize: 24,
+    fontSize: 17,
     fontWeight: "bold",
     color: "#1e40af",
     marginBottom: 4,
@@ -216,13 +221,13 @@ const styles = StyleSheet.create({
   // Client/Property Section
   infoSection: {
     flexDirection: "row",
-    marginBottom: 25,
+    marginBottom: 12,
     gap: 20,
   },
   infoBox: {
     flex: 1,
     backgroundColor: "#f8fafc",
-    padding: 15,
+    padding: 9,
     borderRadius: 4,
   },
   infoTitle: {
@@ -270,8 +275,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
-    padding: 8,
-    minHeight: 30,
+    paddingVertical: 3,
+    paddingHorizontal: 6,
   },
   tableRowAlt: {
     backgroundColor: "#f8fafc",
@@ -287,34 +292,54 @@ const styles = StyleSheet.create({
   },
 
   // Space Section
+  clientBar: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    backgroundColor: "#f8fafc",
+    paddingVertical: 7,
+    paddingHorizontal: 9,
+    borderRadius: 3,
+    marginBottom: 12,
+  },
+  clientField: {
+    width: "25%",
+    paddingRight: 8,
+  },
+
   spaceSection: {
-    marginBottom: 20,
+    marginBottom: 9,
   },
   spaceHeader: {
-    backgroundColor: "#1e40af",
-    padding: 10,
+    // Was a solid blue bar at 10pt padding on every room. On a quotation with
+    // eleven rooms that is a page of chrome, and it reads as a warning rather
+    // than a heading. A tint and a rule carry the same structure quietly.
+    backgroundColor: "#f1f5f9",
+    borderBottomWidth: 1,
+    borderBottomColor: "#cbd5e1",
+    paddingVertical: 4,
+    paddingHorizontal: 7,
     borderTopLeftRadius: 4,
     borderTopRightRadius: 4,
   },
   spaceTitle: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "bold",
-    color: "#ffffff",
+    color: "#0f172a",
   },
   spaceSubtotal: {
-    fontSize: 11,
-    color: "#bfdbfe",
-    marginTop: 2,
+    fontSize: 10,
+    fontWeight: "bold",
+    color: "#0f172a",
   },
 
   // Component
   componentSection: {
     borderLeftWidth: 3,
     borderLeftColor: "#3b82f6",
-    paddingLeft: 10,
-    marginLeft: 10,
-    marginTop: 10,
-    marginBottom: 10,
+    paddingLeft: 8,
+    marginLeft: 7,
+    marginTop: 5,
+    marginBottom: 5,
   },
   componentHeader: {
     flexDirection: "row",
@@ -362,14 +387,14 @@ const styles = StyleSheet.create({
 
   // Totals
   totalsSection: {
-    marginTop: 20,
+    marginTop: 12,
     marginLeft: "auto",
     width: 250,
   },
   totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 6,
+    paddingVertical: 3,
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
   },
@@ -404,13 +429,13 @@ const styles = StyleSheet.create({
 
   // Payment Terms
   paymentSection: {
-    marginTop: 30,
+    marginTop: 14,
   },
   sectionTitle: {
-    fontSize: 11,
+    fontSize: 9.5,
     fontWeight: "bold",
-    color: "#1e40af",
-    marginBottom: 10,
+    color: "#334155",
+    marginBottom: 5,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -452,9 +477,9 @@ const styles = StyleSheet.create({
 
   // Bank Details
   bankSection: {
-    marginTop: 20,
+    marginTop: 12,
     backgroundColor: "#f8fafc",
-    padding: 15,
+    padding: 9,
     borderRadius: 4,
   },
   bankGrid: {
@@ -478,7 +503,7 @@ const styles = StyleSheet.create({
 
   // Terms
   termsSection: {
-    marginTop: 20,
+    marginTop: 10,
   },
   termsText: {
     fontSize: 8,
@@ -489,9 +514,9 @@ const styles = StyleSheet.create({
   // Footer
   footer: {
     position: "absolute",
-    bottom: 30,
-    left: 40,
-    right: 40,
+    bottom: 24,
+    left: 34,
+    right: 34,
     borderTopWidth: 1,
     borderTopColor: "#e2e8f0",
     paddingTop: 10,
@@ -804,53 +829,24 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
           </View>
         </View>
 
-        {/* Client & Property Info */}
-        <View style={styles.infoSection}>
-          <View style={styles.infoBox}>
-            <Text style={styles.infoTitle}>Client Details</Text>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Name</Text>
-              <Text style={styles.infoValue}>{data.client_name || "-"}</Text>
-            </View>
-            {data.client_phone && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Phone</Text>
-                <Text style={styles.infoValue}>{data.client_phone}</Text>
+        {/* Client details: name, phone, email, property. The separate property
+            panel beside this one repeated the address, type and carpet area,
+            which nobody reads on a quotation and which cost a third of the
+            first page. */}
+        <View style={styles.clientBar}>
+          {[
+            ["Client", data.client_name],
+            ["Phone", data.client_phone],
+            ["Email", data.client_email],
+            ["Property", data.property_name],
+          ]
+            .filter(([, value]) => !!value)
+            .map(([label, value]) => (
+              <View key={label as string} style={styles.clientField}>
+                <Text style={styles.infoLabel}>{label}</Text>
+                <Text style={styles.infoValue}>{value}</Text>
               </View>
-            )}
-            {data.client_email && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Email</Text>
-                <Text style={styles.infoValue}>{data.client_email}</Text>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.infoBox}>
-            <Text style={styles.infoTitle}>Property Details</Text>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Property</Text>
-              <Text style={styles.infoValue}>{data.property_name || "-"}</Text>
-            </View>
-            {data.property_address && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Address</Text>
-                <Text style={styles.infoValue}>{data.property_address}</Text>
-              </View>
-            )}
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Type</Text>
-              <Text style={styles.infoValue}>
-                {data.property_type?.toUpperCase() || "-"}
-              </Text>
-            </View>
-            {!!data.carpet_area && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Carpet Area</Text>
-                <Text style={styles.infoValue}>{data.carpet_area} sq.ft</Text>
-              </View>
-            )}
-          </View>
+            ))}
         </View>
 
         {/* Quotation Title */}
@@ -864,13 +860,19 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
 
         {/* Spaces & Components */}
         {quotedSpaces.map((space, spaceIdx) => (
-          <View key={spaceIdx} style={styles.spaceSection}>
+          <View
+            key={spaceIdx}
+            style={styles.spaceSection}
+            // Keeps a room heading from stranding alone at the foot of a page
+            // with its contents overleaf.
+            minPresenceAhead={40}
+          >
             <View style={styles.spaceHeader}>
               <Text style={styles.spaceTitle}>
                 {spaceIdx + 1}. {space.name || space.space_type_name}
               </Text>
               <Text style={styles.spaceSubtotal}>
-                Subtotal: {formatCurrency(space.subtotal)}
+                {formatCurrency(space.subtotal)}
               </Text>
             </View>
 
