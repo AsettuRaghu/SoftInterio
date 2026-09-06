@@ -24,6 +24,11 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createClient();
 
+    // Which slice of the list. The aggregate tables on the report page are
+    // exported from the browser instead, using figures already loaded there -
+    // recomputing them here would give two sets of numbers that could drift.
+    const report = request.nextUrl.searchParams.get("report") || "leads";
+
     const [{ data: leads }, { data: users }, { data: quotations }] =
       await Promise.all([
         supabase
@@ -63,7 +68,15 @@ export async function GET(request: NextRequest) {
       "Won On", "Lost / Disqualified Reason",
     ];
 
-    const rows = (leads || []).map((l) => {
+    const CLOSED = ["won", "lost", "disqualified"];
+    const selected = (leads || []).filter((l) => {
+      if (report === "pipeline") return !CLOSED.includes(l.stage);
+      if (report === "won") return l.stage === "won";
+      if (report === "lost") return l.stage === "lost" || l.stage === "disqualified";
+      return true;
+    });
+
+    const rows = selected.map((l) => {
       const client = l.client as { name?: string; phone?: string; email?: string } | null;
       const property = l.property as { property_name?: string; city?: string } | null;
       return [
@@ -88,12 +101,13 @@ export async function GET(request: NextRequest) {
     const csv =
       "\uFEFF" + [headers.map(csvCell).join(","), ...rows].join("\n");
     const stamp = new Date().toISOString().slice(0, 10);
+    const name = report === "leads" ? "leads" : `leads-${report}`;
 
     return new NextResponse(csv, {
       status: 200,
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="leads-${stamp}.csv"`,
+        "Content-Disposition": `attachment; filename="${name}-${stamp}.csv"`,
       },
     });
   } catch (error) {
