@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
   },
 
   spaceSection: {
-    marginBottom: 9,
+    marginBottom: 7,
   },
   spaceHeader: {
     // Row, not the default column - the subtotal was stacking underneath the
@@ -352,8 +352,8 @@ const styles = StyleSheet.create({
     // shouting.
     paddingLeft: 8,
     paddingRight: 8,
-    paddingTop: 5,
-    paddingBottom: 5,
+    paddingTop: 3,
+    paddingBottom: 3,
     borderBottomWidth: 0.5,
     borderBottomColor: "#f1f5f9",
   },
@@ -381,9 +381,11 @@ const styles = StyleSheet.create({
     // already says "supporting detail".
     fontSize: 8.5,
     color: "#64748b",
-    lineHeight: 1.45,
-    marginTop: 2,
-    paddingRight: 95,
+    lineHeight: 1.35,
+    marginTop: 1,
+    // Runs the full width. Reserving the money column here bought nothing -
+    // the figure is on the line above - and cost an extra wrapped line on
+    // every component, which adds up to a page over a long quotation.
   },
 
   // Line Items
