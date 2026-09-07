@@ -71,8 +71,14 @@ export default function StockPage() {
       }
       const data = await response.json();
       setStats(data.stats);
+      // The route returns lowStockItems; this read lowStockAlerts, so the
+      // alerts panel has always rendered empty however low stock actually got.
+      setLowStockAlerts(data.lowStockItems || data.lowStockAlerts || []);
+      // recentMovements and categories have no source in /api/stock/overview -
+      // it returns stats, lowStockItems and recentPOs. These panels have never
+      // had data and cannot until the route supplies it; defaulting to empty
+      // keeps them honest rather than appearing to load something.
       setRecentMovements(data.recentMovements || []);
-      setLowStockAlerts(data.lowStockAlerts || []);
       setCategories(data.categories || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load overview");

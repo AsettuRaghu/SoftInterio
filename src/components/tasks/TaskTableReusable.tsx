@@ -783,19 +783,25 @@ export default function TaskTable({
       });
 
       if (response.ok) {
-        const savedTask = await response.json();
-        setTasks((prev) =>
-          prev.map((t) =>
-            t.id === parentTaskId
-              ? {
-                  ...t,
-                  subtasks: t.subtasks?.map((st) =>
-                    st.id === tempId ? { ...st, id: savedTask.id } : st
-                  ),
-                }
-              : t
-          )
-        );
+        const data = await response.json();
+        // Same envelope mistake as the tasks page had: the route replies
+        // { task }, so .id off the top level was undefined and the optimistic
+        // subtask kept its placeholder id.
+        const savedId = data.task?.id;
+        if (savedId) {
+          setTasks((prev) =>
+            prev.map((t) =>
+              t.id === parentTaskId
+                ? {
+                    ...t,
+                    subtasks: t.subtasks?.map((st) =>
+                      st.id === tempId ? { ...st, id: savedId } : st
+                    ),
+                  }
+                : t
+            )
+          );
+        }
         handleRefresh();
       }
     } catch (err) {

@@ -236,4 +236,26 @@ to re-run.
 
 ---
 
+## audit-api-shapes.js
+
+Compares what each API route returns against what its callers read, and reports
+where they disagree.
+
+```bash
+node scripts/audit-api-shapes.js
+node scripts/audit-api-shapes.js --verbose   # also prints every route's shape
+```
+
+TypeScript cannot catch this class of bug: a handler returns `NextResponse`, and
+`await res.json()` is `any` on the other side. Three real bugs were found this
+way - a revision opening `/quotations/undefined`, inline subtasks keeping a
+placeholder id, and the stock page reading `lowStockAlerts` from a route that
+returns `lowStockItems`.
+
+Heuristic, so read the output as a list to check rather than a list of
+confirmed bugs. Fetches inside `Promise.all` are counted and skipped: responses
+there pair by array position, which cannot be followed by reading source.
+
+---
+
 That's it. Run `--dry` first on anything that writes.

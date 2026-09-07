@@ -689,20 +689,25 @@ export default function TasksPage() {
       });
 
       if (response.ok) {
-        const savedTask = await response.json();
-        // Replace temp subtask with real one from server
-        setTasks((prev) =>
-          prev.map((t) =>
-            t.id === parentTaskId
-              ? {
-                  ...t,
-                  subtasks: t.subtasks?.map((st) =>
-                    st.id === tempId ? { ...st, id: savedTask.id } : st
-                  ),
-                }
-              : t
-          )
-        );
+        const data = await response.json();
+        // The route replies { task }, so reading .id off the envelope gave
+        // undefined and the optimistic subtask kept a placeholder id until the
+        // next reload - every edit or delete on it then targeted nothing.
+        const savedId = data.task?.id;
+        if (savedId) {
+          setTasks((prev) =>
+            prev.map((t) =>
+              t.id === parentTaskId
+                ? {
+                    ...t,
+                    subtasks: t.subtasks?.map((st) =>
+                      st.id === tempId ? { ...st, id: savedId } : st
+                    ),
+                  }
+                : t
+            )
+          );
+        }
       }
     } catch (err) {
       console.error("Error creating subtask:", err);
