@@ -139,6 +139,38 @@ joins from one — so pairing a project id you may open with a sub-phase id you
 may not would otherwise have read and written another business's data. The
 checklist route in particular never mentioned the project at all.
 
+### Projects come from won leads unless a tenant opts out
+`tenant_settings.allow_direct_project_create` is false by default, so the New
+Project button does not appear and `POST /api/projects` answers 403. The normal
+route is a won lead, which carries the client, property, quotation and scope
+across; a blank form starts with none of that.
+
+It is a tenant setting rather than a `subscription_plan_features` row because
+it is a workflow choice each business makes, not something sold by tier — and
+because that table is read only to draw plan cards and enforces nothing. It
+sits beside `auto_create_project_on_won`, the existing precedent.
+`require_quotation_for_project` is on the same table and is a **dead column**,
+read nowhere.
+
+The flag is checked in the handler, not only in the UI. Hiding a button is not
+a control.
+
+`POST /api/projects` had never worked: it inserted `client_name`,
+`site_address`, `quoted_amount`, `budget_amount` and six other fields that are
+not columns on `projects`, so every request died with PGRST204. It now creates
+the `clients` and `properties` rows and stores `client_id`/`property_id`,
+mirroring `POST /api/sales/leads` — a new client each time rather than matching
+on email, the property optional, both rolled back by hand if the project insert
+fails. The form also sent `start_date` while the handler read
+`expected_start_date`, so the start date was silently dropped.
+
+**Quoted and budget amounts are deliberately not stored on a project.** There
+is no column for either, and `actual_cost` is not one — the Overview tab shows
+that as money spent, while the list aliases it to `quoted_amount` for a total.
+A project's value comes from its quotation, which is where the app already
+models it. Both inputs were removed from the create form rather than given a
+misleading home.
+
 ### Charges are ordinary line items
 Delivery, cleanup and site protection are cost items in a category marked
 `is_charge`. A space made up entirely of such items *prints* below the room
@@ -152,17 +184,6 @@ untouched values would block edits to unrelated fields on any older lead. See
 the past; a contract signature must not be in the **future**.
 
 ## Traps that have already cost time
-
-**`POST /api/projects` is broken and the "New Project" button is live.** The
-handler inserts `client_name`, `client_email`, `client_phone`, `site_address`,
-`city`, `state`, `pincode`, `project_type`, `quoted_amount` and
-`budget_amount`; none of those are columns on `projects`. PostgREST rejects it
-with `PGRST204 Could not find the 'budget_amount' column`. Nobody noticed
-because every real project is created by the `create_project_from_lead` RPC.
-Fixing it properly means creating the `clients` and `properties` rows and
-storing `client_id`/`property_id` — a flow decision, not a rename.
-
-
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it
   `"use client"` makes route handlers import a client-reference proxy, and

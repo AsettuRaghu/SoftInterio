@@ -30,6 +30,7 @@ interface CompanyFormData {
   tenant_type: string;
   timezone: string;
   currency: string;
+  allow_direct_project_create: boolean;
 }
 
 const TIMEZONE_OPTIONS = [
@@ -83,6 +84,7 @@ export default function CompanySettingsPage() {
     tenant_type: "",
     timezone: "Asia/Kolkata",
     currency: "INR",
+    allow_direct_project_create: false,
   });
   const [originalFormData, setOriginalFormData] = useState<CompanyFormData>({
     company_name: "",
@@ -94,6 +96,7 @@ export default function CompanySettingsPage() {
     tenant_type: "",
     timezone: "Asia/Kolkata",
     currency: "INR",
+    allow_direct_project_create: false,
   });
 
   const supabase = createClient();
@@ -178,6 +181,8 @@ export default function CompanySettingsPage() {
         tenant_type: tenantData.tenant_type || "",
         timezone: settingsResult.data?.timezone || "Asia/Kolkata",
         currency: settingsResult.data?.currency || "INR",
+        allow_direct_project_create:
+          settingsResult.data?.allow_direct_project_create === true,
       };
       setFormData(formValues);
       setOriginalFormData(formValues);
@@ -251,6 +256,7 @@ export default function CompanySettingsPage() {
           tenant_id: company.id,
           timezone: formData.timezone,
           currency: formData.currency,
+          allow_direct_project_create: formData.allow_direct_project_create,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "tenant_id" },
@@ -279,6 +285,7 @@ export default function CompanySettingsPage() {
               ...prev,
               timezone: formData.timezone,
               currency: formData.currency,
+              allow_direct_project_create: formData.allow_direct_project_create,
               updated_at: updatedAt,
             }
           : null,
@@ -610,6 +617,45 @@ export default function CompanySettingsPage() {
                   />
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Project Workflow - FULL WIDTH */}
+          <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 bg-slate-100/50 border-b border-slate-200">
+              <h2 className="text-sm font-semibold text-slate-900">
+                Project Workflow
+              </h2>
+              <p className="text-[10px] text-slate-500">
+                Where projects are allowed to come from
+              </p>
+            </div>
+            <div className="p-4">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.allow_direct_project_create}
+                  disabled={!isEditing}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      allow_direct_project_create: e.target.checked,
+                    })
+                  }
+                  className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-slate-900">
+                    Allow creating projects directly
+                  </span>
+                  <span className="block text-xs text-slate-500 mt-0.5">
+                    Off by default. A project normally starts from a won lead,
+                    which carries the client, property, quotation and scope
+                    across. Turning this on adds a New Project button that
+                    starts from a blank form.
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
         </div>

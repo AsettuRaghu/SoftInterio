@@ -241,6 +241,14 @@ export interface TenantSettings {
   language: string;
   business_hours?: Record<string, any> | null;
   notifications_enabled: boolean;
+  /** Whether winning a lead opens a project by itself. */
+  auto_create_project_on_won?: boolean;
+  /**
+   * Whether a project may be created from a blank form. Off by default: the
+   * normal route is a won lead, which carries the client, property, quotation
+   * and scope across.
+   */
+  allow_direct_project_create?: boolean;
   created_at: string;
   updated_at: string;
 }

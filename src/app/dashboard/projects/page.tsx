@@ -27,6 +27,7 @@ import {
   ACTIVE_STATUSES,
 } from "@/modules/projects/constants";
 import { formatCurrency } from "@/modules/projects/utils";
+import { useTenantSettings } from "@/hooks/useTenantSettings";
 
 const PROJECT_STATUS_TABS: FilterOption[] = PROJECT_STATUS_OPTIONS.map(
   (option) => ({
@@ -36,6 +37,7 @@ const PROJECT_STATUS_TABS: FilterOption[] = PROJECT_STATUS_OPTIONS.map(
 );
 
 export default function ProjectsPage() {
+  const { settings: tenantSettings } = useTenantSettings();
   const router = useRouter();
   const [allProjects, setAllProjects] = useState<ProjectSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -268,13 +270,17 @@ export default function ProjectsPage() {
         icon={<BuildingOffice2Icon className="w-5 h-5 text-white" />}
         iconBgClass="from-blue-500 to-blue-600"
         actions={
-          <Link
-            href="/dashboard/projects/new"
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all text-sm font-medium flex items-center gap-2"
-          >
-            <PlusIcon className="w-4 h-4" />
-            New Project
-          </Link>
+          // Projects normally come from a won lead; the button only appears
+          // where the tenant has opted into direct creation.
+          tenantSettings.allowDirectProjectCreate ? (
+            <Link
+              href="/dashboard/projects/new"
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all text-sm font-medium flex items-center gap-2"
+            >
+              <PlusIcon className="w-4 h-4" />
+              New Project
+            </Link>
+          ) : undefined
         }
         stats={
           <>
@@ -385,15 +391,24 @@ export default function ProjectsPage() {
                 title: "No projects found",
                 description: searchValue
                   ? "Try adjusting your search"
-                  : "Create your first project to get started",
-                action: !searchValue ? (
+                  : tenantSettings.allowDirectProjectCreate
+                    ? "Create your first project to get started"
+                    : "Projects start from a won lead",
+                action: searchValue ? undefined : tenantSettings.allowDirectProjectCreate ? (
                   <Link
                     href="/dashboard/projects/new"
                     className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors inline-block"
                   >
                     + Create Your First Project
                   </Link>
-                ) : undefined,
+                ) : (
+                  <Link
+                    href="/dashboard/sales/leads"
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors inline-block"
+                  >
+                    Go to Leads
+                  </Link>
+                ),
               }}
               stickyHeader={true}
             />

@@ -21,6 +21,7 @@ import {
   PROJECT_CATEGORY_OPTIONS,
   PROJECT_TYPE_OPTIONS,
 } from "@/types/projects";
+import { useTenantSettings } from "@/hooks/useTenantSettings";
 
 interface TeamMember {
   id: string;
@@ -53,6 +54,8 @@ function NewProjectForm() {
   const searchParams = useSearchParams();
   const leadIdParam = searchParams.get("lead_id");
 
+  const { settings: tenantSettings, loading: settingsLoading } =
+    useTenantSettings();
   const [loading, setLoading] = useState(false);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [wonLeads, setWonLeads] = useState<WonLead[]>([]);
@@ -78,8 +81,6 @@ function NewProjectForm() {
     project_category: "turnkey" as ProjectCategory,
     start_date: "",
     expected_end_date: "",
-    quoted_amount: "",
-    budget_amount: "",
     project_manager_id: "",
     notes: "",
     initialize_phases: true,
@@ -163,8 +164,6 @@ function NewProjectForm() {
       expected_end_date: lead.target_end_date
         ? lead.target_end_date.split("T")[0]
         : "",
-      quoted_amount: lead.won_amount ? lead.won_amount.toString() : "",
-      budget_amount: lead.won_amount ? lead.won_amount.toString() : "",
       lead_id: lead.id,
     }));
   };
@@ -203,6 +202,18 @@ function NewProjectForm() {
     }
   };
 
+  // The server refuses this anyway; bouncing here saves filling in a form
+  // that cannot be submitted.
+  useEffect(() => {
+    if (!settingsLoading && !tenantSettings.allowDirectProjectCreate) {
+      router.replace("/dashboard/projects");
+    }
+  }, [settingsLoading, tenantSettings.allowDirectProjectCreate, router]);
+
+  if (!settingsLoading && !tenantSettings.allowDirectProjectCreate) {
+    return null;
+  }
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     if (!formData.name.trim()) {
@@ -226,12 +237,6 @@ function NewProjectForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
-          quoted_amount: formData.quoted_amount
-            ? parseFloat(formData.quoted_amount)
-            : 0,
-          budget_amount: formData.budget_amount
-            ? parseFloat(formData.budget_amount)
-            : 0,
           project_manager_id: formData.project_manager_id || null,
           lead_id: formData.lead_id || null,
         }),
@@ -694,36 +699,6 @@ function NewProjectForm() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Quoted Amount (₹)
-              </label>
-              <input
-                type="number"
-                name="quoted_amount"
-                value={formData.quoted_amount}
-                onChange={handleChange}
-                placeholder="1500000"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Budget Amount (₹)
-              </label>
-              <input
-                type="number"
-                name="budget_amount"
-                value={formData.budget_amount}
-                onChange={handleChange}
-                placeholder="1200000"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Internal budget for cost tracking
-              </p>
-            </div>
           </div>
         </div>
 
