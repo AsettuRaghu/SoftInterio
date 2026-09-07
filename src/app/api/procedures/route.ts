@@ -93,6 +93,11 @@ export async function POST(request: NextRequest) {
         name,
         description: (body.description as string)?.trim() || null,
         applies_to: appliesTo,
+        // Which kind of business this playbook is written for. An interiors
+        // firm and an architecture practice run different processes, and the
+        // tenant_type enum already knows the difference. Null means it suits
+        // any of them.
+        tenant_type: (body.tenant_type as string) || null,
         is_active: body.is_active !== false,
         enforce_order: body.enforce_order === true,
         is_protected: body.is_protected === true,

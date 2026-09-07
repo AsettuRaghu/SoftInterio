@@ -65,6 +65,30 @@ export default function ProceduresPage() {
     void load();
   };
 
+  /**
+   * Take a copy so it can be adapted.
+   *
+   * A protected playbook is one SoftInterio ships, and editing it in place
+   * would change the process under every business using it. Adapting one means
+   * owning a copy - which is what makes "we propose the practice, you decide
+   * how you work" true rather than a slogan.
+   */
+  const copy = async (p: ProcedureDefinition) => {
+    const res = await fetch(`/api/procedures/${p.id}/clone`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error || "Could not copy the playbook");
+      return;
+    }
+    await load();
+    setEditingId(data.procedure.id);
+    setIsBuilderOpen(true);
+  };
+
   return (
     <PageLayout isLoading={isLoading} loadingText="Loading procedures...">
       <PageHeader
@@ -103,7 +127,7 @@ export default function ProceduresPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                {["Name", "Applies to", "Steps", "Version", ""].map((h) => (
+                {["Name", "Applies to", "For", "Steps", "Version", ""].map((h) => (
                   <th
                     key={h}
                     className="px-4 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider"
@@ -145,20 +169,45 @@ export default function ProceduresPage() {
                       {TaskRelatedTypeLabels[p.applies_to]}
                     </span>
                   </td>
+                  <td className="px-4 py-3">
+                    <span className="text-xs text-slate-500">
+                      {p.tenant_type
+                        ? p.tenant_type.charAt(0).toUpperCase() +
+                          p.tenant_type.slice(1)
+                        : "Any"}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-slate-600">
                     {p.step_count ?? 0}
                   </td>
                   <td className="px-4 py-3 text-slate-400 text-xs">
                     v{p.version}
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
                     <button
                       type="button"
-                      onClick={() => void remove(p)}
-                      className="text-xs text-red-600 hover:underline"
+                      onClick={() => void copy(p)}
+                      className="text-xs text-blue-600 hover:underline mr-3"
+                      title="Take an editable copy of this playbook"
                     >
-                      Delete
+                      Copy
                     </button>
+                    {p.is_protected ? (
+                      <span
+                        className="text-xs text-slate-400"
+                        title="Provided with SoftInterio. Copy it to make your own version."
+                      >
+                        Standard
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void remove(p)}
+                        className="text-xs text-red-600 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -29,6 +29,14 @@ interface DraftStep {
   /** How long the step takes. Dates are derived from this, not typed. */
   duration_days: number | null;
   instructions: string | null;
+  /** Who signs a step off. Only meaningful for an approval step. */
+  approval_role: string | null;
+  /** What must be attached before an upload step can complete. */
+  required_upload_types: string[] | null;
+  /** May run alongside its siblings instead of waiting for them. */
+  allow_parallel: boolean;
+  /** Skipping has to be explained. */
+  skip_requires_reason: boolean;
 }
 
 interface Props {
@@ -83,6 +91,10 @@ const blankStep = (): DraftStep => ({
   assign_to_role: null,
   duration_days: null,
   instructions: null,
+  approval_role: null,
+  required_upload_types: null,
+  allow_parallel: false,
+  skip_requires_reason: true,
 });
 
 export function ProcedureBuilderModal({
@@ -94,6 +106,10 @@ export function ProcedureBuilderModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [appliesTo, setAppliesTo] = useState<TaskRelatedType>("project");
+  // Which kind of business this playbook is written for. An interiors firm
+  // and an architecture practice run different processes; leaving it blank
+  // says the playbook suits either.
+  const [tenantType, setTenantType] = useState<string>("");
   const [steps, setSteps] = useState<DraftStep[]>([blankStep()]);
   const [enforceOrder, setEnforceOrder] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -106,6 +122,7 @@ export function ProcedureBuilderModal({
     setDescription("");
     setAppliesTo("project");
     setSteps([blankStep()]);
+    setTenantType("");
     setEnforceOrder(false);
     setError(null);
     setExisting(null);
@@ -131,6 +148,7 @@ export function ProcedureBuilderModal({
         setName(data.procedure.name);
         setDescription(data.procedure.description || "");
         setAppliesTo(data.procedure.applies_to);
+        setTenantType(data.procedure.tenant_type ?? "");
         setEnforceOrder(data.procedure.enforce_order === true);
 
         // Flatten: parents in order, each followed by its children, so the
@@ -150,6 +168,10 @@ export function ProcedureBuilderModal({
             assign_to_role: t.assign_to_role,
             duration_days: t.duration_days ?? t.relative_due_days,
             instructions: t.instructions,
+            approval_role: t.approval_role ?? null,
+            required_upload_types: t.required_upload_types ?? null,
+            allow_parallel: t.allow_parallel === true,
+            skip_requires_reason: t.skip_requires_reason !== false,
           });
           for (const c of raw.filter((s: any) => s.parent_step_id === t.id)) {
             flat.push({
@@ -161,6 +183,10 @@ export function ProcedureBuilderModal({
               assign_to_role: c.assign_to_role,
               duration_days: c.duration_days ?? c.relative_due_days,
               instructions: c.instructions,
+              approval_role: c.approval_role ?? null,
+              required_upload_types: c.required_upload_types ?? null,
+              allow_parallel: c.allow_parallel === true,
+              skip_requires_reason: c.skip_requires_reason !== false,
             });
           }
         }
@@ -313,6 +339,7 @@ export function ProcedureBuilderModal({
             name: name.trim(),
             description: description.trim() || null,
             applies_to: appliesTo,
+        tenant_type: tenantType || null,
             enforce_order: enforceOrder,
             steps: cleaned,
           }),
@@ -378,7 +405,7 @@ export function ProcedureBuilderModal({
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             <div className="col-span-2">
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
                 Name
@@ -406,6 +433,23 @@ export function ProcedureBuilderModal({
                     {t.label}
                   </option>
                 ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                Business type
+              </label>
+              <select
+                value={tenantType}
+                onChange={(e) => setTenantType(e.target.value)}
+                title="Who this playbook is written for. Blank suits any."
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="">Any</option>
+                <option value="interiors">Interiors</option>
+                <option value="architect">Architect</option>
+                <option value="vendor">Vendor</option>
+                <option value="factory">Factory</option>
               </select>
             </div>
           </div>
@@ -561,14 +605,77 @@ export function ProcedureBuilderModal({
                           />
                           <span>days</span>
                         </span>
+                        <label className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={step.allow_parallel}
+                            onChange={(e) =>
+                              update(i, { allow_parallel: e.target.checked })
+                            }
+                          />
+                          <span title="May run alongside its siblings instead of waiting its turn.">
+                            Parallel
+                          </span>
+                        </label>
+                        {step.can_skip && (
+                          <label className="flex items-center gap-1 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={step.skip_requires_reason}
+                              onChange={(e) =>
+                                update(i, {
+                                  skip_requires_reason: e.target.checked,
+                                })
+                              }
+                            />
+                            <span title="Skipping this step has to be explained.">
+                              Reason to skip
+                            </span>
+                          </label>
+                        )}
+                      </div>
+
+                      {/* The gate for this step, shown only where it applies -
+                          an upload step needs to say what file, an approval
+                          step needs to say who signs. */}
+                      <div className="flex items-center gap-3 text-[11px] text-slate-500">
                         {step.action_type === "upload" && (
-                          <span className="text-blue-600">
-                            cannot complete without a file
+                          <span className="flex items-center gap-1.5 flex-1">
+                            <span className="text-blue-600 whitespace-nowrap">
+                              needs a file:
+                            </span>
+                            <input
+                              type="text"
+                              value={(step.required_upload_types ?? []).join(", ")}
+                              onChange={(e) =>
+                                update(i, {
+                                  required_upload_types: e.target.value
+                                    .split(",")
+                                    .map((v) => v.trim())
+                                    .filter(Boolean),
+                                })
+                              }
+                              placeholder="drawing, photo — leave blank for any"
+                              className="flex-1 px-1.5 py-0.5 border border-slate-200 rounded"
+                            />
                           </span>
                         )}
                         {step.action_type === "approval" && (
-                          <span className="text-amber-600">
-                            needs sign-off
+                          <span className="flex items-center gap-1.5 flex-1">
+                            <span className="text-amber-600 whitespace-nowrap">
+                              signed off by:
+                            </span>
+                            <input
+                              type="text"
+                              value={step.approval_role ?? ""}
+                              onChange={(e) =>
+                                update(i, {
+                                  approval_role: e.target.value || null,
+                                })
+                              }
+                              placeholder="role slug, e.g. design_manager"
+                              className="flex-1 px-1.5 py-0.5 border border-slate-200 rounded"
+                            />
                           </span>
                         )}
                       </div>

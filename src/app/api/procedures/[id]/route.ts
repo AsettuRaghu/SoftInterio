@@ -93,6 +93,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (body.description !== undefined)
       update.description = body.description?.trim() || null;
     if (body.applies_to !== undefined) update.applies_to = body.applies_to;
+    // Null is meaningful here - it means the playbook suits any kind of
+    // business - so an explicit null must be distinguishable from "untouched".
+    if (body.tenant_type !== undefined)
+      update.tenant_type = body.tenant_type || null;
     if (body.is_active !== undefined) update.is_active = body.is_active;
     if (body.enforce_order !== undefined)
       update.enforce_order = body.enforce_order;

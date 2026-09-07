@@ -286,6 +286,32 @@ When adding a card, copy a neighbour rather than inventing a radius.
 Note the border colour is still not uniform: 17 cards use `border-gray-200`
 where the rest use `border-slate-200`. Untouched here.
 
+### Playbooks are the workflow engine; phases are a view
+SoftInterio grew two engines for one idea. `project_sub_phase_templates` and
+`procedure_step_definitions` share eleven columns and their `action_type` enums
+are identical. The procedure engine is the one to keep and the one already in
+use: it nests (`parent_step_id`), versions (`version`/`is_current`), targets a
+vertical (`tenant_type`, which already knows `architect`), attaches to anything
+(`related_type`/`related_id`), and executes as ordinary tasks rather than a
+second thing to assign and track.
+
+`src/lib/projects/playbook-adapter.ts` maps a run's parent tasks to phases and
+its child tasks to sub-phases, and the project Plan tab draws the 25-step
+"Modular Design Template" through it without one phase-template row. That is
+the evidence the tree is a view. The Plan tab prefers a playbook where one
+exists and falls back to native phases.
+
+**Do not build new workflow features on phase templates.** Still to port before
+the phase engine can go: phase dependencies, progress rollup, planned-vs-actual
+at phase level, and the payment milestone's `linked_phase_id`. Sub-phase
+start/complete/skip routes also still act on phase rows, so a playbook renders
+read-only.
+
+A protected playbook is one SoftInterio ships; it cannot be edited in place,
+because that would change the process under every business using it. `Copy`
+takes an unprotected, inactive, version-1 copy owned by the tenant. That is the
+mechanism behind "we propose the practice, you decide how you work".
+
 ## Traps that have already cost time
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it
