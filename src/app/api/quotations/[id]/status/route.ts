@@ -92,6 +92,39 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // A quotation may be saved half-measured - that is how one gets built -
+    // but it must not reach a client that way. The check that used to block
+    // every save lives here instead, where it costs nothing during the work
+    // and catches the one moment that matters.
+    if (status === "sent") {
+      const { data: lines } = await supabase
+        .from("quotation_line_items")
+        .select("id, unit_code, length, width, quantity, rate")
+        .eq("quotation_id", id);
+
+      const unpriced = (lines || []).filter((li) => {
+        const unit = (li.unit_code || "").toLowerCase();
+        if (!li.rate || Number(li.rate) <= 0) return true;
+        if (["sqft", "sqm"].includes(unit)) return !li.length || !li.width;
+        if (["rft", "rm"].includes(unit)) return !li.length;
+        if (["nos", "set", "kg", "ltr"].includes(unit)) return !li.quantity;
+        return false;
+      });
+
+      if (unpriced.length > 0) {
+        return NextResponse.json(
+          {
+            error: `${unpriced.length} line${
+              unpriced.length === 1 ? "" : "s"
+            } still need a measurement, quantity or rate. Complete them before sending.`,
+            code: "QUOTATION_INCOMPLETE",
+            incomplete_lines: unpriced.length,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     // Prepare update data
     const updateData: Record<string, unknown> = {
       status,

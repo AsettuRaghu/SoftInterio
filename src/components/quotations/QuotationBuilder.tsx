@@ -62,6 +62,10 @@ export function QuotationBuilder({
   // fields, so the profitability panel would have nothing to show anyway.
   const [canViewCosts, setCanViewCosts] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  /** Components with lines that cannot be priced yet. Reported, never blocking. */
+  const [incomplete, setIncomplete] = useState<
+    Array<{ component: string; space: string; missing: number; what: string }>
+  >([]);
 
   // Auto-save state
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -1227,49 +1231,56 @@ export function QuotationBuilder({
     }
   };
 
-  // Validate line items before save
-  const validateLineItems = (): { valid: boolean; errors: string[] } => {
-    const errors: string[] = [];
+  /**
+   * Which lines are not yet complete enough to price.
+   *
+   * Grouped by component rather than listed per line, because that is where a
+   * size is entered - a wardrobe's carcass, shutters and back panel all take
+   * the wardrobe's measurement, so reporting each of them separately names the
+   * same missing number three times and points at the wrong control.
+   */
+  const incompleteByComponent = (): Array<{
+    component: string;
+    space: string;
+    missing: number;
+    what: string;
+  }> => {
+    const groups: Array<{
+      component: string; space: string; missing: number; what: string;
+    }> = [];
 
     spaces.forEach((space) => {
       space.components.forEach((comp) => {
+        const needsSize: string[] = [];
+        let missing = 0;
         comp.lineItems.forEach((item) => {
-          const measureType = getMeasurementInfo(item.unitCode).type;
-          const itemLabel = `${item.costItemName} in ${comp.name} (${space.defaultName})`;
-
-          // Check rate is set
-          if (!item.rate || item.rate <= 0) {
-            errors.push(`Rate is required for "${itemLabel}"`);
-          }
-
-          // Check dimensions based on measurement type
-          switch (measureType) {
-            case "area":
-              if (!item.length || item.length <= 0) {
-                errors.push(`Height is required for "${itemLabel}"`);
-              }
-              if (!item.width || item.width <= 0) {
-                errors.push(`Width is required for "${itemLabel}"`);
-              }
-              break;
-            case "length":
-              if (!item.length || item.length <= 0) {
-                errors.push(`Height is required for "${itemLabel}"`);
-              }
-              break;
-            case "quantity":
-              if (!item.quantity || item.quantity <= 0) {
-                errors.push(`Quantity is required for "${itemLabel}"`);
-              }
-              break;
-            // 'fixed' type doesn't need dimensions
+          const type = getMeasurementInfo(item.unitCode).type;
+          const noRate = !item.rate || item.rate <= 0;
+          const noArea =
+            type === "area" &&
+            (!item.length || item.length <= 0 || !item.width || item.width <= 0);
+          const noLength = type === "length" && (!item.length || item.length <= 0);
+          const noQty = type === "quantity" && (!item.quantity || item.quantity <= 0);
+          if (noRate || noArea || noLength || noQty) {
+            missing += 1;
+            if (noArea || noLength) needsSize.push("size");
+            if (noQty) needsSize.push("quantity");
+            if (noRate) needsSize.push("rate");
           }
         });
+        if (missing > 0) {
+          groups.push({
+            component: comp.name,
+            space: space.defaultName || space.name,
+            missing,
+            what: [...new Set(needsSize)].join(" and "),
+          });
+        }
       });
     });
-
-    return { valid: errors.length === 0, errors };
+    return groups;
   };
+
 
   // Save quotation
   const saveQuotation = async (
@@ -1299,20 +1310,19 @@ export function QuotationBuilder({
         s.components.some((c) => c.lineItems.length > 0)
       );
 
-      // Validate line items (only if redirecting or has line items)
-      if (redirectAfterSave || hasLineItems) {
-        const validation = validateLineItems();
-        if (!validation.valid && redirectAfterSave) {
-          // Enable validation highlighting on mandatory fields
-          setShowValidation(true);
-          // Show first 3 errors max
-          const errorMsg = validation.errors.slice(0, 3).join("\n");
-          const moreCount = validation.errors.length - 3;
-          throw new Error(
-            errorMsg +
-              (moreCount > 0 ? `\n...and ${moreCount} more errors` : "")
-          );
-        }
+      // Incompleteness no longer refuses the save.
+      //
+      // A quotation is built over several sittings - rooms first, then
+      // measurements, then rates - and refusing to store any of it until every
+      // line is measured meant a morning's work could not be kept. The
+      // unfinished lines are reported instead, and the fields stay highlighted,
+      // so the gap is visible without holding the work hostage.
+      if (hasLineItems) {
+        const groups = incompleteByComponent();
+        setIncomplete(groups);
+        if (groups.length > 0) setShowValidation(true);
+      } else {
+        setIncomplete([]);
       }
 
       // Calculate totals from the spaces we're saving
@@ -1879,6 +1889,50 @@ export function QuotationBuilder({
           </div>
         </div>
       </div>
+
+      {/* What is still unfinished. Amber, not red - the work saved, this is a
+          list of what is left, and it names the component because that is the
+          one place a size gets typed. */}
+      {incomplete.length > 0 && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-amber-900">
+                Saved. {incomplete.reduce((n, g) => n + g.missing, 0)} line
+                {incomplete.reduce((n, g) => n + g.missing, 0) === 1 ? "" : "s"}{" "}
+                still need details before this can be sent.
+              </p>
+              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5">
+                {incomplete.slice(0, 6).map((g, i) => (
+                  <span key={i} className="text-xs text-amber-800">
+                    <span className="font-medium">{g.component}</span>
+                    <span className="text-amber-600"> · {g.space}</span>
+                    <span className="text-amber-600">
+                      {" "}
+                      — {g.missing} need {g.what}
+                    </span>
+                  </span>
+                ))}
+                {incomplete.length > 6 && (
+                  <span className="text-xs text-amber-600">
+                    and {incomplete.length - 6} more component
+                    {incomplete.length - 6 === 1 ? "" : "s"}
+                  </span>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => setIncomplete([])}
+              className="shrink-0 text-amber-500 hover:text-amber-700"
+              aria-label="Dismiss"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Error Banner */}
       {saveError && (
