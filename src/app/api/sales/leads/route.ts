@@ -187,6 +187,54 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // What is coming up on each lead: outstanding follow-ups and open tasks,
+    // merged and sorted by date. Two batched queries for the page, matching
+    // the activity enrichment above - the alternative is one pair per row.
+    if (leadIds.length) {
+      const [{ data: followUps }, { data: dueTasks }] = await Promise.all([
+        supabase
+          .from("lead_notes")
+          .select("lead_id, content, follow_up_at")
+          .in("lead_id", leadIds)
+          .not("follow_up_at", "is", null)
+          .is("follow_up_done_at", null),
+        supabase
+          .from("tasks")
+          .select("related_id, title, due_date, status")
+          .eq("related_type", "lead")
+          .in("related_id", leadIds)
+          .in("status", ["todo", "in_progress", "on_hold"])
+          .not("due_date", "is", null),
+      ]);
+
+      const upcoming = new Map<string, Array<{ kind: string; label: string; at: string }>>();
+      const add = (leadId: string, entry: { kind: string; label: string; at: string }) => {
+        const list = upcoming.get(leadId) || [];
+        list.push(entry);
+        upcoming.set(leadId, list);
+      };
+
+      (followUps || []).forEach((n) =>
+        add(n.lead_id, {
+          kind: "follow_up",
+          label: (n.content || "").split("\n")[0].slice(0, 80) || "Follow-up",
+          at: n.follow_up_at,
+        })
+      );
+      (dueTasks || []).forEach((t) =>
+        add(t.related_id, { kind: "task", label: t.title, at: t.due_date })
+      );
+
+      for (const lead of leads || []) {
+        (lead as any).upcoming_items = (upcoming.get(lead.id) || [])
+          // Soonest first - what is closest to today is what a seller needs to
+          // see, and overdue items sort to the top because they are furthest
+          // in the past.
+          .sort((a, b) => (a.at < b.at ? -1 : 1))
+          .slice(0, 3);
+      }
+    }
+
     return NextResponse.json({
       leads: leads || [],
       pagination: {

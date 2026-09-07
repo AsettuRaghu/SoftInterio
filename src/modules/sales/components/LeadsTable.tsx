@@ -92,7 +92,7 @@ export function LeadsTable({
       {
         key: "client_name",
         header: "Client",
-        width: "16%",
+        width: "15%",
         sortable: true,
         render: (lead) => (
           <div className="space-y-1">
@@ -110,7 +110,7 @@ export function LeadsTable({
       {
         key: "property_name",
         header: "Property",
-        width: "11%",
+        width: "10%",
         sortable: true,
         render: (lead) => (
           <div>
@@ -153,7 +153,7 @@ export function LeadsTable({
       {
         key: "stage",
         header: "Stage",
-        width: "11%",
+        width: "10%",
         sortable: true,
         render: (lead) => {
           const colors = StageColors[lead.stage];
@@ -276,7 +276,7 @@ export function LeadsTable({
       {
         key: "last_activity_at",
         header: "Last Activity",
-        width: "19%",
+        width: "17%",
         sortable: true,
         render: (lead) => {
           const days = daysSince(lead.last_activity_at);
@@ -375,32 +375,88 @@ export function LeadsTable({
       {
         key: "next_follow_up_at",
         header: "Follow-up",
-        width: "9%",
+        // Widened from 9%: it now carries what is due rather than only when.
+        width: "14%",
         sortable: true,
         render: (lead) => {
-          if (!lead.next_follow_up_at) {
+          // Follow-ups and open tasks together, soonest first. A seller does
+          // not think of them as different things - both are "what do I owe
+          // this lead next" - and showing only the follow-up date hid every
+          // task that was actually the nearer commitment.
+          const items = lead.upcoming_items || [];
+
+          if (!items.length && !lead.next_follow_up_at) {
             return <span className="text-sm text-slate-300">—</span>;
           }
+
           const today = new Date().toISOString().slice(0, 10);
-          const due = lead.next_follow_up_at.slice(0, 10);
           // Same red / amber / slate coding as the follow-up filters on the
           // notes table, so the two read the same way.
-          if (due < today) {
-            const over = daysSince(lead.next_follow_up_at) ?? 0;
+          const toneFor = (iso: string) => {
+            const due = iso.slice(0, 10);
+            if (due < today) return "text-red-600";
+            if (due === today) return "text-amber-600";
+            return "text-slate-700";
+          };
+          const labelFor = (iso: string) => {
+            const due = iso.slice(0, 10);
+            if (due < today) return `${daysSince(iso) ?? 0}d late`;
+            if (due === today) return "Today";
+            return shortDate(iso);
+          };
+
+          // Nothing itemised but the lead still carries a date - keep the old
+          // behaviour rather than showing a dash.
+          if (!items.length) {
             return (
-              <div>
-                <p className="text-sm font-medium text-red-600">Overdue</p>
-                <p className="text-xs text-red-500">{over}d late</p>
-              </div>
+              <p
+                className={`text-sm font-medium ${toneFor(
+                  lead.next_follow_up_at!
+                )}`}
+              >
+                {labelFor(lead.next_follow_up_at!)}
+              </p>
             );
           }
-          if (due === today) {
-            return <p className="text-sm font-medium text-amber-600">Today</p>;
-          }
+
+          const [next, ...rest] = items;
           return (
-            <p className="text-sm text-slate-700 tabular-nums">
-              {shortDate(lead.next_follow_up_at)}
-            </p>
+            <div>
+              <p className={`text-sm font-medium ${toneFor(next.at)}`}>
+                {labelFor(next.at)}
+              </p>
+              <p
+                className="text-xs text-slate-500 break-words whitespace-normal leading-snug"
+                title={next.label}
+              >
+                {next.label}
+              </p>
+
+              {/* What follows it, so a busy lead is distinguishable from one
+                  with a single reminder sitting on it. */}
+              {rest.length > 0 && (
+                <div className="mt-1 space-y-0.5 border-l border-slate-200 pl-2">
+                  {rest.map((item, i) => (
+                    <p
+                      key={i}
+                      className="flex items-baseline gap-1.5 text-[11px] text-slate-400"
+                      title={item.label}
+                    >
+                      <span
+                        className={`shrink-0 tabular-nums ${
+                          item.at.slice(0, 10) < today
+                            ? "text-red-400"
+                            : "text-slate-400"
+                        }`}
+                      >
+                        {labelFor(item.at)}
+                      </span>
+                      <span className="truncate">{item.label}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
           );
         },
       },

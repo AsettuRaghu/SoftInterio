@@ -121,6 +121,10 @@ export default function LeadsPage() {
           : null, // e.g. "Note Added"
         formatDateForSearch(lead.last_activity_at),
         formatDateForSearch(lead.next_follow_up_at),
+        // The column lists task titles and note openings now, so searching
+        // "site visit" should find the lead that has one due.
+        ...(lead.upcoming_items || []).map((i) => i.label),
+        ...(lead.upcoming_items || []).map((i) => formatDateForSearch(i.at)),
         // Lets "overdue" and "today" find the leads the column marks as such,
         // since those words are rendered rather than stored.
         followUpKeywords(lead.next_follow_up_at),
@@ -331,6 +335,16 @@ export default function LeadsPage() {
             return item.last_activity_at
               ? new Date(item.last_activity_at).getTime()
               : 0;
+          case "next_follow_up_at": {
+            // The column is sortable and had no case here, so it fell through
+            // to "" and every row compared equal - clicking the header did
+            // nothing. Sorts by whatever is actually due soonest, which is now
+            // a task as often as a follow-up, and puts leads with nothing
+            // pending last rather than first.
+            const soonest =
+              item.upcoming_items?.[0]?.at || item.next_follow_up_at;
+            return soonest ? new Date(soonest).getTime() : Infinity;
+          }
           case "created_at":
             return item.created_at ? new Date(item.created_at).getTime() : 0;
           default:

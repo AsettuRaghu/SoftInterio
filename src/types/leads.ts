@@ -465,6 +465,15 @@ export interface Lead {
     detail?: string | null;
     at: string;
   }>;
+  /**
+   * The three nearest outstanding follow-ups and open tasks, soonest first.
+   * Overdue items sort to the top, being furthest in the past.
+   */
+  upcoming_items?: Array<{
+    kind: "follow_up" | "task" | string;
+    label: string;
+    at: string;
+  }>;
 
   // Timestamps
   created_at: string;
