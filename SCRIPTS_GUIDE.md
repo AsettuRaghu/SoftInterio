@@ -258,4 +258,21 @@ there pair by array position, which cannot be followed by reading source.
 
 ---
 
+## audit-api-permissions.js
+
+Which write endpoints enforce a permission, and which only check that someone is
+signed in.
+
+```bash
+node scripts/audit-api-permissions.js
+node scripts/audit-api-permissions.js --all   # list every route, not a sample
+```
+
+`audit-api-security.js` answers "is this route authenticated". This answers "is
+it authorised" - a different question, and the one that was missed. Every
+quotation template route passed the security audit while accepting writes from
+any signed-in user.
+
+---
+
 That's it. Run `--dry` first on anything that writes.

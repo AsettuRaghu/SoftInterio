@@ -11,6 +11,7 @@ import {
 } from "@/types/leads";
 import { logLeadActivity } from "@/lib/activity/log";
 import { generateUniqueProjectNumber } from "@/utils/project-number-generator";
+import { requestLogger } from "@/lib/logger/request";
 import {
   getPendingLeadWork,
   cancelPendingLeadWork,
@@ -22,6 +23,10 @@ interface RouteParams {
 
 // POST /api/sales/leads/[id]/transition - Change lead stage
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  // Declared before the try so the outer catch can use it: an unhandled error
+  // is precisely when knowing which request this was matters most.
+  let log = requestLogger(request);
+
   try {
     // Protect API route
     const guard = await protectApiRoute(request);
@@ -30,6 +35,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const { user } = guard;
+    log = requestLogger(request, { userId: user.id });
     const { id } = await params;
     const supabase = await createClient();
 
@@ -75,7 +81,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         await supabase.rpc("can_move_lead_to_won", { p_user_id: user.id });
 
       if (permissionError) {
-        console.error("Error checking won permission:", permissionError);
+        log.error("Error checking won permission", permissionError);
         return NextResponse.json(
           { error: "Failed to verify permissions" },
           { status: 500 }
@@ -325,7 +331,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             .eq("id", lead.property_id);
           
           if (propertyError) {
-            console.error("Error updating property:", propertyError);
+            log.error("Error updating property", propertyError);
             // Don't fail - continue with lead update
           }
         } else {
@@ -341,7 +347,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             .single();
           
           if (createPropertyError) {
-            console.error("Error creating property:", createPropertyError);
+            log.error("Error creating property", createPropertyError);
             // Don't fail - continue with lead update
           } else if (newProperty) {
             propertyId = newProperty.id;
@@ -414,7 +420,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (updateError) {
-      console.error("Error transitioning lead:", updateError);
+      log.error("Error transitioning lead", updateError);
       return NextResponse.json(
         { error: "Failed to update lead stage" },
         { status: 500 }
@@ -494,7 +500,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         // The stage change itself has already succeeded and must stand. An
         // empty quotation is recoverable in the builder; a failed transition
         // is not.
-        console.error("Error building quotation from scope:", scopeErr);
+        log.error("Error building quotation from scope", scopeErr);
       }
     }
 
@@ -541,7 +547,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (noteError) {
         // The stage change itself has already succeeded; losing the note copy
         // must not fail the request.
-        console.error("Failed to record stage-change note:", noteError);
+        log.error("Failed to record stage-change note", noteError);
       } else {
         stageNoteId = createdNote?.id ?? null;
       }
@@ -622,18 +628,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           }
         } catch (settingErr) {
           // If column doesn't exist or query fails, default to creating project
-          console.log(
-            "Tenant settings query failed, defaulting to create project:",
-            settingErr
-          );
+          log.debug("Tenant settings unavailable, defaulting to create a project", {
+            detail: settingErr,
+          });
         }
 
-        console.log(
-          "Should create project:",
+        log.debug("Project creation decision", {
           shouldCreateProject,
-          "Skip flag:",
-          body.skip_project_creation
-        );
+          skipRequested: body.skip_project_creation,
+        });
 
         if (shouldCreateProject && !body.skip_project_creation) {
           // Determine project category from service_type
@@ -644,14 +647,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           let winningQuotationId = body.selected_quotation_id || null;
           let projectQuotationId: string | null = null;
 
-          console.log(
-            "Creating project with category:",
+          log.info("Creating project from won lead", {
+            leadId: id,
             projectCategory,
-            "for lead:",
-            id,
-            "linked quotation:", 
-            winningQuotationId
-          );
+            quotationId: winningQuotationId,
+          });
 
           // Try to create project using RPC first, with retry logic for duplicate key errors
           let createdProjectId: string | null = null;
@@ -686,10 +686,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               'code' in rpcError &&
               rpcError.code === '23505'
             ) {
-              console.warn(
-                `Duplicate project number on attempt ${attempt + 1}/${maxRetries}, retrying...`,
-                rpcError.message
-              );
+              log.warn("Duplicate project number, retrying", {
+                attempt: attempt + 1,
+                maxRetries,
+                detail: rpcError.message,
+              });
               
               // Wait before retrying with exponential backoff
               if (attempt < maxRetries - 1) {
@@ -703,11 +704,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           }
 
           if (projectError) {
-            console.error("Error creating project from lead after retries:", projectError);
+            log.error("Error creating project from lead after retries", projectError);
             // Store the error to return to client
             projectCreationError = projectError;
           } else if (createdProjectId) {
-            console.log("Project created successfully:", createdProjectId);
+            log.debug("Project created successfully", { detail: createdProjectId });
             projectId = createdProjectId;
 
             // Joins the two timelines. Without this the lead's history stops
@@ -745,12 +746,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             if (to_stage === "won" && winningQuotationId) {
               try {
                 // 1. Lock the original quotation (sales side)
-                console.log(
-                  "[Quotation] Locking original quotation:",
-                  winningQuotationId,
-                  "for project:",
-                  projectId
-                );
+                log.debug("Locking the sales quotation for the project", {
+                  quotationId: winningQuotationId,
+                  projectId,
+                });
 
                 const { error: lockError } = await supabase.rpc(
                   "lock_quotation_for_project",
@@ -761,22 +760,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                 );
 
                 if (lockError) {
-                  console.warn(
-                    "Warning: Failed to lock original quotation:",
-                    lockError
-                  );
+                  log.warn("Warning: Failed to lock original quotation", { detail: lockError });
                   // Don't fail project creation if locking fails
                 } else {
-                  console.log(
-                    "[Quotation] Original quotation locked successfully"
-                  );
+                  log.debug("[Quotation] Original quotation locked successfully");
                 }
 
                 // 2. Copy quotation to project (create V1 baseline)
-                console.log(
-                  "[Quotation] Copying quotation to project:",
-                  winningQuotationId
-                );
+                log.debug("[Quotation] Copying quotation to project", { detail: winningQuotationId });
 
                 const { data: copiedQuotationId, error: copyError } =
                   await supabase.rpc("copy_quotation_to_project", {
@@ -786,14 +777,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                   });
 
                 if (copyError) {
-                  console.error("Error copying quotation:", copyError);
+                  log.error("Error copying quotation", copyError);
                   projectCreationError = copyError;
                 } else if (copiedQuotationId) {
                   projectQuotationId = copiedQuotationId;
-                  console.log(
-                    "[Quotation] Quotation copied successfully:",
-                    projectQuotationId
-                  );
+                  log.debug("[Quotation] Quotation copied successfully", { detail: projectQuotationId });
 
                   // 3. Update project with baseline quotation reference
                   const { error: updateProjectError } = await supabase
@@ -806,19 +794,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                     .eq("id", projectId);
 
                   if (updateProjectError) {
-                    console.error(
-                      "Error updating project quotation reference:",
-                      updateProjectError
-                    );
+                    log.error("Error updating project quotation reference", updateProjectError);
                     // Don't fail - quotation is copied even if link fails
                   } else {
-                    console.log(
-                      "[Quotation] Project linked to quotation successfully"
-                    );
+                    log.debug("[Quotation] Project linked to quotation successfully");
                   }
                 }
               } catch (quotationErr) {
-                console.error("Error in quotation linking flow:", quotationErr);
+                log.error("Error in quotation linking flow", quotationErr);
                 // Don't fail project creation if quotation operations fail
                 projectCreationError = quotationErr;
               }
@@ -826,7 +809,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           }
         }
       } catch (projectErr) {
-        console.error("Error in project creation flow:", projectErr);
+        log.error("Error in project creation flow", projectErr);
         projectCreationError = projectErr;
       }
 
@@ -848,7 +831,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             : (projectCreationError as { message?: string })?.message ||
               String(projectCreationError);
 
-        console.error("Project creation failed after winning the lead:", detail);
+        log.error("Project creation failed after winning the lead", detail);
 
         // Recorded on the lead so this is visible later, not only to whoever
         // happened to be looking at the screen.
@@ -890,7 +873,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       project_created: projectId !== null,
     });
   } catch (error) {
-    console.error("Stage transition API error:", error);
+    log.error("Stage transition API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
