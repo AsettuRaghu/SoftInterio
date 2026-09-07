@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import type { PermissionKey } from "@/types/roles-permissions";
 
 // Icons as components for cleaner code
 export const Icons = {
@@ -153,14 +154,20 @@ export const Icons = {
 export interface NavigationSubItem {
   name: string;
   href: string;
-  permission?: string; // Optional - if not specified, uses parent permission
+  /** Optional - if not specified, the parent menu's permission applies. */
+  permission?: PermissionKey;
 }
 
 export interface NavigationItem {
   name: string;
   href: string;
   icon: ReactNode;
-  permission: string; // Required permission to view this menu
+  /**
+   * Required permission to view this menu. Typed against the generated key
+   * list: a menu pointing at a permission that does not exist is hidden from
+   * everyone, which is indistinguishable from a deliberate restriction.
+   */
+  permission: PermissionKey;
   badge?: string;
   subItems?: NavigationSubItem[];
 }
@@ -206,7 +213,7 @@ export const navigationConfig: NavigationItem[] = [
       {
         name: "Reports",
         href: "/dashboard/projects/reports",
-        permission: "projects.reports.view",
+        permission: "projects.reports",
       },
     ],
   },
@@ -373,7 +380,7 @@ export const navigationConfig: NavigationItem[] = [
 // Helper to filter navigation based on permissions
 export function filterNavigationByPermissions(
   items: NavigationItem[],
-  hasPermission: (permission: string) => boolean,
+  hasPermission: (permission: PermissionKey) => boolean,
   showDisabled: boolean = true, // If true, show greyed out; if false, hide completely
 ): (NavigationItem & {
   disabled: boolean;

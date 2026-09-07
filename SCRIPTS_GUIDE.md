@@ -6,6 +6,7 @@
 npm run security:audit   # every API route is behind protectApiRoute
 npm run security:views   # no database view leaks rows to unauthenticated callers
 npm run db:orphans       # tenants left behind with no users
+npm run perms:check      # generated permission types still match the database
 ```
 
 All three exit non-zero on failure, so they work in CI.
@@ -276,3 +277,46 @@ any signed-in user.
 ---
 
 That's it. Run `--dry` first on anything that writes.
+
+---
+
+## generate-permission-types.js
+
+Rewrites `src/types/roles-permissions.ts` from the `permissions` and `roles`
+tables. **That file is generated - do not edit it by hand.**
+
+```bash
+node scripts/generate-permission-types.js         # rewrite
+node scripts/generate-permission-types.js --dry   # exit 1 if stale, write nothing
+```
+
+Run it whenever a permission or role is added, renamed or removed. The
+generated `PermissionKey` union is what makes a mistyped permission a compile
+error: `requiredPermissions`, the navigation config, `route-permissions.ts` and
+`PermissionGate` are all typed against it.
+
+Before this existed the file was hand-written and had drifted to 159 of 265
+permissions and 18 of 21 roles, so 106 granted permissions could not be named
+in TypeScript at all.
+
+Role hierarchy is deliberately not generated. The model is flat, even though
+`roles.hierarchy_level` still exists in the schema.
+
+---
+
+## audit-permission-keys.js
+
+```bash
+npm run perms:check
+```
+
+Checks the one thing the type system cannot - that the generated file still
+matches the database - and exits non-zero when it does not, so it works in CI.
+
+It also reports, without failing:
+
+- **granted to no role** - a permission that exists but is unreachable
+- **never referenced in `src/`** - a permission nothing enforces
+
+The second number is large (202 of 265) and is a useful map of how much of the
+permission model is still unenforced, module by module.

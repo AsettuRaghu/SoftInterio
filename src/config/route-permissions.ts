@@ -4,11 +4,19 @@
  * Used by middleware for server-side route protection
  */
 
+import type { PermissionKey } from "@/types/roles-permissions";
+
 export interface RoutePermission {
   /** The route pattern (supports exact match and prefix match with *) */
   pattern: string;
-  /** Required permission key(s) - user must have at least one */
-  permissions: string[];
+  /**
+   * Required permission key(s) - user must have at least one.
+   *
+   * Typed against the generated key list. Middleware denies a page when the
+   * caller holds none of these, so a key that does not exist locks the route
+   * for everyone - and looks exactly like an intentional restriction.
+   */
+  permissions: PermissionKey[];
   /** If true, user must have ALL permissions; if false, ANY permission suffices */
   requireAll?: boolean;
   /** Description for documentation */
@@ -48,16 +56,6 @@ export const routePermissions: RoutePermission[] = [
     pattern: "/dashboard/settings/billing",
     permissions: ["settings.billing"],
     description: "Billing and subscription",
-  },
-  {
-    pattern: "/dashboard/settings/roles/*",
-    permissions: ["settings.roles.view"],
-    description: "Roles management pages",
-  },
-  {
-    pattern: "/dashboard/settings/roles",
-    permissions: ["settings.roles.view"],
-    description: "Roles management",
   },
   // Profile is accessible to everyone - no restriction needed
   // {

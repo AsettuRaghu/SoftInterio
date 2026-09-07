@@ -14,11 +14,16 @@ interface UserPermissionsState {
 }
 
 interface UseUserPermissionsReturn extends UserPermissionsState {
-  hasPermission: (permission: PermissionKey | string) => boolean;
-  hasAnyPermission: (permissions: (PermissionKey | string)[]) => boolean;
-  hasAllPermissions: (permissions: (PermissionKey | string)[]) => boolean;
-  hasRole: (role: RoleSlug | string) => boolean;
-  hasAnyRole: (roles: (RoleSlug | string)[]) => boolean;
+  // Typed against the generated key list. These took `PermissionKey | string`,
+  // which accepts every string and so checked nothing: a mistyped key returned
+  // false and hid the control it guarded, looking exactly like a legitimate
+  // denial. Use isPermissionKey() for a value that genuinely arrives as a
+  // string at runtime.
+  hasPermission: (permission: PermissionKey) => boolean;
+  hasAnyPermission: (permissions: PermissionKey[]) => boolean;
+  hasAllPermissions: (permissions: PermissionKey[]) => boolean;
+  hasRole: (role: RoleSlug) => boolean;
+  hasAnyRole: (roles: RoleSlug[]) => boolean;
   isOwner: boolean;
   isAdmin: boolean;
   isAdminOrHigher: boolean;

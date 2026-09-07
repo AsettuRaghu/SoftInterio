@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { PermissionKey } from "@/types/roles-permissions";
 
 // ============================================
 // Types
@@ -54,8 +55,14 @@ export type GuardResult =
 export interface GuardOptions {
   /** Check tenant membership in tenant_users table */
   checkTenantMembership?: boolean;
-  /** Required permissions for this endpoint */
-  requiredPermissions?: string[];
+  /**
+   * Required permissions for this endpoint.
+   *
+   * Typed against the generated key list rather than plain string: a mistyped
+   * or renamed permission used to compile happily and then deny everyone at
+   * runtime, which looks identical to a deliberate restriction.
+   */
+  requiredPermissions?: PermissionKey[];
   /** Require all permissions (AND) or any permission (OR) */
   requireAllPermissions?: boolean;
   /**

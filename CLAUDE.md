@@ -122,12 +122,40 @@ A project is "yours" if you manage it **or created it**. Both, because
 ownership would show a `view_own` holder an empty list. This differs from leads
 on purpose.
 
-**106 of 265 permissions in the database are not declared in
-`src/types/roles-permissions.ts`**, and all 106 are granted to some role —
-including `quotations.templates.*`, which routes already gate on. That file's
-`PERMISSION_GROUPS` has **no consumers**; it is a stale aspirational document,
-not the source of truth. `role_permissions` is read-only in the app (no route
-writes it), so nothing can silently drop the undeclared grants.
+### `roles-permissions.ts` is generated — never edit it
+`src/types/roles-permissions.ts` is written by
+`node scripts/generate-permission-types.js` from the `permissions` and `roles`
+tables. Run it whenever a permission or role changes; `npm run perms:check`
+fails when it is stale.
+
+It was hand-written until 2026-09-07 and had drifted to 159 of 265 permissions
+and 18 of 21 roles, so 106 granted permissions could not be named in
+TypeScript. Its runtime exports — `PERMISSION_GROUPS`, `ROLE_HIERARCHY`,
+`isManagerRole`, `hasHigherOrEqualPrivilege`, `getAssignableRoles` — had zero
+consumers and are gone. Nothing expressing a hierarchy is generated, even
+though `roles.hierarchy_level` still exists in the schema.
+
+`requiredPermissions`, `navigationConfig`, `route-permissions.ts` and
+`PermissionGate` are all typed as `PermissionKey`, so a mistyped permission is
+now a compile error instead of a silent denial. Typing them found two live
+bugs: the nav asked for `projects.reports.view` (the real key is
+`projects.reports`), which hid that menu from everyone, and
+`/dashboard/settings/roles` was guarded by `settings.roles.view` — neither the
+route nor the permission exists.
+
+**There are two lead permission namespaces.** The code enforces `leads.*`;
+`sales.leads.*` (20 keys) is granted to roles and read nowhere. **Manager holds
+`sales.leads.view` but neither `leads.view` nor `leads.view_own`, so a Manager
+is denied leads entirely.** No current user is affected — every real account
+also holds Admin or Owner — but the grants need reconciling before anyone is
+given Manager alone.
+
+**202 of 265 permissions are referenced nowhere in `src/`.** `npm run
+perms:check` lists them by module; it is a fair map of how much of the
+permission model is still unenforced.
+
+`role_permissions` is read-only in the app (no route writes it), so nothing can
+silently drop a grant.
 
 ### Every project sub-route must prove lineage
 `requireProjectAccess()` in `src/lib/projects/guard.ts` resolves the project in

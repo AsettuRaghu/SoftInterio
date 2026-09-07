@@ -63,7 +63,9 @@ export async function POST_EXAMPLE(request: NextRequest) {
   try {
     // Step 1: Protect with permission requirement
     const guard = await protectApiRoute(request, {
-      requiredPermissions: ["resource.create"],
+      // A real key from the generated list - requiredPermissions is typed,
+      // so a made-up example would no longer compile.
+      requiredPermissions: ["projects.create"],
       requireAllPermissions: true,
     });
     if (!guard.success) {
