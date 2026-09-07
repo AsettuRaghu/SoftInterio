@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { requestLogger } from "@/lib/logger/request";
 
 /**
  * Everything the sales report needs, computed in one place.
@@ -52,6 +53,8 @@ const median = (values: number[]) => {
 };
 
 export async function GET(request: NextRequest) {
+  const log = requestLogger(request);
+
   try {
     const guard = await protectApiRoute(request);
     if (!guard.success) return createErrorResponse(guard.error!, guard.statusCode!);
@@ -459,7 +462,7 @@ export async function GET(request: NextRequest) {
       trend,
     });
   } catch (error) {
-    console.error("Lead analytics error:", error);
+    log.error("Lead analytics error", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

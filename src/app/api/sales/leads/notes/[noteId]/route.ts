@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { requestLogger } from "@/lib/logger/request";
 import {
   logLeadActivity,
   logNoteChange,
@@ -59,8 +60,15 @@ async function logNoteUpdate(
 
 // PATCH /api/sales/leads/notes/[noteId] - Update a note
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      // No leads.notes.edit exists, so the ability to write notes is the gate.
+      // Narrower than ideal - anyone who can add a note can amend another
+      // person's - but far better than any signed-in user being able to.
+      requiredPermissions: ["leads.notes.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -132,7 +140,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (error) {
-      console.error("Error updating note:", error);
+      log.error("Error updating note", error);
       return NextResponse.json(
         { error: "Failed to update note" },
         { status: 500 }
@@ -143,7 +151,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ success: true, note });
   } catch (error) {
-    console.error("Error updating note:", error);
+    log.error("Error updating note", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -153,8 +161,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 // DELETE /api/sales/leads/notes/[noteId] - Delete a note
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      // No leads.notes.edit exists, so the ability to write notes is the gate.
+      // Narrower than ideal - anyone who can add a note can amend another
+      // person's - but far better than any signed-in user being able to.
+      requiredPermissions: ["leads.notes.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -180,7 +195,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       .eq("id", noteId);
 
     if (error) {
-      console.error("Error deleting note:", error);
+      log.error("Error deleting note", error);
       return NextResponse.json(
         { error: "Failed to delete note" },
         { status: 500 }
@@ -198,7 +213,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Error deleting note:", error);
+    log.error("Error deleting note", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

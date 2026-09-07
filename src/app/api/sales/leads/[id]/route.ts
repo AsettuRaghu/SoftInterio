@@ -9,6 +9,8 @@ import {
 } from "@/lib/activity/log";
 import type { UpdateLeadInput } from "@/types/leads";
 import { validateLeadDates, type LeadDateFields } from "@/lib/dates/lead-dates";
+import { leadAccess, canReadLead, canWriteLead } from "@/lib/leads/access";
+import { requestLogger } from "@/lib/logger/request";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -16,9 +18,11 @@ interface RouteParams {
 
 // GET /api/sales/leads/[id] - Get single lead with all related data
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  let log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -26,6 +30,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
+    log = requestLogger(request, { userId: user.id });
+    const access = leadAccess(guard.permissions, user.isSuperAdmin);
+
+    if (access.denied) {
+      log.warn("Lead read refused: no permission", { leadId: id });
+      return NextResponse.json(
+        { error: "You do not have permission to view leads" },
+        { status: 403 }
+      );
+    }
 
     // Use admin client for fetching leads with user data (bypasses RLS for foreign key joins)
     const supabaseAdmin = createAdminClient();
@@ -61,11 +75,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (leadError.code === "PGRST116") {
         return NextResponse.json({ error: "Lead not found" }, { status: 404 });
       }
-      console.error("Error fetching lead:", leadError);
+      log.error("Error fetching lead", leadError, { leadId: id });
       return NextResponse.json(
         { error: "Failed to fetch lead" },
         { status: 500 }
       );
+    }
+
+    // Checked before the related data is fetched, so a lead the caller may not
+    // see does not have its notes, documents and activities read out of the
+    // database on the way to being refused. Answered as 404 rather than 403:
+    // whether a particular lead exists is itself information.
+    if (!canReadLead(access, lead, user.id)) {
+      log.warn("Lead access refused", { leadId: id });
+      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 
     // Fetch related data in parallel using admin client
@@ -247,7 +270,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Debug: Log tasks being fetched
-    console.log(`[Lead API] Fetched ${tasks?.length || 0} tasks for lead ${id}`);
+    log.debug("Lead detail loaded", { leadId: id, taskCount: tasks?.length || 0 });
 
     // Add spaces and components counts to quotations
     if (quotations && quotations.length > 0) {
@@ -300,7 +323,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       calendarEvents: calendarEvents || [],
     });
   } catch (error) {
-    console.error("Get lead API error:", error);
+    log.error("Get lead API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -310,9 +333,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 // PATCH /api/sales/leads/[id] - Update lead and linked client/property records
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  let log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -320,6 +345,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
+    log = requestLogger(request, { userId: user.id });
+    const access = leadAccess(guard.permissions, user.isSuperAdmin);
 
     const body: UpdateLeadInput = await request.json();
 
@@ -341,6 +368,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     if (fetchError || !existingLead) {
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+
+    // leads.edit changes any lead; leads.edit_own changes only leads assigned
+    // to the caller. Checked against the stored assignment rather than the
+    // request body, or a caller could reassign a lead to themselves in the
+    // same request that grants them the right to edit it.
+    if (!canWriteLead(access, existingLead, user.id)) {
+      log.warn("Lead update refused", {
+        leadId: id,
+        assignedTo: existingLead.assigned_to,
+      });
+      return NextResponse.json(
+        { error: "You do not have permission to edit this lead" },
+        { status: 403 }
+      );
     }
 
     // Prevent modification of closed leads (won/lost/disqualified)
@@ -426,7 +468,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           .eq("id", existingLead.client_id);
         
         if (clientError) {
-          console.error("Error updating client:", clientError);
+          log.error("Error updating client", clientError);
           return NextResponse.json(
             { error: "Failed to update client record" },
             { status: 500 }
@@ -463,7 +505,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             .eq("id", existingLead.property_id);
           
           if (propertyError) {
-            console.error("Error updating property:", propertyError);
+            log.error("Error updating property", propertyError);
             return NextResponse.json(
               { error: `Failed to update property: ${propertyError.message}` },
               { status: 500 }
@@ -489,7 +531,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             .single();
           
           if (createPropertyError) {
-            console.error("Error creating property:", createPropertyError);
+            log.error("Error creating property", createPropertyError);
             return NextResponse.json(
               { error: `Failed to create property: ${createPropertyError.message}` },
               { status: 500 }
@@ -533,7 +575,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         .eq("id", id);
 
       if (updateError) {
-        console.error("Error updating lead:", updateError);
+        log.error("Error updating lead", updateError);
         return NextResponse.json(
           { error: "Failed to update lead" },
           { status: 500 }
@@ -615,7 +657,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (refetchError) {
-      console.error("Error refetching lead:", refetchError);
+      log.error("Error refetching lead", refetchError);
       return NextResponse.json(
         { error: "Lead updated but failed to fetch" },
         { status: 500 }
@@ -624,7 +666,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ lead });
   } catch (error) {
-    console.error("Update lead API error:", error);
+    log.error("Update lead API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -634,9 +676,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 // DELETE /api/sales/leads/[id] - Delete lead (soft delete or hard delete based on business rules)
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  let log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -644,26 +688,54 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
+    log = requestLogger(request, { userId: user.id });
 
-    // TODO: Check user has delete permission
+    // This handler carried a "TODO: Check user has delete permission" and then
+    // hard-deleted the lead. Any signed-in member of the tenant could destroy
+    // any lead, with its notes, activities and stage history, permanently.
+    //
+    // leads.delete is deliberately narrow - Owner, Admin and Sales Manager -
+    // and unlike editing there is no _own variant: deleting is not something a
+    // salesperson does to their own pipeline.
+    if (!user.isSuperAdmin && !guard.permissions?.has("leads.delete")) {
+      log.warn("Lead delete refused", { leadId: id });
+      return NextResponse.json(
+        { error: "You do not have permission to delete leads" },
+        { status: 403 }
+      );
+    }
 
-    // For now, we do hard delete (could add soft delete later)
+    // Read before deleting: afterwards there is nothing left to say what was
+    // destroyed, and a deletion is the one action nobody can undo.
+    const { data: doomed } = await supabase
+      .from("leads")
+      .select("lead_number, stage, assigned_to, client:clients(name)")
+      .eq("id", id)
+      .maybeSingle();
+
     const { error: deleteError } = await supabase
       .from("leads")
       .delete()
       .eq("id", id);
 
     if (deleteError) {
-      console.error("Error deleting lead:", deleteError);
+      log.error("Error deleting lead", deleteError, { leadId: id });
       return NextResponse.json(
         { error: "Failed to delete lead" },
         { status: 500 }
       );
     }
 
+    log.info("Lead deleted", {
+      leadId: id,
+      leadNumber: doomed?.lead_number,
+      stage: doomed?.stage,
+      client: (doomed?.client as { name?: string } | null)?.name,
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Delete lead API error:", error);
+    log.error("Delete lead API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

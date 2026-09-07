@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { uiLogger } from "@/lib/logger";
 import type {
   Property,
   CreatePropertyInput,
@@ -116,7 +117,7 @@ export function PropertySelector({
           setSearchResults(data.properties || []);
         }
       } catch (error) {
-        console.error("Error searching properties:", error);
+        uiLogger.error("Error searching properties", error);
       } finally {
         setIsSearching(false);
       }
@@ -137,7 +138,7 @@ export function PropertySelector({
         setSelectedProperty(data.property);
       }
     } catch (error) {
-      console.error("Error fetching property details:", error);
+      uiLogger.error("Error fetching property details", error);
     }
   };
 

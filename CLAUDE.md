@@ -83,6 +83,21 @@ Tasks are deliberately not carried into the project — a project starts with a
 clean slate rather than a sales backlog. Note tasks link to a lead through
 `related_type`/`related_id`, not a `lead_id` column.
 
+### Permissions are flat, and view_own means assigned to you
+No hierarchy, no reporting lines: a person can do what their granted
+permissions say, nothing inherited. `leads.view` is every lead in the tenant;
+`leads.view_own` is leads whose `assigned_to` is the caller — not leads they
+created, since leads arrive from forms and imports with a system creator.
+
+**RLS does not enforce this.** The policy on `leads` checks tenant membership
+and nothing else, and the list route uses the admin client, which bypasses RLS
+entirely. Scoping happens in `src/lib/leads/access.ts` and in the route, or it
+happens nowhere.
+
+`role_permissions.granted` is tri-state — a row can exist to *revoke*. The API
+guard ignored it until 2026-09-07, so a revoke honoured by the settings UI was
+ignored by the API.
+
 ### Charges are ordinary line items
 Delivery, cleanup and site protection are cost items in a category marked
 `is_charge`. A space made up entirely of such items *prints* below the room

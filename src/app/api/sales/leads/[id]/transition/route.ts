@@ -12,6 +12,7 @@ import {
 import { logLeadActivity } from "@/lib/activity/log";
 import { generateUniqueProjectNumber } from "@/utils/project-number-generator";
 import { requestLogger } from "@/lib/logger/request";
+import { leadAccess, canWriteLead } from "@/lib/leads/access";
 import {
   getPendingLeadWork,
   cancelPendingLeadWork,
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -61,6 +62,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (fetchError || !lead) {
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+
+    // Moving a lead through the pipeline is editing it, so the same rule
+    // applies: leads.edit for any lead, leads.edit_own for your own. Checked
+    // here, after the lead is loaded, because ownership can only be judged
+    // against the stored assignment.
+    const access = leadAccess(guard.permissions, user.isSuperAdmin);
+    if (!canWriteLead(access, lead, user.id)) {
+      log.warn("Stage transition refused", {
+        leadId: id,
+        toStage: to_stage,
+        assignedTo: lead.assigned_to,
+      });
+      return NextResponse.json(
+        { error: "You do not have permission to change this lead's stage" },
+        { status: 403 }
+      );
     }
 
     const fromStage = lead.stage as LeadStage;
@@ -763,11 +781,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                   log.warn("Warning: Failed to lock original quotation", { detail: lockError });
                   // Don't fail project creation if locking fails
                 } else {
-                  log.debug("[Quotation] Original quotation locked successfully");
+                  log.debug("Original quotation locked successfully");
                 }
 
                 // 2. Copy quotation to project (create V1 baseline)
-                log.debug("[Quotation] Copying quotation to project", { detail: winningQuotationId });
+                log.debug("Copying quotation to project", { detail: winningQuotationId });
 
                 const { data: copiedQuotationId, error: copyError } =
                   await supabase.rpc("copy_quotation_to_project", {
@@ -781,7 +799,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                   projectCreationError = copyError;
                 } else if (copiedQuotationId) {
                   projectQuotationId = copiedQuotationId;
-                  log.debug("[Quotation] Quotation copied successfully", { detail: projectQuotationId });
+                  log.debug("Quotation copied successfully", { detail: projectQuotationId });
 
                   // 3. Update project with baseline quotation reference
                   const { error: updateProjectError } = await supabase
@@ -797,7 +815,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                     log.error("Error updating project quotation reference", updateProjectError);
                     // Don't fail - quotation is copied even if link fails
                   } else {
-                    log.debug("[Quotation] Project linked to quotation successfully");
+                    log.debug("Project linked to quotation successfully");
                   }
                 }
               } catch (quotationErr) {

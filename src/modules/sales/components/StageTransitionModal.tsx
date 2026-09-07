@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { todayISO } from "@/lib/dates/lead-dates";
+import { uiLogger } from "@/lib/logger";
 
 /**
  * Carries a stored date into the form only while it still makes sense.
@@ -120,33 +121,21 @@ export function StageTransitionModal({
       setLoadingManagers(true);
       try {
         const response = await fetch("/api/settings/team/project-managers");
-        console.log(
-          "[StageTransitionModal] Project managers API response status:",
-          response.status
-        );
-
         if (response.ok) {
           const data = await response.json();
-          console.log(
-            "[StageTransitionModal] Project managers loaded:",
-            data.length,
-            "items"
-          );
-          console.log("[StageTransitionModal] Project managers data:", data);
+          // The full list was logged on every open - names and emails of every
+          // project manager into the browser console each time the modal
+          // appeared. The count is what a debugger needs.
+          uiLogger.debug("Project managers loaded", { count: data.length });
           setProjectManagers(data);
         } else {
           const errorData = await response.json().catch(() => ({}));
-          console.error(
-            "[StageTransitionModal] API error:",
-            response.status,
-            errorData
-          );
+          uiLogger.error("Failed to load project managers", errorData, {
+            status: response.status,
+          });
         }
       } catch (err) {
-        console.error(
-          "[StageTransitionModal] Failed to load project managers:",
-          err
-        );
+        uiLogger.error("Failed to load project managers", err);
       } finally {
         setLoadingManagers(false);
       }
@@ -289,7 +278,7 @@ export function StageTransitionModal({
       const errorMessage =
         err instanceof Error ? err.message : "An error occurred";
       setError(errorMessage);
-      console.error("Stage transition error:", err);
+      uiLogger.error("Stage transition error", err);
       setIsSubmitting(false);
     }
   };

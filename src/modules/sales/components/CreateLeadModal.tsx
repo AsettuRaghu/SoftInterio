@@ -20,6 +20,7 @@ import {
 } from "@/types/leads";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { todayISO } from "@/lib/dates/lead-dates";
+import { uiLogger } from "@/lib/logger";
 
 interface TeamMember {
   id: string;
@@ -95,7 +96,7 @@ export function CreateLeadModal({
           }
         }
       } catch (err) {
-        console.error("Failed to fetch team members:", err);
+        uiLogger.error("Failed to fetch team members", err);
       } finally {
         setLoadingTeamMembers(false);
       }

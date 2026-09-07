@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { logLeadActivity, noteExcerpt } from "@/lib/activity/log";
+import { requestLogger } from "@/lib/logger/request";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -9,6 +10,8 @@ interface RouteParams {
 
 // GET /api/sales/leads/[id]/notes - Get lead notes
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
     const guard = await protectApiRoute(request);
@@ -33,7 +36,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Error fetching notes:", error);
+      log.error("Error fetching notes", error);
       return NextResponse.json(
         { error: "Failed to fetch notes" },
         { status: 500 }
@@ -42,7 +45,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ notes: notes || [] });
   } catch (error) {
-    console.error("Get notes API error:", error);
+    log.error("Get notes API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -52,9 +55,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 // POST /api/sales/leads/[id]/notes - Add a note
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["leads.notes.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -104,7 +111,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (createError) {
-      console.error("Error creating note:", createError);
+      log.error("Error creating note", createError);
       return NextResponse.json(
         { error: "Failed to create note" },
         { status: 500 }
@@ -140,7 +147,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ note }, { status: 201 });
   } catch (error) {
-    console.error("Create note API error:", error);
+    log.error("Create note API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

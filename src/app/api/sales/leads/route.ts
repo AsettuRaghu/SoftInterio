@@ -5,17 +5,35 @@ import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { generateUniqueLeadNumber } from "@/utils/lead-number-generator";
 import type { CreateLeadInput, LeadStage } from "@/types/leads";
 import { validateLeadDates, type LeadDateFields } from "@/lib/dates/lead-dates";
+import { leadAccess } from "@/lib/leads/access";
+import { requestLogger } from "@/lib/logger/request";
 
 // GET /api/sales/leads - List leads with filters
 export async function GET(request: NextRequest) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
     const { user } = guard;
+    const log = requestLogger(request, { userId: user.id });
+
+    // leads.view sees the tenant's leads; leads.view_own sees only leads
+    // assigned to the caller. RLS enforces neither - its policy checks tenant
+    // membership alone - so without this a salesperson holding only view_own
+    // could read every lead in the business.
+    const access = leadAccess(guard.permissions, user.isSuperAdmin);
+    if (access.denied) {
+      log.warn("Lead list refused: no read permission");
+      return NextResponse.json(
+        { error: "You do not have permission to view leads" },
+        { status: 403 }
+      );
+    }
     const supabase = await createClient();
 
     // Get user's tenant
@@ -69,6 +87,13 @@ export async function GET(request: NextRequest) {
         { count: "exact" }
       )
       .eq("tenant_id", userData.tenant_id);
+
+    // Narrowed before any other filter, so nothing downstream can widen it
+    // back. This query uses the admin client, which bypasses RLS entirely -
+    // the scoping has to happen here or it happens nowhere.
+    if (!access.readAll) {
+      query = query.eq("assigned_to", user.id);
+    }
 
     // Apply filters
     if (stages) {
@@ -131,7 +156,7 @@ export async function GET(request: NextRequest) {
     const { data: leads, error: leadsError, count } = await query;
 
     if (leadsError) {
-      console.error("[GET /api/sales/leads] Error fetching leads:", leadsError);
+      log.error("Error fetching leads", leadsError);
       return NextResponse.json(
         { error: "Failed to fetch leads", details: leadsError.message },
         { status: 500 }
@@ -158,7 +183,7 @@ export async function GET(request: NextRequest) {
 
       if (recentError) {
         // Non-fatal: the list still renders, just without the detail line.
-        console.error("[GET /api/sales/leads] activity detail:", recentError);
+        log.error("activity detail", recentError);
       } else {
         // Rows arrive newest-first, so the first three seen per lead are the
         // three most recent. Three rather than one because a single line says
@@ -245,7 +270,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("[GET /api/sales/leads] Unexpected error:", error);
+    log.error("Unexpected error", error);
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : "Failed to get leads" },
       { status: 500 }
@@ -256,17 +281,18 @@ export async function GET(request: NextRequest) {
 // POST /api/sales/leads - Create a new lead
 // This also creates linked Client and Property records automatically
 export async function POST(request: NextRequest) {
-  console.log("[POST /api/sales/leads] Starting request");
+  const log = requestLogger(request);
 
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["leads.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
     const { user } = guard;
-    console.log("[POST /api/sales/leads] User authenticated:", user!.id);
 
     const supabase = await createClient();
 
@@ -278,10 +304,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (userError) {
-      console.error(
-        "[POST /api/sales/leads] Error fetching user data:",
-        userError
-      );
+      log.error("Error fetching user data", userError);
       return NextResponse.json(
         { error: "Failed to fetch user data" },
         { status: 500 }
@@ -289,32 +312,34 @@ export async function POST(request: NextRequest) {
     }
 
     if (!userData?.tenant_id) {
-      console.log("[POST /api/sales/leads] User has no tenant");
+      log.debug("User has no tenant");
       return NextResponse.json(
         { error: "User not found or no tenant" },
         { status: 404 }
       );
     }
-    console.log("[POST /api/sales/leads] Tenant ID:", userData.tenant_id);
+    log.debug("Tenant ID", { detail: userData.tenant_id });
 
     const body: CreateLeadInput = await request.json();
-    console.log(
-      "[POST /api/sales/leads] Request body:",
-      JSON.stringify(body, null, 2)
-    );
+    // The whole body was logged as pretty-printed JSON on every request -
+     // client name, phone and email into the log stream on a create. Only the
+     // shape is recorded now.
+    log.debug("Creating lead", {
+      hasClient: !!body.client_name,
+      source: body.lead_source,
+      serviceType: body.service_type,
+    });
 
     // Validate required fields
     if (!body.client_name?.trim()) {
-      console.log(
-        "[POST /api/sales/leads] Validation failed: client_name required"
-      );
+      log.debug("Validation failed: client_name required");
       return NextResponse.json(
         { error: "Client name is required" },
         { status: 400 }
       );
     }
     if (!body.phone?.trim()) {
-      console.log("[POST /api/sales/leads] Validation failed: phone required");
+      log.debug("Validation failed: phone required");
       return NextResponse.json(
         { error: "Phone number is required" },
         { status: 400 }
@@ -332,7 +357,7 @@ export async function POST(request: NextRequest) {
     }
 
     // STEP 1: Create Client record
-    console.log("[POST /api/sales/leads] Creating client record");
+    log.debug("Creating client record");
     const { data: client, error: clientError } = await supabase
       .from("clients")
       .insert({
@@ -348,23 +373,20 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (clientError) {
-      console.error(
-        "[POST /api/sales/leads] Error creating client:",
-        clientError
-      );
+      log.error("Error creating client", clientError);
       return NextResponse.json(
         { error: "Failed to create client record", details: clientError.message },
         { status: 500 }
       );
     }
-    console.log("[POST /api/sales/leads] Client created:", client.id);
+    log.debug("Client created", { detail: client.id });
 
     // STEP 2: Create Property record (if property details provided)
     let propertyId: string | null = null;
     const hasPropertyData = body.property_name || body.unit_number || body.property_city || body.property_category;
     
     if (hasPropertyData) {
-      console.log("[POST /api/sales/leads] Creating property record");
+      log.debug("Creating property record");
       const { data: property, error: propertyError } = await supabase
         .from("properties")
         .insert({
@@ -383,25 +405,22 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (propertyError) {
-        console.error(
-          "[POST /api/sales/leads] Error creating property:",
-          propertyError
-        );
+        log.error("Error creating property", propertyError);
         // Don't fail the lead creation - property is optional
-        console.warn("[POST /api/sales/leads] Continuing without property record");
+        log.warn("Continuing without property record");
       } else {
         propertyId = property.id;
-        console.log("[POST /api/sales/leads] Property created:", propertyId);
+        log.debug("Property created", { detail: propertyId });
       }
     }
 
     // STEP 3: Generate lead number based on tenant_lead_config
-    console.log("[POST /api/sales/leads] Generating lead number");
+    log.debug("Generating lead number");
     const leadNumber = await generateUniqueLeadNumber(userData.tenant_id);
-    console.log("[POST /api/sales/leads] Generated lead number:", leadNumber);
+    log.debug("Generated lead number", { detail: leadNumber });
 
     // STEP 4: Create Lead record with linked client and property
-    console.log("[POST /api/sales/leads] Creating lead in database");
+    log.debug("Creating lead in database");
     const { data: lead, error: createError } = await supabase
       .from("leads")
       .insert({
@@ -432,10 +451,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (createError) {
-      console.error(
-        "[POST /api/sales/leads] Error creating lead:",
-        JSON.stringify(createError, null, 2)
-      );
+      log.error("Error creating lead", createError);
 
       // Clean up created client and property if lead creation fails
       if (client?.id) {
@@ -451,11 +467,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(
-      "[POST /api/sales/leads] Lead created successfully:",
-      lead.id,
-      lead.lead_number
-    );
+    log.info("Lead created", { leadId: lead.id, leadNumber: lead.lead_number });
 
     // Create initial activity
     const { error: activityError } = await supabase
@@ -469,10 +481,7 @@ export async function POST(request: NextRequest) {
       });
 
     if (activityError) {
-      console.warn(
-        "[POST /api/sales/leads] Failed to create activity:",
-        activityError
-      );
+      log.warn("Failed to create activity", { detail: activityError });
     }
 
     // Create note if provided
@@ -484,17 +493,14 @@ export async function POST(request: NextRequest) {
       });
 
       if (noteError) {
-        console.warn(
-          "[POST /api/sales/leads] Failed to create note:",
-          noteError
-        );
+        log.warn("Failed to create note", { detail: noteError });
       }
     }
 
-    console.log("[POST /api/sales/leads] Request completed successfully");
+    log.debug("Request completed successfully");
     return NextResponse.json({ lead }, { status: 201 });
   } catch (error) {
-    console.error("[POST /api/sales/leads] Unexpected error:", error);
+    log.error("Unexpected error", error);
     return NextResponse.json(
       {
         error: "Internal server error",

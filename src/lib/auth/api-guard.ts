@@ -29,9 +29,27 @@ export interface AuthenticatedUser {
 }
 
 // Discriminated union for better type narrowing
-export type GuardResult = 
-  | { success: true; user: AuthenticatedUser; error?: undefined; statusCode?: undefined }
-  | { success: false; user?: undefined; error: string; statusCode: number };
+export type GuardResult =
+  | {
+      success: true;
+      user: AuthenticatedUser;
+      /**
+       * Every permission key this user holds.
+       *
+       * Exposed because a yes/no gate is not enough for permissions that come
+       * in a broad and a narrow form. A route that accepts leads.edit or
+       * leads.edit_own has to know which one it got: the first means any lead,
+       * the second means only the caller's own, and the guard alone cannot
+       * make that distinction.
+       *
+       * Populated whenever permissions were resolved. Empty for a route that
+       * asked for none - absence here is not proof the user holds nothing.
+       */
+      permissions: Set<string>;
+      error?: undefined;
+      statusCode?: undefined;
+    }
+  | { success: false; user?: undefined; permissions?: undefined; error: string; statusCode: number };
 
 export interface GuardOptions {
   /** Check tenant membership in tenant_users table */
@@ -40,6 +58,11 @@ export interface GuardOptions {
   requiredPermissions?: string[];
   /** Require all permissions (AND) or any permission (OR) */
   requireAllPermissions?: boolean;
+  /**
+   * Resolve the user's permissions even when none are required, so the route
+   * can branch on what they hold. Costs one extra query.
+   */
+  loadPermissions?: boolean;
 }
 
 // ============================================
@@ -142,6 +165,7 @@ export async function protectApiRoute(
     checkTenantMembership = true,
     requiredPermissions = [],
     requireAllPermissions = true,
+    loadPermissions = false,
   } = options;
 
   try {
@@ -226,13 +250,19 @@ export async function protectApiRoute(
     // ----------------------------------------
     // Step 4: Check Permissions (if required)
     // ----------------------------------------
-    if (requiredPermissions.length > 0 && !userData.is_super_admin) {
+    const permissionKeys = new Set<string>();
+
+    if (
+      (requiredPermissions.length > 0 || loadPermissions) &&
+      !userData.is_super_admin
+    ) {
       const { data: userPermissions } = await adminClient
         .from("user_roles")
         .select(
           `
           role:roles(
             role_permissions(
+              granted,
               permission:permissions(key)
             )
           )
@@ -240,27 +270,29 @@ export async function protectApiRoute(
         )
         .eq("user_id", authUser.id);
 
-      // Extract permission keys
-      const permissionKeys = new Set<string>();
       userPermissions?.forEach((ur: any) => {
         ur.role?.role_permissions?.forEach((rp: any) => {
-          if (rp.permission?.key) {
+          // granted is a tri-state: a row can exist to *revoke* a permission.
+          // It was not read here, so an explicit revoke would have been
+          // honoured by the settings UI and ignored by the API.
+          if (rp.permission?.key && rp.granted !== false) {
             permissionKeys.add(rp.permission.key);
           }
         });
       });
 
-      // Check if user has required permissions
-      const hasPermissions = requireAllPermissions
-        ? requiredPermissions.every((p) => permissionKeys.has(p))
-        : requiredPermissions.some((p) => permissionKeys.has(p));
+      if (requiredPermissions.length > 0) {
+        const hasPermissions = requireAllPermissions
+          ? requiredPermissions.every((p) => permissionKeys.has(p))
+          : requiredPermissions.some((p) => permissionKeys.has(p));
 
-      if (!hasPermissions) {
-        return {
-          success: false,
-          error: "You do not have permission to perform this action",
-          statusCode: 403,
-        };
+        if (!hasPermissions) {
+          return {
+            success: false,
+            error: "You do not have permission to perform this action",
+            statusCode: 403,
+          };
+        }
       }
     }
 
@@ -269,6 +301,7 @@ export async function protectApiRoute(
     // ----------------------------------------
     return {
       success: true,
+      permissions: permissionKeys,
       user: {
         id: userData.id,
         email: userData.email,

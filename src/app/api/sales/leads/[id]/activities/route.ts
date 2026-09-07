@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import type { LeadActivityType, MeetingType, MeetingAttendee } from "@/types/leads";
+import { requestLogger } from "@/lib/logger/request";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -10,9 +11,13 @@ interface RouteParams {
 
 // GET /api/sales/leads/[id]/activities - Get all activities for a lead
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["leads.activities.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -58,7 +63,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .order("created_at", { ascending: false });
 
     if (activitiesError) {
-      console.error("Error fetching activities:", activitiesError);
+      log.error("Error fetching activities", activitiesError);
       return NextResponse.json(
         { error: "Failed to fetch activities" },
         { status: 500 }
@@ -67,7 +72,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ activities: activities || [] });
   } catch (error) {
-    console.error("Get activities API error:", error);
+    log.error("Get activities API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -77,9 +82,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 // POST /api/sales/leads/[id]/activities - Create a new activity
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["leads.activities.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -170,7 +179,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (createError) {
-      console.error("Error creating activity:", createError);
+      log.error("Error creating activity", createError);
       return NextResponse.json(
         { error: "Failed to create activity" },
         { status: 500 }
@@ -217,7 +226,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ activity }, { status: 201 });
   } catch (error) {
-    console.error("Create activity API error:", error);
+    log.error("Create activity API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -227,9 +236,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
 // PATCH /api/sales/leads/[id]/activities?activityId=xxx - Update an activity (e.g., mark meeting as completed)
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["leads.activities.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -316,7 +329,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (updateError) {
-      console.error("Error updating activity:", updateError);
+      log.error("Error updating activity", updateError);
       return NextResponse.json(
         { error: "Failed to update activity" },
         { status: 500 }
@@ -325,7 +338,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ activity });
   } catch (error) {
-    console.error("Update activity API error:", error);
+    log.error("Update activity API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -335,9 +348,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 // DELETE /api/sales/leads/[id]/activities?activityId=xxx - Delete an activity
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["leads.activities.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -388,7 +405,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       .eq("lead_id", leadId);
 
     if (deleteError) {
-      console.error("Error deleting activity:", deleteError);
+      log.error("Error deleting activity", deleteError);
       return NextResponse.json(
         { error: "Failed to delete activity" },
         { status: 500 }
@@ -397,7 +414,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Delete activity API error:", error);
+    log.error("Delete activity API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

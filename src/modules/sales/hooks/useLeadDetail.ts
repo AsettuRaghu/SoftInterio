@@ -10,6 +10,7 @@ import type {
 import type { Task } from "@/types/tasks";
 import type { DocumentWithUrl, Document } from "@/types/documents";
 import type { EditFormData } from "../components/EditLeadModal";
+import { uiLogger } from "@/lib/logger";
 
 export interface TaskWithUser extends Task {
   assigned_user?: {
@@ -98,7 +99,7 @@ export function useLeadDetail() {
       // rather than leaving the Timeline tab stale.
       setActivities(data.activities || []);
     } catch (err) {
-      console.error("Error fetching tasks:", err);
+      uiLogger.error("Error fetching tasks", err);
     }
   }, [leadId]);
 
@@ -116,7 +117,7 @@ export function useLeadDetail() {
       // follow-up - all write timeline entries. Same response, no extra call.
       setActivities(data.activities || []);
     } catch (err) {
-      console.error("Error fetching notes:", err);
+      uiLogger.error("Error fetching notes", err);
     }
   }, [leadId]);
 
@@ -131,7 +132,7 @@ export function useLeadDetail() {
       const data = await response.json();
       setActivities(data.activities || []);
     } catch (err) {
-      console.error("Error fetching activities:", err);
+      uiLogger.error("Error fetching activities", err);
     }
   }, [leadId]);
 
@@ -151,7 +152,7 @@ export function useLeadDetail() {
         );
       }
     } catch (err) {
-      console.error("Failed to fetch team members:", err);
+      uiLogger.error("Failed to fetch team members", err);
     }
   }, []);
 
@@ -167,7 +168,7 @@ export function useLeadDetail() {
         setDocuments(data.documents || []);
       }
     } catch (err) {
-      console.error("Failed to fetch documents:", err);
+      uiLogger.error("Failed to fetch documents", err);
     } finally {
       setIsLoadingDocuments(false);
     }
@@ -225,7 +226,7 @@ export function useLeadDetail() {
         }
         return true;
       } catch (err) {
-        console.error("Error updating lead:", err);
+        uiLogger.error("Error updating lead", err);
         throw err;
       } finally {
         setIsSaving(false);
@@ -254,7 +255,7 @@ export function useLeadDetail() {
         setQuotations(data.quotations || []);
         setNotes(data.notes || []);
       } catch (err) {
-        console.error("Error updating lead after stage transition:", err);
+        uiLogger.error("Error updating lead after stage transition", err);
       }
     },
     [leadId]
@@ -287,7 +288,7 @@ export function useLeadDetail() {
         }
         router.push(`/dashboard/quotations/${newId}?edit=1`);
       } catch (err) {
-        console.error("Error creating revision:", err);
+        uiLogger.error("Error creating revision", err);
         throw err;
       } finally {
         setRevisingId(null);
@@ -308,7 +309,7 @@ export function useLeadDetail() {
         throw new Error("Failed to delete document");
       }
     } catch (err) {
-      console.error("Error deleting document:", err);
+      uiLogger.error("Error deleting document", err);
       throw err;
     }
   }, []);
@@ -333,7 +334,7 @@ export function useLeadDetail() {
 
         await fetchLead();
       } catch (err) {
-        console.error("Error updating assignee:", err);
+        uiLogger.error("Error updating assignee", err);
         throw err;
       }
     },

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import type { Client, CreateClientInput } from "@/types/clients";
 import { ClientTypeLabels } from "@/types/clients";
+import { uiLogger } from "@/lib/logger";
 
 interface ClientSelectorProps {
   selectedClientId: string | null;
@@ -102,7 +103,7 @@ export function ClientSelector({
           setSearchResults(data.clients || []);
         }
       } catch (error) {
-        console.error("Error searching clients:", error);
+        uiLogger.error("Error searching clients", error);
       } finally {
         setIsSearching(false);
       }
@@ -123,7 +124,7 @@ export function ClientSelector({
         setSelectedClient(data.client);
       }
     } catch (error) {
-      console.error("Error fetching client details:", error);
+      uiLogger.error("Error fetching client details", error);
     }
   };
 

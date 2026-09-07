@@ -22,8 +22,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { requestLogger } from "@/lib/logger/request";
 
 export async function GET(request: NextRequest) {
+  const log = requestLogger(request);
+
   try {
     const guard = await protectApiRoute(request);
     if (!guard.success) {
@@ -85,11 +88,11 @@ export async function GET(request: NextRequest) {
     if (taskError) {
       // A failure here should not blank the lead queue, which is the more
       // important half of this widget.
-      console.error("Error loading task reminders:", taskError);
+      log.error("Error loading task reminders", taskError);
     }
 
     if (error) {
-      console.error("Error loading follow-ups:", error);
+      log.error("Error loading follow-ups", error);
       return NextResponse.json(
         { error: "Failed to load follow-ups" },
         { status: 500 }
@@ -149,7 +152,7 @@ export async function GET(request: NextRequest) {
       ...buckets,
     });
   } catch (error) {
-    console.error("Follow-ups GET error:", error);
+    log.error("Follow-ups GET error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

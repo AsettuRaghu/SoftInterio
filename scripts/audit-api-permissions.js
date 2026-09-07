@@ -49,10 +49,18 @@ for (const file of walk(API_DIR)) {
     const nextExport = src.slice(start + 1).search(/\nexport async function /);
     const body = src.slice(start, nextExport === -1 ? undefined : start + 1 + nextExport);
 
-    const hasPermission = /requiredPermissions\s*:/.test(body);
+    // Two shapes count as enforcement. The declarative one hands a list to the
+    // guard. The other reads guard.permissions and decides in the handler -
+    // which a route must do when the answer depends on the row, as it does for
+    // leads.edit versus leads.edit_own.
+    const declarative = /requiredPermissions\s*:/.test(body);
+    const inHandler =
+      /guard\.permissions/.test(body) ||
+      /\b(canWriteLead|canReadLead|leadAccess)\(/.test(body);
+    const hasPermission = declarative || inHandler;
     const selfService = SELF_SERVICE.some((p) => route.startsWith(p));
 
-    rows.push({ route, verb, hasPermission, selfService });
+    rows.push({ route, verb, hasPermission, selfService, style: declarative ? "declared" : inHandler ? "in-handler" : "" });
   }
 }
 
@@ -83,5 +91,5 @@ Object.entries(areas)
 
 if (guarded.length) {
   console.log("\nAlready enforcing a permission:");
-  guarded.forEach((r) => console.log(`  ${r.route} [${r.verb}]`));
+  guarded.forEach((r) => console.log(`  ${r.route} [${r.verb}] (${r.style})`));
 }
