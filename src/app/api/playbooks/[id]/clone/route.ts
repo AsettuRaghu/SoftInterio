@@ -118,7 +118,7 @@ export async function POST(
     });
 
     return NextResponse.json(
-      { procedure: copy, stepCount: ordered.length },
+      { playbook: copy, stepCount: ordered.length },
       { status: 201 }
     );
   } catch (error) {

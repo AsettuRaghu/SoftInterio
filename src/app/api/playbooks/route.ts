@@ -1,6 +1,6 @@
 /**
- * Procedures
- * GET /api/procedures - list definitions, optionally for one entity type
+ * Playbooks
+ * GET /api/playbooks - list definitions, optionally for one entity type
  *
  * A definition is a reusable workflow: ordered steps with completion gates.
  * It replaces task templates, which could spawn tasks but enforce nothing.
@@ -33,22 +33,22 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
 
     if (error) {
-      console.error("Error listing procedures:", error);
+      console.error("Error listing playbooks:", error);
       return NextResponse.json(
-        { error: "Failed to load procedures" },
+        { error: "Failed to load playbooks" },
         { status: 500 }
       );
     }
 
-    const procedures = (data || []).map((p: any) => ({
+    const playbooks = (data || []).map((p: any) => ({
       ...p,
       step_count: p.steps?.[0]?.count ?? 0,
       steps: undefined,
     }));
 
-    return NextResponse.json({ procedures });
+    return NextResponse.json({ playbooks });
   } catch (error) {
-    console.error("Procedures GET error:", error);
+    console.error("Playbooks GET error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * POST /api/procedures - create a definition together with its steps
+ * POST /api/playbooks - create a definition together with its steps
  *
  * Steps arrive as a flat, ordered list carrying an optional parent index, so
  * the client never has to invent ids. Nesting is resolved here.
@@ -108,15 +108,15 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error || !definition) {
-      console.error("Error creating procedure:", error);
+      console.error("Error creating playbook:", error);
       if (error?.code === "23505") {
         return NextResponse.json(
-          { error: "A procedure with this name already exists" },
+          { error: "A playbook with this name already exists" },
           { status: 409 }
         );
       }
       return NextResponse.json(
-        { error: "Failed to create the procedure" },
+        { error: "Failed to create the playbook" },
         { status: 500 }
       );
     }
@@ -129,11 +129,11 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { procedure: definition, step_count: created.count },
+      { playbook: definition, step_count: created.count },
       { status: 201 }
     );
   } catch (error) {
-    console.error("Procedure POST error:", error);
+    console.error("Playbook POST error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

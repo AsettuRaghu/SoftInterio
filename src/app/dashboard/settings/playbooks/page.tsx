@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Procedures - reusable workflows with enforced completion gates.
+ * Playbooks - reusable workflows with enforced completion gates.
  * Replaces the Task Templates page, which could spawn tasks but enforce
  * nothing.
  */
@@ -11,14 +11,14 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { PageLayout, PageHeader } from "@/components/ui/PageLayout";
 import { Toast } from "@/components/ui/Toast";
 import {
-  ProcedureBuilderModal,
-} from "@/components/procedures";
+  PlaybookBuilderModal,
+} from "@/components/playbooks";
 import { TaskRelatedTypeLabels } from "@/types/tasks";
-import type { ProcedureDefinition } from "@/types/procedures";
+import type { PlaybookDefinition } from "@/types/playbooks";
 
-export default function ProceduresPage() {
+export default function PlaybooksPage() {
   const { confirm, confirmDialog } = useConfirm();
-  const [procedures, setProcedures] = useState<ProcedureDefinition[]>([]);
+  const [playbooks, setPlaybooks] = useState<PlaybookDefinition[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
@@ -26,14 +26,14 @@ export default function ProceduresPage() {
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch("/api/procedures?include_inactive=true");
+      const response = await fetch("/api/playbooks?include_inactive=true");
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        setError(body.error || "Could not load procedures");
+        setError(body.error || "Could not load playbooks");
         return;
       }
       const data = await response.json();
-      setProcedures(data.procedures || []);
+      setPlaybooks(data.playbooks || []);
     } catch {
       setError("Could not reach the server");
     } finally {
@@ -45,7 +45,7 @@ export default function ProceduresPage() {
     void load();
   }, [load]);
 
-  const remove = async (p: ProcedureDefinition) => {
+  const remove = async (p: PlaybookDefinition) => {
     if (
       !(await confirm({
         title: `Delete "${p.name}"?`,
@@ -54,12 +54,12 @@ export default function ProceduresPage() {
     ) {
       return;
     }
-    const response = await fetch(`/api/procedures/${p.id}`, { method: "DELETE" });
+    const response = await fetch(`/api/playbooks/${p.id}`, { method: "DELETE" });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       // Usually "it has been run N times" - the API refuses rather than
       // orphaning run history.
-      setError(data.error || "Could not delete the procedure");
+      setError(data.error || "Could not delete the playbook");
       return;
     }
     void load();
@@ -73,8 +73,8 @@ export default function ProceduresPage() {
    * owning a copy - which is what makes "we propose the practice, you decide
    * how you work" true rather than a slogan.
    */
-  const copy = async (p: ProcedureDefinition) => {
-    const res = await fetch(`/api/procedures/${p.id}/clone`, {
+  const copy = async (p: PlaybookDefinition) => {
+    const res = await fetch(`/api/playbooks/${p.id}/clone`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
@@ -85,19 +85,17 @@ export default function ProceduresPage() {
       return;
     }
     await load();
-    setEditingId(data.procedure.id);
+    setEditingId(data.playbook.id);
     setIsBuilderOpen(true);
   };
 
   return (
-    <PageLayout isLoading={isLoading} loadingText="Loading procedures...">
+    <PageLayout isLoading={isLoading} loadingText="Loading playbooks...">
       <PageHeader
-        title="Procedures"
-        subtitle="Reusable workflows whose steps become tasks, with gates that must be met before a step can complete"
-        breadcrumbs={[
-          { label: "Dashboard", href: "/dashboard" },
-          { label: "Procedures" },
-        ]}
+        title="Playbooks"
+        subtitle="How your team works: ordered steps with gates, which become tasks when a playbook is run on a project, lead or quotation"
+        basePath={{ label: "Settings", href: "/dashboard/settings" }}
+        breadcrumbs={[{ label: "Playbooks" }]}
         actions={
           <button
             type="button"
@@ -107,7 +105,7 @@ export default function ProceduresPage() {
             }}
             className="px-3 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
           >
-            + New Procedure
+            + New Playbook
           </button>
         }
       />
@@ -115,11 +113,11 @@ export default function ProceduresPage() {
       <div className="mt-4" />
       <Toast message={error} onDismiss={() => setError(null)} />
 
-      {procedures.length === 0 ? (
+      {playbooks.length === 0 ? (
         <div className="bg-white rounded-lg border border-slate-200 px-6 py-12 text-center">
           <p className="text-sm text-slate-500">
-            No procedures yet. Create one to define a workflow your team must
-            follow.
+            No playbooks yet. Create one to describe how your team works, or
+            copy one of the standard playbooks and adapt it.
           </p>
         </div>
       ) : (
@@ -138,7 +136,7 @@ export default function ProceduresPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {procedures.map((p) => (
+              {playbooks.map((p) => (
                 <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-4 py-3">
                     <button
@@ -216,9 +214,9 @@ export default function ProceduresPage() {
         </div>
       )}
 
-      <ProcedureBuilderModal
+      <PlaybookBuilderModal
         isOpen={isBuilderOpen}
-        procedureId={editingId}
+        playbookId={editingId}
         onClose={() => setIsBuilderOpen(false)}
         onSaved={load}
       />

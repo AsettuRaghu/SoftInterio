@@ -88,7 +88,7 @@ interface TeamMember {
   avatar_url?: string;
 }
 
-// "unassigned" exists because procedure steps often land with no owner: a
+// "unassigned" exists because playbook steps often land with no owner: a
 // step's assign_to_role resolves to nobody when two people hold the role, and
 // the system declines to guess. Without this tab that work is invisible -
 // "My Tasks" filters on assigned_to, so a whole 25-step run would be seen by
@@ -338,7 +338,7 @@ export default function TasksPage() {
 
     // Deliberately computed from the FULL fetched set, not from `all` above:
     // "All Tasks" is really "created by me or assigned to me", so unassigned
-    // work would otherwise be visible only to whoever started the procedure.
+    // work would otherwise be visible only to whoever started the playbook.
     // A queue nobody else can see is not a queue.
     const unassigned = tasks.filter(
       (task) =>
@@ -1366,7 +1366,7 @@ export default function TasksPage() {
                     ? "bg-blue-600 text-white shadow-sm"
                     : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
                 }`}
-                title="Open work with no owner - procedure steps land here when a role maps to more than one person"
+                title="Open work with no owner - playbook steps land here when a role maps to more than one person"
               >
                 Unassigned
                 <span

@@ -306,13 +306,6 @@ export const navigationConfig: NavigationItem[] = [
         href: "/dashboard/tasks",
         permission: "tasks.view",
       },
-      {
-        // Supersedes Task Templates: same idea, but the steps are ordered and
-        // gated rather than a one-off stamp that enforces nothing.
-        name: "Procedures",
-        href: "/dashboard/procedures",
-        permission: "tasks.templates.view",
-      },
     ],
   },
   {
@@ -367,6 +360,15 @@ export const navigationConfig: NavigationItem[] = [
         name: "Config",
         href: "/dashboard/settings/config",
         permission: "settings.company.update",
+      },
+      {
+        // Authoring lives here rather than under Tasks: a playbook drives a
+        // whole delivery, and it can target a project, a lead, a quotation or
+        // a client, so it belongs under none of them. Running one stays in
+        // context, on the entity's own Tasks tab.
+        name: "Playbooks",
+        href: "/dashboard/settings/playbooks",
+        permission: "tasks.templates.view",
       },
       {
         name: "Billing and Subscription",

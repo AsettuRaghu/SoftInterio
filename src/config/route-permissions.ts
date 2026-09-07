@@ -53,14 +53,14 @@ export const routePermissions: RoutePermission[] = [
     description: "Company settings",
   },
   {
-    pattern: "/dashboard/procedures/*",
+    pattern: "/dashboard/settings/playbooks/*",
     permissions: ["tasks.templates.view"],
-    description: "Procedure pages",
+    description: "Playbook pages",
   },
   {
-    pattern: "/dashboard/procedures",
+    pattern: "/dashboard/settings/playbooks",
     permissions: ["tasks.templates.view"],
-    description: "Procedures",
+    description: "Playbooks",
   },
   {
     pattern: "/dashboard/settings/billing",

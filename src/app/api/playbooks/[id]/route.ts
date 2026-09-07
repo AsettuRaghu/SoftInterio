@@ -1,5 +1,5 @@
 /**
- * GET /api/procedures/[id] - one definition with its ordered steps
+ * GET /api/playbooks/[id] - one definition with its ordered steps
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -21,15 +21,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const supabase = await createClient();
 
-    const { data: procedure } = await supabase
+    const { data: playbook } = await supabase
       .from("procedure_definitions")
       .select("*")
       .eq("id", id)
       .maybeSingle();
 
-    if (!procedure) {
+    if (!playbook) {
       return NextResponse.json(
-        { error: "Procedure not found" },
+        { error: "Playbook not found" },
         { status: 404 }
       );
     }
@@ -42,9 +42,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .eq("is_current", true)
       .order("display_order");
 
-    return NextResponse.json({ procedure, steps: steps || [] });
+    return NextResponse.json({ playbook, steps: steps || [] });
   } catch (error) {
-    console.error("Procedure GET error:", error);
+    console.error("Playbook GET error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 /**
- * PATCH /api/procedures/[id] - update a definition and replace its steps
+ * PATCH /api/playbooks/[id] - update a definition and replace its steps
  *
  * Editing steps bumps `version`. Live runs pinned their version at start, so
  * they keep the rules they began under; only new runs pick up the change.
@@ -78,7 +78,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     if (!existing) {
       return NextResponse.json(
-        { error: "Procedure not found" },
+        { error: "Playbook not found" },
         { status: 404 }
       );
     }
@@ -111,9 +111,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .eq("id", id);
 
     if (error) {
-      console.error("Error updating procedure:", error);
+      console.error("Error updating playbook:", error);
       return NextResponse.json(
-        { error: "Failed to update the procedure" },
+        { error: "Failed to update the playbook" },
         { status: 500 }
       );
     }
@@ -127,15 +127,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       stepCount = result.count;
     }
 
-    const { data: procedure } = await supabase
+    const { data: playbook } = await supabase
       .from("procedure_definitions")
       .select("*")
       .eq("id", id)
       .single();
 
-    return NextResponse.json({ procedure, step_count: stepCount });
+    return NextResponse.json({ playbook, step_count: stepCount });
   } catch (error) {
-    console.error("Procedure PATCH error:", error);
+    console.error("Playbook PATCH error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -144,7 +144,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 }
 
 /**
- * DELETE /api/procedures/[id]
+ * DELETE /api/playbooks/[id]
  *
  * Refused if any run references it - a run keeps a foreign key to its
  * definition so its history stays readable. Deactivate instead.
@@ -167,7 +167,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (count && count > 0) {
       return NextResponse.json(
         {
-          error: `This procedure has been run ${count} time${
+          error: `This playbook has been run ${count} time${
             count === 1 ? "" : "s"
           }. Deactivate it instead so that history stays intact.`,
         },
@@ -181,16 +181,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       .eq("id", id);
 
     if (error) {
-      console.error("Error deleting procedure:", error);
+      console.error("Error deleting playbook:", error);
       return NextResponse.json(
-        { error: "Failed to delete the procedure" },
+        { error: "Failed to delete the playbook" },
         { status: 500 }
       );
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Procedure DELETE error:", error);
+    console.error("Playbook DELETE error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

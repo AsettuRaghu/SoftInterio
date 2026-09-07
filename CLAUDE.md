@@ -287,6 +287,22 @@ Note the border colour is still not uniform: 17 cards use `border-gray-200`
 where the rest use `border-slate-200`. Untouched here.
 
 ### Playbooks are the workflow engine; phases are a view
+**The UI says Playbook; the database says procedure.** The tables, the enum
+and the RPC keep their original names — `procedure_definitions`,
+`procedure_step_definitions`, `procedure_runs`, `procedure_run_id`,
+`procedure_step_id`, `start_procedure_run`. Everything above storage — routes,
+components, types, copy — says Playbook. Renaming the schema would have bought
+nothing and risked a migration, but do not "fix" the mismatch by half.
+
+Authoring lives at **Settings → Playbooks** (`/dashboard/settings/playbooks`),
+not under Tasks: a playbook drives a whole delivery and can target a project,
+lead, quotation or client, so it belongs under none of them. **Running** one
+stays in context, on the entity's own Tasks tab via `PlaybooksPanel`. It is
+gated on `tasks.templates.view` (Admin, Owner, Manager, Designer) rather than
+Config's `settings.company.update` (Admin, Owner) on purpose — a design manager
+should be able to write down how their team works without being an
+administrator.
+
 SoftInterio grew two engines for one idea. `project_sub_phase_templates` and
 `procedure_step_definitions` share eleven columns and their `action_type` enums
 are identical. The procedure engine is the one to keep and the one already in

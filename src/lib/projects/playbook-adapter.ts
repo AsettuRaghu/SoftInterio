@@ -9,9 +9,9 @@ import type {
  * Renders a playbook run as a phase tree.
  *
  * SoftInterio grew two engines for the same idea. The phase engine has
- * templates, sub-phases, statuses and requirements; the procedure engine has
+ * templates, sub-phases, statuses and requirements; the playbook engine has
  * definitions, steps, runs and the same eight action types, spelled
- * identically. The difference is that the procedure engine nests, versions,
+ * identically. The difference is that the playbook engine nests, versions,
  * targets a vertical through tenant_type, and executes as ordinary tasks -
  * and it is the one carrying the real 25-step Modular Design process.
  *

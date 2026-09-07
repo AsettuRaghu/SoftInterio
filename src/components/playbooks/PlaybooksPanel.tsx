@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Procedures attached to one entity: what is running, how far along, and a
+ * Playbooks attached to one entity: what is running, how far along, and a
  * way to start another.
  *
  * Steps are ordinary tasks, so this panel deliberately does NOT reimplement
@@ -14,12 +14,12 @@ import { Modal } from "@/components/ui/Modal";
 import { Toast } from "@/components/ui/Toast";
 import { isOverdue, TaskStatusLabels, type TaskRelatedType } from "@/types/tasks";
 import {
-  ProcedureActionColors,
-  ProcedureActionLabels,
-  type ProcedureDefinition,
-  type ProcedureRun,
-  type ProcedureRunStep,
-} from "@/types/procedures";
+  PlaybookActionColors,
+  PlaybookActionLabels,
+  type PlaybookDefinition,
+  type PlaybookRun,
+  type PlaybookRunStep,
+} from "@/types/playbooks";
 
 interface Props {
   relatedType: TaskRelatedType;
@@ -31,32 +31,32 @@ interface Props {
 
 const settled = new Set(["completed", "cancelled", "skipped"]);
 
-export function ProceduresPanel({
+export function PlaybooksPanel({
   relatedType,
   relatedId,
   readOnly = false,
   onRunChange,
 }: Props) {
-  const [runs, setRuns] = useState<ProcedureRun[]>([]);
+  const [runs, setRuns] = useState<PlaybookRun[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [isPickerOpen, setIsPickerOpen] = useState(false);
-  const [available, setAvailable] = useState<ProcedureDefinition[]>([]);
+  const [available, setAvailable] = useState<PlaybookDefinition[]>([]);
   const [starting, setStarting] = useState<string | null>(null);
 
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
-  const [steps, setSteps] = useState<ProcedureRunStep[]>([]);
+  const [steps, setSteps] = useState<PlaybookRunStep[]>([]);
   const [stepsLoading, setStepsLoading] = useState(false);
 
   const loadRuns = useCallback(async () => {
     try {
       const response = await fetch(
-        `/api/procedures/runs?related_type=${relatedType}&related_id=${relatedId}`
+        `/api/playbooks/runs?related_type=${relatedType}&related_id=${relatedId}`
       );
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        setError(body.error || "Could not load procedures");
+        setError(body.error || "Could not load playbooks");
         return;
       }
       const data = await response.json();
@@ -74,10 +74,10 @@ export function ProceduresPanel({
 
   const openPicker = async () => {
     setIsPickerOpen(true);
-    const response = await fetch(`/api/procedures?applies_to=${relatedType}`);
+    const response = await fetch(`/api/playbooks?applies_to=${relatedType}`);
     if (response.ok) {
       const data = await response.json();
-      setAvailable(data.procedures || []);
+      setAvailable(data.playbooks || []);
     }
   };
 
@@ -85,7 +85,7 @@ export function ProceduresPanel({
     setStarting(definitionId);
     setError(null);
     try {
-      const response = await fetch(`/api/procedures/${definitionId}/run`, {
+      const response = await fetch(`/api/playbooks/${definitionId}/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -95,7 +95,7 @@ export function ProceduresPanel({
       });
       const data = await response.json();
       if (!response.ok) {
-        setError(data.error || "Could not start the procedure");
+        setError(data.error || "Could not start the playbook");
         return;
       }
       setIsPickerOpen(false);
@@ -116,7 +116,7 @@ export function ProceduresPanel({
     setExpandedRun(runId);
     setStepsLoading(true);
     try {
-      const response = await fetch(`/api/procedures/runs/${runId}`);
+      const response = await fetch(`/api/playbooks/runs/${runId}`);
       if (response.ok) {
         const data = await response.json();
         setSteps(data.steps || []);
@@ -127,9 +127,9 @@ export function ProceduresPanel({
   };
 
   const cancelRun = async (runId: string) => {
-    const reason = window.prompt("Why is this procedure being cancelled?");
+    const reason = window.prompt("Why is this playbook being cancelled?");
     if (reason === null) return;
-    const response = await fetch(`/api/procedures/runs/${runId}`, {
+    const response = await fetch(`/api/playbooks/runs/${runId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "cancelled", reason }),
@@ -149,23 +149,23 @@ export function ProceduresPanel({
       <Toast message={error} onDismiss={() => setError(null)} />
 
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-slate-700">Procedures</h3>
+        <h3 className="text-sm font-medium text-slate-700">Playbooks</h3>
         {!readOnly && (
           <button
             type="button"
             onClick={() => void openPicker()}
             className="px-2.5 py-1 text-xs font-medium rounded-md border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
           >
-            Start a procedure
+            Start a playbook
           </button>
         )}
       </div>
 
       {isLoading ? (
-        <p className="text-xs text-slate-400">Loading procedures...</p>
+        <p className="text-xs text-slate-400">Loading playbooks...</p>
       ) : runs.length === 0 ? (
         <p className="text-xs text-slate-400">
-          No procedures running. Starting one creates its steps as tasks.
+          No playbooks running. Starting one creates its steps as tasks.
         </p>
       ) : (
         <div className="space-y-2">
@@ -229,7 +229,7 @@ export function ProceduresPanel({
                       <>
                         <div className="divide-y divide-slate-50">
                           {steps.map((step) => {
-                            const colors = ProcedureActionColors[step.action_type];
+                            const colors = PlaybookActionColors[step.action_type];
                             const isSettled = settled.has(step.status);
                             return (
                               <div
@@ -241,7 +241,7 @@ export function ProceduresPanel({
                                 <span
                                   className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${colors.bg} ${colors.text} ${colors.border}`}
                                 >
-                                  {ProcedureActionLabels[step.action_type]}
+                                  {PlaybookActionLabels[step.action_type]}
                                 </span>
                                 <span
                                   className={`flex-1 min-w-0 text-xs truncate ${
@@ -305,13 +305,13 @@ export function ProceduresPanel({
       <Modal
         isOpen={isPickerOpen}
         onClose={() => setIsPickerOpen(false)}
-        title="Start a procedure"
+        title="Start a playbook"
         subtitle="Its steps are created as tasks against this record."
         size="lg"
       >
         {available.length === 0 ? (
           <p className="text-sm text-slate-400">
-            No procedures defined for {relatedType}s yet.
+            No playbooks defined for {relatedType}s yet.
           </p>
         ) : (
           <div className="space-y-2">
@@ -344,4 +344,4 @@ export function ProceduresPanel({
   );
 }
 
-export default ProceduresPanel;
+export default PlaybooksPanel;

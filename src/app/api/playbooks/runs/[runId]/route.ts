@@ -1,6 +1,6 @@
 /**
- * GET    /api/procedures/runs/[runId] - run with its step tasks and gates
- * PATCH  /api/procedures/runs/[runId] - cancel a run
+ * GET    /api/playbooks/runs/[runId] - run with its step tasks and gates
+ * PATCH  /api/playbooks/runs/[runId] - cancel a run
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -91,7 +91,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       steps,
     });
   } catch (error) {
-    console.error("Procedure run GET error:", error);
+    console.error("Playbook run GET error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -165,7 +165,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         p_task_id: t.id,
         p_user_id: user.id,
         p_to: "cancelled",
-        p_reason: body.reason?.trim() || "Procedure cancelled",
+        p_reason: body.reason?.trim() || "Playbook cancelled",
       });
     }
 
@@ -174,7 +174,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       cancelled_steps: (openTasks || []).length,
     });
   } catch (error) {
-    console.error("Procedure run PATCH error:", error);
+    console.error("Playbook run PATCH error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

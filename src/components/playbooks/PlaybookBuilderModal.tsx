@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Create or edit a procedure.
+ * Create or edit a playbook.
  *
  * Steps are held as a FLAT list with a parent index rather than a tree. The
  * data is only ever two levels deep, and a flat list makes reordering and
@@ -12,15 +12,15 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import type { TaskRelatedType } from "@/types/tasks";
 import {
-  ProcedureActionColors,
-  ProcedureActionLabels,
-  type ProcedureActionType,
-  type ProcedureDefinition,
-} from "@/types/procedures";
+  PlaybookActionColors,
+  PlaybookActionLabels,
+  type PlaybookActionType,
+  type PlaybookDefinition,
+} from "@/types/playbooks";
 
 interface DraftStep {
   title: string;
-  action_type: ProcedureActionType;
+  action_type: PlaybookActionType;
   /** Index of the parent in this same array; null = top level. */
   parent_index: number | null;
   is_required: boolean;
@@ -43,11 +43,11 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   /** Omit to create a new one. */
-  procedureId?: string | null;
+  playbookId?: string | null;
   onSaved?: () => void;
 }
 
-const ACTION_TYPES: ProcedureActionType[] = [
+const ACTION_TYPES: PlaybookActionType[] = [
   "manual",
   "upload",
   "checklist",
@@ -97,10 +97,10 @@ const blankStep = (): DraftStep => ({
   skip_requires_reason: true,
 });
 
-export function ProcedureBuilderModal({
+export function PlaybookBuilderModal({
   isOpen,
   onClose,
-  procedureId,
+  playbookId,
   onSaved,
 }: Props) {
   const [name, setName] = useState("");
@@ -115,7 +115,7 @@ export function ProcedureBuilderModal({
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [existing, setExisting] = useState<ProcedureDefinition | null>(null);
+  const [existing, setExisting] = useState<PlaybookDefinition | null>(null);
 
   const reset = useCallback(() => {
     setName("");
@@ -130,7 +130,7 @@ export function ProcedureBuilderModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    if (!procedureId) {
+    if (!playbookId) {
       reset();
       return;
     }
@@ -138,18 +138,18 @@ export function ProcedureBuilderModal({
     setIsLoading(true);
     (async () => {
       try {
-        const response = await fetch(`/api/procedures/${procedureId}`);
+        const response = await fetch(`/api/playbooks/${playbookId}`);
         if (!response.ok) {
-          setError("Could not load the procedure");
+          setError("Could not load the playbook");
           return;
         }
         const data = await response.json();
-        setExisting(data.procedure);
-        setName(data.procedure.name);
-        setDescription(data.procedure.description || "");
-        setAppliesTo(data.procedure.applies_to);
-        setTenantType(data.procedure.tenant_type ?? "");
-        setEnforceOrder(data.procedure.enforce_order === true);
+        setExisting(data.playbook);
+        setName(data.playbook.name);
+        setDescription(data.playbook.description || "");
+        setAppliesTo(data.playbook.applies_to);
+        setTenantType(data.playbook.tenant_type ?? "");
+        setEnforceOrder(data.playbook.enforce_order === true);
 
         // Flatten: parents in order, each followed by its children, so the
         // editor's parent_index refers to a position in this same array.
@@ -195,7 +195,7 @@ export function ProcedureBuilderModal({
         setIsLoading(false);
       }
     })();
-  }, [isOpen, procedureId, reset]);
+  }, [isOpen, playbookId, reset]);
 
   const update = (i: number, patch: Partial<DraftStep>) =>
     setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
@@ -319,7 +319,7 @@ export function ProcedureBuilderModal({
   const save = async () => {
     const cleaned = steps.filter((s) => s.title.trim());
     if (!name.trim()) {
-      setError("Give the procedure a name");
+      setError("Give the playbook a name");
       return;
     }
     if (cleaned.length === 0) {
@@ -331,9 +331,9 @@ export function ProcedureBuilderModal({
     setError(null);
     try {
       const response = await fetch(
-        procedureId ? `/api/procedures/${procedureId}` : "/api/procedures",
+        playbookId ? `/api/playbooks/${playbookId}` : "/api/playbooks",
         {
-          method: procedureId ? "PATCH" : "POST",
+          method: playbookId ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: name.trim(),
@@ -347,7 +347,7 @@ export function ProcedureBuilderModal({
       );
       const data = await response.json();
       if (!response.ok) {
-        setError(data.error || "Could not save the procedure");
+        setError(data.error || "Could not save the playbook");
         return;
       }
       onSaved?.();
@@ -363,11 +363,11 @@ export function ProcedureBuilderModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={procedureId ? "Edit procedure" : "New procedure"}
+      title={playbookId ? "Edit playbook" : "New playbook"}
       subtitle={
         existing && existing.version > 1
           ? `Version ${existing.version}. Editing the steps creates a new version; runs already under way keep the rules they started with.`
-          : "Steps become tasks when the procedure is run."
+          : "Steps become tasks when the playbook is run."
       }
       size="3xl"
       footer={
@@ -389,7 +389,7 @@ export function ProcedureBuilderModal({
               onClick={() => void save()}
               className="px-3 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              {isSaving ? "Saving..." : procedureId ? "Save changes" : "Create"}
+              {isSaving ? "Saving..." : playbookId ? "Save changes" : "Create"}
             </button>
           </div>
         </div>
@@ -461,7 +461,7 @@ export function ProcedureBuilderModal({
             <input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="What is this procedure for?"
+              placeholder="What is this playbook for?"
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
@@ -497,7 +497,7 @@ export function ProcedureBuilderModal({
 
             <div className="space-y-1.5">
               {steps.map((step, i) => {
-                const colors = ProcedureActionColors[step.action_type];
+                const colors = PlaybookActionColors[step.action_type];
                 const isChild = step.parent_index !== null;
                 return (
                   <div
@@ -545,14 +545,14 @@ export function ProcedureBuilderModal({
                           onChange={(e) =>
                             update(i, {
                               action_type: e.target
-                                .value as ProcedureActionType,
+                                .value as PlaybookActionType,
                             })
                           }
                           className={`px-2 py-1.5 text-xs font-medium rounded-md border ${colors.bg} ${colors.text} ${colors.border} focus:outline-none`}
                         >
                           {ACTION_TYPES.map((a) => (
                             <option key={a} value={a}>
-                              {ProcedureActionLabels[a]}
+                              {PlaybookActionLabels[a]}
                             </option>
                           ))}
                         </select>
@@ -699,4 +699,4 @@ export function ProcedureBuilderModal({
   );
 }
 
-export default ProcedureBuilderModal;
+export default PlaybookBuilderModal;

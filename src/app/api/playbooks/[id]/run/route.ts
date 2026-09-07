@@ -1,11 +1,11 @@
 /**
- * POST /api/procedures/[id]/run
+ * POST /api/playbooks/[id]/run
  *
- * Starts a procedure against an entity. Delegates to start_procedure_run(),
+ * Starts a playbook against an entity. Delegates to start_procedure_run(),
  * which creates the run, materialises every step as a task (nested steps
  * become subtasks) and writes the completion requirements that gate them.
  *
- * The run snapshots the definition's version, so editing the procedure later
+ * The run snapshots the definition's version, so editing the playbook later
  * cannot change the rules of work already under way.
  */
 
@@ -51,9 +51,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
     if (error) {
-      console.error("Error starting procedure run:", error);
+      console.error("Error starting playbook run:", error);
       return NextResponse.json(
-        { error: "Failed to start the procedure" },
+        { error: "Failed to start the playbook" },
         { status: 500 }
       );
     }
@@ -61,14 +61,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // The RPC reports rule violations in its payload, not as a thrown error.
     if (!data?.success) {
       return NextResponse.json(
-        { error: data?.error || "Could not start the procedure" },
+        { error: data?.error || "Could not start the playbook" },
         { status: 409 }
       );
     }
 
     return NextResponse.json({ success: true, ...data }, { status: 201 });
   } catch (error) {
-    console.error("Procedure run POST error:", error);
+    console.error("Playbook run POST error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

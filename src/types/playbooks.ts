@@ -1,7 +1,7 @@
 // ============================================================================
-// Procedures
+// Playbooks
 //
-// A Procedure is a predefined, ordered set of steps with completion gates,
+// A Playbook is a predefined, ordered set of steps with completion gates,
 // attached to a lead / project / quotation / client. It supersedes task
 // templates, which could spawn tasks but enforce nothing.
 //
@@ -11,7 +11,7 @@
 
 import type { TaskRelatedType, TaskStatus } from "./tasks";
 
-export type ProcedureActionType =
+export type PlaybookActionType =
   | "manual" // just mark it done
   | "upload" // evidence required
   | "checklist" // every item ticked
@@ -21,9 +21,9 @@ export type ProcedureActionType =
   | "meeting" // a scheduled event happened
   | "handover"; // responsibility passes between teams
 
-export type ProcedureRunStatus = "active" | "completed" | "cancelled";
+export type PlaybookRunStatus = "active" | "completed" | "cancelled";
 
-export const ProcedureActionLabels: Record<ProcedureActionType, string> = {
+export const PlaybookActionLabels: Record<PlaybookActionType, string> = {
   manual: "Manual",
   upload: "Upload required",
   checklist: "Checklist",
@@ -35,8 +35,8 @@ export const ProcedureActionLabels: Record<ProcedureActionType, string> = {
 };
 
 /** Colour by what the step demands, so a run reads at a glance. */
-export const ProcedureActionColors: Record<
-  ProcedureActionType,
+export const PlaybookActionColors: Record<
+  PlaybookActionType,
   { bg: string; text: string; border: string }
 > = {
   manual: { bg: "bg-slate-50", text: "text-slate-600", border: "border-slate-200" },
@@ -49,7 +49,7 @@ export const ProcedureActionColors: Record<
   handover: { bg: "bg-green-50", text: "text-green-600", border: "border-green-200" },
 };
 
-export interface ProcedureDefinition {
+export interface PlaybookDefinition {
   id: string;
   tenant_id: string;
   tenant_type?: string | null;
@@ -67,7 +67,7 @@ export interface ProcedureDefinition {
   step_count?: number;
 }
 
-export interface ProcedureStepDefinition {
+export interface PlaybookStepDefinition {
   id: string;
   definition_id: string;
   parent_step_id?: string | null;
@@ -75,7 +75,7 @@ export interface ProcedureStepDefinition {
   description?: string | null;
   instructions?: string | null;
   display_order: number;
-  action_type: ProcedureActionType;
+  action_type: PlaybookActionType;
   form_schema?: Record<string, unknown> | null;
   required_upload_types?: string[] | null;
   approval_role?: string | null;
@@ -91,7 +91,7 @@ export interface ProcedureStepDefinition {
   allow_parallel: boolean;
 }
 
-export interface ProcedureRun {
+export interface PlaybookRun {
   id: string;
   tenant_id: string;
   definition_id: string;
@@ -100,7 +100,7 @@ export interface ProcedureRun {
   definition_name: string;
   related_type: TaskRelatedType;
   related_id: string;
-  status: ProcedureRunStatus;
+  status: PlaybookRunStatus;
   started_by?: string | null;
   started_at: string;
   completed_at?: string | null;
@@ -127,7 +127,7 @@ export interface TaskCompletionRequirement {
 }
 
 /** A step task, joined with its definition and gates. */
-export interface ProcedureRunStep {
+export interface PlaybookRunStep {
   id: string;
   task_number: string;
   title: string;
@@ -138,7 +138,7 @@ export interface ProcedureRunStep {
   due_date?: string | null;
   hold_reason?: string | null;
   skip_reason?: string | null;
-  action_type: ProcedureActionType;
+  action_type: PlaybookActionType;
   instructions?: string | null;
   can_skip: boolean;
   display_order: number;

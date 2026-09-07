@@ -546,7 +546,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
   const tabs: { key: TabKey; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "spaces", label: "Spaces" },
-    { key: "project-mgmt", label: "Project Mgmt" },
+    { key: "project-mgmt", label: "Plan" },
     { key: "quotations", label: "Quotations" },
     { key: "tasks", label: "Tasks" },
     { key: "notes", label: "Notes" },

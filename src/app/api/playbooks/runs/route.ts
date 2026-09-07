@@ -1,5 +1,5 @@
 /**
- * GET /api/procedures/runs?related_type=&related_id=
+ * GET /api/playbooks/runs?related_type=&related_id=
  *
  * Runs attached to one entity, each with a progress rollup so a caller can
  * render "4 of 25 done" without pulling every step task.
@@ -31,9 +31,9 @@ export async function GET(request: NextRequest) {
     const { data: runs, error } = await query;
 
     if (error) {
-      console.error("Error listing procedure runs:", error);
+      console.error("Error listing playbook runs:", error);
       return NextResponse.json(
-        { error: "Failed to load procedure runs" },
+        { error: "Failed to load playbook runs" },
         { status: 500 }
       );
     }
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     }
 
     // One query for every step task, then rolled up per run - avoids an N+1
-    // when an entity carries several procedures.
+    // when an entity carries several playbooks.
     const { data: stepTasks } = await supabase
       .from("tasks")
       .select("id, procedure_run_id, status")
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ runs: withProgress });
   } catch (error) {
-    console.error("Procedure runs GET error:", error);
+    console.error("Playbook runs GET error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

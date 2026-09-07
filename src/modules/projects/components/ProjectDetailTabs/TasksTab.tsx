@@ -3,7 +3,7 @@
 import React from "react";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import TaskTableReusable from "@/components/tasks/TaskTableReusable";
-import { ProceduresPanel } from "@/components/procedures";
+import { PlaybooksPanel } from "@/components/playbooks";
 import type { Task } from "@/types/tasks";
 
 interface TaskWithUser extends Task {
@@ -54,10 +54,10 @@ export default function TasksTab({
 
   return (
     <div className="space-y-4">
-      {/* Procedure steps ARE tasks, so the panel sits above the table they
+      {/* Playbook steps ARE tasks, so the panel sits above the table they
           appear in rather than living on a separate screen. */}
       <div className="bg-white rounded-lg border border-slate-200 p-4">
-        <ProceduresPanel
+        <PlaybooksPanel
           relatedType="project"
           relatedId={projectId}
           readOnly={projectClosed}
