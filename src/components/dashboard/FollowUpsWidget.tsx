@@ -116,7 +116,7 @@ export function FollowUpsWidget() {
 
   if (isLoading) {
     return (
-      <div className="bg-white rounded-xl border border-slate-200 p-4">
+      <div className="bg-white rounded-lg border border-slate-200 p-4">
         <p className="text-sm text-slate-400">Loading follow-ups...</p>
       </div>
     );
@@ -124,7 +124,7 @@ export function FollowUpsWidget() {
 
   if (!queue || queue.counts.total === 0) {
     return (
-      <div className="bg-white rounded-xl border border-slate-200 p-4">
+      <div className="bg-white rounded-lg border border-slate-200 p-4">
         <h3 className="text-sm font-medium text-slate-700">
           Follow-ups &amp; tasks
         </h3>
@@ -139,7 +139,7 @@ export function FollowUpsWidget() {
   const rows = queue[active];
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+    <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
         <h3 className="text-sm font-medium text-slate-700">
           Follow-ups &amp; tasks

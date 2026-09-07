@@ -779,7 +779,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
           {activeTab === "payments" && (
             <div className="space-y-6">
               <div className="grid grid-cols-4 gap-4">
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
                   <p className="text-xs text-slate-500 uppercase font-bold">
                     Total Due
                   </p>
@@ -790,7 +790,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 {/* Add other summary cards as needed */}
               </div>
               {/* Milestones list would go here */}
-              <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500">
+              <div className="bg-white rounded-lg border border-slate-200 p-8 text-center text-slate-500">
                 Payment Milestones Implementation
               </div>
             </div>

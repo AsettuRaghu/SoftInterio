@@ -695,7 +695,7 @@ export default function DocumentsPage() {
             </button>
           </div>
         ) : viewMode === "list" ? (
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
             <table className="w-full">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
@@ -883,7 +883,7 @@ export default function DocumentsPage() {
             {filteredDocuments.map((doc) => (
               <div
                 key={doc.id}
-                className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md transition-all cursor-pointer group"
+                className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition-all cursor-pointer group"
               >
                 <div className="flex justify-center mb-3">
                   <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center">

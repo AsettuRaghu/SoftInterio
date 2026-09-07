@@ -250,7 +250,7 @@ export function DocumentList({
         {documents.map((doc) => (
           <div
             key={doc.id}
-            className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white transition-all hover:border-slate-300 hover:shadow-md"
+            className="group relative overflow-hidden rounded-lg border border-slate-200 bg-white transition-all hover:border-slate-300 hover:shadow-md"
           >
             {/* Preview area */}
             <div
@@ -377,7 +377,7 @@ export function DocumentList({
   return (
     <div
       className={cn(
-        "divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white",
+        "divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white",
         className
       )}
     >

@@ -46,25 +46,25 @@ export default function InventoryPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="text-sm text-gray-600">Total Items</div>
           <div className="text-2xl font-bold text-gray-900">384</div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="text-sm text-gray-600">Categories</div>
           <div className="text-2xl font-bold text-blue-600">12</div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="text-sm text-gray-600">Low Stock Items</div>
           <div className="text-2xl font-bold text-yellow-600">8</div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="text-sm text-gray-600">Total Value</div>
           <div className="text-2xl font-bold text-green-600">$125K</div>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200">
+      <div className="bg-white rounded-lg border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">
             Inventory Items

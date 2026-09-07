@@ -291,7 +291,7 @@ export function PrintFormatModal({
             </div>
 
             {/* The two axes that matter most */}
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
+            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-4">
               <h3 className="text-sm font-semibold text-slate-900">
                 What the client sees
               </h3>

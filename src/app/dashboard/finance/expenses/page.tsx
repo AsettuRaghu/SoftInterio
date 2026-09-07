@@ -181,7 +181,7 @@ export default function ExpensesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+      <div className="flex items-center justify-between bg-white rounded-lg border border-slate-200 p-6 shadow-sm">
         <div>
           <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
             <Link href="/dashboard/finance" className="hover:text-blue-600">Finance</Link>
@@ -206,19 +206,19 @@ export default function ExpensesPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
           <p className="text-2xl font-bold text-slate-900">${(stats.total / 1000).toFixed(1)}K</p>
           <p className="text-sm text-slate-600">Total Approved</p>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
           <p className="text-2xl font-bold text-amber-600">${(stats.pending / 1000).toFixed(1)}K</p>
           <p className="text-sm text-slate-600">Pending Approval</p>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
           <p className="text-2xl font-bold text-blue-600">${(stats.materials / 1000).toFixed(1)}K</p>
           <p className="text-sm text-slate-600">Materials</p>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
           <p className="text-2xl font-bold text-green-600">${(stats.projectRelated / 1000).toFixed(1)}K</p>
           <p className="text-sm text-slate-600">Project-Related</p>
         </div>
@@ -242,7 +242,7 @@ export default function ExpensesPage() {
       </div>
 
       {/* Expenses Table */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-slate-50 border-b border-slate-200">

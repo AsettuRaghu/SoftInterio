@@ -387,7 +387,7 @@ export default function TaskTemplatesPage() {
     <div className="h-full bg-slate-50/50">
       <div className="h-full flex flex-col px-4 py-4">
         {/* Main Card - Full Height with integrated header */}
-        <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-0">
+        <div className="flex-1 bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-0">
           {/* Elegant Header inside the card */}
           <div className="px-4 py-2.5 border-b border-slate-100 bg-linear-to-r from-slate-50 to-white">
             {/* Breadcrumb */}

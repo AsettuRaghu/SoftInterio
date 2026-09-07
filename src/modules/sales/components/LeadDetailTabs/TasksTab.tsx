@@ -54,7 +54,7 @@ export default function TasksTab({
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-xl border border-slate-200 p-4">
+      <div className="bg-white rounded-lg border border-slate-200 p-4">
         <ProceduresPanel
           relatedType="lead"
           relatedId={leadId}

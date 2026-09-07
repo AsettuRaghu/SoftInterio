@@ -120,7 +120,7 @@ export default function SalesPage() {
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="bg-white rounded-lg border border-slate-200 p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-600">Total Leads</p>
@@ -147,7 +147,7 @@ export default function SalesPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="bg-white rounded-lg border border-slate-200 p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-600">Pipeline Value</p>
@@ -176,7 +176,7 @@ export default function SalesPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="bg-white rounded-lg border border-slate-200 p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-600">Conversion Rate</p>
@@ -203,7 +203,7 @@ export default function SalesPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="bg-white rounded-lg border border-slate-200 p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-600">Avg. Deal Size</p>
@@ -232,7 +232,7 @@ export default function SalesPage() {
       </div>
 
       {/* Monthly Target Progress */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
+      <div className="bg-white rounded-lg border border-slate-200 p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-slate-900">
             Monthly Target Progress
@@ -268,7 +268,7 @@ export default function SalesPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Activity */}
-        <div className="bg-white rounded-xl border border-slate-200">
+        <div className="bg-white rounded-lg border border-slate-200">
           <div className="px-6 py-4 border-b border-slate-200">
             <h2 className="text-lg font-semibold text-slate-900">
               Recent Activity
@@ -386,7 +386,7 @@ export default function SalesPage() {
         </div>
 
         {/* Top Deals in Pipeline */}
-        <div className="bg-white rounded-xl border border-slate-200">
+        <div className="bg-white rounded-lg border border-slate-200">
           <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-slate-900">
               Top Deals in Pipeline
@@ -452,7 +452,7 @@ export default function SalesPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Link
           href="/dashboard/sales/leads"
-          className="bg-white rounded-xl border border-slate-200 p-6 hover:shadow-md transition-shadow"
+          className="bg-white rounded-lg border border-slate-200 p-6 hover:shadow-md transition-shadow"
         >
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -479,7 +479,7 @@ export default function SalesPage() {
 
         <Link
           href="/dashboard/sales/pipeline"
-          className="bg-white rounded-xl border border-slate-200 p-6 hover:shadow-md transition-shadow"
+          className="bg-white rounded-lg border border-slate-200 p-6 hover:shadow-md transition-shadow"
         >
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -506,7 +506,7 @@ export default function SalesPage() {
 
         <Link
           href="/dashboard/sales/contacts"
-          className="bg-white rounded-xl border border-slate-200 p-6 hover:shadow-md transition-shadow"
+          className="bg-white rounded-lg border border-slate-200 p-6 hover:shadow-md transition-shadow"
         >
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">

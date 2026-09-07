@@ -92,14 +92,14 @@ export default function ProceduresPage() {
       <Toast message={error} onDismiss={() => setError(null)} />
 
       {procedures.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 px-6 py-12 text-center">
+        <div className="bg-white rounded-lg border border-slate-200 px-6 py-12 text-center">
           <p className="text-sm text-slate-500">
             No procedures yet. Create one to define a workflow your team must
             follow.
           </p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>

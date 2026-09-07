@@ -101,7 +101,7 @@ export function PageLayout({
     return (
       <div className="h-full bg-slate-50/50">
         <div className="h-full flex flex-col px-4 py-4">
-          <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 flex items-center justify-center">
+          <div className="flex-1 bg-white rounded-lg shadow-sm border border-slate-200 flex items-center justify-center">
             <div className="flex flex-col items-center gap-2">
               <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
               <p className="text-xs text-slate-500">{loadingText}</p>
@@ -128,7 +128,7 @@ export function PageLayout({
 
       {/* Content */}
       <div className="h-full flex flex-col px-4 py-4">
-        <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-0">
+        <div className="flex-1 bg-white rounded-lg shadow-sm border border-slate-200 flex flex-col min-h-0">
           {children}
         </div>
       </div>

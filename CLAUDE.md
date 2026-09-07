@@ -239,10 +239,9 @@ because it is the working view rather than another record of correspondence.
 Procurement and Payments have no lead counterpart and come last. Overview is
 the tab a project opens on, as a lead does.
 
-Cards on both pages are `rounded-xl` — the app-wide majority is `rounded-lg`,
-but these two pages sit in one workflow and matching each other matters more.
 Page-level primary buttons are `buttonVariants()` at the default size, which is
-the `px-4 py-2` the lead page uses; `sm` is for in-card actions.
+the `px-4 py-2` the lead page uses; `sm` is for in-card actions. Card radius is
+the app-wide `rounded-lg` — see below.
 
 Tabs are not hidden when a project has no lead — a directly created project
 still has quotations, a calendar and a timeline.
@@ -269,6 +268,23 @@ Leads legitimately carry target dates that have since passed. Re-validating
 untouched values would block edits to unrelated fields on any older lead. See
 `src/lib/dates/lead-dates.ts`. Direction is per field: targets must not be in
 the past; a contract signature must not be in the **future**.
+
+### One radius for resting surfaces, another for floating ones
+Every card and panel is **`rounded-lg`** — all 211 of them, across every module.
+Buttons, inputs and badges are `rounded-lg` too, so a card matches the controls
+inside it.
+
+Popovers, dropdowns, date pickers and dialogs stay **`rounded-xl`** (10 of
+them, all carrying `shadow-xl`). A surface that floats above the page reads as
+a different kind of thing, and the larger radius is what says so.
+
+This was settled on 2026-09-07 after the split had reached 101 `rounded-lg`
+cards against 98 `rounded-xl` — near even, and drifting per module: sales and
+projects had gone one way, quotations, stock, settings and tasks the other.
+When adding a card, copy a neighbour rather than inventing a radius.
+
+Note the border colour is still not uniform: 17 cards use `border-gray-200`
+where the rest use `border-slate-200`. Untouched here.
 
 ## Traps that have already cost time
 

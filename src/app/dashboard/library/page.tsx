@@ -239,7 +239,7 @@ export default function LibraryPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+      <div className="flex items-center justify-between bg-white rounded-lg border border-slate-200 p-6 shadow-sm">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">Design Library</h1>
           <p className="text-slate-600">Curated collection of materials, furniture, and finishes</p>
@@ -274,26 +274,26 @@ export default function LibraryPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
           <p className="text-2xl font-bold text-slate-900">{stats.total}</p>
           <p className="text-sm text-slate-600">Total Items</p>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
           <p className="text-2xl font-bold text-amber-600">{stats.furniture}</p>
           <p className="text-sm text-slate-600">Furniture</p>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
           <p className="text-2xl font-bold text-yellow-600">{stats.lighting}</p>
           <p className="text-sm text-slate-600">Lighting</p>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
           <p className="text-2xl font-bold text-stone-600">{stats.materials}</p>
           <p className="text-sm text-slate-600">Materials & Finishes</p>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4">
+      <div className="bg-white rounded-lg border border-slate-200 p-4">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1">
             <label className="block text-sm font-medium text-slate-600 mb-2">Category</label>
@@ -337,7 +337,7 @@ export default function LibraryPage() {
       {viewType === "grid" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredItems.map((item) => (
-            <div key={item.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition-all cursor-pointer group">
+            <div key={item.id} className="bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-lg transition-all cursor-pointer group">
               {/* Placeholder Image Area */}
               <div className="h-40 bg-linear-to-br from-slate-100 to-slate-50 flex items-center justify-center relative overflow-hidden">
                 <div className="text-center">
@@ -400,7 +400,7 @@ export default function LibraryPage() {
         </div>
       ) : (
         /* List View */
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50 border-b border-slate-200">

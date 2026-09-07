@@ -34,7 +34,7 @@ export function VendorCard({ vendor, onClick }: VendorCardProps) {
 
   return (
     <div
-      className="bg-white rounded-xl border border-slate-200 p-6 hover:shadow-md hover:border-slate-300 transition-all cursor-pointer"
+      className="bg-white rounded-lg border border-slate-200 p-6 hover:shadow-md hover:border-slate-300 transition-all cursor-pointer"
       onClick={onClick}
     >
       <div className="flex items-start justify-between mb-4">

@@ -817,7 +817,7 @@ export default function NewTemplatePage() {
           {/* Spaces */}
           <div className="space-y-4">
             {spaces.length === 0 ? (
-              <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+              <div className="bg-white rounded-lg border border-slate-200 p-12 text-center">
                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <svg
                     className="w-8 h-8 text-blue-600"

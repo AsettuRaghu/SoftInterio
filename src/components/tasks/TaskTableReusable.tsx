@@ -1434,7 +1434,7 @@ export default function TaskTable({
     <div className={compact ? "" : "h-full bg-slate-50/50"}>
       <Toast message={actionError} onDismiss={() => setActionError(null)} />
       <div className={compact ? "" : "h-full flex flex-col px-4 py-4"}>
-        <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-0">
+        <div className="flex-1 bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-0">
           {/* Header */}
           {showHeader && (
             <div className="px-4 py-3 border-b border-slate-100 bg-linear-to-r from-slate-50 to-white">

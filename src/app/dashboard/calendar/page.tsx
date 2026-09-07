@@ -408,7 +408,7 @@ export default function CalendarPage() {
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
           {/* Main Calendar */}
           <div className="xl:col-span-3">
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+            <div className="bg-white rounded-lg border border-slate-200 shadow-sm">
               {/* Calendar Header */}
               <div className="p-4 border-b border-slate-200 flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -644,7 +644,7 @@ export default function CalendarPage() {
           {/* Sidebar */}
           <div className="space-y-6">
             {/* Upcoming Events */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+            <div className="bg-white rounded-lg border border-slate-200 shadow-sm">
               <div className="p-4 border-b border-slate-200">
                 <h3 className="font-semibold text-slate-900 flex items-center gap-2">
                   <ClockIcon className="w-5 h-5 text-blue-500" />
@@ -718,7 +718,7 @@ export default function CalendarPage() {
 
             {/* Overdue Events */}
             {overdueEvents.length > 0 && (
-              <div className="bg-white rounded-xl border border-red-200 shadow-sm">
+              <div className="bg-white rounded-lg border border-red-200 shadow-sm">
                 <div className="p-4 border-b border-red-200 bg-red-50 rounded-t-xl">
                   <h3 className="font-semibold text-red-700 flex items-center gap-2">
                     <ExclamationCircleIcon className="w-5 h-5" />
@@ -764,7 +764,7 @@ export default function CalendarPage() {
             )}
 
             {/* Legend */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-4">
               <h3 className="font-semibold text-slate-900 mb-3">Legend</h3>
               <div className="space-y-2">
                 {Object.entries(MEETING_TYPE_LABELS).map(([key, label]) => {

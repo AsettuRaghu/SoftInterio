@@ -77,7 +77,7 @@ export default function FinancePage() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+      <div className="flex items-center justify-between bg-white rounded-lg border border-slate-200 p-6 shadow-sm">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">Finance Dashboard</h1>
           <p className="text-slate-600 text-base">
@@ -96,7 +96,7 @@ export default function FinancePage() {
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="bg-white rounded-lg border border-slate-200 p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-600">Total Revenue</p>
@@ -113,7 +113,7 @@ export default function FinancePage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="bg-white rounded-lg border border-slate-200 p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-600">Outstanding</p>
@@ -130,7 +130,7 @@ export default function FinancePage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="bg-white rounded-lg border border-slate-200 p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-600">Monthly Expenses</p>
@@ -147,7 +147,7 @@ export default function FinancePage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="bg-white rounded-lg border border-slate-200 p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-600">Net Profit</p>
@@ -167,7 +167,7 @@ export default function FinancePage() {
 
       {/* Quick Links */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Link href="/dashboard/finance/invoices" className="bg-white rounded-xl border border-slate-200 p-6 hover:shadow-md transition-shadow">
+        <Link href="/dashboard/finance/invoices" className="bg-white rounded-lg border border-slate-200 p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
               <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -181,7 +181,7 @@ export default function FinancePage() {
           </div>
         </Link>
 
-        <Link href="/dashboard/finance/payments" className="bg-white rounded-xl border border-slate-200 p-6 hover:shadow-md transition-shadow">
+        <Link href="/dashboard/finance/payments" className="bg-white rounded-lg border border-slate-200 p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
               <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -195,7 +195,7 @@ export default function FinancePage() {
           </div>
         </Link>
 
-        <Link href="/dashboard/finance/expenses" className="bg-white rounded-xl border border-slate-200 p-6 hover:shadow-md transition-shadow">
+        <Link href="/dashboard/finance/expenses" className="bg-white rounded-lg border border-slate-200 p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
               <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -212,7 +212,7 @@ export default function FinancePage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Cash Flow Chart */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-6">
+        <div className="lg:col-span-2 bg-white rounded-lg border border-slate-200 p-6">
           <h2 className="text-lg font-semibold text-slate-900 mb-6">Cash Flow (Last 6 Months)</h2>
           <div className="h-64">
             <div className="flex items-end justify-between h-48 gap-4">
@@ -248,7 +248,7 @@ export default function FinancePage() {
         </div>
 
         {/* Overdue Alert */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="bg-white rounded-lg border border-slate-200 p-6">
           <h2 className="text-lg font-semibold text-slate-900 mb-4">Payment Alerts</h2>
           <div className="space-y-4">
             <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -297,7 +297,7 @@ export default function FinancePage() {
       </div>
 
       {/* Recent Transactions */}
-      <div className="bg-white rounded-xl border border-slate-200">
+      <div className="bg-white rounded-lg border border-slate-200">
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900">Recent Transactions</h2>
           <button className="text-blue-600 text-sm hover:text-blue-700">View All →</button>

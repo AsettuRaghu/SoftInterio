@@ -15,7 +15,7 @@ export default function ReportsPage() {
 
       {/* Report Categories */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer">
+        <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer">
           <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
             <svg
               className="w-6 h-6 text-blue-600"
@@ -42,7 +42,7 @@ export default function ReportsPage() {
           </button>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer">
+        <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer">
           <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
             <svg
               className="w-6 h-6 text-green-600"
@@ -69,7 +69,7 @@ export default function ReportsPage() {
           </button>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer">
+        <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer">
           <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
             <svg
               className="w-6 h-6 text-purple-600"
@@ -98,7 +98,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Quick Stats */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-6">
           Quick Statistics
         </h2>
@@ -135,7 +135,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Recent Reports */}
-      <div className="bg-white rounded-xl border border-gray-200">
+      <div className="bg-white rounded-lg border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">
             Recent Reports
