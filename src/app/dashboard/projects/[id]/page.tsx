@@ -132,6 +132,14 @@ export default function ProjectDetailPage({ params }: PageProps) {
   // The lead page loads these from the same endpoint and hands them to its
   // Tasks tab. The project page passed teamMembers={undefined}, so assigning a
   // project task had no one to choose from.
+  // A playbook run rendered as a phase tree. This is the convergence proof:
+  // if the tree can draw a playbook, it is a view rather than a second engine.
+  const [playbook, setPlaybook] = useState<{
+    name: string;
+    version: number;
+    stepCount: number;
+  } | null>(null);
+  const [playbookPhases, setPlaybookPhases] = useState<any[]>([]);
   const [teamMembers, setTeamMembers] = useState<
     { id: string; name: string; email: string; avatar_url?: string }[]
   >([]);
@@ -158,7 +166,20 @@ export default function ProjectDetailPage({ params }: PageProps) {
     fetchProject();
     fetchCounts();
     void fetchTeamMembers();
+    void fetchPlaybook();
   }, [id]);
+
+  const fetchPlaybook = async () => {
+    try {
+      const res = await fetch(`/api/projects/${id}/playbook`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setPlaybook(data.playbook);
+      setPlaybookPhases(data.phases || []);
+    } catch {
+      // The native phases still render; the playbook is additive.
+    }
+  };
 
   const fetchTeamMembers = async () => {
     try {
@@ -645,16 +666,35 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
         <div>
           {activeTab === "project-mgmt" && (
-            <ManagementTab
-              projectId={project.id}
-              phases={project.phases || []}
-              onInitializePhases={initializePhases}
-              onRefresh={fetchProject}
-              onEditPhase={handleEditPhase}
-              onEditSubPhase={handleEditSubPhase}
-              onSubPhaseClick={handleSubPhaseClick}
-              onQuickAction={handleQuickAction}
-            />
+            <>
+              {playbook && (
+                <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+                  <p className="text-sm font-medium text-blue-900">
+                    Drawn from the playbook &ldquo;{playbook.name}&rdquo; (v
+                    {playbook.version})
+                  </p>
+                  <p className="text-xs text-blue-700 mt-0.5">
+                    {playbookPhases.length} phases and {playbook.stepCount}{" "}
+                    steps, rendered by this tree without a single phase-template
+                    row. The tree is a view; the playbook is the engine.
+                  </p>
+                </div>
+              )}
+              <ManagementTab
+                projectId={project.id}
+                phases={
+                  playbookPhases.length > 0
+                    ? playbookPhases
+                    : project.phases || []
+                }
+                onInitializePhases={initializePhases}
+                onRefresh={fetchProject}
+                onEditPhase={handleEditPhase}
+                onEditSubPhase={handleEditSubPhase}
+                onSubPhaseClick={handleSubPhaseClick}
+                onQuickAction={handleQuickAction}
+              />
+            </>
           )}
 
           {/* The same Spaces the seller captured on the lead. They hang off
