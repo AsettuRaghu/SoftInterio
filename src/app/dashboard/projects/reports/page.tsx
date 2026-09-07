@@ -85,7 +85,7 @@ export default function ProjectReportsPage() {
         {reportCards.map((report) => (
           <div
             key={report.title}
-            className="relative bg-white rounded-lg border border-slate-200 p-5 hover:shadow-md transition-shadow"
+            className="relative bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-shadow"
           >
             {report.comingSoon && (
               <span className="absolute top-3 right-3 px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-500 rounded-full">
@@ -104,7 +104,7 @@ export default function ProjectReportsPage() {
       </div>
 
       {/* Quick Stats Placeholder */}
-      <div className="bg-white rounded-lg border border-slate-200 p-6">
+      <div className="bg-white rounded-xl border border-slate-200 p-6">
         <h2 className="text-lg font-medium text-slate-900 mb-4">
           Quick Insights
         </h2>

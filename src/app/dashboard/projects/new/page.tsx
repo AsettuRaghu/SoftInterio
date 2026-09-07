@@ -285,7 +285,7 @@ function NewProjectForm() {
       </div>
 
       {/* Creation Mode Selector */}
-      <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6">
+      <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
         <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
           <LinkIcon className="w-5 h-5 text-slate-400" />
           Project Source
@@ -456,7 +456,7 @@ function NewProjectForm() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Basic Info */}
-        <div className="bg-white rounded-lg border border-slate-200 p-6">
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
           <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
             <Building2 className="w-5 h-5 text-slate-400" />
             Project Information
@@ -541,7 +541,7 @@ function NewProjectForm() {
         </div>
 
         {/* Client Info */}
-        <div className="bg-white rounded-lg border border-slate-200 p-6">
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
           <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
             <User className="w-5 h-5 text-slate-400" />
             Client Information
@@ -604,7 +604,7 @@ function NewProjectForm() {
         </div>
 
         {/* Site Address */}
-        <div className="bg-white rounded-lg border border-slate-200 p-6">
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
           <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
             <MapPin className="w-5 h-5 text-slate-400" />
             Site Address
@@ -669,7 +669,7 @@ function NewProjectForm() {
         </div>
 
         {/* Timeline & Budget */}
-        <div className="bg-white rounded-lg border border-slate-200 p-6">
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
           <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
             <Calendar className="w-5 h-5 text-slate-400" />
             Timeline & Budget
@@ -705,7 +705,7 @@ function NewProjectForm() {
         </div>
 
         {/* Assignment & Options */}
-        <div className="bg-white rounded-lg border border-slate-200 p-6">
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
           <h2 className="text-lg font-semibold text-slate-900 mb-4">
             Assignment & Options
           </h2>
@@ -794,7 +794,7 @@ function NewProjectLoading() {
         <div className="w-10 h-10 bg-slate-200 rounded-lg animate-pulse" />
         <div className="h-6 w-48 bg-slate-200 rounded animate-pulse" />
       </div>
-      <div className="bg-white rounded-lg border border-slate-200 p-6">
+      <div className="bg-white rounded-xl border border-slate-200 p-6">
         <div className="space-y-4">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="h-10 bg-slate-100 rounded animate-pulse" />

@@ -28,8 +28,10 @@ export default function NotesTab({
   return (
     <NotesTableReusable
       notes={notes || []}
-      // The project page never passed onAddNoteClick, so the create button
-      // never rendered and project notes were effectively read-only.
+      // The shared component owns creation and follow-up editing, so leads
+      // and projects behave identically rather than each wiring its own flow.
+      // allowCreate plus createEndpoint are what render the button;
+      // onCreateNote is an optional hook for the page, not a requirement.
       createEndpoint={`/api/projects/${projectId}/notes`}
       updateEndpoint={`/api/projects/${projectId}/notes`}
       showNoteTitle

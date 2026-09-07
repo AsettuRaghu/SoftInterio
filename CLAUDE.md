@@ -226,10 +226,26 @@ labels is what hid the problem.
 lead's scope and special requirements and **neither column exists** — that
 detail lives on the property and the quotation.
 
-### Project detail: one tab bar, one edit dialog
-Counts go in a tab's `badge` and render as a pill; do not fold them into the
-label. Tabs are not hidden when a project has no lead — a directly created
-project still has quotations, a calendar and a timeline.
+### Project detail follows the lead detail page
+The lead detail page is the reference for this module. Its tab bar is plain —
+`px-4 py-3 text-sm font-medium border-b-2`, active `border-blue-600
+text-blue-600`, **no icons and no count badges** — and the project page matches
+it exactly, plus `whitespace-nowrap` and `overflow-x-auto` because it carries
+eleven tabs rather than eight.
+
+Order mirrors leads: overview, spaces, quotations, tasks, notes, documents,
+calendar, timeline. **Project Mgmt sits third**, beside Overview and Spaces,
+because it is the working view rather than another record of correspondence.
+Procurement and Payments have no lead counterpart and come last. Overview is
+the tab a project opens on, as a lead does.
+
+Cards on both pages are `rounded-xl` — the app-wide majority is `rounded-lg`,
+but these two pages sit in one workflow and matching each other matters more.
+Page-level primary buttons are `buttonVariants()` at the default size, which is
+the `px-4 py-2` the lead page uses; `sm` is for in-card actions.
+
+Tabs are not hidden when a project has no lead — a directly created project
+still has quotations, a calendar and a timeline.
 
 There is one loading flag, because `fetchCounts` is one `Promise.all`. It
 previously had six that could never disagree, one of which was never read.

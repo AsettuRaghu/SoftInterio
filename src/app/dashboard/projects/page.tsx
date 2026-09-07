@@ -277,7 +277,7 @@ export default function ProjectsPage() {
           tenantSettings.allowDirectProjectCreate ? (
             <Link
               href="/dashboard/projects/new"
-              className={cn(buttonVariants({ size: "sm" }), "gap-2")}
+              className={cn(buttonVariants(), "gap-2")}
             >
               <PlusIcon className="w-4 h-4" />
               New Project

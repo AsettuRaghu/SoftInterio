@@ -56,7 +56,7 @@ export default function TasksTab({
     <div className="space-y-4">
       {/* Procedure steps ARE tasks, so the panel sits above the table they
           appear in rather than living on a separate screen. */}
-      <div className="bg-white rounded-lg border border-slate-200 p-4">
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
         <ProceduresPanel
           relatedType="project"
           relatedId={projectId}

@@ -487,6 +487,35 @@ export interface ProjectLeadData {
 }
 
 
+/**
+ * Timeline labels for project activities.
+ *
+ * Lives here, next to the other label maps, because the lead side reads
+ * LeadActivityTypeLabels from @/types/leads and the project tab was carrying
+ * its own copy inline - so the two timelines could drift in wording.
+ */
+export const ProjectActivityTypeLabels: Record<string, string> = {
+  call_made: "Call Made",
+  call_received: "Call Received",
+  call_missed: "Call Missed",
+  email_sent: "Email Sent",
+  email_received: "Email Received",
+  meeting_scheduled: "Meeting Scheduled",
+  meeting_completed: "Meeting Completed",
+  client_meeting: "Client Meeting",
+  internal_meeting: "Internal Meeting",
+  site_visit: "Site Visit",
+  quotation_sent: "Quotation Sent",
+  quotation_revised: "Quotation Revised",
+  quotation_approved: "Quotation Approved",
+  project_created: "Project Created",
+  status_changed: "Status Changed",
+  task_created: "Task Created",
+  task_completed: "Task Completed",
+  document_uploaded: "Document Uploaded",
+  note_added: "Note Added",
+};
+
 // =====================================================
 // PROJECT PHASE
 // =====================================================

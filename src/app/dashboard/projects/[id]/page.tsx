@@ -6,20 +6,10 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeftIcon,
   BuildingOffice2Icon,
-  CalendarDaysIcon,
-  ClockIcon,
   PauseIcon,
   XMarkIcon,
-  CurrencyRupeeIcon,
-  DocumentTextIcon,
   PlusIcon,
   LinkIcon,
-  InformationCircleIcon,
-  ClipboardDocumentListIcon,
-  CubeIcon,
-  Cog6ToothIcon,
-  ChatBubbleLeftRightIcon,
-  ShoppingCartIcon,
 } from "@heroicons/react/24/outline";
 import {
   Project,
@@ -98,7 +88,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState<TabKey>("project-mgmt");
+  const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [selectedSubPhase, setSelectedSubPhase] = useState<{
     phaseId: string;
     subPhaseId: string;
@@ -139,6 +129,12 @@ export default function ProjectDetailPage({ params }: PageProps) {
   }, [id]);
   const [calendarCount, setCalendarCount] = useState(0);
   const [activities, setActivities] = useState<any[]>([]);
+  // The lead page loads these from the same endpoint and hands them to its
+  // Tasks tab. The project page passed teamMembers={undefined}, so assigning a
+  // project task had no one to choose from.
+  const [teamMembers, setTeamMembers] = useState<
+    { id: string; name: string; email: string; avatar_url?: string }[]
+  >([]);
   const [quotationsCount, setQuotationsCount] = useState(0);
   const [quotations, setQuotations] = useState<any[]>([]);
 
@@ -161,7 +157,28 @@ export default function ProjectDetailPage({ params }: PageProps) {
   useEffect(() => {
     fetchProject();
     fetchCounts();
+    void fetchTeamMembers();
   }, [id]);
+
+  const fetchTeamMembers = async () => {
+    try {
+      const res = await fetch("/api/team/members");
+      const data = await res.json();
+      // Shape is { success, data } - the same read as useLeadDetail.
+      if (res.ok && data.success && data.data) {
+        setTeamMembers(
+          data.data.map((m: any) => ({
+            id: m.id,
+            name: m.name,
+            email: m.email,
+            avatar_url: m.avatar_url,
+          })),
+        );
+      }
+    } catch {
+      // A missing team list only costs the assignee dropdown its options.
+    }
+  };
 
   const fetchProject = async () => {
     try {
@@ -493,83 +510,31 @@ export default function ProjectDetailPage({ params }: PageProps) {
   }
 
   /**
-   * One tab bar, one set of conventions.
+   * Tab order and styling follow the lead detail page, so moving between a
+   * lead and the project it became does not change the furniture.
    *
-   * Counts go in `badge` and render as a pill. Every tab except Payments used
-   * to fold its count into the label as "Notes (3)" while Payments alone used
-   * the badge the renderer already supported, so two styles sat side by side.
+   * Leads run overview -> spaces -> quotations -> tasks -> notes -> documents
+   * -> calendar -> timeline. Project Mgmt sits third, beside Overview and
+   * Spaces, because it is the working view of the project rather than another
+   * record of correspondence. Procurement and Payments have no counterpart on
+   * a lead and follow at the end.
    *
-   * Quotations, Calendar and Timeline are no longer hidden when the project
-   * has no lead. A project created directly is still a project: it can carry
-   * quotations, meetings and a timeline, and hiding three tabs made it look
-   * broken rather than new.
+   * No icons and no count badges: the lead tab bar has neither, and the two
+   * sitting side by side is what made them look like different products.
    */
-  const tabs: {
-    key: TabKey;
-    label: string;
-    icon?: React.ReactNode;
-    badge?: number;
-  }[] = [
-    {
-      key: "project-mgmt",
-      label: "Project Mgmt",
-      icon: <Cog6ToothIcon className="w-4 h-4" />,
-    },
-    { key: "spaces", label: "Spaces", icon: <CubeIcon className="w-4 h-4" /> },
-    {
-      key: "overview",
-      label: "Overview",
-      icon: <InformationCircleIcon className="w-4 h-4" />,
-    },
-    {
-      key: "quotations",
-      label: "Quotations",
-      icon: <DocumentTextIcon className="w-4 h-4" />,
-      badge: quotationsCount,
-    },
-    {
-      key: "tasks",
-      label: "Tasks",
-      icon: <ClipboardDocumentListIcon className="w-4 h-4" />,
-      badge: tasksCount,
-    },
-    {
-      key: "notes",
-      label: "Notes",
-      icon: <ChatBubbleLeftRightIcon className="w-4 h-4" />,
-      badge: notesCount,
-    },
-    {
-      key: "documents",
-      label: "Documents",
-      icon: <DocumentTextIcon className="w-4 h-4" />,
-      badge: documentsCount,
-    },
-    {
-      key: "calendar",
-      label: "Calendar",
-      icon: <CalendarDaysIcon className="w-4 h-4" />,
-      badge: calendarCount,
-    },
-    {
-      key: "timeline",
-      label: "Timeline",
-      icon: <ClockIcon className="w-4 h-4" />,
-    },
-    {
-      key: "procurement",
-      label: "Procurement",
-      icon: <ShoppingCartIcon className="w-4 h-4" />,
-    },
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: "overview", label: "Overview" },
+    { key: "spaces", label: "Spaces" },
+    { key: "project-mgmt", label: "Project Mgmt" },
+    { key: "quotations", label: "Quotations" },
+    { key: "tasks", label: "Tasks" },
+    { key: "notes", label: "Notes" },
+    { key: "documents", label: "Documents" },
+    { key: "calendar", label: "Calendar" },
+    { key: "timeline", label: "Timeline" },
+    { key: "procurement", label: "Procurement" },
     ...(canSeePayments
-      ? [
-          {
-            key: "payments" as TabKey,
-            label: "Payments",
-            icon: <CurrencyRupeeIcon className="w-4 h-4" />,
-            badge: project.payment_milestones?.length,
-          },
-        ]
+      ? [{ key: "payments" as TabKey, label: "Payments" }]
       : []),
   ];
 
@@ -652,7 +617,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 setActiveTab("overview");
                 setShowEditDetailsModal(true);
               }}
-              className={cn(buttonVariants({ size: "sm" }))}
+              className={cn(buttonVariants())}
             >
               Edit
             </button>
@@ -660,33 +625,25 @@ export default function ProjectDetailPage({ params }: PageProps) {
         }
       />
 
-      <PageContent noPadding>
-        {/* Tabs Navigation */}
-        <div className="bg-white border-b border-slate-200">
-          <div className="flex overflow-x-auto">
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors whitespace-nowrap border-b-2 ${
-                  activeTab === tab.key
-                    ? "border-blue-600 text-blue-600 bg-blue-50/50"
-                    : "border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                }`}
-              >
-                {tab.icon}
-                {tab.label}
-                {tab.badge ? (
-                  <span className="bg-slate-100 text-slate-600 text-xs px-1.5 py-0.5 rounded-full">
-                    {tab.badge}
-                  </span>
-                ) : null}
-              </button>
-            ))}
-          </div>
+      <PageContent>
+        {/* Same markup as the lead detail page. */}
+        <div className="flex border-b border-slate-200 mb-6 -mx-6 px-6 overflow-x-auto">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                activeTab === tab.key
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        <div className="p-6">
+        <div>
           {activeTab === "project-mgmt" && (
             <ManagementTab
               projectId={project.id}
@@ -731,7 +688,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
               projectId={project.id}
               tasks={tasks}
               projectClosed={project.status === "completed"}
-              teamMembers={undefined}
+              teamMembers={teamMembers}
               onCountChange={(count) => setTasksCount(count)}
               onRefresh={fetchCounts}
             />
@@ -810,6 +767,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
           ) : activeTab === "quotations" ? (
             <QuotationsTab
               quotations={quotations}
+              projectClosed={project.status === "completed"}
               onCountChange={(count) => setQuotationsCount(count)}
               onViewQuotation={(quotation) => {
                 // Navigate to quotation view page
@@ -821,7 +779,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
           {activeTab === "payments" && (
             <div className="space-y-6">
               <div className="grid grid-cols-4 gap-4">
-                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                   <p className="text-xs text-slate-500 uppercase font-bold">
                     Total Due
                   </p>
@@ -832,7 +790,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 {/* Add other summary cards as needed */}
               </div>
               {/* Milestones list would go here */}
-              <div className="bg-white rounded-lg border border-slate-200 p-8 text-center text-slate-500">
+              <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500">
                 Payment Milestones Implementation
               </div>
             </div>

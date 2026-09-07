@@ -1,6 +1,7 @@
 "use client";
 
 import TimelineTableReusable from "@/components/timeline/TimelineTableReusable";
+import { ProjectActivityTypeLabels } from "@/types/projects";
 
 interface TimelineEvent {
   id: string;
@@ -25,27 +26,6 @@ interface TimelineTabProps {
   onCountChange?: (count: number) => void;
 }
 
-const ActivityTypeLabels: Record<string, string> = {
-  call_made: "Call Made",
-  call_received: "Call Received",
-  call_missed: "Call Missed",
-  email_sent: "Email Sent",
-  email_received: "Email Received",
-  meeting_scheduled: "Meeting Scheduled",
-  meeting_completed: "Meeting Completed",
-  client_meeting: "Client Meeting",
-  internal_meeting: "Internal Meeting",
-  site_visit: "Site Visit",
-  quotation_sent: "Quotation Sent",
-  quotation_revised: "Quotation Revised",
-  quotation_approved: "Quotation Approved",
-  project_created: "Project Created",
-  status_changed: "Status Changed",
-  task_created: "Task Created",
-  task_completed: "Task Completed",
-  document_uploaded: "Document Uploaded",
-  note_added: "Note Added",
-};
 
 export default function TimelineTab({
   projectId,
@@ -64,7 +44,7 @@ export default function TimelineTab({
   return (
     <TimelineTableReusable
       activities={timelineActivities}
-      activityTypeLabels={ActivityTypeLabels}
+      activityTypeLabels={ProjectActivityTypeLabels}
       showFilters={true}
       readOnly={projectClosed}
       onRefresh={onRefresh}

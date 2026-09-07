@@ -5,12 +5,14 @@ import { Quotation } from "@/types/quotations";
 
 interface ProjectQuotationsTabProps {
   quotations: Quotation[];
+  projectClosed?: boolean;
   onCountChange?: (count: number) => void;
   onViewQuotation?: (quotation: Quotation) => void;
 }
 
 export default function QuotationsTab({
   quotations,
+  projectClosed = false,
   onCountChange,
   onViewQuotation,
 }: ProjectQuotationsTabProps) {
@@ -22,7 +24,7 @@ export default function QuotationsTab({
       showFilters={true}
       showHeader={false}
       compact={true}
-      readOnly={false}
+      readOnly={projectClosed}
       onViewQuotation={onViewQuotation}
     />
   );
