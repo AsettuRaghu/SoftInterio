@@ -243,6 +243,37 @@ the past; a contract signature must not be in the **future**.
 - **Never `next build` in this directory** while `npm run dev` is running; it
   corrupts the dev server's `.next`. Build from a hardlinked copy.
 
+## Migrations
+
+`supabase/migrations/` holds **one file**: the baseline schema, dumped from the
+live database on 2026-09-07 and already marked applied in the remote ledger.
+
+It exists because there was no foundation before it. Every migration this
+project had was a delta on a schema built in the Supabase dashboard — not one
+core table was created by a migration, so a fresh replay died on the first
+`ALTER`, and roughly ten months of schema evolution existed nowhere in the
+repository. The baseline carries 124 tables, 323 RLS policies, 135 functions,
+50 types, 364 indexes and the `trg_lead_stage_change` trigger, none of which
+had been in version control.
+
+The 43 deltas it supersedes are in `supabase/migrations_archive/`, kept for the
+reasoning in their comments. **Do not re-run them.** Replaying an old
+`CREATE OR REPLACE FUNCTION` on top of the baseline would overwrite a current
+definition with an older one — a real risk here, where functions were often
+edited in the dashboard.
+
+**Migrations can now be applied from the CLI.** The project is linked and the
+ledger matches, so `supabase db push` applies anything new — no more pasting
+SQL into the dashboard. Applying by hand is what caused the drift being cleaned
+up here: it does not write to the ledger, so seven migrations looked unapplied
+when they were live.
+
+    supabase db push                 # apply pending migrations
+    supabase migration list          # local vs remote ledger
+    supabase db dump -f supabase/migrations/20260101000000_baseline_schema.sql
+
+`db dump` and `db diff` need Docker running; `push`, `list` and `repair` do not.
+
 ## Layout worth knowing
 
 - `src/lib/dates/lead-dates.ts` — date rules shared by routes and modals
