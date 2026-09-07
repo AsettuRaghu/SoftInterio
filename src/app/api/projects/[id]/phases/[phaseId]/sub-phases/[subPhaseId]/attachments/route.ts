@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import {
+  requireProjectAccess,
+  requirePhaseLineage,
+} from "@/lib/projects/guard";
+import { requestLogger } from "@/lib/logger/request";
 
 // GET /api/projects/[id]/phases/[phaseId]/sub-phases/[subPhaseId]/attachments
 export async function GET(
@@ -9,15 +14,34 @@ export async function GET(
     params,
   }: { params: Promise<{ id: string; phaseId: string; subPhaseId: string }> }
 ) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
+    const { user } = guard;
+
     const { id: projectId, phaseId, subPhaseId } = await params;
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId,
+      user,
+      permissions: guard.permissions,
+      mode: "read",
+    });
+    if (!gate.ok) return gate.response;
+
+    const lineage = await requirePhaseLineage(supabase, {
+      projectId,
+      phaseId,
+      subPhaseId,
+    });
+    if (!lineage.ok) return lineage.response;
 
     const { data: attachments, error } = await supabase
       .from("project_phase_attachments")
@@ -31,13 +55,13 @@ export async function GET(
       .order("uploaded_at", { ascending: false });
 
     if (error) {
-      console.error("Error fetching attachments:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error fetching attachments", error);
+      return NextResponse.json({ error: "Request failed" }, { status: 500 });
     }
 
     return NextResponse.json({ attachments });
   } catch (error) {
-    console.error("Error in get attachments API:", error);
+    log.error("Error in get attachments API", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -52,9 +76,11 @@ export async function POST(
     params,
   }: { params: Promise<{ id: string; phaseId: string; subPhaseId: string }> }
 ) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -62,6 +88,21 @@ export async function POST(
     const { user } = guard;
     const { id: projectId, phaseId, subPhaseId } = await params;
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
+
+    const lineage = await requirePhaseLineage(supabase, {
+      projectId,
+      phaseId,
+      subPhaseId,
+    });
+    if (!lineage.ok) return lineage.response;
 
     const formData = await request.formData();
     const files = formData.getAll("files") as File[];
@@ -91,7 +132,7 @@ export async function POST(
         });
 
       if (uploadError) {
-        console.error("Error uploading file:", uploadError);
+        log.error("Error uploading file", uploadError);
         continue; // Skip this file and continue with others
       }
 
@@ -119,7 +160,7 @@ export async function POST(
         .single();
 
       if (dbError) {
-        console.error("Error creating attachment record:", dbError);
+        log.error("Error creating attachment record", dbError);
         continue;
       }
 
@@ -149,7 +190,7 @@ export async function POST(
       attachments: uploadedAttachments,
     });
   } catch (error) {
-    console.error("Error in upload attachments API:", error);
+    log.error("Error in upload attachments API", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

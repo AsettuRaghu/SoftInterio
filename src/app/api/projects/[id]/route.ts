@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { requireProjectAccess } from "@/lib/projects/guard";
+import { requestLogger } from "@/lib/logger/request";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -9,9 +11,10 @@ interface RouteParams {
 
 // GET /api/projects/[id] - Get single project with all phases
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
-    // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -21,19 +24,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const supabase = await createClient();
     const supabaseAdmin = createAdminClient();
 
-    // Get user's tenant_id
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.tenant_id) {
-      return NextResponse.json(
-        { error: "User not associated with a tenant" },
-        { status: 400 }
-      );
-    }
+    const gate = await requireProjectAccess(supabase, {
+      projectId: id,
+      user,
+      permissions: guard.permissions,
+      mode: "read",
+    });
+    if (!gate.ok) return gate.response;
 
     // Fetch project with relations
     const { data: project, error } = await supabase
@@ -48,12 +45,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       `
       )
       .eq("id", id)
-      .eq("tenant_id", userData.tenant_id)
+      .eq("tenant_id", user.tenantId)
       .single();
 
     if (error) {
-      console.error("Error fetching project:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error fetching project", error, { projectId: id });
+      return NextResponse.json({ error: "Failed to fetch project" }, { status: 500 });
     }
 
     if (!project) {
@@ -145,7 +142,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (fullProjectError) {
-       console.error("Error fetching full project details:", fullProjectError);
+       log.error("Error fetching full project details", fullProjectError, { projectId: id });
        return NextResponse.json(
          { error: "Failed to fetch project details" },
          { status: 500 }
@@ -224,7 +221,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         .single();
       
       if (leadError) {
-        console.error("Error fetching lead data:", leadError);
+        log.error("Error fetching linked lead", leadError, { projectId: id, leadId: fullProject.lead_id });
       }
       
       pLead = leadData;
@@ -263,23 +260,31 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Try to find linked lead ID
     let leadId = project.lead_id;
 
-    // Fallback: If no link on project, check if any lead points to this project
+    // Fallback: if the project carries no link, see whether a lead points back
+    // at it. maybeSingle, not single: .single() on a miss raises PGRST116 and
+    // the error was being discarded, so a legitimately unlinked project logged
+    // nothing and looked identical to a failure.
+    //
+    // This used to repair the missing link by writing to projects from inside
+    // a GET. A read handler that mutates is a trap - it fires on every page
+    // view, races with a concurrent edit, and needs write permission the
+    // caller may not have. The link is derived for this response only.
     if (!leadId) {
-      const { data: reverseLinkedLead } = await supabase
+      const { data: reverseLinkedLead, error: reverseError } = await supabase
         .from("leads")
         .select("id")
         .eq("project_id", id)
+        .eq("tenant_id", user.tenantId)
         .limit(1)
-        .single();
-      
-      if (reverseLinkedLead) {
-        leadId = reverseLinkedLead.id;
-        // Optionally update the project to fix the missing link
-        await supabase
-          .from("projects")
-          .update({ lead_id: leadId, converted_from_lead_id: leadId })
-          .eq("id", id);
+        .maybeSingle();
+
+      if (reverseError) {
+        log.warn("Reverse lead lookup failed", {
+          projectId: id,
+          error: reverseError.message,
+        });
       }
+      if (reverseLinkedLead) leadId = reverseLinkedLead.id;
     }
 
     if (leadId) {
@@ -289,7 +294,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         .select(
           `
           id,
-          lead_number,
           lead_number,
           stage,
           property_name,
@@ -376,7 +380,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         created_user:users!calendar_events_created_by_fkey(id, name, avatar_url)
       `
       )
-      .eq("tenant_id", userData.tenant_id)
+      .eq("tenant_id", user.tenantId)
       .eq("linked_type", "project")
       .eq("linked_id", id)
       .order("scheduled_at", { ascending: false });
@@ -404,7 +408,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
-    console.error("Project API error:", error);
+    log.error("Unhandled error fetching project", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -414,9 +418,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 // PATCH /api/projects/[id] - Update project
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
-    // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -425,19 +430,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const supabase = await createClient();
 
-    // Get user's tenant_id
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.tenant_id) {
-      return NextResponse.json(
-        { error: "User not associated with a tenant" },
-        { status: 400 }
-      );
-    }
+    const gate = await requireProjectAccess(supabase, {
+      projectId: id,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
 
     const body = await request.json();
 
@@ -485,8 +484,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         .from("projects")
         .select("property_id")
         .eq("id", id)
+        .eq("tenant_id", user.tenantId)
         .single();
-    
+
     if (fetchError) throw fetchError;
 
     // Prepare project updates (keep original project fields)
@@ -498,25 +498,80 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // We will manually add back the ones that ARE on the project table if needed.
     // Checking types: Project has property_type, project_category, status, etc.
     
-    const projectUpdates: any = { ...projectUpdateData };
-    if (body.project_category) projectUpdates.project_category = body.project_category;
-    if (body.status) projectUpdates.status = body.status;
-    if (body.description) projectUpdates.description = body.description;
-    if (body.notes) projectUpdates.notes = body.notes;
-    // ... maps other direct fields automatically via ...projectUpdateData
+    // Allowlist, not a spread of whatever arrived.
+    //
+    // This previously did `{ ...projectUpdateData }` - every body key that the
+    // destructure above did not happen to name went straight into the UPDATE.
+    // The .eq("tenant_id") below decides which row is matched but not what the
+    // SET clause may touch, so a request carrying tenant_id could hand the
+    // project to another business, and created_by, project_number or id were
+    // equally writable. It also meant sending back a field the projects table
+    // does not have - project_type and quoted_amount are computed for the
+    // response, not columns - failed the whole request with a schema error.
+    //
+    // Identity and audit columns are absent on purpose: id, tenant_id,
+    // project_number, created_by, created_at. is_active is absent too, so
+    // archiving stays with DELETE, which requires projects.delete.
+    const EDITABLE_PROJECT_FIELDS = [
+      "name",
+      "description",
+      "status",
+      "priority",
+      "project_category",
+      "expected_start_date",
+      "expected_end_date",
+      "actual_start_date",
+      "actual_end_date",
+      "actual_cost",
+      "overall_progress",
+      "notes",
+      "project_manager_id",
+      "current_phase_id",
+      "client_id",
+      "property_id",
+      "quotation_id",
+      "baseline_quotation_id",
+      "lead_id",
+      "next_follow_up_at",
+    ] as const;
+
+    const projectUpdates: Record<string, unknown> = {};
+    for (const field of EDITABLE_PROJECT_FIELDS) {
+      if (field in projectUpdateData) {
+        projectUpdates[field] = (projectUpdateData as Record<string, unknown>)[field];
+      }
+    }
+
+    const rejected = Object.keys(projectUpdateData).filter(
+      (k) => !(EDITABLE_PROJECT_FIELDS as readonly string[]).includes(k)
+    );
+    if (rejected.length > 0) {
+      // Not an error - the detail response carries plenty of derived fields a
+      // form may echo back. Logged so a genuinely missing column is visible
+      // rather than silently discarded.
+      log.debug("Ignored non-editable project fields", {
+        projectId: id,
+        fields: rejected,
+      });
+    }
 
     const { data: project, error } = await supabase
       .from("projects")
       .update(projectUpdates)
       .eq("id", id)
-      .eq("tenant_id", userData.tenant_id)
+      .eq("tenant_id", user.tenantId)
       .select()
       .single();
 
     if (error) {
-      console.error("Error updating project:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error updating project", error, { projectId: id });
+      return NextResponse.json({ error: "Failed to update project" }, { status: 500 });
     }
+
+    log.info("Project updated", {
+      projectId: id,
+      fields: Object.keys(projectUpdates),
+    });
 
     // 2. Update Property Table if property_id exists
     if (existingProject?.property_id) {
@@ -550,7 +605,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           .eq("id", existingProject.property_id);
         
         if (propError) {
-          console.error("Error updating property:", propError);
+          log.error("Error updating linked property", propError, { projectId: id, propertyId: existingProject.property_id });
           // We don't fail the whole request, but log it
         }
       }
@@ -563,6 +618,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         .from("projects")
         .select("client_id")
         .eq("id", id)
+        .eq("tenant_id", user.tenantId)
         .single();
 
       if (!currentProjectError && currentProject?.client_id) {
@@ -577,10 +633,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             .from("clients")
             .update(clientUpdates)
             .eq("id", currentProject.client_id)
-            .eq("tenant_id", userData.tenant_id);
+            .eq("tenant_id", user.tenantId);
           
           if (clientError) {
-            console.error("Error updating client:", clientError);
+            log.error("Error updating linked client", clientError, { projectId: id, clientId: currentProject.client_id });
             // We don't fail the whole request, but log it
           }
         }
@@ -589,7 +645,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ project });
   } catch (error) {
-    console.error("Project API error:", error);
+    log.error("Unhandled error updating project", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -599,9 +655,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 // DELETE /api/projects/[id] - Soft delete project
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
-    // Protect API route
-    const guard = await protectApiRoute(request);
+    // Archiving is its own permission - holding projects.edit is not enough.
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["projects.delete"],
+      loadPermissions: true,
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -610,35 +671,37 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const supabase = await createClient();
 
-    // Get user's tenant_id
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.tenant_id) {
-      return NextResponse.json(
-        { error: "User not associated with a tenant" },
-        { status: 400 }
-      );
-    }
+    // Confirms the project exists in this tenant before reporting success.
+    // Without it the update matched nothing and still answered { success:
+    // true }, so a wrong id looked exactly like a completed archive.
+    const gate = await requireProjectAccess(supabase, {
+      projectId: id,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
 
     // Soft delete by setting is_active = false
     const { error } = await supabase
       .from("projects")
       .update({ is_active: false })
       .eq("id", id)
-      .eq("tenant_id", userData.tenant_id);
+      .eq("tenant_id", user.tenantId);
 
     if (error) {
-      console.error("Error deleting project:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error archiving project", error, { projectId: id });
+      return NextResponse.json({ error: "Failed to archive project" }, { status: 500 });
     }
+
+    log.info("Project archived", {
+      projectId: id,
+      projectNumber: gate.project.project_number,
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Project API error:", error);
+    log.error("Unhandled error archiving project", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { requireProjectAccess } from "@/lib/projects/guard";
+import { requestLogger } from "@/lib/logger/request";
 import { logProjectActivity, noteExcerpt } from "@/lib/activity/log";
 
 interface RouteParams {
@@ -9,15 +11,27 @@ interface RouteParams {
 
 // GET /api/projects/[id]/notes - Get project notes
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
+    const { user } = guard;
+
     const { id } = await params;
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId: id,
+      user,
+      permissions: guard.permissions,
+      mode: "read",
+    });
+    if (!gate.ok) return gate.response;
 
     const { data: notes, error } = await supabase
       .from("project_notes")
@@ -31,7 +45,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (error.code === "PGRST205" || error.message?.includes("Could not find the table")) {
         return NextResponse.json({ notes: [] });
       }
-      console.error("Error fetching notes:", error);
+      log.error("Error fetching notes", error);
       return NextResponse.json(
         { error: "Failed to fetch notes" },
         { status: 500 }
@@ -40,7 +54,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ notes: notes || [] });
   } catch (error) {
-    console.error("Get notes API error:", error);
+    log.error("Get notes API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -50,9 +64,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 // POST /api/projects/[id]/notes - Add a note
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -60,6 +76,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId: id,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
 
     const { title, content, category, is_pinned, follow_up_at } =
       await request.json();
@@ -106,7 +130,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           { status: 500 }
         );
       }
-      console.error("Error creating note:", createError);
+      log.error("Error creating note", createError);
       return NextResponse.json(
         { error: "Failed to create note" },
         { status: 500 }
@@ -141,7 +165,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ note }, { status: 201 });
   } catch (error) {
-    console.error("Create note API error:", error);
+    log.error("Create note API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

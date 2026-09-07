@@ -98,6 +98,47 @@ happens nowhere.
 guard ignored it until 2026-09-07, so a revoke honoured by the settings UI was
 ignored by the API.
 
+### Projects use a different, incoherent permission vocabulary
+Do not copy the leads reading across. On leads, `leads.view` (4 roles) is
+cleanly "every lead" and does not overlap `leads.view_own` except on Admin and
+Owner. On projects the seed is contradictory:
+
+- `projects.view` is granted to 15 of 21 roles, including Limited and Sales,
+  which *also* hold `projects.view_own` — granting "all" and "only mine" at once.
+- `projects.view_all` exists too (5 roles). `leads.view_all` does not exist.
+- Seven roles hold `projects.view` and neither `view_all` nor `view_own`.
+  One of them is Project Manager, which also holds create, edit and delete.
+  A role that may delete a project but open none is unconsidered seed data.
+- `projects.edit` (4 roles) and `projects.update` (6 roles) are near-disjoint
+  and mean the same act.
+
+So `src/lib/projects/access.ts` treats `view` OR `view_all` as read-all, and
+`edit` OR `update` as write-all. That is deliberately the permissive reading:
+it follows the stated rule — granted the permission to view, then you can view
+— and locks nobody out. Tightening it means fixing the grants first.
+
+A project is "yours" if you manage it **or created it**. Both, because
+`project_manager_id` is null on every project that exists, so manager-only
+ownership would show a `view_own` holder an empty list. This differs from leads
+on purpose.
+
+**106 of 265 permissions in the database are not declared in
+`src/types/roles-permissions.ts`**, and all 106 are granted to some role —
+including `quotations.templates.*`, which routes already gate on. That file's
+`PERMISSION_GROUPS` has **no consumers**; it is a stale aspirational document,
+not the source of truth. `role_permissions` is read-only in the app (no route
+writes it), so nothing can silently drop the undeclared grants.
+
+### Every project sub-route must prove lineage
+`requireProjectAccess()` in `src/lib/projects/guard.ts` resolves the project in
+the caller's tenant and checks read/write. `requirePhaseLineage()` then proves
+the phase, sub-phase and checklist ids in the URL actually belong to it.
+
+Both are needed. The child tables carry no `tenant_id` — they are up to three
+joins from one — so pairing a project id you may open with a sub-phase id you
+may not would otherwise have read and written another business's data. The
+checklist route in particular never mentioned the project at all.
+
 ### Charges are ordinary line items
 Delivery, cleanup and site protection are cost items in a category marked
 `is_charge`. A space made up entirely of such items *prints* below the room
@@ -111,6 +152,17 @@ untouched values would block edits to unrelated fields on any older lead. See
 the past; a contract signature must not be in the **future**.
 
 ## Traps that have already cost time
+
+**`POST /api/projects` is broken and the "New Project" button is live.** The
+handler inserts `client_name`, `client_email`, `client_phone`, `site_address`,
+`city`, `state`, `pincode`, `project_type`, `quoted_amount` and
+`budget_amount`; none of those are columns on `projects`. PostgREST rejects it
+with `PGRST204 Could not find the 'budget_amount' column`. Nobody noticed
+because every real project is created by the `create_project_from_lead` RPC.
+Fixing it properly means creating the `clients` and `properties` rows and
+storing `client_id`/`property_id` — a flow decision, not a rename.
+
+
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it
   `"use client"` makes route handlers import a client-reference proxy, and

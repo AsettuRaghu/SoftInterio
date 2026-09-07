@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import {
+  requireProjectAccess,
+  requirePhaseLineage,
+} from "@/lib/projects/guard";
+import { requestLogger } from "@/lib/logger/request";
 
 // GET /api/projects/[id]/phases/[phaseId]/sub-phases/[subPhaseId]/approvals
 export async function GET(
@@ -9,15 +14,34 @@ export async function GET(
     params,
   }: { params: Promise<{ id: string; phaseId: string; subPhaseId: string }> }
 ) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
+    const { user } = guard;
+
     const { id: projectId, phaseId, subPhaseId } = await params;
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId,
+      user,
+      permissions: guard.permissions,
+      mode: "read",
+    });
+    if (!gate.ok) return gate.response;
+
+    const lineage = await requirePhaseLineage(supabase, {
+      projectId,
+      phaseId,
+      subPhaseId,
+    });
+    if (!lineage.ok) return lineage.response;
 
     const { data: approvals, error } = await supabase
       .from("project_phase_approvals")
@@ -32,13 +56,13 @@ export async function GET(
       .order("requested_at", { ascending: false });
 
     if (error) {
-      console.error("Error fetching approvals:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error fetching approvals", error);
+      return NextResponse.json({ error: "Request failed" }, { status: 500 });
     }
 
     return NextResponse.json({ approvals });
   } catch (error) {
-    console.error("Error in get approvals API:", error);
+    log.error("Error in get approvals API", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -54,9 +78,11 @@ export async function POST(
     params,
   }: { params: Promise<{ id: string; phaseId: string; subPhaseId: string }> }
 ) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -64,6 +90,21 @@ export async function POST(
     const { user } = guard;
     const { id: projectId, phaseId, subPhaseId } = await params;
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
+
+    const lineage = await requirePhaseLineage(supabase, {
+      projectId,
+      phaseId,
+      subPhaseId,
+    });
+    if (!lineage.ok) return lineage.response;
 
     const body = await request.json();
     const { request_notes, approver_id, approver_role } = body;
@@ -89,8 +130,8 @@ export async function POST(
       .single();
 
     if (error) {
-      console.error("Error creating approval:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error creating approval", error);
+      return NextResponse.json({ error: "Request failed" }, { status: 500 });
     }
 
     // Log activity
@@ -106,7 +147,7 @@ export async function POST(
 
     return NextResponse.json({ success: true, approval });
   } catch (error) {
-    console.error("Error in create approval API:", error);
+    log.error("Error in create approval API", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -122,18 +163,34 @@ export async function PATCH(
     params,
   }: { params: Promise<{ id: string; phaseId: string; subPhaseId: string }> }
 ) {
+  const log = requestLogger(request);
+
   try {
+    const guard = await protectApiRoute(request, { loadPermissions: true });
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
+
     const { id: projectId, phaseId, subPhaseId } = await params;
     const supabase = await createClient();
 
-    // Get current user
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const gate = await requireProjectAccess(supabase, {
+      projectId,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
 
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const lineage = await requirePhaseLineage(supabase, {
+      projectId,
+      phaseId,
+      subPhaseId,
+    });
+    if (!lineage.ok) return lineage.response;
+
 
     const body = await request.json();
     const { approval_id, status, response_notes } = body;
@@ -175,8 +232,8 @@ export async function PATCH(
       .single();
 
     if (error) {
-      console.error("Error updating approval:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error updating approval", error);
+      return NextResponse.json({ error: "Request failed" }, { status: 500 });
     }
 
     // Log activity
@@ -193,7 +250,7 @@ export async function PATCH(
 
     return NextResponse.json({ success: true, approval });
   } catch (error) {
-    console.error("Error in update approval API:", error);
+    log.error("Error in update approval API", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

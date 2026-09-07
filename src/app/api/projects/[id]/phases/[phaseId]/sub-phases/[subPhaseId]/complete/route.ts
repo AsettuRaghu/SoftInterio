@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import {
+  requireProjectAccess,
+  requirePhaseLineage,
+} from "@/lib/projects/guard";
+import { requestLogger } from "@/lib/logger/request";
 
 // POST /api/projects/[id]/phases/[phaseId]/sub-phases/[subPhaseId]/complete
 export async function POST(
@@ -9,9 +14,11 @@ export async function POST(
     params,
   }: { params: Promise<{ id: string; phaseId: string; subPhaseId: string }> }
 ) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -19,6 +26,21 @@ export async function POST(
     const { user } = guard;
     const { id: projectId, phaseId, subPhaseId } = await params;
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
+
+    const lineage = await requirePhaseLineage(supabase, {
+      projectId,
+      phaseId,
+      subPhaseId,
+    });
+    if (!lineage.ok) return lineage.response;
 
     // Get completion notes from body (required for status change)
     let notes: string | null = null;
@@ -49,8 +71,8 @@ export async function POST(
     });
 
     if (error) {
-      console.error("Error completing sub-phase:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error completing sub-phase", error);
+      return NextResponse.json({ error: "Request failed" }, { status: 500 });
     }
 
     // Check if the function returned an error
@@ -63,7 +85,7 @@ export async function POST(
 
     return NextResponse.json({ success: true, data });
   } catch (error) {
-    console.error("Error in complete sub-phase API:", error);
+    log.error("Error in complete sub-phase API", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

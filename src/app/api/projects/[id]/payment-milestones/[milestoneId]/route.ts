@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { requireProjectAccess } from "@/lib/projects/guard";
+import { requestLogger } from "@/lib/logger/request";
 
 interface RouteParams {
   params: Promise<{ id: string; milestoneId: string }>;
@@ -8,15 +10,27 @@ interface RouteParams {
 
 // PATCH /api/projects/[id]/payment-milestones/[milestoneId] - Update milestone
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
-    const { milestoneId } = await params;
+    const { user } = guard;
+
+    const { id, milestoneId } = await params;
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId: id,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
 
     const body = await request.json();
     const {
@@ -47,6 +61,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .from("project_payment_milestones")
       .update(updateData)
       .eq("id", milestoneId)
+      .eq("project_id", id)
       .select(
         `
         *,
@@ -56,13 +71,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (error) {
-      console.error("Error updating payment milestone:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error updating payment milestone", error);
+      return NextResponse.json({ error: "Request failed" }, { status: 500 });
     }
 
     return NextResponse.json({ payment_milestone: milestone });
   } catch (error) {
-    console.error("Payment milestone API error:", error);
+    log.error("Payment milestone API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -72,15 +87,27 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 // POST /api/projects/[id]/payment-milestones/[milestoneId]/record-payment - Record payment
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
-    const { milestoneId } = await params;
+    const { user } = guard;
+
+    const { id, milestoneId } = await params;
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId: id,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
 
     const body = await request.json();
     const { paid_amount, payment_reference, payment_method, notes } = body;
@@ -103,6 +130,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         notes,
       })
       .eq("id", milestoneId)
+      .eq("project_id", id)
       .select(
         `
         *,
@@ -112,13 +140,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (error) {
-      console.error("Error recording payment:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error recording payment", error);
+      return NextResponse.json({ error: "Request failed" }, { status: 500 });
     }
 
     return NextResponse.json({ payment_milestone: milestone });
   } catch (error) {
-    console.error("Payment milestone API error:", error);
+    log.error("Payment milestone API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -128,21 +156,34 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
 // DELETE /api/projects/[id]/payment-milestones/[milestoneId] - Delete milestone
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
-    const { milestoneId } = await params;
+    const { user } = guard;
+
+    const { id, milestoneId } = await params;
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId: id,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
 
     // Check if milestone has been paid
     const { data: milestone } = await supabase
       .from("project_payment_milestones")
       .select("status")
       .eq("id", milestoneId)
+      .eq("project_id", id)
       .single();
 
     if (milestone?.status === "paid") {
@@ -155,16 +196,17 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const { error } = await supabase
       .from("project_payment_milestones")
       .delete()
-      .eq("id", milestoneId);
+      .eq("id", milestoneId)
+      .eq("project_id", id);
 
     if (error) {
-      console.error("Error deleting payment milestone:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error deleting payment milestone", error);
+      return NextResponse.json({ error: "Request failed" }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Payment milestone API error:", error);
+    log.error("Payment milestone API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

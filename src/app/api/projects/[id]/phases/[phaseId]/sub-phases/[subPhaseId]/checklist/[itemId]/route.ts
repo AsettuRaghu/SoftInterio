@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import {
+  requireProjectAccess,
+  requirePhaseLineage,
+} from "@/lib/projects/guard";
+import { requestLogger } from "@/lib/logger/request";
 
 interface RouteParams {
   params: Promise<{
@@ -13,16 +18,32 @@ interface RouteParams {
 
 // PATCH - Update checklist item (toggle completion, edit name, etc.)
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
     const { user } = guard;
-    const { itemId } = await params;
+    const { id, itemId } = await params;
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId: id,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
+
+    const lineage = await requirePhaseLineage(supabase, {
+      projectId: id,
+      checklistItemId: itemId,
+    });
+    if (!lineage.ok) return lineage.response;
 
     const body = await request.json();
     const { name, is_completed, notes } = body;
@@ -55,13 +76,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (error) {
-      console.error("Error updating checklist item:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error updating checklist item", error);
+      return NextResponse.json({ error: "Request failed" }, { status: 500 });
     }
 
     return NextResponse.json({ checklist_item: item });
   } catch (error) {
-    console.error("Checklist API error:", error);
+    log.error("Checklist API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -71,15 +92,33 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 // DELETE - Delete checklist item
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
-    const { itemId } = await params;
+    const { user } = guard;
+
+    const { id, itemId } = await params;
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId: id,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
+
+    const lineage = await requirePhaseLineage(supabase, {
+      projectId: id,
+      checklistItemId: itemId,
+    });
+    if (!lineage.ok) return lineage.response;
 
     const { error } = await supabase
       .from("project_checklist_items")
@@ -87,13 +126,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       .eq("id", itemId);
 
     if (error) {
-      console.error("Error deleting checklist item:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error deleting checklist item", error);
+      return NextResponse.json({ error: "Request failed" }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Checklist API error:", error);
+    log.error("Checklist API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -2,33 +2,34 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { generateUniqueProjectNumber } from "@/utils/project-number-generator";
+import { projectAccess } from "@/lib/projects/access";
+import { requestLogger } from "@/lib/logger/request";
 
 // GET /api/projects - List projects with phase summary
 export async function GET(request: NextRequest) {
+  const log = requestLogger(request);
+
   try {
-    // Protect API route
-    const guard = await protectApiRoute(request);
+    // loadPermissions rather than requiredPermissions: the list is readable
+    // with either the broad or the own-only grant, and the handler has to know
+    // which one it got in order to scope the query.
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
     const { user } = guard;
-    const supabase = await createClient();
+    const access = projectAccess(guard.permissions, user.isSuperAdmin);
 
-    // Get user's tenant_id
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.tenant_id) {
+    if (access.denied) {
+      log.warn("Projects list denied", { userId: user.id });
       return NextResponse.json(
-        { error: "User not associated with a tenant" },
-        { status: 400 }
+        { error: "You do not have permission to view projects" },
+        { status: 403 }
       );
     }
 
+    const supabase = await createClient();
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
@@ -66,8 +67,17 @@ export async function GET(request: NextRequest) {
       `,
         { count: "exact" }
       )
-      .eq("tenant_id", userData.tenant_id)
+      .eq("tenant_id", user.tenantId)
       .order("created_at", { ascending: false });
+
+    // Someone limited to their own sees the projects they manage or created.
+    // Applied before the caller-supplied filters so a crafted query string
+    // cannot widen it.
+    if (!access.readAll) {
+      query = query.or(
+        `project_manager_id.eq.${user.id},created_by.eq.${user.id}`
+      );
+    }
 
     // Apply filters
     if (search) {
@@ -107,8 +117,8 @@ export async function GET(request: NextRequest) {
     const { data: projects, error, count } = await query;
 
     if (error) {
-      console.error("Error fetching projects:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error fetching projects", error);
+      return NextResponse.json({ error: "Failed to fetch projects" }, { status: 500 });
     }
 
     // Attach flat client_name and property/service data to projects
@@ -157,7 +167,7 @@ export async function GET(request: NextRequest) {
       offset,
     });
   } catch (error) {
-    console.error("Projects API error:", error);
+    log.error("Unhandled error listing projects", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -167,9 +177,12 @@ export async function GET(request: NextRequest) {
 
 // POST /api/projects - Create a new project with phases
 export async function POST(request: NextRequest) {
+  const log = requestLogger(request);
+
   try {
-    // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["projects.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -177,25 +190,11 @@ export async function POST(request: NextRequest) {
     const { user } = guard;
     const supabase = await createClient();
 
-    // Get user's tenant_id
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.tenant_id) {
-      return NextResponse.json(
-        { error: "User not associated with a tenant" },
-        { status: 400 }
-      );
-    }
-
     // Check usage limits - can add projects?
     const { canAddProject } = await import("@/lib/billing/usage");
-    const usageCheck = await canAddProject(userData.tenant_id);
+    const usageCheck = await canAddProject(user.tenantId);
     if (!usageCheck.canAdd) {
-      console.log("[PROJECTS API] Project limit reached for tenant:", userData.tenant_id);
+      log.info("Project limit reached", { tenantId: user.tenantId });
       return NextResponse.json(
         {
           error: usageCheck.message || "Project limit reached",
@@ -244,9 +243,9 @@ export async function POST(request: NextRequest) {
     // Generate project number with retry logic to handle duplicates
     let projectNumber: string;
     try {
-      projectNumber = await generateUniqueProjectNumber(userData.tenant_id);
+      projectNumber = await generateUniqueProjectNumber(user.tenantId);
     } catch (err) {
-      console.error("Error generating project number:", err);
+      log.error("Error generating project number", err);
       return NextResponse.json(
         { error: "Failed to generate project number" },
         { status: 500 }
@@ -257,7 +256,7 @@ export async function POST(request: NextRequest) {
     const { data: project, error } = await supabase
       .from("projects")
       .insert({
-        tenant_id: userData.tenant_id,
+        tenant_id: user.tenantId,
         project_number: projectNumber,
         name,
         description,
@@ -284,8 +283,8 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error("Error creating project:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error creating project", error);
+      return NextResponse.json({ error: "Failed to create project" }, { status: 500 });
     }
 
     // Initialize phases from templates
@@ -293,11 +292,11 @@ export async function POST(request: NextRequest) {
       try {
         await supabase.rpc("initialize_project_phases", {
           p_project_id: project.id,
-          p_tenant_id: userData.tenant_id,
+          p_tenant_id: user.tenantId,
           p_project_category: project_category || "turnkey",
         });
       } catch (phaseError) {
-        console.error("Error initializing phases:", phaseError);
+        log.error("Error initializing phases", phaseError, { projectId: project.id });
         // Don't fail the whole request, just log the error
       }
     }
@@ -305,12 +304,15 @@ export async function POST(request: NextRequest) {
     // Update the lead with project_id reference if created from a lead
     if (lead_id && project) {
       try {
+        // Tenant-scoped: lead_id arrives in the request body, so without this
+        // a caller could stamp their project id onto another business's lead.
         await supabase
           .from("leads")
           .update({ project_id: project.id })
-          .eq("id", lead_id);
+          .eq("id", lead_id)
+          .eq("tenant_id", user.tenantId);
       } catch (leadUpdateError) {
-        console.error("Error linking project to lead:", leadUpdateError);
+        log.error("Error linking project to lead", leadUpdateError, { projectId: project.id, leadId: lead_id });
         // Don't fail - project was created successfully
       }
     }
@@ -333,7 +335,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error("Projects API error:", error);
+    log.error("Unhandled error creating project", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

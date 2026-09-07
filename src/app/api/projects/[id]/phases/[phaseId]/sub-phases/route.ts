@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import {
+  requireProjectAccess,
+  requirePhaseLineage,
+} from "@/lib/projects/guard";
+import { requestLogger } from "@/lib/logger/request";
 
 interface RouteParams {
   params: Promise<{ id: string; phaseId: string }>;
@@ -8,15 +13,33 @@ interface RouteParams {
 
 // GET /api/projects/[id]/phases/[phaseId]/sub-phases - Get all sub-phases
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
-    const { phaseId } = await params;
+    const { user } = guard;
+
+    const { id, phaseId } = await params;
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId: id,
+      user,
+      permissions: guard.permissions,
+      mode: "read",
+    });
+    if (!gate.ok) return gate.response;
+
+    const lineage = await requirePhaseLineage(supabase, {
+      projectId: id,
+      phaseId,
+    });
+    if (!lineage.ok) return lineage.response;
 
     const { data: subPhases, error } = await supabase
       .from("project_sub_phases")
@@ -31,13 +54,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .order("display_order", { ascending: true });
 
     if (error) {
-      console.error("Error fetching sub-phases:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error fetching sub-phases", error);
+      return NextResponse.json({ error: "Request failed" }, { status: 500 });
     }
 
     return NextResponse.json({ sub_phases: subPhases || [] });
   } catch (error) {
-    console.error("Sub-phases API error:", error);
+    log.error("Sub-phases API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -47,15 +70,33 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 // POST /api/projects/[id]/phases/[phaseId]/sub-phases - Add sub-phase
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
-    const { phaseId } = await params;
+    const { user } = guard;
+
+    const { id, phaseId } = await params;
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId: id,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
+
+    const lineage = await requirePhaseLineage(supabase, {
+      projectId: id,
+      phaseId,
+    });
+    if (!lineage.ok) return lineage.response;
 
     const body = await request.json();
     const { name, assigned_to, due_date, notes } = body;
@@ -97,13 +138,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (error) {
-      console.error("Error creating sub-phase:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error creating sub-phase", error);
+      return NextResponse.json({ error: "Request failed" }, { status: 500 });
     }
 
     return NextResponse.json({ sub_phase: subPhase }, { status: 201 });
   } catch (error) {
-    console.error("Sub-phases API error:", error);
+    log.error("Sub-phases API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

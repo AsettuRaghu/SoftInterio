@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import {
+  requireProjectAccess,
+  requirePhaseLineage,
+} from "@/lib/projects/guard";
+import { requestLogger } from "@/lib/logger/request";
 
 interface RouteParams {
   params: Promise<{ id: string; phaseId: string }>;
@@ -8,9 +13,11 @@ interface RouteParams {
 
 // GET /api/projects/[id]/phases/[phaseId] - Get single phase with details
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -19,18 +26,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { id, phaseId } = await params;
     const supabase = await createClient();
 
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
+    const gate = await requireProjectAccess(supabase, {
+      projectId: id,
+      user,
+      permissions: guard.permissions,
+      mode: "read",
+    });
+    if (!gate.ok) return gate.response;
 
-    if (!userData?.tenant_id) {
-      return NextResponse.json(
-        { error: "User not associated with a tenant" },
-        { status: 400 }
-      );
-    }
+    const lineage = await requirePhaseLineage(supabase, {
+      projectId: id,
+      phaseId,
+    });
+    if (!lineage.ok) return lineage.response;
 
     // Fetch phase with sub-phases
     const { data: phase, error } = await supabase
@@ -107,7 +115,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
-    console.error("Phase API error:", error);
+    log.error("Phase API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -117,9 +125,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 // PATCH /api/projects/[id]/phases/[phaseId] - Update phase
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -128,18 +138,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { id, phaseId } = await params;
     const supabase = await createClient();
 
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
+    const gate = await requireProjectAccess(supabase, {
+      projectId: id,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
 
-    if (!userData?.tenant_id) {
-      return NextResponse.json(
-        { error: "User not associated with a tenant" },
-        { status: 400 }
-      );
-    }
+    const lineage = await requirePhaseLineage(supabase, {
+      projectId: id,
+      phaseId,
+    });
+    if (!lineage.ok) return lineage.response;
 
     const body = await request.json();
     const {
@@ -250,8 +261,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (error) {
-      console.error("Error updating phase:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error updating phase", error);
+      return NextResponse.json({ error: "Request failed" }, { status: 500 });
     }
 
     // Log status change if status changed
@@ -267,14 +278,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         });
 
       if (logError) {
-        console.error("Error logging phase status change:", logError);
+        log.error("Error logging phase status change", logError);
         // Don't fail the request, just log the error
       }
     }
 
     return NextResponse.json({ phase });
   } catch (error) {
-    console.error("Phase API error:", error);
+    log.error("Phase API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -284,29 +295,32 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 // DELETE /api/projects/[id]/phases/[phaseId] - Delete phase
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
+    const guard = await protectApiRoute(request, { loadPermissions: true });
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
+    const { user } = guard;
+
     const { id, phaseId } = await params;
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
 
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const gate = await requireProjectAccess(supabase, {
+      projectId: id,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
 
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.tenant_id) {
-      return NextResponse.json(
-        { error: "User not associated with a tenant" },
-        { status: 400 }
-      );
-    }
+    const lineage = await requirePhaseLineage(supabase, {
+      projectId: id,
+      phaseId,
+    });
+    if (!lineage.ok) return lineage.response;
 
     // Check if any other phases depend on this one
     const { data: dependents } = await supabase
@@ -328,13 +342,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       .eq("project_id", id);
 
     if (error) {
-      console.error("Error deleting phase:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error deleting phase", error);
+      return NextResponse.json({ error: "Request failed" }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Phase API error:", error);
+    log.error("Phase API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

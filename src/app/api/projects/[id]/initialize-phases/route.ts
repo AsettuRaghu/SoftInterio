@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { requireProjectAccess } from "@/lib/projects/guard";
+import { requestLogger } from "@/lib/logger/request";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -9,9 +11,11 @@ interface RouteParams {
 // POST /api/projects/[id]/initialize-phases - Initialize phases from templates
 // This version calls an RPC function that handles all enum casting in PostgreSQL
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -20,25 +24,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const supabase = await createClient();
 
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.tenant_id) {
-      return NextResponse.json(
-        { error: "User not associated with a tenant" },
-        { status: 400 }
-      );
-    }
+    const gate = await requireProjectAccess(supabase, {
+      projectId: id,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
 
     // Get project with category
     const { data: project, error: projectError } = await supabase
       .from("projects")
       .select("id, project_category, tenant_id")
       .eq("id", id)
-      .eq("tenant_id", userData.tenant_id)
+      .eq("tenant_id", user.tenantId)
       .single();
 
     if (projectError || !project) {
@@ -75,13 +74,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       "initialize_project_phases_v2",
       {
         p_project_id: id,
-        p_tenant_id: userData.tenant_id,
+        p_tenant_id: user.tenantId,
         p_project_category: projectCategory,
       }
     );
 
     if (rpcError) {
-      console.error("RPC Error:", rpcError);
+      log.error("RPC Error", rpcError);
       return NextResponse.json(
         {
           error: "Failed to initialize phases",
@@ -113,7 +112,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
   } catch (error) {
-    console.error("Error initializing phases:", error);
+    log.error("Error initializing phases", error);
     return NextResponse.json(
       {
         error: "Internal server error",

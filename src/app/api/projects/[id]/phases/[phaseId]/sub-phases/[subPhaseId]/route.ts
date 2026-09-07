@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import {
+  requireProjectAccess,
+  requirePhaseLineage,
+} from "@/lib/projects/guard";
+import { requestLogger } from "@/lib/logger/request";
 
 interface RouteParams {
   params: Promise<{ id: string; phaseId: string; subPhaseId: string }>;
@@ -8,15 +13,34 @@ interface RouteParams {
 
 // GET /api/projects/[id]/phases/[phaseId]/sub-phases/[subPhaseId] - Get sub-phase details
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
+    const { user } = guard;
+
     const { id: projectId, phaseId, subPhaseId } = await params;
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId,
+      user,
+      permissions: guard.permissions,
+      mode: "read",
+    });
+    if (!gate.ok) return gate.response;
+
+    const lineage = await requirePhaseLineage(supabase, {
+      projectId,
+      phaseId,
+      subPhaseId,
+    });
+    if (!lineage.ok) return lineage.response;
 
     // Get sub-phase with related data
     const { data: subPhase, error } = await supabase
@@ -35,8 +59,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (error) {
-      console.error("Error fetching sub-phase:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error fetching sub-phase", error);
+      return NextResponse.json({ error: "Request failed" }, { status: 500 });
     }
 
     // Get template data for instructions and can_skip
@@ -115,7 +139,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ subPhase: formattedSubPhase });
   } catch (error) {
-    console.error("Sub-phase API error:", error);
+    log.error("Sub-phase API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -125,16 +149,32 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 // PATCH /api/projects/[id]/phases/[phaseId]/sub-phases/[subPhaseId] - Update sub-phase
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
     const { user } = guard;
-    const { subPhaseId } = await params;
+    const { id, subPhaseId } = await params;
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId: id,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
+
+    const lineage = await requirePhaseLineage(supabase, {
+      projectId: id,
+      subPhaseId,
+    });
+    if (!lineage.ok) return lineage.response;
 
     const body = await request.json();
     const {
@@ -245,8 +285,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (error) {
-      console.error("Error updating sub-phase:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error updating sub-phase", error);
+      return NextResponse.json({ error: "Request failed" }, { status: 500 });
     }
 
     // Log status change to status_logs table if status changed
@@ -262,14 +302,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         });
 
       if (logError) {
-        console.error("Error logging status change:", logError);
+        log.error("Error logging status change", logError);
         // Don't fail the request, just log the error
       }
     }
 
     return NextResponse.json({ sub_phase: subPhase });
   } catch (error) {
-    console.error("Sub-phase API error:", error);
+    log.error("Sub-phase API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -279,16 +319,32 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 // DELETE /api/projects/[id]/phases/[phaseId]/sub-phases/[subPhaseId] - Delete sub-phase
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
-  try {
-    const { subPhaseId } = await params;
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  const log = requestLogger(request);
 
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const guard = await protectApiRoute(request, { loadPermissions: true });
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
     }
+
+    const { user } = guard;
+
+    const { id, subPhaseId } = await params;
+    const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId: id,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
+
+    const lineage = await requirePhaseLineage(supabase, {
+      projectId: id,
+      subPhaseId,
+    });
+    if (!lineage.ok) return lineage.response;
 
     const { error } = await supabase
       .from("project_sub_phases")
@@ -296,13 +352,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       .eq("id", subPhaseId);
 
     if (error) {
-      console.error("Error deleting sub-phase:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      log.error("Error deleting sub-phase", error);
+      return NextResponse.json({ error: "Request failed" }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Sub-phase API error:", error);
+    log.error("Sub-phase API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

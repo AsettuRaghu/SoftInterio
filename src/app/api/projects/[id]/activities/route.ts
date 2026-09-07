@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { requireProjectAccess } from "@/lib/projects/guard";
+import { requestLogger } from "@/lib/logger/request";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -12,8 +14,10 @@ export async function GET(
   request: NextRequest,
   { params }: RouteParams
 ) {
+  const log = requestLogger(request);
+
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -21,38 +25,15 @@ export async function GET(
     const { user } = guard;
     const { id: projectId } = await params;
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId,
+      user,
+      permissions: guard.permissions,
+      mode: "read",
+    });
+    if (!gate.ok) return gate.response;
     const supabaseAdmin = createAdminClient();
-
-    // Get user's tenant_id
-    const { data: userData, error: userError } = await supabaseAdmin
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      );
-    }
-
-    const tenantId = userData.tenant_id;
-
-    // Verify project exists and belongs to this tenant
-    const { data: project, error: projectError } = await supabaseAdmin
-      .from("projects")
-      .select("id")
-      .eq("id", projectId)
-      .eq("tenant_id", tenantId)
-      .single();
-
-    if (projectError || !project) {
-      return NextResponse.json(
-        { error: "Project not found" },
-        { status: 404 }
-      );
-    }
 
     // Fetch activities with user details
     const { data: activities, error: activitiesError } = await supabaseAdmin
@@ -65,7 +46,7 @@ export async function GET(
       .order("created_at", { ascending: false });
 
     if (activitiesError) {
-      console.error("Error fetching project activities:", activitiesError);
+      log.error("Error fetching project activities", activitiesError);
       return NextResponse.json(
         { error: "Failed to fetch activities" },
         { status: 500 }
@@ -84,7 +65,7 @@ export async function GET(
 
     return NextResponse.json({ activities: transformedActivities || [] });
   } catch (error) {
-    console.error("Get project activities API error:", error);
+    log.error("Get project activities API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -97,8 +78,10 @@ export async function POST(
   request: NextRequest,
   { params }: RouteParams
 ) {
+  const log = requestLogger(request);
+
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -106,39 +89,17 @@ export async function POST(
     const { user } = guard;
     const { id: projectId } = await params;
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
     const supabaseAdmin = createAdminClient();
     const body = await request.json();
 
-    // Get user's tenant_id
-    const { data: userData, error: userError } = await supabaseAdmin
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      );
-    }
-
-    const tenantId = userData.tenant_id;
-
-    // Verify project exists and belongs to this tenant
-    const { data: project, error: projectError } = await supabaseAdmin
-      .from("projects")
-      .select("id, name")
-      .eq("id", projectId)
-      .eq("tenant_id", tenantId)
-      .single();
-
-    if (projectError || !project) {
-      return NextResponse.json(
-        { error: "Project not found" },
-        { status: 404 }
-      );
-    }
 
     // Create activity
     const activityData: any = {
@@ -172,7 +133,7 @@ export async function POST(
       .single();
 
     if (activityError) {
-      console.error("Error creating project activity:", activityError);
+      log.error("Error creating project activity", activityError);
       return NextResponse.json(
         { error: "Failed to create activity" },
         { status: 500 }
@@ -186,7 +147,7 @@ export async function POST(
         content: body.meeting_notes,
         note_type: "meeting",
         created_by: user.id,
-        tenant_id: tenantId,
+        tenant_id: user.tenantId,
       };
 
       const { data: note, error: noteError } = await supabaseAdmin
@@ -206,7 +167,7 @@ export async function POST(
 
     return NextResponse.json(activity, { status: 201 });
   } catch (error) {
-    console.error("Create project activity API error:", error);
+    log.error("Create project activity API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -219,8 +180,10 @@ export async function PATCH(
   request: NextRequest,
   { params }: RouteParams
 ) {
+  const log = requestLogger(request);
+
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -238,24 +201,17 @@ export async function PATCH(
     }
 
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
     const supabaseAdmin = createAdminClient();
     const body = await request.json();
 
-    // Get user's tenant_id
-    const { data: userData, error: userError } = await supabaseAdmin
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      );
-    }
-
-    const tenantId = userData.tenant_id;
 
     // Verify activity exists and belongs to this tenant
     const { data: activity, error: activityError } = await supabaseAdmin
@@ -263,7 +219,7 @@ export async function PATCH(
       .select("*")
       .eq("id", activityId)
       .eq("project_id", projectId)
-      .eq("tenant_id", tenantId)
+      .eq("tenant_id", user.tenantId)
       .single();
 
     if (activityError || !activity) {
@@ -301,7 +257,7 @@ export async function PATCH(
       .single();
 
     if (updateError) {
-      console.error("Error updating project activity:", updateError);
+      log.error("Error updating project activity", updateError);
       return NextResponse.json(
         { error: "Failed to update activity" },
         { status: 500 }
@@ -310,7 +266,7 @@ export async function PATCH(
 
     return NextResponse.json(updatedActivity);
   } catch (error) {
-    console.error("Update project activity API error:", error);
+    log.error("Update project activity API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -323,8 +279,10 @@ export async function DELETE(
   request: NextRequest,
   { params }: RouteParams
 ) {
+  const log = requestLogger(request);
+
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -342,23 +300,16 @@ export async function DELETE(
     }
 
     const supabase = await createClient();
+
+    const gate = await requireProjectAccess(supabase, {
+      projectId,
+      user,
+      permissions: guard.permissions,
+      mode: "write",
+    });
+    if (!gate.ok) return gate.response;
     const supabaseAdmin = createAdminClient();
 
-    // Get user's tenant_id
-    const { data: userData, error: userError } = await supabaseAdmin
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      );
-    }
-
-    const tenantId = userData.tenant_id;
 
     // Verify activity exists and belongs to this tenant
     const { data: activity, error: activityError } = await supabaseAdmin
@@ -366,7 +317,7 @@ export async function DELETE(
       .select("*")
       .eq("id", activityId)
       .eq("project_id", projectId)
-      .eq("tenant_id", tenantId)
+      .eq("tenant_id", user.tenantId)
       .single();
 
     if (activityError || !activity) {
@@ -383,7 +334,7 @@ export async function DELETE(
       .eq("id", activityId);
 
     if (deleteError) {
-      console.error("Error deleting project activity:", deleteError);
+      log.error("Error deleting project activity", deleteError);
       return NextResponse.json(
         { error: "Failed to delete activity" },
         { status: 500 }
@@ -392,7 +343,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Delete project activity API error:", error);
+    log.error("Delete project activity API error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
