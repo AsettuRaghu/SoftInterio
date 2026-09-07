@@ -51,13 +51,18 @@ export function LeadsTable({
    * locale format so the padding is stable - en-IN gives "4/9/26", which does
    * not line up in a column.
    */
-  const shortDate = useCallback((iso: string) => {
+
+  /**
+   * "8 Sep" - day and month only.
+   *
+   * A follow-up or a task due date is always within a few weeks either side of
+   * today, so the year says nothing and dd-mm-yy costs three characters in a
+   * narrow column for it.
+   */
+  const dayMonth = useCallback((iso: string) => {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return "";
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${pad(
-      d.getFullYear() % 100
-    )}`;
+    return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
   }, []);
 
   /** Whole days between then and now. Null when there is no date at all. */
@@ -345,7 +350,7 @@ export function LeadsTable({
                   for the eye, not something to read word for word - the point
                   is whether anything has been happening. */}
               {earlier.length > 0 && (
-                <div className="mt-1 space-y-0.5 border-l border-slate-200 pl-2">
+                <div className="mt-1 space-y-0.5">
                   {earlier.map((a, i) => (
                     <p
                       key={i}
@@ -402,7 +407,7 @@ export function LeadsTable({
             const due = iso.slice(0, 10);
             if (due < today) return `${daysSince(iso) ?? 0}d late`;
             if (due === today) return "Today";
-            return shortDate(iso);
+            return dayMonth(iso);
           };
 
           // Nothing itemised but the lead still carries a date - keep the old
@@ -435,7 +440,7 @@ export function LeadsTable({
               {/* What follows it, so a busy lead is distinguishable from one
                   with a single reminder sitting on it. */}
               {rest.length > 0 && (
-                <div className="mt-1 space-y-0.5 border-l border-slate-200 pl-2">
+                <div className="mt-1 space-y-0.5">
                   {rest.map((item, i) => (
                     <p
                       key={i}
@@ -461,7 +466,7 @@ export function LeadsTable({
         },
       },
     ],
-    [formatDate, daysSince, shortDate, getInitials]
+    [formatDate, daysSince, dayMonth, getInitials]
   );
 
   return (
