@@ -277,7 +277,15 @@ export function useLeadDetail() {
         }
 
         const data = await response.json();
-        router.push(`/dashboard/quotations/${data.id}?edit=1`);
+        // The route replies { quotation }, not the quotation itself. Reading
+        // data.id gave undefined, so this navigated to
+        // /dashboard/quotations/undefined and the page reported "Failed to
+        // fetch quotation" - the revision had actually been created.
+        const newId = data.quotation?.id;
+        if (!newId) {
+          throw new Error("The revision was created but could not be opened.");
+        }
+        router.push(`/dashboard/quotations/${newId}?edit=1`);
       } catch (err) {
         console.error("Error creating revision:", err);
         throw err;
