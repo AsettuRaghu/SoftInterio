@@ -160,16 +160,29 @@ export async function GET(request: NextRequest) {
         // Non-fatal: the list still renders, just without the detail line.
         console.error("[GET /api/sales/leads] activity detail:", recentError);
       } else {
-        // Rows arrive newest-first, so the first one seen per lead wins.
-        const latest = new Map<string, any>();
+        // Rows arrive newest-first, so the first three seen per lead are the
+        // three most recent. Three rather than one because a single line says
+        // when something last happened but not whether the lead is moving - a
+        // burst this week reads very differently from one note in April, and
+        // that difference is the whole point of the column.
+        const byLead = new Map<string, any[]>();
         for (const a of recent || []) {
-          if (!latest.has(a.lead_id)) latest.set(a.lead_id, a);
+          const list = byLead.get(a.lead_id) || [];
+          if (list.length < 3) {
+            list.push(a);
+            byLead.set(a.lead_id, list);
+          }
         }
         for (const lead of leads || []) {
-          const a = latest.get(lead.id);
-          (lead as any).last_activity_detail = a
-            ? a.description || a.title || null
+          const list = byLead.get(lead.id) || [];
+          (lead as any).last_activity_detail = list[0]
+            ? list[0].description || list[0].title || null
             : null;
+          (lead as any).recent_activities = list.map((a) => ({
+            type: a.activity_type,
+            detail: a.description || a.title || null,
+            at: a.created_at,
+          }));
         }
       }
     }

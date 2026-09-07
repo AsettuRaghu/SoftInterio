@@ -268,6 +268,11 @@ export function LeadsTable({
       // Replaces the Created Date column. A creation date never changes and
       // says nothing about whether a lead needs attention; recency of contact
       // does. Both fields below are already maintained on the leads table.
+      //
+      // The column carries the three most recent entries rather than one. When
+      // something last happened tells you little on its own - three notes this
+      // week reads as momentum, one in April reads as abandoned, and the same
+      // "5d ago" label sits on top of both.
       {
         key: "last_activity_at",
         header: "Last Activity",
@@ -289,6 +294,21 @@ export function LeadsTable({
               : days <= 15
               ? { label: `${days}d ago`, tone: "text-orange-600" }
               : { label: `${days}d ago`, tone: "text-red-600" };
+
+          // "Today", "Yesterday", "5d" - said the way someone would say it,
+          // and short enough to sit at the end of a line without wrapping it.
+          const whenShort = (iso: string) => {
+            const d = daysSince(iso);
+            if (d === null) return "";
+            if (d === 0) return "Today";
+            if (d === 1) return "Yesterday";
+            if (d < 7) return `${d}d`;
+            if (d < 30) return `${Math.floor(d / 7)}w`;
+            if (d < 365) return `${Math.floor(d / 30)}mo`;
+            return `${Math.floor(d / 365)}y`;
+          };
+
+          const earlier = (lead.recent_activities || []).slice(1);
 
           return (
             <div>
@@ -319,6 +339,33 @@ export function LeadsTable({
                     LeadActivityTypeLabels[lead.last_activity_type!] ||
                     lead.last_activity_type}
                 </p>
+              )}
+
+              {/* What came before it. Muted and single-line: this is texture
+                  for the eye, not something to read word for word - the point
+                  is whether anything has been happening. */}
+              {earlier.length > 0 && (
+                <div className="mt-1 space-y-0.5 border-l border-slate-200 pl-2">
+                  {earlier.map((a, i) => (
+                    <p
+                      key={i}
+                      className="flex items-baseline gap-1.5 text-[11px] text-slate-400"
+                      title={a.detail || undefined}
+                    >
+                      <span className="shrink-0 tabular-nums text-slate-400">
+                        {whenShort(a.at)}
+                      </span>
+                      <span className="truncate">
+                        {a.detail ||
+                          (a.type
+                            ? LeadActivityTypeLabels[
+                                a.type as keyof typeof LeadActivityTypeLabels
+                              ] || a.type
+                            : "")}
+                      </span>
+                    </p>
+                  ))}
+                </div>
               )}
             </div>
           );

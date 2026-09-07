@@ -456,6 +456,15 @@ export interface Lead {
    * "a note was added" but never what the note said.
    */
   last_activity_detail?: string | null;
+  /**
+   * The three most recent activities, newest first. Supplied by the list API
+   * so a reader can tell a lead that is moving from one that stopped.
+   */
+  recent_activities?: Array<{
+    type?: string | null;
+    detail?: string | null;
+    at: string;
+  }>;
 
   // Timestamps
   created_at: string;
