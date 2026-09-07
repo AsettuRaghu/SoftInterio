@@ -12,10 +12,22 @@ import { SearchBox } from "@/components/ui/SearchBox";
 import {
   ArrowUpIcon,
   ArrowDownIcon,
+  ArrowPathIcon,
   DocumentTextIcon,
   EyeIcon,
+  PencilIcon,
 } from "@heroicons/react/24/outline";
 import { formatCurrency, formatDate } from "@/modules/sales/utils/formatters";
+
+/**
+ * Whether opening this quotation will land in the builder.
+ *
+ * Only what a table row knows - the detail page makes the real decision using
+ * is_locked and the project link as well. This just picks the icon, so a reader
+ * is not promised an edit that will be refused.
+ */
+const isEditable = (q: { status?: string | null }) =>
+  !["sent", "approved", "rejected"].includes(q.status || "");
 
 interface QuotationTableReusableProps {
   quotations: Quotation[];
@@ -420,13 +432,39 @@ export default function QuotationTableReusable({
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="flex items-center justify-center gap-1.5">
+                      {/* Pencil when the quotation will open editable, eye when
+                          it will not - the same pair used on the templates and
+                          quotations lists, so the icon means one thing across
+                          the app. Both go to the same route; it decides. */}
                       {allowView && onViewQuotation && !readOnly && (
                         <button
                           onClick={() => onViewQuotation(quotation)}
-                          className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                          title="View Quotation"
+                          className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                          title={isEditable(quotation) ? "Edit" : "View"}
                         >
-                          <EyeIcon className="w-3.5 h-3.5" />
+                          {isEditable(quotation) ? (
+                            <PencilIcon className="w-3.5 h-3.5" />
+                          ) : (
+                            <EyeIcon className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      )}
+
+                      {/* Revise was accepted as a prop and never rendered, so
+                          the lead page has been passing a working handler to a
+                          button that did not exist. */}
+                      {onReviseQuotation && !readOnly && (
+                        <button
+                          onClick={(e) => onReviseQuotation(quotation.id, e)}
+                          disabled={revisingId === quotation.id}
+                          className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors disabled:opacity-50"
+                          title="Create a revision"
+                        >
+                          {revisingId === quotation.id ? (
+                            <span className="block w-3.5 h-3.5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <ArrowPathIcon className="w-3.5 h-3.5" />
+                          )}
                         </button>
                       )}
                     </div>
