@@ -35,6 +35,11 @@ export const routePermissions: RoutePermission[] = [
     description: "Team management",
   },
   {
+    pattern: "/dashboard/settings/config",
+    permissions: ["settings.company.update"],
+    description: "Tenant feature switches",
+  },
+  {
     pattern: "/dashboard/settings/company",
     permissions: ["settings.company.view"],
     description: "Company settings",

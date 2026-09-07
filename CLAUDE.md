@@ -147,13 +147,19 @@ across; a blank form starts with none of that.
 
 It is a tenant setting rather than a `subscription_plan_features` row because
 it is a workflow choice each business makes, not something sold by tier — and
-because that table is read only to draw plan cards and enforces nothing. It
-sits beside `auto_create_project_on_won`, the existing precedent.
-`require_quotation_for_project` is on the same table and is a **dead column**,
-read nowhere.
+because that table is read only to draw plan cards and enforces nothing.
+
+Every tenant-level switch is a column on `tenant_settings` and is edited on
+**Settings → Config** (`/dashboard/settings/config`, gated on
+`settings.company.update`). Add one by appending to the `FLAGS` array on that
+page — the load, save, dirty check and rendering are all driven from it. Only
+list a flag once something reads it: `require_quotation_for_project` is on the
+same table, read nowhere, and so is deliberately not offered.
 
 The flag is checked in the handler, not only in the UI. Hiding a button is not
-a control.
+a control. The New Project button appears **only on the projects list page**
+and only when the flag is on; a dead quick-action in `DashboardOverview` (an
+unused component) was removed so no other surface offers it.
 
 `POST /api/projects` had never worked: it inserted `client_name`,
 `site_address`, `quoted_amount`, `budget_amount` and six other fields that are

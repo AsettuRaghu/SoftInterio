@@ -354,6 +354,14 @@ export const navigationConfig: NavigationItem[] = [
         permission: "settings.team.view",
       },
       {
+        // Tenant-level feature switches. Gated on the same permission as
+        // editing the company: these change how the product behaves for
+        // everyone, so they belong with the owner/admin pair.
+        name: "Config",
+        href: "/dashboard/settings/config",
+        permission: "settings.company.update",
+      },
+      {
         name: "Billing and Subscription",
         href: "/dashboard/settings/billing",
         permission: "settings.billing",

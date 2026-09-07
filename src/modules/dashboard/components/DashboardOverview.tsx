@@ -133,9 +133,6 @@ export function DashboardOverview() {
           </h3>
           <div className="space-y-2">
             <button className="w-full text-left px-3 py-2.5 text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors border border-slate-200 hover:border-blue-300">
-              + Create New Project
-            </button>
-            <button className="w-full text-left px-3 py-2.5 text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors border border-slate-200 hover:border-blue-300">
               + Add Client
             </button>
             <button className="w-full text-left px-3 py-2.5 text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors border border-slate-200 hover:border-blue-300">
