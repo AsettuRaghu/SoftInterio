@@ -233,6 +233,13 @@ the past; a contract signature must not be in the **future**.
 - **`quotations.project_id` carries no foreign key** (only
   `linked_to_project_id` does), so PostgREST cannot embed the project. Fetch it
   separately.
+- **`routePermissions` lives in `src/config/route-permissions.ts` only.** It was
+  copied into `src/lib/supabase/middleware.ts` "to work with Edge Runtime" and
+  the two drifted: the config file was read by nothing, so the quotation
+  config, print library, terms library and Settings → Config were ungated,
+  while the middleware still guarded `/dashboard/settings/roles` — a page that
+  does not exist — behind `settings.roles.view`, a permission that does not
+  exist. The module is types and a literal array, so Edge imports it fine.
 - **Never `next build` in this directory** while `npm run dev` is running; it
   corrupts the dev server's `.next`. Build from a hardlinked copy.
 
@@ -251,7 +258,9 @@ the past; a contract signature must not be in the **future**.
 
 ## Still open
 
-- `sendEmail()` is stubbed and returns success without sending
+- **No email is sent anywhere.** The stub service was dead code and was
+  deleted; there is no send path at all. `api/team/members/[id]/reset-password`
+  still takes a `sendEmail` flag in its body that controls nothing
 - Vercel deployment unfinished — `NEXT_PUBLIC_*` vars are needed at build time
 - Cover page is wired but dormant; needs an uploaded image
 - Terms are rendered live from the clause library, not snapshotted onto the

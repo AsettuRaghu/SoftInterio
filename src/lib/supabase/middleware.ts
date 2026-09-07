@@ -8,92 +8,25 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getSubscriptionStatus, hasAccessToplatform, getAccessBlockedMessage } from "@/lib/billing/subscription-status";
 import type { TenantSubscriptionData } from "@/lib/billing/subscription-status";
 import { accessLogger } from "@/lib/activity-logger";
+import {
+  routePermissions,
+  type RoutePermission,
+} from "@/config/route-permissions";
 
 // ============================================
 // ROUTE PERMISSION CONFIGURATION
-// Inline to work with Edge Runtime
 // ============================================
-
-interface RoutePermission {
-  pattern: string;
-  permissions: string[];
-  requireAll?: boolean;
-}
-
-/**
- * Protected routes configuration
- * Routes are checked in order - first match wins
- */
-const routePermissions: RoutePermission[] = [
-  // Settings routes
-  { pattern: "/dashboard/settings/team/*", permissions: ["settings.team.view"] },
-  { pattern: "/dashboard/settings/team", permissions: ["settings.team.view"] },
-  { pattern: "/dashboard/settings/company", permissions: ["settings.company.view"] },
-  { pattern: "/dashboard/settings/billing", permissions: ["settings.billing"] },
-  { pattern: "/dashboard/settings/roles/*", permissions: ["settings.roles.view"] },
-  { pattern: "/dashboard/settings/roles", permissions: ["settings.roles.view"] },
-  { pattern: "/dashboard/settings/quotations-config", permissions: ["quotations.view"] },
-  
-  // Sales routes
-  { pattern: "/dashboard/sales/leads/*", permissions: ["leads.view", "sales.leads.view"], requireAll: false },
-  { pattern: "/dashboard/sales/leads", permissions: ["leads.view", "sales.leads.view"], requireAll: false },
-  { pattern: "/dashboard/sales/pipeline", permissions: ["leads.view", "sales.leads.view"], requireAll: false },
-  { pattern: "/dashboard/sales/clients/*", permissions: ["clients.view"] },
-  { pattern: "/dashboard/sales/clients", permissions: ["clients.view"] },
-  { pattern: "/dashboard/sales", permissions: ["leads.view", "sales.leads.view", "clients.view"], requireAll: false },
-  
-  // Projects routes
-  { pattern: "/dashboard/projects/*", permissions: ["projects.view"] },
-  { pattern: "/dashboard/projects", permissions: ["projects.view"] },
-  
-  // Quotations routes
-  { pattern: "/dashboard/quotations/templates/*", permissions: ["quotations.templates.view"] },
-  { pattern: "/dashboard/quotations/templates", permissions: ["quotations.templates.view"] },
-  { pattern: "/dashboard/quotations/new", permissions: ["quotations.create"] },
-  { pattern: "/dashboard/quotations/*", permissions: ["quotations.view"] },
-  { pattern: "/dashboard/quotations", permissions: ["quotations.view"] },
-  
-  // Stock routes
-  { pattern: "/dashboard/stock/inventory/*", permissions: ["materials.view"] },
-  { pattern: "/dashboard/stock/inventory", permissions: ["materials.view"] },
-  { pattern: "/dashboard/stock/purchase-orders/*", permissions: ["po.view"] },
-  { pattern: "/dashboard/stock/purchase-orders", permissions: ["po.view"] },
-  { pattern: "/dashboard/stock/vendors/*", permissions: ["vendors.view"] },
-  { pattern: "/dashboard/stock/vendors", permissions: ["vendors.view"] },
-  { pattern: "/dashboard/stock/brands/*", permissions: ["brands.view"] },
-  { pattern: "/dashboard/stock/brands", permissions: ["brands.view"] },
-  { pattern: "/dashboard/stock", permissions: ["stock.view", "stock.overview"], requireAll: false },
-  
-  // Finance routes
-  { pattern: "/dashboard/finance/invoices/*", permissions: ["finance.invoices.view"] },
-  { pattern: "/dashboard/finance/invoices", permissions: ["finance.invoices.view"] },
-  { pattern: "/dashboard/finance/payments/*", permissions: ["finance.payments.view"] },
-  { pattern: "/dashboard/finance/payments", permissions: ["finance.payments.view"] },
-  { pattern: "/dashboard/finance/expenses/*", permissions: ["finance.expenses.view"] },
-  { pattern: "/dashboard/finance/expenses", permissions: ["finance.expenses.view"] },
-  { pattern: "/dashboard/finance", permissions: ["finance.view"] },
-  
-  // Tasks routes
-  { pattern: "/dashboard/procedures/*", permissions: ["tasks.templates.view"] },
-  { pattern: "/dashboard/procedures", permissions: ["tasks.templates.view"] },
-  { pattern: "/dashboard/tasks/templates/*", permissions: ["tasks.templates.view"] },
-  { pattern: "/dashboard/tasks/templates", permissions: ["tasks.templates.view"] },
-  { pattern: "/dashboard/tasks/*", permissions: ["tasks.view"] },
-  { pattern: "/dashboard/tasks", permissions: ["tasks.view"] },
-  
-  // Other routes
-  { pattern: "/dashboard/calendar", permissions: ["calendar.view"] },
-  { pattern: "/dashboard/documents/*", permissions: ["documents.view"] },
-  { pattern: "/dashboard/documents", permissions: ["documents.view"] },
-  { pattern: "/dashboard/library/*", permissions: ["library.view"] },
-  { pattern: "/dashboard/library", permissions: ["library.view"] },
-  { pattern: "/dashboard/reports/*", permissions: ["reports.view"] },
-  { pattern: "/dashboard/reports", permissions: ["reports.view"] },
-  
-  // Clients (standalone)
-  { pattern: "/dashboard/clients/*", permissions: ["clients.view"] },
-  { pattern: "/dashboard/clients", permissions: ["clients.view"] },
-];
+//
+// This list used to be copied out into this file "to work with Edge Runtime".
+// It then drifted from src/config/route-permissions.ts, which is the copy that
+// looks authoritative and was in fact read by nothing: four pages listed there
+// - the quotation config, print and terms libraries, and Settings -> Config -
+// were never gated at all, while this copy still guarded
+// /dashboard/settings/roles, a page that does not exist, behind
+// settings.roles.view, a permission that does not exist.
+//
+// The config module is types and a literal array with no Node dependencies, so
+// Edge imports it perfectly well and there is one list again.
 
 /**
  * Match route against pattern
