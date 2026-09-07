@@ -22,6 +22,8 @@ import {
   ProjectSubPhaseStatus,
   ProjectSubPhaseStatusLabels,
 } from "@/types/projects";
+import { buttonVariants } from "@/components/ui/Button";
+import { cn } from "@/utils/cn";
 
 interface TeamMember {
   id: string;
@@ -393,7 +395,7 @@ export default function SubPhaseEditModal({
               <button
                 type="button"
                 onClick={handleStart}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                className={cn(buttonVariants({ size: "sm" }), "gap-2")}
               >
                 <PlayIcon className="w-4 h-4" />
                 Start Work
@@ -403,7 +405,7 @@ export default function SubPhaseEditModal({
               <button
                 type="button"
                 onClick={handlePause}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-500 text-white text-sm font-medium rounded-lg hover:bg-yellow-600 transition-colors"
+                className={cn(buttonVariants({ variant: "warning", size: "sm" }), "gap-2")}
               >
                 <PauseIcon className="w-4 h-4" />
                 Put On Hold
@@ -413,7 +415,7 @@ export default function SubPhaseEditModal({
               <button
                 type="button"
                 onClick={handleResume}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                className={cn(buttonVariants({ size: "sm" }), "gap-2")}
               >
                 <PlayIcon className="w-4 h-4" />
                 Resume Work

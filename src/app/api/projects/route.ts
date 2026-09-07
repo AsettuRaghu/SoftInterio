@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
         expected_end_date,
         actual_end_date,
         actual_cost,
+        contract_value,
         overall_progress,
         created_at,
         updated_at,
@@ -135,7 +136,10 @@ export async function GET(request: NextRequest) {
         property_type: pProperty?.property_type,
         carpet_area: pProperty?.carpet_area,
         city: pProperty?.city,
-        quoted_amount: p.actual_cost || 0, // Map actual_cost to quoted_amount for frontend
+        // contract_value is the agreed value; actual_cost is money spent.
+        // These were previously the same field, which is why every project
+        // showed as worth nothing.
+        contract_value: p.contract_value ?? null,
         project_type: p.project_category, // Use project_category as project_type
         priority: p.priority || "Medium", // Default to Medium if not set
         current_phase: null, // Will be populated if current_phase_id exists

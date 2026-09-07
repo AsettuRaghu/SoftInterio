@@ -205,6 +205,43 @@ A project's value comes from its quotation, which is where the app already
 models it. Both inputs were removed from the create form rather than given a
 misleading home.
 
+### The lead -> project handover, and what it does not carry
+`create_project_from_lead` carries the client and property by id (which is why
+Spaces are shared), the latest quotation, the target dates, the documents (a
+copy) and the lead's notes (re-pointed by `project_id`). The transition route
+writes the first project activity.
+
+It now also carries `won_amount` into **`projects.contract_value`** and calls
+`initialize_project_phases`. Before 2026-09-07 it did neither: `actual_cost`
+was hardcoded to 0 so every project read as worth nothing (the list aliased
+`actual_cost` to "quoted_amount"), and `p_initialize_phases` only ever *looked
+up* a phase, so a converted project had none and the Project Mgmt tab — the
+default tab — opened empty.
+
+`contract_value` is the agreed value, frozen at handover. `actual_cost` is
+money spent. They are different columns on purpose; showing one under both
+labels is what hid the problem.
+
+`description` is still NULL after conversion. The obvious sources would be the
+lead's scope and special requirements and **neither column exists** — that
+detail lives on the property and the quotation.
+
+### Project detail: one tab bar, one edit dialog
+Counts go in a tab's `badge` and render as a pill; do not fold them into the
+label. Tabs are not hidden when a project has no lead — a directly created
+project still has quotations, a calendar and a timeline.
+
+There is one loading flag, because `fetchCounts` is one `Promise.all`. It
+previously had six that could never disagree, one of which was never read.
+
+Editing goes through `EditProjectDetailsModal` on the Overview tab, opened by
+the header button. A second `EditProjectModal` existed whose opener was never
+called, and the header button set a flag nothing read — **so for a while no
+project could be edited at all.** Keep one dialog.
+
+Primary buttons come from `buttonVariants` in `@/components/ui/Button`; cards
+are `rounded-lg`, which is the app-wide majority.
+
 ### Charges are ordinary line items
 Delivery, cleanup and site protection are cost items in a category marked
 `is_charge`. A space made up entirely of such items *prints* below the room

@@ -116,17 +116,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // If percentage provided but no amount, calculate from project quoted_amount
+    // If a percentage is given without an amount, take it from the project's
+    // contract value. This used to select quoted_amount, which is not a column
+    // on projects, so the query failed and percentage milestones never priced.
     let calculatedAmount = amount;
     if (!calculatedAmount && percentage) {
       const { data: project } = await supabase
         .from("projects")
-        .select("quoted_amount")
+        .select("contract_value")
         .eq("id", id)
         .single();
 
-      if (project?.quoted_amount) {
-        calculatedAmount = (project.quoted_amount * percentage) / 100;
+      if (project?.contract_value) {
+        calculatedAmount = (project.contract_value * percentage) / 100;
       }
     }
 

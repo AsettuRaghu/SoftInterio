@@ -49,12 +49,13 @@ import {
   QuotationsTab,
   PhaseEditModal,
   SubPhaseEditModal,
-  EditProjectModal,
-  type EditProjectFormData,
 } from "@/modules/projects/components";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useUserPermissions } from "@/hooks/useUserPermissions";
 import { formatCurrency as formatCurrencyUtil } from "@/modules/projects/utils";
 import { SpacesTab } from "@/components/property/SpacesTab";
+import { buttonVariants } from "@/components/ui/Button";
+import { cn } from "@/utils/cn";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -65,10 +66,34 @@ type TabKey = ProjectDetailTab;
 // Status workflow for visual stepper
 const STATUS_WORKFLOW = ["new", "in_progress", "completed"];
 
+/**
+ * Where a status sits on the new -> in progress -> completed line.
+ *
+ * on_hold and cancelled are not points on that line. The stepper used to call
+ * STATUS_WORKFLOW.indexOf(status) directly, which returned -1 for both, so
+ * every dot rendered grey and a cancelled project looked exactly like one that
+ * had not started yet. A hold is work in progress that has paused; a
+ * cancellation is off the line entirely and is drawn differently.
+ */
+function stepIndexForStatus(status: string | undefined): number {
+  switch (status) {
+    case "completed":
+      return 2;
+    case "in_progress":
+    case "on_hold":
+      return 1;
+    case "cancelled":
+      return -1;
+    default:
+      return 0;
+  }
+}
+
 export default function ProjectDetailPage({ params }: PageProps) {
   const { id } = use(params);
   const router = useRouter();
   const { user } = useCurrentUser();
+  const { hasAnyPermission } = useUserPermissions();
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,22 +117,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
   const [showSubPhaseEditModal, setShowSubPhaseEditModal] = useState(false);
 
   // Project editing state
-  const [showEditProjectModal, setShowEditProjectModal] = useState(false);
-  const [editProjectForm, setEditProjectForm] = useState<EditProjectFormData>({
-    name: "",
-    description: "",
-    status: "",
-    project_category: "",
-    expected_start_date: "",
-    expected_end_date: "",
-    actual_start_date: "",
-    actual_end_date: "",
-    notes: "",
-  });
-  const [isSavingProject, setIsSavingProject] = useState(false);
-  const [projectValidationError, setProjectValidationError] = useState<
-    string | null
-  >(null);
 
   // Tab counts and data
   const [documentsCount, setDocumentsCount] = useState(0);
@@ -133,19 +142,21 @@ export default function ProjectDetailPage({ params }: PageProps) {
   const [quotationsCount, setQuotationsCount] = useState(0);
   const [quotations, setQuotations] = useState<any[]>([]);
 
-  // Tab loading states
-  const [tabsLoading, setTabsLoading] = useState(true);
-  const [documentLoading, setDocumentLoading] = useState(true);
-  const [taskLoading, setTaskLoading] = useState(true);
-  const [noteLoading, setNoteLoading] = useState(true);
-  const [calendarLoading, setCalendarLoading] = useState(true);
-  const [quotationLoading, setQuotationLoading] = useState(true);
+  // One flag, because there is one fetch. There used to be six - tabDataLoading,
+  // tabDataLoading, tabDataLoading, tabDataLoading, tabDataLoading and
+  // tabDataLoading - all set and cleared together by fetchCounts, so they
+  // could never disagree. tabDataLoading was never read at all, and the Timeline
+  // tab keyed off tabDataLoading, which was harmless only by accident.
+  const [tabDataLoading, setTabDataLoading] = useState(true);
 
-  // Check user role
-  const isFinanceUser =
-    user?.roles?.includes("finance") ||
-    user?.roles?.includes("admin") ||
-    user?.roles?.includes("owner");
+  // Payments is gated on a permission, not on a hardcoded list of role names.
+  // The old check was roles.includes("finance"|"admin"|"owner"), which the flat
+  // permission model does not use and which quietly excluded Finance Manager -
+  // its slug is finance_manager, so it never matched "finance".
+  const canSeePayments = hasAnyPermission([
+    "finance.payments.view",
+    "projects.milestones.manage",
+  ]);
 
   useEffect(() => {
     fetchProject();
@@ -174,12 +185,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
   const fetchCounts = useCallback(async () => {
     try {
-      setTabsLoading(true);
-      setDocumentLoading(true);
-      setTaskLoading(true);
-      setNoteLoading(true);
-      setCalendarLoading(true);
-      setQuotationLoading(true);
+      setTabDataLoading(true);
 
       // First fetch project to get quotation_id (the linked lead quotation)
       const projectRes = await fetch(`/api/projects/${id}`);
@@ -216,7 +222,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
         setDocuments(data.documents || []);
         setDocumentsCount(data.documents?.length || 0);
       }
-      setDocumentLoading(false);
 
       if (tasksRes.ok) {
         const data = await tasksRes.json();
@@ -224,7 +229,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
         setTasks(tasksList);
         setTasksCount(tasksList.length);
       }
-      setTaskLoading(false);
 
       if (notesRes.ok) {
         const data = await notesRes.json();
@@ -232,7 +236,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
         setNotes(notesList);
         setNotesCount(notesList.length);
       }
-      setNoteLoading(false);
 
       if (activitiesRes.ok) {
         const data = await activitiesRes.json();
@@ -249,7 +252,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
           ).length,
         );
       }
-      setCalendarLoading(false);
 
       // Count quotations: project quotations + linked lead quotation (if exists and not duplicate)
       let totalQuotations = 0;
@@ -290,16 +292,10 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
       setQuotations(allQuotations);
       setQuotationsCount(totalQuotations);
-      setQuotationLoading(false);
-      setTabsLoading(false);
+      setTabDataLoading(false);
     } catch (err) {
       console.error("Error fetching counts:", err);
-      setTabsLoading(false);
-      setDocumentLoading(false);
-      setTaskLoading(false);
-      setNoteLoading(false);
-      setCalendarLoading(false);
-      setQuotationLoading(false);
+      setTabDataLoading(false);
     }
   }, [id]);
 
@@ -464,67 +460,11 @@ export default function ProjectDetailPage({ params }: PageProps) {
     setShowSubPhaseEditModal(true);
   };
 
-  const handleEditProject = () => {
-    if (project) {
-      setEditProjectForm({
-        name: project.name || "",
-        description: project.description || "",
-        status: project.status || "",
-        project_category: project.project_category || "",
-        expected_start_date: project.expected_start_date?.split("T")[0] || "",
-        expected_end_date: project.expected_end_date?.split("T")[0] || "",
-        actual_start_date:
-          (project as any).actual_start_date?.split("T")[0] || "",
-        actual_end_date: project.actual_end_date?.split("T")[0] || "",
-        notes: project.notes || "",
-      });
-      setShowEditProjectModal(true);
-    }
-  };
-
-  const handleSaveProjectEdit = async () => {
-    try {
-      setProjectValidationError(null);
-
-      if (!editProjectForm.name.trim()) {
-        setProjectValidationError("Project name is required");
-        return;
-      }
-
-      setIsSavingProject(true);
-
-      const response = await fetch(`/api/projects/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: editProjectForm.name.trim(),
-          description: editProjectForm.description.trim() || null,
-          status: editProjectForm.status || null,
-          project_category: editProjectForm.project_category || null,
-          expected_start_date: editProjectForm.expected_start_date || null,
-          expected_end_date: editProjectForm.expected_end_date || null,
-          actual_start_date: editProjectForm.actual_start_date || null,
-          actual_end_date: editProjectForm.actual_end_date || null,
-          notes: editProjectForm.notes.trim() || null,
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to update project");
-      }
-
-      await fetchProject();
-      setShowEditProjectModal(false);
-    } catch (err) {
-      console.error("Error saving project edit:", err);
-      setProjectValidationError(
-        err instanceof Error ? err.message : "Failed to update project",
-      );
-    } finally {
-      setIsSavingProject(false);
-    }
-  };
+  // handleEditProject and handleSaveProjectEdit lived here, driving a second
+  // edit dialog. handleEditProject was never called from anywhere, so that
+  // dialog could not be opened at all; the header button set a flag nothing
+  // read. Editing now goes through EditProjectDetailsModal on the Overview
+  // tab, which is the one that was actually reachable.
 
   if (loading) {
     return (
@@ -552,6 +492,18 @@ export default function ProjectDetailPage({ params }: PageProps) {
     );
   }
 
+  /**
+   * One tab bar, one set of conventions.
+   *
+   * Counts go in `badge` and render as a pill. Every tab except Payments used
+   * to fold its count into the label as "Notes (3)" while Payments alone used
+   * the badge the renderer already supported, so two styles sat side by side.
+   *
+   * Quotations, Calendar and Timeline are no longer hidden when the project
+   * has no lead. A project created directly is still a project: it can carry
+   * quotations, meetings and a timeline, and hiding three tabs made it look
+   * broken rather than new.
+   */
   const tabs: {
     key: TabKey;
     label: string;
@@ -569,52 +521,47 @@ export default function ProjectDetailPage({ params }: PageProps) {
       label: "Overview",
       icon: <InformationCircleIcon className="w-4 h-4" />,
     },
-    ...(project.lead
-      ? [
-          {
-            key: "quotations" as TabKey,
-            label: `Quotations${
-              quotationsCount > 0 ? ` (${quotationsCount})` : ""
-            }`,
-            icon: <DocumentTextIcon className="w-4 h-4" />,
-          },
-        ]
-      : []),
+    {
+      key: "quotations",
+      label: "Quotations",
+      icon: <DocumentTextIcon className="w-4 h-4" />,
+      badge: quotationsCount,
+    },
     {
       key: "tasks",
-      label: `Tasks${tasksCount > 0 ? ` (${tasksCount})` : ""}`,
+      label: "Tasks",
       icon: <ClipboardDocumentListIcon className="w-4 h-4" />,
+      badge: tasksCount,
     },
     {
       key: "notes",
-      label: `Notes${notesCount > 0 ? ` (${notesCount})` : ""}`,
+      label: "Notes",
       icon: <ChatBubbleLeftRightIcon className="w-4 h-4" />,
+      badge: notesCount,
     },
     {
       key: "documents",
-      label: `Documents${documentsCount > 0 ? ` (${documentsCount})` : ""}`,
+      label: "Documents",
       icon: <DocumentTextIcon className="w-4 h-4" />,
+      badge: documentsCount,
     },
-    ...(project.lead
-      ? [
-          {
-            key: "calendar" as TabKey,
-            label: `Calendar${calendarCount > 0 ? ` (${calendarCount})` : ""}`,
-            icon: <CalendarDaysIcon className="w-4 h-4" />,
-          },
-          {
-            key: "lead-history" as TabKey,
-            label: "Timeline",
-            icon: <ClockIcon className="w-4 h-4" />,
-          },
-        ]
-      : []),
+    {
+      key: "calendar",
+      label: "Calendar",
+      icon: <CalendarDaysIcon className="w-4 h-4" />,
+      badge: calendarCount,
+    },
+    {
+      key: "timeline",
+      label: "Timeline",
+      icon: <ClockIcon className="w-4 h-4" />,
+    },
     {
       key: "procurement",
       label: "Procurement",
       icon: <ShoppingCartIcon className="w-4 h-4" />,
     },
-    ...(isFinanceUser
+    ...(canSeePayments
       ? [
           {
             key: "payments" as TabKey,
@@ -647,23 +594,27 @@ export default function ProjectDetailPage({ params }: PageProps) {
             {/* Progress Stepper (Simplified) */}
             <div className="flex items-center gap-1">
               {STATUS_WORKFLOW.map((step, index) => {
-                const currentIndex = STATUS_WORKFLOW.indexOf(
-                  project.status || "new",
-                );
+                const currentIndex = stepIndexForStatus(project.status);
+                const isCancelled = project.status === "cancelled";
+                const isOnHold = project.status === "on_hold";
                 const isCompleted = index < currentIndex;
                 const isCurrent = index === currentIndex;
-                // Skip if project is cancelled/on_hold for visual clarity, or handle specifically
+
                 return (
                   <div
                     key={step}
                     className={`w-2 h-2 rounded-full ${
-                      isCompleted
-                        ? "bg-green-500"
-                        : isCurrent
-                          ? "bg-blue-600"
-                          : "bg-slate-200"
+                      isCancelled
+                        ? "bg-red-300"
+                        : isCompleted
+                          ? "bg-green-500"
+                          : isCurrent
+                            ? isOnHold
+                              ? "bg-amber-500"
+                              : "bg-blue-600"
+                            : "bg-slate-200"
                     }`}
-                    title={step}
+                    title={isCancelled ? "Cancelled" : step}
                   />
                 );
               })}
@@ -695,8 +646,13 @@ export default function ProjectDetailPage({ params }: PageProps) {
         actions={
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowEditDetailsModal(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+              onClick={() => {
+                // The dialog lives on the Overview tab, so move there before
+                // opening it - otherwise it appears over an unrelated tab.
+                setActiveTab("overview");
+                setShowEditDetailsModal(true);
+              }}
+              className={cn(buttonVariants({ size: "sm" }))}
             >
               Edit
             </button>
@@ -756,10 +712,15 @@ export default function ProjectDetailPage({ params }: PageProps) {
           )}
 
           {activeTab === "overview" && (
-            <OverviewTab project={project} onUpdate={updateProject} />
+            <OverviewTab
+              project={project}
+              onUpdate={updateProject}
+              isModalOpen={showEditDetailsModal}
+              onModalClose={() => setShowEditDetailsModal(false)}
+            />
           )}
 
-          {activeTab === "tasks" && taskLoading ? (
+          {activeTab === "tasks" && tabDataLoading ? (
             <div className="space-y-4 animate-pulse">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="h-12 bg-slate-200 rounded" />
@@ -776,7 +737,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
             />
           ) : null}
 
-          {activeTab === "documents" && documentLoading ? (
+          {activeTab === "documents" && tabDataLoading ? (
             <div className="space-y-4 animate-pulse">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="h-12 bg-slate-200 rounded" />
@@ -792,7 +753,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
             />
           ) : null}
 
-          {activeTab === "notes" && noteLoading ? (
+          {activeTab === "notes" && tabDataLoading ? (
             <div className="space-y-4 animate-pulse">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="h-12 bg-slate-200 rounded" />
@@ -808,13 +769,13 @@ export default function ProjectDetailPage({ params }: PageProps) {
             />
           ) : null}
 
-          {activeTab === "lead-history" && calendarLoading ? (
+          {activeTab === "timeline" && tabDataLoading ? (
             <div className="space-y-4 animate-pulse">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="h-12 bg-slate-200 rounded" />
               ))}
             </div>
-          ) : activeTab === "lead-history" ? (
+          ) : activeTab === "timeline" ? (
             <TimelineTab
               projectId={project.id}
               activities={activities}
@@ -824,7 +785,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
             />
           ) : null}
 
-          {activeTab === "calendar" && calendarLoading ? (
+          {activeTab === "calendar" && tabDataLoading ? (
             <div className="space-y-4 animate-pulse">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="h-12 bg-slate-200 rounded" />
@@ -840,7 +801,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
             />
           ) : null}
 
-          {activeTab === "quotations" && quotationLoading ? (
+          {activeTab === "quotations" && tabDataLoading ? (
             <div className="space-y-4 animate-pulse">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="h-12 bg-slate-200 rounded" />
@@ -918,21 +879,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
           />
         )}
 
-        {/* Edit Project Modal */}
-        {showEditProjectModal && project && (
-          <EditProjectModal
-            project={project}
-            editForm={editProjectForm}
-            setEditForm={setEditProjectForm}
-            onClose={() => {
-              setShowEditProjectModal(false);
-              setProjectValidationError(null);
-            }}
-            onSave={handleSaveProjectEdit}
-            isSaving={isSavingProject}
-            validationError={projectValidationError}
-          />
-        )}
       </PageContent>
     </PageLayout>
   );

@@ -20,4 +20,3 @@ export { default as ProjectsTable } from "./ProjectsTable";
 export { default as PhaseEditModal } from "./PhaseEditModal";
 export { default as SubPhaseEditModal } from "./SubPhaseEditModal";
 export { default as SubPhaseDetailPanel } from "./SubPhaseDetailPanel";
-export { EditProjectModal, type EditProjectFormData } from "./EditProjectModal";

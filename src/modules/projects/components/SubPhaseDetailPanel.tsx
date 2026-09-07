@@ -22,6 +22,8 @@ import {
   PencilIcon,
 } from "@heroicons/react/24/outline";
 import { CheckCircleIcon as CheckCircleSolid } from "@heroicons/react/24/solid";
+import { buttonVariants } from "@/components/ui/Button";
+import { cn } from "@/utils/cn";
 
 // Types
 interface ChecklistItem {
@@ -544,7 +546,7 @@ export default function SubPhaseDetailPanel({
               <>
                 <button
                   onClick={handleStartSubPhase}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700"
+                  className={cn(buttonVariants({ size: "xs" }), "gap-1")}
                 >
                   <PlayIcon className="w-3.5 h-3.5" />
                   Start
@@ -883,7 +885,7 @@ export default function SubPhaseDetailPanel({
                   <button
                     onClick={handleAddComment}
                     disabled={!newComment.trim() || submittingComment}
-                    className="px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={cn(buttonVariants({ size: "sm" }))}
                   >
                     {submittingComment ? "Posting..." : "Post Comment"}
                   </button>

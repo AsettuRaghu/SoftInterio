@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Project } from "@/types/projects";
+import { Project, ProjectStatusLabels } from "@/types/projects";
 import { X } from "lucide-react";
 
 // Property type options (aligned with property_type_v2 enum)
@@ -56,6 +56,10 @@ const furnishingOptions = [
 
 interface EditFormData {
   // Project Details
+  // name and status were only editable in a second, separate modal that could
+  // never be opened. They live here now so one dialog covers the whole record.
+  name: string;
+  status: string;
   description: string;
   notes: string;
   project_category: string;
@@ -103,6 +107,8 @@ export function EditProjectDetailsModal({
 }: EditProjectDetailsModalProps) {
   const [editForm, setEditForm] = React.useState<EditFormData>({
     // Project Details
+    name: "",
+    status: "new",
     description: "",
     notes: "",
     project_category: "turnkey",
@@ -139,6 +145,8 @@ export function EditProjectDetailsModal({
     if (isOpen && project) {
       setEditForm({
         // Project Details
+        name: project.name || "",
+        status: project.status || "new",
         description: project.description || "",
         notes: project.notes || "",
         project_category: project.project_category || "turnkey",
@@ -624,7 +632,46 @@ export function EditProjectDetailsModal({
                 Project Details
               </h3>
               <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Project Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.name}
+                    onChange={(e) => handleInputChange("name", e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Project name"
+                  />
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Status
+                    </label>
+                    <select
+                      value={editForm.status}
+                      onChange={(e) =>
+                        handleInputChange("status", e.target.value)
+                      }
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      {(
+                        [
+                          "new",
+                          "in_progress",
+                          "on_hold",
+                          "completed",
+                          "cancelled",
+                        ] as const
+                      ).map((value) => (
+                        <option key={value} value={value}>
+                          {ProjectStatusLabels[value]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
                       Project Category

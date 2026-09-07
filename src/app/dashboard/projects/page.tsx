@@ -28,6 +28,8 @@ import {
 } from "@/modules/projects/constants";
 import { formatCurrency } from "@/modules/projects/utils";
 import { useTenantSettings } from "@/hooks/useTenantSettings";
+import { buttonVariants } from "@/components/ui/Button";
+import { cn } from "@/utils/cn";
 
 const PROJECT_STATUS_TABS: FilterOption[] = PROJECT_STATUS_OPTIONS.map(
   (option) => ({
@@ -195,8 +197,8 @@ export default function ProjectsPage() {
             return item.status;
           case "overall_progress":
             return item.overall_progress || 0;
-          case "quoted_amount":
-            return item.quoted_amount || 0;
+          case "contract_value":
+            return item.contract_value || 0;
           case "timeline":
             return item.expected_end_date
               ? new Date(item.expected_end_date).getTime()
@@ -253,7 +255,7 @@ export default function ProjectsPage() {
       (p) => p.status === "completed"
     ).length;
     const totalValue = allProjects.reduce(
-      (sum, p) => sum + (p.quoted_amount || 0),
+      (sum, p) => sum + (p.contract_value || 0),
       0
     );
 
@@ -275,7 +277,7 @@ export default function ProjectsPage() {
           tenantSettings.allowDirectProjectCreate ? (
             <Link
               href="/dashboard/projects/new"
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all text-sm font-medium flex items-center gap-2"
+              className={cn(buttonVariants({ size: "sm" }), "gap-2")}
             >
               <PlusIcon className="w-4 h-4" />
               New Project

@@ -253,123 +253,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .eq("project_id", id)
       .order("created_at", { ascending: true });
 
-    // Fetch lead data if project was converted from lead
-    let leadData = null;
-    let leadActivities = null;
-    
-    // Try to find linked lead ID
-    let leadId = project.lead_id;
-
-    // Fallback: if the project carries no link, see whether a lead points back
-    // at it. maybeSingle, not single: .single() on a miss raises PGRST116 and
-    // the error was being discarded, so a legitimately unlinked project logged
-    // nothing and looked identical to a failure.
-    //
-    // This used to repair the missing link by writing to projects from inside
-    // a GET. A read handler that mutates is a trap - it fires on every page
-    // view, races with a concurrent edit, and needs write permission the
-    // caller may not have. The link is derived for this response only.
-    if (!leadId) {
-      const { data: reverseLinkedLead, error: reverseError } = await supabase
-        .from("leads")
-        .select("id")
-        .eq("project_id", id)
-        .eq("tenant_id", user.tenantId)
-        .limit(1)
-        .maybeSingle();
-
-      if (reverseError) {
-        log.warn("Reverse lead lookup failed", {
-          projectId: id,
-          error: reverseError.message,
-        });
-      }
-      if (reverseLinkedLead) leadId = reverseLinkedLead.id;
-    }
-
-    if (leadId) {
-
-      const { data: lead } = await supabase
-        .from("leads")
-        .select(
-          `
-          id,
-          lead_number,
-          stage,
-          property_name,
-          property_type,
-          flat_number,
-          property_address,
-          property_city,
-          property_pincode,
-          carpet_area_sqft,
-          service_type,
-          project_scope,
-          special_requirements,
-          budget_range,
-          won_amount,
-          contract_signed_date,
-          expected_project_start,
-          target_start_date,
-          target_end_date,
-          lead_source,
-          assigned_to,
-          created_at,
-          updated_at,
-          won_at,
-          client:clients!client_id(name, email, phone),
-          assigned_user:users!assigned_to(id, name, email, avatar_url)
-        `
-        )
-        .eq("id", leadId)
-        .single();
-
-      if (lead) {
-        // Calculate lead duration
-        const leadDurationDays =
-          lead.won_at && lead.created_at
-            ? Math.floor(
-                (new Date(lead.won_at).getTime() -
-                  new Date(lead.created_at).getTime()) /
-                  (1000 * 60 * 60 * 24)
-              )
-            : null;
-
-        // Fetch lead activities/history
-        const { data: activities, count } = await supabase
-          .from("lead_activities")
-          .select(
-            `
-            id,
-            activity_type,
-            title,
-            description,
-            created_at,
-            created_by,
-            creator:users!created_by(id, name)
-          `,
-            { count: "exact" }
-          )
-          .eq("lead_id", leadId)
-          .order("created_at", { ascending: false })
-          .limit(50);
-
-        leadActivities = activities;
-
-        // Build lead data with calculated fields and flattened client info
-        // Handle client relation which might be returned as an array or object
-        const linkedClient = Array.isArray(lead.client) ? lead.client[0] : lead.client;
-        
-        leadData = {
-          ...lead,
-          client_name: linkedClient?.name || "Unknown",
-          email: linkedClient?.email,
-          phone: linkedClient?.phone,
-          lead_duration_days: leadDurationDays,
-          activity_count: count || 0,
-        };
-      }
-    }
+    // A second lead fetch used to live here. It selected nine columns that do
+    // not exist on leads - property_name, flat_number, carpet_area_sqft,
+    // project_scope, special_requirements and the rest all moved to the
+    // properties table - so the query failed every time. Its result was
+    // assigned to a variable that was never returned, and the lead_activities
+    // it guarded were therefore always null. Nothing reads them, and lead
+    // activities deliberately do not carry into a project's timeline anyway.
+    // The lead this page needs is already fetched above as pLead.
 
     // Fetch calendar events linked to this project
     const { data: calendarEvents } = await supabaseAdmin
@@ -397,13 +288,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         priority: fullProject?.priority,
         current_phase: fullProject?.current_phase,
         current_phase_id: fullProject?.current_phase_id,
-        quoted_amount: fullProject?.actual_cost, // Map to quoted_amount for display
+        contract_value: fullProject?.contract_value ?? null,
         actual_cost: fullProject?.actual_cost,
         lead_id: fullProject?.lead_id, // Include lead_id for navigation
         won_amount: pLead?.won_amount, // Include won amount from lead
         phases: phasesWithDeps || [],
         payment_milestones: paymentMilestones || [],
-        lead_activities: leadActivities,
         calendar_events: calendarEvents || [],
       },
     });

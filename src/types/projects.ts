@@ -347,7 +347,9 @@ export interface Project {
 
   // Progress & Cost
   overall_progress: number;
-  quoted_amount?: number;
+  /** The agreed value of the work, carried from the lead's won_amount. */
+  contract_value?: number;
+  /** Money spent. Not the same thing as contract_value. */
   actual_cost?: number;
   won_amount?: number; // From linked lead
 
@@ -421,7 +423,6 @@ export interface Project {
 
   // Lead data (if converted from lead)
   lead?: ProjectLeadData;
-  lead_activities?: ProjectLeadActivity[];
 }
 
 // Lead data attached to project
@@ -485,19 +486,6 @@ export interface ProjectLeadData {
   activity_count?: number;
 }
 
-// Lead activity for history
-export interface ProjectLeadActivity {
-  id: string;
-  activity_type: string;
-  title: string;
-  description?: string;
-  created_at: string;
-  created_by?: string;
-  creator?: {
-    id: string;
-    name: string;
-  };
-}
 
 // =====================================================
 // PROJECT PHASE
@@ -786,7 +774,7 @@ export interface ProjectSummary {
   actual_end_date?: string;
   created_at?: string;
   updated_at?: string;
-  quoted_amount: number;
+  contract_value: number | null;
   project_manager?: {
     id: string;
     name: string;
@@ -810,7 +798,7 @@ export interface ProjectDashboardStats {
   projects_by_category: Record<ProjectCategory, number>;
   overdue_phases: number;
   pending_payments: number;
-  total_quoted_amount: number;
+  total_contract_value: number;
   total_actual_cost: number;
 }
 
@@ -993,11 +981,9 @@ export type ProjectDetailTab =
   | "documents"
   | "tasks"
   | "timeline"
-  | "leads"
   | "notes"
   | "quotations"
   | "procurement"
-  | "lead-history"
   | "calendar"
   | "payments";
 
