@@ -135,7 +135,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
   >([]);
   const [roles, setRoles] = useState<{ slug: string; name: string }[]>([]);
   const [enforceOrder, setEnforceOrder] = useState(false);
-  const [isActive, setIsActive] = useState(true);
+  const [status, setStatus] = useState<"draft" | "committed" | "retired">("draft");
   const [autoStart, setAutoStart] = useState(false);
   const [autoStartCategory, setAutoStartCategory] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -149,7 +149,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
     setAppliesTo("project");
     setSteps([blankStep()]);
     setTenantType("");
-    setIsActive(true);
+    setStatus("draft");
     setAutoStart(false);
     setAutoStartCategory("");
     setEnforceOrder(false);
@@ -178,7 +178,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
         setAppliesTo(data.playbook.applies_to);
         setTenantType(data.playbook.tenant_type ?? "");
         setEnforceOrder(data.playbook.enforce_order === true);
-        setIsActive(data.playbook.is_active !== false);
+        setStatus(data.playbook.status ?? "draft");
         setAutoStart(data.playbook.auto_start === true);
         setAutoStartCategory(data.playbook.auto_start_project_category ?? "");
 
@@ -261,6 +261,26 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
     setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
 
   const addStep = () => setSteps((prev) => [...prev, blankStep()]);
+
+  /**
+   * Commit, revise or retire. Revising opens the next version so the steps can
+   * change again; plans already running keep the version they started under.
+   */
+  const lifecycle = async (action: "commit" | "revise" | "retire") => {
+    if (!playbookId) return;
+    setError(null);
+    const res = await fetch(`/api/playbooks/${playbookId}/lifecycle`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error || "Could not change the playbook");
+      return;
+    }
+    setStatus(data.status);
+  };
 
   React.useEffect(() => {
     void (async () => {
@@ -452,7 +472,6 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
             applies_to: appliesTo,
         tenant_type: tenantType || null,
             enforce_order: enforceOrder,
-            is_active: isActive,
             auto_start: autoStart,
             auto_start_project_category: autoStartCategory || null,
             steps: cleaned,
@@ -552,21 +571,70 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
             />
           </div>
 
-          <label className="flex items-start gap-2 px-3 py-2 rounded-md bg-slate-50 border border-slate-200 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-              className="mt-0.5"
-            />
-            <span className="text-xs text-slate-600">
-              <span className="font-medium text-slate-700">Ready to use</span>
-              <span className="block text-slate-500">
-                Turn this off while you are still writing it. An inactive
-                playbook cannot be started on anything.
+          {playbookId && (
+            <div className="flex items-start gap-3 px-3 py-2 rounded-md bg-slate-50 border border-slate-200">
+              <span
+                className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                  status === "committed"
+                    ? "bg-green-100 text-green-700"
+                    : status === "retired"
+                      ? "bg-slate-200 text-slate-600"
+                      : "bg-amber-100 text-amber-700"
+                }`}
+              >
+                {status === "committed"
+                  ? "In service"
+                  : status === "retired"
+                    ? "Retired"
+                    : "Draft"}
               </span>
-            </span>
-          </label>
+              <span className="text-xs text-slate-500 flex-1">
+                {status === "draft"
+                  ? "Being written. The steps can change, and it cannot be run until it is put into service."
+                  : status === "committed"
+                    ? "In service. The steps are frozen because plans are following them — revise to change what it asks people to do. Wording can still be edited."
+                    : "Retired. Plans already running it carry on untouched; no new project will adopt it."}
+              </span>
+              <div className="flex gap-2 shrink-0">
+                {status === "draft" && (
+                  <button
+                    type="button"
+                    onClick={() => void lifecycle("commit")}
+                    className="px-2 py-1 text-xs font-medium rounded border border-green-300 text-green-700 hover:bg-green-50"
+                  >
+                    Put into service
+                  </button>
+                )}
+                {status === "committed" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void lifecycle("revise")}
+                      className="px-2 py-1 text-xs font-medium rounded border border-blue-300 text-blue-700 hover:bg-blue-50"
+                    >
+                      Revise
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void lifecycle("retire")}
+                      className="px-2 py-1 text-xs font-medium rounded border border-slate-300 text-slate-600 hover:bg-slate-100"
+                    >
+                      Retire
+                    </button>
+                  </>
+                )}
+                {status === "retired" && (
+                  <button
+                    type="button"
+                    onClick={() => void lifecycle("commit")}
+                    className="px-2 py-1 text-xs font-medium rounded border border-green-300 text-green-700 hover:bg-green-50"
+                  >
+                    Put back into service
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {appliesTo === "project" && (
             <div className="px-3 py-2 rounded-md bg-slate-50 border border-slate-200">

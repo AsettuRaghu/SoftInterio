@@ -19,6 +19,7 @@ import {
   InlineAssignee,
   InlineDatePicker,
   TaskStatusControls,
+  TaskRequirements,
   TagSelector,
   type TeamMember,
 } from "@/components/tasks";
@@ -532,6 +533,17 @@ export default function TaskDetailPage() {
       <div className="grid grid-cols-5 gap-6">
         {/* Main Content */}
         <div className="col-span-3 space-y-6">
+          {/*
+           * Gates first, because they are the reason Complete is refused.
+           *
+           * A playbook step opens here, and its requirements - a file to
+           * attach, a checklist to tick, a sign-off to get - only existed in
+           * the edit modal reached from the task list. So a step arrived here
+           * blocked with nothing on the page to unblock it.
+           */}
+          {task && (
+            <TaskRequirements taskId={task.id} onChanged={() => fetchTask()} />
+          )}
           {/* Description */}
           <div className="bg-white rounded-lg border border-slate-200 p-4">
             <h3 className="text-sm font-medium text-slate-700 mb-3">

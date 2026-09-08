@@ -415,6 +415,28 @@ The refusals carry `reason: "assignee_fixed_by_playbook"` or
 out, so the server is the only thing enforcing this — a caller finds out by
 being refused, with a message that says why.
 
+### A playbook has a life: draft, committed, retired
+`procedure_definitions.status` replaced `is_active` doing two jobs badly —
+"inactive" could not distinguish never-finished from taken-out-of-service.
+
+- **draft** — being written. Steps may change. **Cannot be run**;
+  `start_procedure_run` refuses, and auto-start only picks up committed ones.
+- **committed** — in service. **The contract is frozen**: steps, gates, order,
+  dependencies and hours. Wording is not — the name, description and a step's
+  instructions stay editable, because forcing a new version to fix a typo is
+  how a process stops being maintained. The API already drew this line:
+  `stepsChanged` bumps the version, other edits do not.
+- **retired** — no new plan adopts it. Plans already running are untouched.
+
+`POST /api/playbooks/[id]/lifecycle` takes `commit`, `revise` or `retire`.
+Revising returns a committed playbook to draft at the next version. Committing
+with no steps is refused. A protected playbook cannot move at all — copy it.
+
+**Nothing here touches a running plan.** A run pins its version at the start
+and resolves its tasks through `procedure_step_id`, which keeps pointing at the
+step rows it began under — which is why old step versions are kept with
+`is_current = false` rather than deleted.
+
 ### Configure the playbook, not the run
 `start_procedure_run` already does more than the builder used to let you say.
 It resolves an assignee, carries `priority` and `estimated_hours` onto the

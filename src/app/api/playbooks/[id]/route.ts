@@ -94,7 +94,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const { data: existing } = await supabase
       .from("procedure_definitions")
-      .select("id, version, is_protected")
+      .select("id, version, is_protected, status")
       .eq("id", id)
       .maybeSingle();
 
@@ -106,6 +106,37 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const stepsChanged = Array.isArray(body.steps);
+
+    /**
+     * A committed playbook's contract is frozen.
+     *
+     * Steps, gates, order, dependencies and hours are what a running plan
+     * agreed to. Wording is not, and forcing a new version to fix a typo is
+     * how a process stops being maintained - so the name, the description and
+     * a step's instructions stay editable in service. Revise it to change what
+     * it actually asks people to do.
+     */
+    if (stepsChanged && existing.status === "committed") {
+      return NextResponse.json(
+        {
+          error:
+            "This playbook is in service, so its steps cannot change. Revise it to make a new version.",
+          reason: "committed",
+        },
+        { status: 409 }
+      );
+    }
+
+    if (existing.status === "retired") {
+      return NextResponse.json(
+        {
+          error:
+            "This playbook is retired. Plans already running it are unaffected, but it cannot be changed.",
+          reason: "retired",
+        },
+        { status: 409 }
+      );
+    }
 
     const update: Record<string, unknown> = {
       updated_by: user.id,

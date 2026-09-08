@@ -142,9 +142,15 @@ export default function PlaybooksPage() {
                     >
                       <span className="block font-medium text-slate-900 hover:text-blue-600">
                         {p.name}
-                        {!p.is_active && (
-                          <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-500">
-                            inactive
+                        {p.status !== "committed" && (
+                          <span
+                            className={`ml-2 px-1.5 py-0.5 rounded text-[10px] ${
+                              p.status === "retired"
+                                ? "bg-slate-100 text-slate-500"
+                                : "bg-amber-100 text-amber-700"
+                            }`}
+                          >
+                            {p.status === "retired" ? "retired" : "draft"}
                           </span>
                         )}
                       </span>
