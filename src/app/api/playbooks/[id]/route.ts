@@ -42,7 +42,29 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .eq("is_current", true)
       .order("display_order");
 
-    return NextResponse.json({ playbook, steps: steps || [] });
+    // Dependencies come back attached to the step that waits, so the editor
+    // can show "waits for" without a second round trip.
+    const stepIds = (steps || []).map((s) => s.id as string);
+    let depsByStep: Record<string, string[]> = {};
+    if (stepIds.length > 0) {
+      const { data: deps } = await supabase
+        .from("procedure_step_dependencies")
+        .select("step_id, depends_on_step_id")
+        .in("step_id", stepIds);
+      for (const d of deps || []) {
+        (depsByStep[d.step_id as string] ||= []).push(
+          d.depends_on_step_id as string
+        );
+      }
+    }
+
+    return NextResponse.json({
+      playbook,
+      steps: (steps || []).map((s) => ({
+        ...s,
+        depends_on_step_ids: depsByStep[s.id as string] || [],
+      })),
+    });
   } catch (error) {
     console.error("Playbook GET error:", error);
     return NextResponse.json(

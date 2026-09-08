@@ -37,6 +37,8 @@ interface DraftStep {
   /** What must be attached before an upload step can complete. */
   required_upload_types: string[] | null;
   checklist_items: string[] | null;
+  /** Indexes of steps that must finish first. Holds whatever the ordering says. */
+  depends_on: number[];
   /** May run alongside its siblings instead of waiting for them. */
   allow_parallel: boolean;
   /** Skipping has to be explained. */
@@ -104,6 +106,7 @@ const blankStep = (): DraftStep => ({
   approval_role: null,
   required_upload_types: null,
   checklist_items: null,
+  depends_on: [],
   allow_parallel: false,
   skip_requires_reason: true,
 });
@@ -204,6 +207,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
             approval_role: t.approval_role ?? null,
             required_upload_types: t.required_upload_types ?? null,
             checklist_items: t.checklist_items ?? null,
+            depends_on: [],
             allow_parallel: t.allow_parallel === true,
             skip_requires_reason: t.skip_requires_reason !== false,
           });
@@ -223,11 +227,29 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
               approval_role: c.approval_role ?? null,
               required_upload_types: c.required_upload_types ?? null,
               checklist_items: c.checklist_items ?? null,
+              depends_on: [],
               allow_parallel: c.allow_parallel === true,
               skip_requires_reason: c.skip_requires_reason !== false,
             });
           }
         }
+        // Dependencies arrive as step ids; the editor works in indexes,
+        // because a step being written has no id yet.
+        const indexById = new Map<string, number>();
+        raw.forEach((r: any) => {
+          const at = flat.findIndex(
+            (f, n) => f.title === r.title && !indexById.has(r.id) && n >= 0,
+          );
+          if (at >= 0) indexById.set(r.id, at);
+        });
+        raw.forEach((r: any) => {
+          const at = indexById.get(r.id);
+          if (at === undefined) return;
+          flat[at].depends_on = (r.depends_on_step_ids || [])
+            .map((id: string) => indexById.get(id))
+            .filter((n: number | undefined): n is number => n !== undefined);
+        });
+
         setSteps(flat.length ? flat : [blankStep()]);
       } finally {
         setIsLoading(false);
@@ -384,7 +406,29 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
   };
 
   const save = async () => {
-    const cleaned = steps.filter((s) => s.title.trim());
+    // Dropping untitled rows shifts every index after them, and both
+    // parent_index and depends_on are indexes into this list. Remap rather
+    // than let a blank row in the middle silently re-parent the steps below
+    // it - which it would have done before.
+    const keptIndexes = steps
+      .map((s, i) => (s.title.trim() ? i : -1))
+      .filter((i) => i >= 0);
+    const newIndexOf = new Map<number, number>(
+      keptIndexes.map((old, next) => [old, next])
+    );
+    const cleaned = keptIndexes.map((old) => {
+      const s = steps[old];
+      return {
+        ...s,
+        parent_index:
+          s.parent_index === null
+            ? null
+            : (newIndexOf.get(s.parent_index) ?? null),
+        depends_on: s.depends_on
+          .map((d) => newIndexOf.get(d))
+          .filter((d): d is number => d !== undefined),
+      };
+    });
     if (!name.trim()) {
       setError("Give the playbook a name");
       return;
@@ -752,6 +796,72 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                           ))}
                         </select>
                       </div>
+
+                      {/* What has to finish first. A named dependency holds
+                          whether or not the playbook enforces order, which is
+                          how "3D waits on the layout sign-off but the ceiling
+                          quote runs alongside" gets said. */}
+                      {i > 0 && (
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                          <span className="text-slate-400">Waits for</span>
+                          {steps.slice(0, i).some((s) => s.title.trim()) ? (
+                            <>
+                              <select
+                                value=""
+                                onChange={(e) => {
+                                  const n = Number(e.target.value);
+                                  if (Number.isNaN(n)) return;
+                                  if (step.depends_on.includes(n)) return;
+                                  update(i, {
+                                    depends_on: [...step.depends_on, n],
+                                  });
+                                }}
+                                className="px-1.5 py-0.5 border border-slate-200 rounded bg-white max-w-[12rem]"
+                              >
+                                <option value="">add a step…</option>
+                                {steps.slice(0, i).map((s, n) =>
+                                  s.title.trim() &&
+                                  !step.depends_on.includes(n) ? (
+                                    <option key={n} value={n}>
+                                      {s.title}
+                                    </option>
+                                  ) : null,
+                                )}
+                              </select>
+                              {step.depends_on.length === 0 && (
+                                <span className="text-slate-400">
+                                  nothing — starts when its turn comes
+                                </span>
+                              )}
+                              {step.depends_on.map((n) => (
+                                <span
+                                  key={n}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200"
+                                >
+                                  {steps[n]?.title || `Step ${n + 1}`}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      update(i, {
+                                        depends_on: step.depends_on.filter(
+                                          (x) => x !== n,
+                                        ),
+                                      })
+                                    }
+                                    className="text-amber-500 hover:text-amber-800"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              ))}
+                            </>
+                          ) : (
+                            <span className="text-slate-400">
+                              name an earlier step first
+                            </span>
+                          )}
+                        </div>
+                      )}
 
                       {/* One number, in hours. It is what actual_hours is
                           measured against afterwards, which is how a team sees

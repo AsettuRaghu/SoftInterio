@@ -424,10 +424,20 @@ fix, a conversion that rolled back is not.
 `/dashboard/settings/playbooks/[id]`, with `new` for a new one.
 `PlaybookEditor` is the form; the page owns navigation.
 
-Still not expressible in a playbook: **`form_schema`**, so a `form` step is no
-different from a manual one, and **step-to-step dependencies** — there is only
-all-or-nothing `enforce_order` plus per-step `allow_parallel`, so "3D waits on
-layout sign-off while the ceiling quote runs alongside" cannot be said.
+**A step can wait on named steps.** `procedure_step_dependencies` holds
+`hard` (blocks) and `soft` (recorded, advisory) links, and
+`task_blocking_predecessors` checks them **before** `enforce_order` — a named
+dependency holds whether or not the playbook enforces order, which is how "3D
+waits on layout sign-off while the ceiling quote runs alongside" gets said.
+
+The editor works in **indexes**, because a step being written has no id yet;
+the API resolves them after every step exists. Dropping an untitled row shifts
+those indexes, so `cleaned` remaps both `parent_index` and `depends_on` — it
+did not before, and a blank row in the middle would silently re-parent
+everything below it.
+
+Still not expressible: **`form_schema`**, so a `form` step is no different from
+a manual one.
 
 ### Deleting a task, and why a playbook step cannot be
 Three rules, all in `DELETE /api/tasks/[id]`. Before 2026-09-08 there were

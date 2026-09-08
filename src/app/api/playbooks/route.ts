@@ -168,6 +168,9 @@ export async function replaceSteps(
   }
 
   const idByIndex = new Map<number, string>();
+  // Every step by index, not just the top-level ones idByIndex tracks for
+  // parenting - a dependency can name any step.
+  const allIdByIndex = new Map<number, string>();
   let order = 0;
 
   // Two passes: top-level first, then children, so parents always exist.
@@ -226,6 +229,30 @@ export async function replaceSteps(
         return { count: order, error: "Failed to save the steps" };
       }
       if (!hasParent) idByIndex.set(i, data.id);
+      allIdByIndex.set(i, data.id);
+    }
+  }
+
+  // A third pass, once every step exists and can be pointed at. Dependencies
+  // are given as indexes into the submitted list, the same way parents are.
+  for (let i = 0; i < steps.length; i++) {
+    const from = allIdByIndex.get(i);
+    const wanted: unknown = steps[i]?.depends_on;
+    if (!from || !Array.isArray(wanted) || wanted.length === 0) continue;
+
+    for (const rawIndex of wanted) {
+      const to = allIdByIndex.get(Number(rawIndex));
+      // Self-reference would never start, and the constraint would reject it
+      // anyway; skipping keeps the save from failing over a stale index.
+      if (!to || to === from) continue;
+
+      const { error } = await supabase
+        .from("procedure_step_dependencies")
+        .insert({ step_id: from, depends_on_step_id: to, dependency_type: "hard" });
+
+      if (error) {
+        console.error("Error saving a step dependency:", error);
+      }
     }
   }
 
