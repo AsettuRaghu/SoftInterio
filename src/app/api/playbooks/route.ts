@@ -98,6 +98,9 @@ export async function POST(request: NextRequest) {
         // tenant_type enum already knows the difference. Null means it suits
         // any of them.
         tenant_type: (body.tenant_type as string) || null,
+        auto_start: body.auto_start === true,
+        auto_start_project_category:
+          (body.auto_start_project_category as string) || null,
         is_active: body.is_active !== false,
         enforce_order: body.enforce_order === true,
         is_protected: body.is_protected === true,

@@ -4,6 +4,7 @@ import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { generateUniqueProjectNumber } from "@/utils/project-number-generator";
 import { projectAccess } from "@/lib/projects/access";
 import { allowsDirectProjectCreate } from "@/lib/projects/settings";
+import { autoStartProjectPlaybook } from "@/lib/playbooks/auto-start";
 import { requestLogger } from "@/lib/logger/request";
 
 // GET /api/projects - List projects with phase summary
@@ -412,6 +413,16 @@ export async function POST(request: NextRequest) {
         // Don't fail the whole request, just log the error
       }
     }
+
+    // The playbook for this kind of project starts itself, so adopting a
+    // process does not mean remembering to apply it every time.
+    await autoStartProjectPlaybook(supabase, {
+      tenantId: user.tenantId,
+      projectId: project.id,
+      projectCategory: project.project_category,
+      userId: user.id,
+      log,
+    });
 
     // Update the lead with project_id reference if created from a lead
     if (lead_id && project) {

@@ -6,23 +6,22 @@
  * nothing.
  */
 
+import { useRouter } from "next/navigation";
 import React, { useCallback, useEffect, useState } from "react";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { PageLayout, PageHeader } from "@/components/ui/PageLayout";
 import { Toast } from "@/components/ui/Toast";
 import {
-  PlaybookBuilderModal,
 } from "@/components/playbooks";
 import { TaskRelatedTypeLabels } from "@/types/tasks";
 import type { PlaybookDefinition } from "@/types/playbooks";
 
 export default function PlaybooksPage() {
+  const router = useRouter();
   const { confirm, confirmDialog } = useConfirm();
   const [playbooks, setPlaybooks] = useState<PlaybookDefinition[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isBuilderOpen, setIsBuilderOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -84,9 +83,7 @@ export default function PlaybooksPage() {
       setError(data.error || "Could not copy the playbook");
       return;
     }
-    await load();
-    setEditingId(data.playbook.id);
-    setIsBuilderOpen(true);
+    router.push(`/dashboard/settings/playbooks/${data.playbook.id}`);
   };
 
   return (
@@ -99,10 +96,7 @@ export default function PlaybooksPage() {
         actions={
           <button
             type="button"
-            onClick={() => {
-              setEditingId(null);
-              setIsBuilderOpen(true);
-            }}
+            onClick={() => router.push("/dashboard/settings/playbooks/new")}
             className="px-3 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
           >
             + New Playbook
@@ -141,10 +135,9 @@ export default function PlaybooksPage() {
                   <td className="px-4 py-3">
                     <button
                       type="button"
-                      onClick={() => {
-                        setEditingId(p.id);
-                        setIsBuilderOpen(true);
-                      }}
+                      onClick={() =>
+                        router.push(`/dashboard/settings/playbooks/${p.id}`)
+                      }
                       className="text-left"
                     >
                       <span className="block font-medium text-slate-900 hover:text-blue-600">
@@ -213,13 +206,6 @@ export default function PlaybooksPage() {
           </table>
         </div>
       )}
-
-      <PlaybookBuilderModal
-        isOpen={isBuilderOpen}
-        playbookId={editingId}
-        onClose={() => setIsBuilderOpen(false)}
-        onSaved={load}
-      />
       {confirmDialog}
     </PageLayout>
   );

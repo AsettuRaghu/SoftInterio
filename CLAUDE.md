@@ -364,12 +364,23 @@ playbook that named them.
 
 `is_active` is a draft switch — an inactive playbook cannot be started.
 
-Still not expressible in a playbook, in the order worth fixing:
-**`form_schema`** (so a `form` step is no different from a manual one),
-**auto-attach** (nothing starts a playbook by itself, so adoption still needs a
-human), and **step-to-step dependencies** — there is only all-or-nothing
-`enforce_order` plus per-step `allow_parallel`, so "3D waits on layout sign-off
-while the ceiling quote runs alongside" cannot be said.
+**A playbook can start itself.** `auto_start` plus
+`auto_start_project_category` mean a won lead becoming a project picks up its
+delivery process without anyone applying a template. Both project-creation
+paths call `autoStartProjectPlaybook`. A playbook naming a category beats one
+taking any; a partial unique index stops two claiming the same category, and
+the helper refuses to start a second run of the same playbook on one project.
+It fails quietly on purpose — a project without its playbook is a click to
+fix, a conversion that rolled back is not.
+
+**Authoring is a page, not a modal** —
+`/dashboard/settings/playbooks/[id]`, with `new` for a new one.
+`PlaybookEditor` is the form; the page owns navigation.
+
+Still not expressible in a playbook: **`form_schema`**, so a `form` step is no
+different from a manual one, and **step-to-step dependencies** — there is only
+all-or-nothing `enforce_order` plus per-step `allow_parallel`, so "3D waits on
+layout sign-off while the ceiling quote runs alongside" cannot be said.
 
 ### Deleting a task, and why a playbook step cannot be
 Three rules, all in `DELETE /api/tasks/[id]`. Before 2026-09-08 there were

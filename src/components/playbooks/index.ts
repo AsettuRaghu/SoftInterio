@@ -1,2 +1,2 @@
 export { PlaybooksPanel } from "./PlaybooksPanel";
-export { PlaybookBuilderModal } from "./PlaybookBuilderModal";
+export { PlaybookEditor } from "./PlaybookEditor";

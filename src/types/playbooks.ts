@@ -61,6 +61,10 @@ export interface PlaybookDefinition {
   is_protected: boolean;
   /** When true a step cannot start until its predecessors are settled. */
   enforce_order: boolean;
+  /** Start this playbook by itself when a matching project is created. */
+  auto_start: boolean;
+  /** Restrict auto-start to one project category. Null means any. */
+  auto_start_project_category?: string | null;
   created_at: string;
   updated_at: string;
   /** Convenience count from the list endpoint. */

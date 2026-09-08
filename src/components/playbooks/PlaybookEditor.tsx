@@ -9,7 +9,6 @@
  */
 
 import React, { useCallback, useEffect, useState } from "react";
-import { Modal } from "@/components/ui/Modal";
 import type { TaskRelatedType } from "@/types/tasks";
 import {
   PlaybookActionColors,
@@ -44,8 +43,8 @@ interface DraftStep {
 }
 
 interface Props {
-  isOpen: boolean;
-  onClose: () => void;
+  /** Called when the user backs out without saving. */
+  onCancel: () => void;
   /** Omit to create a new one. */
   playbookId?: string | null;
   onSaved?: () => void;
@@ -107,12 +106,15 @@ const blankStep = (): DraftStep => ({
   skip_requires_reason: true,
 });
 
-export function PlaybookBuilderModal({
-  isOpen,
-  onClose,
-  playbookId,
-  onSaved,
-}: Props) {
+/**
+ * Authoring a playbook is a page, not a dialog.
+ *
+ * A real process is twenty-five nested steps, each carrying an owner, a gate,
+ * a duration, a priority and an effort. That never fitted a modal, and the
+ * things still to come - a field builder for form steps, a dependency picker -
+ * need more room again, not less.
+ */
+export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [appliesTo, setAppliesTo] = useState<TaskRelatedType>("project");
@@ -126,6 +128,8 @@ export function PlaybookBuilderModal({
   const [people, setPeople] = useState<{ id: string; name: string }[]>([]);
   const [enforceOrder, setEnforceOrder] = useState(false);
   const [isActive, setIsActive] = useState(true);
+  const [autoStart, setAutoStart] = useState(false);
+  const [autoStartCategory, setAutoStartCategory] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -138,13 +142,14 @@ export function PlaybookBuilderModal({
     setSteps([blankStep()]);
     setTenantType("");
     setIsActive(true);
+    setAutoStart(false);
+    setAutoStartCategory("");
     setEnforceOrder(false);
     setError(null);
     setExisting(null);
   }, []);
 
   useEffect(() => {
-    if (!isOpen) return;
     if (!playbookId) {
       reset();
       return;
@@ -166,6 +171,8 @@ export function PlaybookBuilderModal({
         setTenantType(data.playbook.tenant_type ?? "");
         setEnforceOrder(data.playbook.enforce_order === true);
         setIsActive(data.playbook.is_active !== false);
+        setAutoStart(data.playbook.auto_start === true);
+        setAutoStartCategory(data.playbook.auto_start_project_category ?? "");
 
         // Flatten: parents in order, each followed by its children, so the
         // editor's parent_index refers to a position in this same array.
@@ -217,7 +224,7 @@ export function PlaybookBuilderModal({
         setIsLoading(false);
       }
     })();
-  }, [isOpen, playbookId, reset]);
+  }, [playbookId, reset]);
 
   const update = (i: number, patch: Partial<DraftStep>) =>
     setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
@@ -225,7 +232,6 @@ export function PlaybookBuilderModal({
   const addStep = () => setSteps((prev) => [...prev, blankStep()]);
 
   React.useEffect(() => {
-    if (!isOpen) return;
     void (async () => {
       try {
         const res = await fetch("/api/team/members");
@@ -239,7 +245,7 @@ export function PlaybookBuilderModal({
         // Without the list a step simply cannot name anyone yet.
       }
     })();
-  }, [isOpen]);
+  }, []);
 
   const removeStep = (i: number) =>
     setSteps((prev) => {
@@ -381,6 +387,8 @@ export function PlaybookBuilderModal({
         tenant_type: tenantType || null,
             enforce_order: enforceOrder,
             is_active: isActive,
+            auto_start: autoStart,
+            auto_start_project_category: autoStartCategory || null,
             steps: cleaned,
           }),
         }
@@ -391,7 +399,6 @@ export function PlaybookBuilderModal({
         return;
       }
       onSaved?.();
-      onClose();
     } catch {
       setError("Could not reach the server");
     } finally {
@@ -400,41 +407,14 @@ export function PlaybookBuilderModal({
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={playbookId ? "Edit playbook" : "New playbook"}
-      subtitle={
-        existing && existing.version > 1
-          ? `Version ${existing.version}. Editing the steps creates a new version; runs already under way keep the rules they started with.`
-          : "Steps become tasks when the playbook is run."
-      }
-      size="3xl"
-      footer={
-        <div className="flex items-center justify-between w-full">
-          <span className="text-xs text-slate-400">
-            {steps.filter((s) => s.title.trim()).length} step(s)
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-3 py-1.5 text-sm font-medium rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={isSaving}
-              onClick={() => void save()}
-              className="px-3 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {isSaving ? "Saving..." : playbookId ? "Save changes" : "Create"}
-            </button>
-          </div>
-        </div>
-      }
-    >
+    <div className="space-y-4">
+      {existing && existing.version > 1 && (
+        <p className="text-xs text-slate-500">
+          Version {existing.version}. Editing the steps creates a new version;
+          runs already under way keep the rules they started with.
+        </p>
+      )}
+
       {isLoading ? (
         <p className="text-sm text-slate-400">Loading...</p>
       ) : (
@@ -521,6 +501,56 @@ export function PlaybookBuilderModal({
               </span>
             </span>
           </label>
+
+          {appliesTo === "project" && (
+            <div className="px-3 py-2 rounded-md bg-slate-50 border border-slate-200">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoStart}
+                  onChange={(e) => setAutoStart(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span className="text-xs text-slate-600">
+                  <span className="font-medium text-slate-700">
+                    Start this automatically on new projects
+                  </span>
+                  <span className="block text-slate-500">
+                    A won lead becoming a project picks this up by itself, so
+                    adopting the process does not mean remembering to apply it.
+                  </span>
+                </span>
+              </label>
+              {autoStart && (
+                <div className="mt-2 pl-6 flex items-center gap-2">
+                  <span className="text-xs text-slate-500">for</span>
+                  <select
+                    value={autoStartCategory}
+                    onChange={(e) => setAutoStartCategory(e.target.value)}
+                    className="px-2 py-1 text-xs border border-slate-200 rounded bg-white"
+                  >
+                    <option value="">any project</option>
+                    {[
+                      "turnkey",
+                      "modular",
+                      "renovation",
+                      "consultation",
+                      "commercial_fitout",
+                      "hybrid",
+                      "other",
+                    ].map((c) => (
+                      <option key={c} value={c}>
+                        {c.replace(/_/g, " ")} projects
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-xs text-slate-400">
+                    A playbook naming a category wins over one taking any.
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
 
           <label className="flex items-start gap-2 px-3 py-2 rounded-md bg-slate-50 border border-slate-200 cursor-pointer">
             <input
@@ -799,8 +829,30 @@ export function PlaybookBuilderModal({
           </div>
         </div>
       )}
-    </Modal>
+      <div className="sticky bottom-0 -mx-6 px-6 py-3 bg-white border-t border-slate-200 flex items-center justify-between">
+        <span className="text-xs text-slate-400">
+          {steps.filter((s) => s.title.trim()).length} step(s)
+        </span>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-3 py-1.5 text-sm font-medium rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={isSaving}
+            onClick={() => void save()}
+            className="px-3 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {isSaving ? "Saving..." : playbookId ? "Save changes" : "Create"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
-export default PlaybookBuilderModal;
+export default PlaybookEditor;

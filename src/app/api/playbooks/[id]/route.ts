@@ -97,6 +97,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // business - so an explicit null must be distinguishable from "untouched".
     if (body.tenant_type !== undefined)
       update.tenant_type = body.tenant_type || null;
+    if (body.auto_start !== undefined) update.auto_start = body.auto_start;
+    if (body.auto_start_project_category !== undefined)
+      update.auto_start_project_category =
+        body.auto_start_project_category || null;
     if (body.is_active !== undefined) update.is_active = body.is_active;
     if (body.enforce_order !== undefined)
       update.enforce_order = body.enforce_order;
