@@ -173,8 +173,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       update.enforce_order = body.enforce_order;
     if (body.is_protected !== undefined)
       update.is_protected = body.is_protected;
-    // Changing the steps changes the contract, so the version moves.
-    if (stepsChanged) update.version = existing.version + 1;
+    /*
+     * Saving does not move the version. It used to, from when a version was a
+     * number on a single row and a save was the only way to make one - so a
+     * draft edited over several days walked its number up on every save, and
+     * this playbook reached v8 with v4 to v7 having never existed.
+     *
+     * A version is a row now. Revise creates the next one; commit puts it into
+     * service. Writing a playbook takes a team days of drafting, and none of
+     * that should count as a version of anything.
+     */
 
     const { error } = await supabase
       .from("procedure_definitions")

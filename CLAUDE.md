@@ -439,6 +439,21 @@ and a step that gates on a run but not on a sync is the kind of inconsistency
 nobody notices until it matters. It is not idempotent — call it once per new
 task.
 
+### Saving a draft is not a version
+Only **revise** makes a version, and **commit** puts it into service. A save is
+a save.
+
+The PATCH used to do `version = version + 1` whenever the steps changed — right
+when a version was a number on one row, wrong once a version became a row. A
+draft edited over four days reached **v8 while v4 to v7 never existed**. Writing
+a playbook takes a team days of drafting and none of it is a version of
+anything.
+
+For the same reason `replaceSteps` **deletes** a draft's old steps instead of
+superseding them. Superseding protects a running plan's rules, and a draft
+cannot be run — keeping them left 96 unreachable rows behind those four days.
+A committed version still supersedes, because plans depend on it.
+
 ### Hold references by identity, not position
 Twice now the editor has lost configuration by holding a reference as an array
 index. `parent_index` needed remapping every time rows were dropped or moved;

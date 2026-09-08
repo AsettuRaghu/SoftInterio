@@ -195,11 +195,32 @@ export async function replaceSteps(
   // NULL, so deleting here would strip action_type, can_skip and instructions
   // from every task in a run already under way - defeating the version
   // pinning that exists to stop exactly that.
-  await supabase
-    .from("procedure_step_definitions")
-    .update({ is_current: false })
-    .eq("definition_id", definitionId)
-    .eq("is_current", true);
+  /*
+   * A draft's old steps are deleted; a version in service has its superseded.
+   *
+   * Superseding exists so a running plan keeps resolving the rules it began
+   * under - and a draft cannot be run, so it has no plans to protect. Keeping
+   * them left 96 unreachable rows behind four days of drafting, along with the
+   * dependencies hanging off them.
+   */
+  const { data: definition } = await supabase
+    .from("procedure_definitions")
+    .select("status")
+    .eq("id", definitionId)
+    .maybeSingle();
+
+  if (definition?.status === "draft") {
+    await supabase
+      .from("procedure_step_definitions")
+      .delete()
+      .eq("definition_id", definitionId);
+  } else {
+    await supabase
+      .from("procedure_step_definitions")
+      .update({ is_current: false })
+      .eq("definition_id", definitionId)
+      .eq("is_current", true);
+  }
 
   if (!Array.isArray(steps) || steps.length === 0) {
     return { count: 0 };
