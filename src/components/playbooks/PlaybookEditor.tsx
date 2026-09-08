@@ -48,6 +48,15 @@ interface DraftStep {
   checklist_items: string[] | null;
   /** Indexes of steps that must finish first. Holds whatever the ordering says. */
   depends_on: number[];
+  /**
+   * Carried through untouched.
+   *
+   * The editor has no control for these, and a save rebuilds every step from
+   * this object - so anything not held here is silently dropped the first time
+   * somebody edits the playbook for an unrelated reason.
+   */
+  description?: string | null;
+  form_schema?: Record<string, unknown> | null;
   /** May run alongside its siblings instead of waiting for them. */
   allow_parallel: boolean;
   /** Skipping has to be explained. */
@@ -222,8 +231,12 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
         const tops = raw.filter((s: any) => !s.parent_step_id);
         const flat: DraftStep[] = [];
         const idToIndex = new Map<string, number>();
+        // Where each database row ended up, so dependencies can be resolved by
+        // identity rather than by matching titles.
+        const indexOfRawId = new Map<string, number>();
         for (const t of tops) {
           idToIndex.set(t.id, flat.length);
+          indexOfRawId.set(t.id, flat.length);
           flat.push({
             uid: newUid(),
             step_key: t.step_key,
@@ -243,11 +256,14 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
             approval_role: t.approval_role ?? null,
             required_upload_types: t.required_upload_types ?? null,
             checklist_items: t.checklist_items ?? null,
+            description: t.description ?? null,
+            form_schema: t.form_schema ?? null,
             depends_on: [],
             allow_parallel: t.allow_parallel === true,
             skip_requires_reason: t.skip_requires_reason !== false,
           });
           for (const c of raw.filter((s: any) => s.parent_step_id === t.id)) {
+            indexOfRawId.set(c.id, flat.length);
             flat.push({
               uid: newUid(),
               step_key: c.step_key,
@@ -265,26 +281,27 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
               approval_role: c.approval_role ?? null,
               required_upload_types: c.required_upload_types ?? null,
               checklist_items: c.checklist_items ?? null,
+              description: c.description ?? null,
+              form_schema: c.form_schema ?? null,
               depends_on: [],
               allow_parallel: c.allow_parallel === true,
               skip_requires_reason: c.skip_requires_reason !== false,
             });
           }
         }
-        // Dependencies arrive as step ids; the editor works in indexes,
-        // because a step being written has no id yet.
-        const indexById = new Map<string, number>();
+        /**
+         * Dependencies arrive as step ids; the editor works in indexes,
+         * because a step being written has no id yet.
+         *
+         * The position is recorded as each step is flattened. Matching on the
+         * title instead - which this did - puts every "Internal Review" on the
+         * first one of them, and this playbook has four.
+         */
         raw.forEach((r: any) => {
-          const at = flat.findIndex(
-            (f, n) => f.title === r.title && !indexById.has(r.id) && n >= 0,
-          );
-          if (at >= 0) indexById.set(r.id, at);
-        });
-        raw.forEach((r: any) => {
-          const at = indexById.get(r.id);
+          const at = indexOfRawId.get(r.id);
           if (at === undefined) return;
           flat[at].depends_on = (r.depends_on_step_ids || [])
-            .map((id: string) => indexById.get(id))
+            .map((id: string) => indexOfRawId.get(id))
             .filter((n: number | undefined): n is number => n !== undefined);
         });
 

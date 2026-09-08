@@ -235,6 +235,10 @@ export async function replaceSteps(
           ...(step.step_key ? { step_key: step.step_key } : {}),
           title: step.title.trim(),
           description: step.description?.trim() || null,
+          // Carried through even though nothing edits it yet: dropping a field
+          // on save because the editor has no control for it is how a playbook
+          // quietly loses configuration.
+          form_schema: step.form_schema ?? null,
           instructions: step.instructions?.trim() || null,
           display_order: order,
           action_type: step.action_type || "manual",
