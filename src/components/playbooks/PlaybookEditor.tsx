@@ -821,7 +821,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
               </label>
               <div className="flex items-center gap-3">
                 <span className="text-[11px] text-slate-400">
-                  drag ⠿ to move · → nest · a phase moves with its steps
+                  drag ⠿ to move · → nest · a phase moves with its steps · ▲▼ on hover
                 </span>
                 {parentUids.length > 0 && (
                   <button
@@ -864,7 +864,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                       e.preventDefault();
                       handleDrop(i);
                     }}
-                    className={`flex items-start gap-1.5 ${isChild ? "pl-8" : ""} ${
+                    className={`group flex items-start gap-1.5 ${isChild ? "pl-8" : ""} ${
                       dragging === step.uid ? "opacity-40" : ""
                     } ${
                       dropTarget === i && dragging && dragging !== step.uid
@@ -889,7 +889,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                         type="button"
                         onClick={() => moveStep(i, -1)}
                         title="Move up"
-                        className="w-6 h-4 flex items-center justify-center rounded text-slate-300 hover:text-blue-600 hover:bg-blue-50 text-[10px]"
+                        className="w-6 h-4 flex items-center justify-center rounded text-slate-300 hover:text-blue-600 hover:bg-blue-50 text-[10px] opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
                       >
                         ▲
                       </button>
@@ -897,7 +897,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                         type="button"
                         onClick={() => moveStep(i, 1)}
                         title="Move down"
-                        className="w-6 h-4 flex items-center justify-center rounded text-slate-300 hover:text-blue-600 hover:bg-blue-50 text-[10px]"
+                        className="w-6 h-4 flex items-center justify-center rounded text-slate-300 hover:text-blue-600 hover:bg-blue-50 text-[10px] opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
                       >
                         ▼
                       </button>
