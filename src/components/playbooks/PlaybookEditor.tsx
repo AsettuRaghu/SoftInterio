@@ -46,8 +46,15 @@ interface DraftStep {
   /** What must be attached before an upload step can complete. */
   required_upload_types: string[] | null;
   checklist_items: string[] | null;
-  /** Indexes of steps that must finish first. Holds whatever the ordering says. */
-  depends_on: number[];
+  /**
+   * The steps that must finish first, held by uid rather than position.
+   *
+   * These were indexes, and nothing remapped them when a step moved - so
+   * setting "waits for" and then dragging anything silently retargeted the
+   * dependency at whatever had taken that position. Identity survives
+   * reordering; positions are worked out once, at save.
+   */
+  depends_on: string[];
   /**
    * Carried through untouched.
    *
@@ -301,8 +308,11 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
           const at = indexOfRawId.get(r.id);
           if (at === undefined) return;
           flat[at].depends_on = (r.depends_on_step_ids || [])
-            .map((id: string) => indexOfRawId.get(id))
-            .filter((n: number | undefined): n is number => n !== undefined);
+            .map((depId: string) => {
+              const n = indexOfRawId.get(depId);
+              return n === undefined ? undefined : flat[n].uid;
+            })
+            .filter((u: string | undefined): u is string => u !== undefined);
         });
 
         setSteps(flat.length ? flat : [blankStep()]);
@@ -548,10 +558,10 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
   };
 
   const save = async () => {
-    // Dropping untitled rows shifts every index after them, and both
-    // parent_index and depends_on are indexes into this list. Remap rather
-    // than let a blank row in the middle silently re-parent the steps below
-    // it - which it would have done before.
+    // Dropping untitled rows shifts every index after them, and parent_index
+    // is an index into this list - so it is remapped rather than left to
+    // silently re-parent the steps below a blank row. depends_on is held by
+    // uid precisely so it never needs this, and is resolved to positions here.
     const keptIndexes = steps
       .map((s, i) => (s.title.trim() ? i : -1))
       .filter((i) => i >= 0);
@@ -566,9 +576,11 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
           s.parent_index === null
             ? null
             : (newIndexOf.get(s.parent_index) ?? null),
+        // Positions are worked out here and nowhere else, from the order the
+        // steps are actually being sent in.
         depends_on: s.depends_on
-          .map((d) => newIndexOf.get(d))
-          .filter((d): d is number => d !== undefined),
+          .map((uid) => keptIndexes.findIndex((old) => steps[old].uid === uid))
+          .filter((n) => n >= 0),
       };
     });
     if (!name.trim()) {
@@ -1069,20 +1081,20 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                               <select
                                 value=""
                                 onChange={(e) => {
-                                  const n = Number(e.target.value);
-                                  if (Number.isNaN(n)) return;
-                                  if (step.depends_on.includes(n)) return;
+                                  const uid = e.target.value;
+                                  if (!uid || step.depends_on.includes(uid))
+                                    return;
                                   update(i, {
-                                    depends_on: [...step.depends_on, n],
+                                    depends_on: [...step.depends_on, uid],
                                   });
                                 }}
                                 className="px-1.5 py-0.5 border border-slate-200 rounded bg-white max-w-[12rem]"
                               >
                                 <option value="">add a step…</option>
-                                {steps.slice(0, i).map((s, n) =>
+                                {steps.slice(0, i).map((s) =>
                                   s.title.trim() &&
-                                  !step.depends_on.includes(n) ? (
-                                    <option key={n} value={n}>
+                                  !step.depends_on.includes(s.uid) ? (
+                                    <option key={s.uid} value={s.uid}>
                                       {s.title}
                                     </option>
                                   ) : null,
@@ -1093,18 +1105,19 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                                   nothing — starts when its turn comes
                                 </span>
                               )}
-                              {step.depends_on.map((n) => (
+                              {step.depends_on.map((uid) => (
                                 <span
-                                  key={n}
+                                  key={uid}
                                   className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200"
                                 >
-                                  {steps[n]?.title || `Step ${n + 1}`}
+                                  {steps.find((s) => s.uid === uid)?.title ||
+                                    "(removed step)"}
                                   <button
                                     type="button"
                                     onClick={() =>
                                       update(i, {
                                         depends_on: step.depends_on.filter(
-                                          (x) => x !== n,
+                                          (x) => x !== uid,
                                         ),
                                       })
                                     }

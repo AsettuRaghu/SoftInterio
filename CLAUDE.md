@@ -439,6 +439,21 @@ and a step that gates on a run but not on a sync is the kind of inconsistency
 nobody notices until it matters. It is not idempotent — call it once per new
 task.
 
+### Hold references by identity, not position
+Twice now the editor has lost configuration by holding a reference as an array
+index. `parent_index` needed remapping every time rows were dropped or moved;
+`depends_on` held indexes too, and **nothing remapped it on reorder at all** —
+so setting "waits for" and then dragging anything retargeted the dependency at
+whatever took that position.
+
+`depends_on` now holds `uid`s, and positions are worked out once, at save.
+Dependency hydration also matched rows to editor positions **by title**, and
+this playbook has "Internal Review" four times and "Client Confirmation" three
+— so every one resolved to the first. Match by identity.
+
+The rule: inside the editor, refer to a step by `uid`. Convert to an index only
+in the payload, and only at the moment of sending.
+
 ### Editing steps: uid, renest, and why nesting is one level
 A draft step carries a client-side `uid`. Not the database id — a step being
 written has none — and not the array index, which changes the moment anything
