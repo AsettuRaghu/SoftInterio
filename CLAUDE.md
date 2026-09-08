@@ -439,6 +439,23 @@ and a step that gates on a run but not on a sync is the kind of inconsistency
 nobody notices until it matters. It is not idempotent — call it once per new
 task.
 
+### One plan at a time, and who may change one
+`POST /api/playbooks/[id]/run` refuses to start a second run while one is
+active on the same entity. Nothing stopped it before, and the Plan tab shows
+only the most recently started run — so the other kept its tasks, invisible on
+the tab where the work happens. Stopping the current playbook is the deliberate
+act that makes room for another.
+
+Every playbook route is gated: `tasks.templates.view` to read,
+`.create` / `.edit` / `.delete` to author, and starting or stopping a run on
+`tasks.create` / `tasks.edit`, because that creates and cancels real work
+rather than editing a template. They were all session-only until 2026-09-08.
+
+Cross-tenant access is held by RLS — `procedure_definitions`,
+`procedure_runs` and `procedure_step_definitions` all scope on
+`get_user_tenant_id()`, and **no playbook route uses the admin client**, so
+that protection actually applies. Keep it that way.
+
 ### Saving a playbook is batched
 `replaceSteps` inserted one step at a time inside a two-pass loop, then one
 dependency at a time — about **forty-five sequential round trips** for a

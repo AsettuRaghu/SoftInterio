@@ -6,14 +6,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { requestLogger } from "@/lib/logger/request";
 
 interface RouteParams {
   params: Promise<{ runId: string }>;
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["tasks.view"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -91,7 +96,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       steps,
     });
   } catch (error) {
-    console.error("Playbook run GET error:", error);
+    log.error("Playbook run GET error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -100,8 +105,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
-    const guard = await protectApiRoute(request);
+        // Cancelling a run cancels its open tasks.
+const guard = await protectApiRoute(request, {
+      requiredPermissions: ["tasks.edit"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -145,7 +155,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .eq("id", runId);
 
     if (error) {
-      console.error("Error cancelling run:", error);
+      log.error("Error cancelling run", error);
       return NextResponse.json(
         { error: "Failed to cancel the run" },
         { status: 500 }
@@ -174,7 +184,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       cancelled_steps: (openTasks || []).length,
     });
   } catch (error) {
-    console.error("Playbook run PATCH error:", error);
+    log.error("Playbook run PATCH error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

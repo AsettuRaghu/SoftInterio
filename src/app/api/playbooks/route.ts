@@ -9,10 +9,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { requestLogger } from "@/lib/logger/request";
 
 export async function GET(request: NextRequest) {
+  const log = requestLogger(request);
+
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["tasks.templates.view"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -34,7 +39,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
 
     if (error) {
-      console.error("Error listing playbooks:", error);
+      log.error("Error listing playbooks", error);
       return NextResponse.json(
         { error: "Failed to load playbooks" },
         { status: 500 }
@@ -86,7 +91,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ playbooks });
   } catch (error) {
-    console.error("Playbooks GET error:", error);
+    log.error("Playbooks GET error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -101,8 +106,12 @@ export async function GET(request: NextRequest) {
  * the client never has to invent ids. Nesting is resolved here.
  */
 export async function POST(request: NextRequest) {
+  const log = requestLogger(request);
+
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["tasks.templates.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -149,7 +158,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error || !definition) {
-      console.error("Error creating playbook:", error);
+      log.error("Error creating playbook", error);
       if (error?.code === "23505") {
         return NextResponse.json(
           { error: "A playbook with this name already exists" },
@@ -162,7 +171,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const created = await replaceSteps(supabase, definition.id, body.steps || []);
+    const created = await replaceSteps(
+      supabase,
+      definition.id,
+      body.steps || [],
+      log,
+    );
     if (created.error) {
       // Without steps the definition is useless, so do not leave a husk behind.
       await supabase.from("procedure_definitions").delete().eq("id", definition.id);
@@ -174,7 +188,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error("Playbook POST error:", error);
+    log.error("Playbook POST error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -189,7 +203,9 @@ export async function POST(request: NextRequest) {
 export async function replaceSteps(
   supabase: Awaited<ReturnType<typeof createClient>>,
   definitionId: string,
-  steps: any[]
+  steps: any[],
+  /** So a failure inside the helper lands in the same log as its caller. */
+  log?: { error: (message: string, error?: unknown) => void }
 ): Promise<{ count: number; error?: string }> {
   // Supersede rather than delete. tasks.procedure_step_id is ON DELETE SET
   // NULL, so deleting here would strip action_type, can_skip and instructions
@@ -306,7 +322,7 @@ export async function replaceSteps(
       .select("id, display_order");
 
     if (error || !data) {
-      console.error("Error creating steps:", error);
+      log?.error("Error creating steps", error);
       return { count: order, error: "Failed to save the steps" };
     }
 
@@ -352,7 +368,7 @@ export async function replaceSteps(
     const { error } = await supabase
       .from("procedure_step_dependencies")
       .insert(links);
-    if (error) console.error("Error saving step dependencies:", error);
+    if (error) log?.error("Error saving step dependencies", error);
   }
 
   return { count: order };

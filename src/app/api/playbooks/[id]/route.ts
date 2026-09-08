@@ -6,14 +6,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { replaceSteps } from "../route";
+import { requestLogger } from "@/lib/logger/request";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["tasks.templates.view"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -66,7 +71,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       })),
     });
   } catch (error) {
-    console.error("Playbook GET error:", error);
+    log.error("Playbook GET error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -81,8 +86,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
  * they keep the rules they began under; only new runs pick up the change.
  */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["tasks.templates.edit"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -190,7 +199,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .eq("id", id);
 
     if (error) {
-      console.error("Error updating playbook:", error);
+      log.error("Error updating playbook", error);
       return NextResponse.json(
         { error: "Failed to update the playbook" },
         { status: 500 }
@@ -199,7 +208,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     let stepCount: number | undefined;
     if (stepsChanged) {
-      const result = await replaceSteps(supabase, id, body.steps);
+      const result = await replaceSteps(supabase, id, body.steps, log);
       if (result.error) {
         return NextResponse.json({ error: result.error }, { status: 500 });
       }
@@ -214,7 +223,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ playbook, step_count: stepCount });
   } catch (error) {
-    console.error("Playbook PATCH error:", error);
+    log.error("Playbook PATCH error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -229,8 +238,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
  * definition so its history stays readable. Deactivate instead.
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["tasks.templates.delete"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -260,7 +273,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       .eq("id", id);
 
     if (error) {
-      console.error("Error deleting playbook:", error);
+      log.error("Error deleting playbook", error);
       return NextResponse.json(
         { error: "Failed to delete the playbook" },
         { status: 500 }
@@ -269,7 +282,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Playbook DELETE error:", error);
+    log.error("Playbook DELETE error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

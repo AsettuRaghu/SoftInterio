@@ -4,7 +4,6 @@ import React from "react";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
 import TaskTableReusable from "@/components/tasks/TaskTableReusable";
-import { PlaybooksPanel } from "@/components/playbooks";
 import type { Task } from "@/types/tasks";
 
 interface TaskWithUser extends Task {
@@ -54,15 +53,6 @@ export default function TasksTab({
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-lg border border-slate-200 p-4">
-        <PlaybooksPanel
-          relatedType="lead"
-          relatedId={leadId}
-          readOnly={leadClosed}
-          onRunChange={onRefresh}
-        />
-      </div>
-
       <TaskTableReusable
       // Filter by this lead
       relatedType="lead"

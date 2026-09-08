@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { requestLogger } from "@/lib/logger/request";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -20,8 +21,13 @@ interface RouteParams {
 const VALID_ENTITIES = ["lead", "project", "quotation", "client"];
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  const log = requestLogger(request);
+
   try {
-    const guard = await protectApiRoute(request);
+        // Starting a playbook creates the tasks the team will work.
+const guard = await protectApiRoute(request, {
+      requiredPermissions: ["tasks.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -42,7 +48,34 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const { data, error } = await supabase.rpc("start_procedure_run", {
+        /**
+     * One plan at a time.
+     *
+     * Nothing stopped a second run starting beside the first, and the Plan tab
+     * shows only the most recently started one - so the other kept its tasks,
+     * invisible on the tab where the work is done. Stopping the current
+     * playbook is the deliberate act that makes room for another.
+     */
+    const { data: current } = await supabase
+      .from("procedure_runs")
+      .select("id, definition_name")
+      .eq("related_type", relatedType)
+      .eq("related_id", relatedId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (current) {
+      return NextResponse.json(
+        {
+          error: `This already follows "${current.definition_name}". Stop it before starting another.`,
+          reason: "already_running",
+          runId: current.id,
+        },
+        { status: 409 }
+      );
+    }
+
+const { data, error } = await supabase.rpc("start_procedure_run", {
       p_definition_id: id,
       p_related_type: relatedType,
       p_related_id: relatedId,
@@ -51,7 +84,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
     if (error) {
-      console.error("Error starting playbook run:", error);
+      log.error("Error starting playbook run", error);
       return NextResponse.json(
         { error: "Failed to start the playbook" },
         { status: 500 }
@@ -68,7 +101,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ success: true, ...data }, { status: 201 });
   } catch (error) {
-    console.error("Playbook run POST error:", error);
+    log.error("Playbook run POST error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -8,10 +8,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { requestLogger } from "@/lib/logger/request";
 
 export async function GET(request: NextRequest) {
+  const log = requestLogger(request);
+
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["tasks.view"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -31,7 +36,7 @@ export async function GET(request: NextRequest) {
     const { data: runs, error } = await query;
 
     if (error) {
-      console.error("Error listing playbook runs:", error);
+      log.error("Error listing playbook runs", error);
       return NextResponse.json(
         { error: "Failed to load playbook runs" },
         { status: 500 }
@@ -71,7 +76,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ runs: withProgress });
   } catch (error) {
-    console.error("Playbook runs GET error:", error);
+    log.error("Playbook runs GET error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
