@@ -137,7 +137,9 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
   >([]);
   const [roles, setRoles] = useState<{ slug: string; name: string }[]>([]);
   const [enforceOrder, setEnforceOrder] = useState(false);
-  const [status, setStatus] = useState<"draft" | "committed" | "retired">("draft");
+  const [status, setStatus] = useState<
+    "draft" | "committed" | "superseded" | "retired"
+  >("draft");
   const [autoStart, setAutoStart] = useState(false);
   const [autoStartCategory, setAutoStartCategory] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -281,6 +283,12 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
     const data = await res.json();
     if (!res.ok) {
       setError(data.error || "Could not change the playbook");
+      return;
+    }
+    // Revising opens the next version beside this one, so the editor follows
+    // it. The version still in service is left exactly as it was.
+    if (data.draftId) {
+      window.location.href = `/dashboard/settings/playbooks/${data.draftId}`;
       return;
     }
     setStatus(data.status);
@@ -590,14 +598,18 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                   ? "In service"
                   : status === "retired"
                     ? "Retired"
-                    : "Draft"}
+                    : status === "superseded"
+                      ? "Superseded"
+                      : "Draft"}
               </span>
               <span className="text-xs text-slate-500 flex-1">
                 {status === "draft"
                   ? "Being written. The steps can change, and it cannot be run until it is put into service."
                   : status === "committed"
-                    ? "In service. The steps are frozen because plans are following them — revise to change what it asks people to do. Wording can still be edited."
-                    : "Retired. Plans already running it carry on untouched; no new project will adopt it."}
+                    ? "In service. Revising opens the next version beside this one — this stays adoptable while you write it."
+                    : status === "superseded"
+                      ? "Superseded by a later version. Plans that adopted it carry on following it."
+                      : "Retired. Plans already running it carry on untouched; no new project will adopt it."}
               </span>
               <div className="flex gap-2 shrink-0">
                 {status === "draft" && (

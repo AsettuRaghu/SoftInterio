@@ -59,7 +59,17 @@ export interface PlaybookDefinition {
   applies_to: TaskRelatedType;
   is_active: boolean;
   /** draft: editable, cannot run. committed: in service. retired: no new runs. */
-  status: "draft" | "committed" | "retired";
+  status: "draft" | "committed" | "superseded" | "retired";
+  /** Ties the versions of one playbook together. */
+  root_id: string;
+  /** Every version of this playbook, newest first. Present on the list. */
+  versions?: {
+    id: string;
+    version: number;
+    status: string;
+    step_count: number;
+    updated_at: string;
+  }[];
   is_protected: boolean;
   /** When true a step cannot start until its predecessors are settled. */
   enforce_order: boolean;

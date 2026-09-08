@@ -439,7 +439,31 @@ and a step that gates on a run but not on a sync is the kind of inconsistency
 nobody notices until it matters. It is not idempotent — call it once per new
 task.
 
-### A playbook has a life: draft, committed, retired
+### A version of a playbook is a row, not a number
+`procedure_definitions` holds one row per version, tied by `root_id`. This
+replaced a single row carrying a `version` number, which had a real flaw:
+revising flipped that row to draft, and since only a committed playbook can be
+run, **revising took the process out of service** until the editing finished.
+
+Now v3 stays committed and adoptable while v4 is drafted beside it.
+
+- **draft** — being written; cannot be run. One per family at a time.
+- **committed** — in service. Steps frozen; wording still editable.
+- **superseded** — a later version took over. **Read-only**: a plan may still
+  be following it, and `PRJ_20251219_0001` follows v1 today.
+- **retired** — no new plans; running ones untouched.
+
+Revising copies the committed version's steps and dependencies into the new
+draft, so a revision starts from what is in service rather than a blank page.
+Committing supersedes the outgoing version **first**, because the auto-start
+index allows one committed row per category — and the new version inherits how
+the old one was adopted.
+
+The list groups by `root_id` and shows one entry per playbook: the committed
+version represents it, else the open draft, else the newest. Every version is a
+chip you can open.
+
+### The lifecycle in detail
 `procedure_definitions.status` replaced `is_active` doing two jobs badly —
 "inactive" could not distinguish never-finished from taken-out-of-service.
 

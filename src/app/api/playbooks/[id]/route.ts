@@ -127,6 +127,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // A superseded version is history, and a plan may still be following it -
+    // PRJ_20251219_0001 follows v1 today. Editing it would rewrite what that
+    // plan agreed to, which is the whole thing version pinning prevents.
+    if (existing.status === "superseded") {
+      return NextResponse.json(
+        {
+          error:
+            "This version has been superseded. Plans that adopted it still follow it, so it cannot be changed.",
+          reason: "superseded",
+        },
+        { status: 409 }
+      );
+    }
+
     if (existing.status === "retired") {
       return NextResponse.json(
         {

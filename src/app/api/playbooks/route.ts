@@ -28,7 +28,8 @@ export async function GET(request: NextRequest) {
       .order("name");
 
     if (appliesTo) query = query.eq("applies_to", appliesTo);
-    if (!includeInactive) query = query.eq("is_active", true);
+    // Every version comes back; the grouping below picks which one represents
+    // the playbook and hands the rest over as its history.
 
     const { data, error } = await query;
 
@@ -40,11 +41,48 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const playbooks = (data || []).map((p: any) => ({
+    const rows = (data || []).map((p: any) => ({
       ...p,
       step_count: p.steps?.[0]?.count ?? 0,
       steps: undefined,
     }));
+
+    /**
+     * One entry per playbook, not per version.
+     *
+     * A version is a row now, so the list would otherwise show "Modular Design
+     * Template" three times. The row that represents the playbook is the one
+     * in service; failing that the open draft, so a playbook being written for
+     * the first time is still visible; failing that the newest version, which
+     * is how a fully retired playbook still appears.
+     */
+    const byFamily = new Map<string, any[]>();
+    for (const row of rows) {
+      const family = row.root_id ?? row.id;
+      (byFamily.get(family) ?? byFamily.set(family, []).get(family)!).push(row);
+    }
+
+    const playbooks = [...byFamily.values()]
+      .map((versions) => {
+        const ordered = [...versions].sort((a, b) => b.version - a.version);
+        const head =
+          ordered.find((v) => v.status === "committed") ??
+          ordered.find((v) => v.status === "draft") ??
+          ordered[0];
+
+        return {
+          ...head,
+          versions: ordered.map((v) => ({
+            id: v.id,
+            version: v.version,
+            status: v.status,
+            step_count: v.step_count,
+            updated_at: v.updated_at,
+          })),
+        };
+      })
+      .filter((p) => includeInactive || p.status !== "retired")
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     return NextResponse.json({ playbooks });
   } catch (error) {

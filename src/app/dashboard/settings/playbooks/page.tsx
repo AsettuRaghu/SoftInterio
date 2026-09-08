@@ -119,7 +119,7 @@ export default function PlaybooksPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                {["Name", "Applies to", "For", "Steps", "Version", ""].map((h) => (
+                {["Name", "Applies to", "For", "Steps", "Versions", ""].map((h) => (
                   <th
                     key={h}
                     className="px-4 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider"
@@ -177,8 +177,41 @@ export default function PlaybooksPage() {
                   <td className="px-4 py-3 text-slate-600">
                     {p.step_count ?? 0}
                   </td>
-                  <td className="px-4 py-3 text-slate-400 text-xs">
-                    v{p.version}
+                  {/* Every version, so the freeze is legible: which one is in
+                      service, what is being drafted beside it, and what came
+                      before. */}
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {(p.versions ?? [{ id: p.id, version: p.version, status: p.status }]).map(
+                        (v) => (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={() =>
+                              router.push(`/dashboard/settings/playbooks/${v.id}`)
+                            }
+                            title={
+                              v.status === "committed"
+                                ? "In service"
+                                : v.status === "draft"
+                                  ? "Being written — cannot be used yet"
+                                  : v.status === "retired"
+                                    ? "Retired"
+                                    : "Superseded by a later version"
+                            }
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${
+                              v.status === "committed"
+                                ? "bg-green-50 text-green-700 border-green-200"
+                                : v.status === "draft"
+                                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                                  : "bg-slate-50 text-slate-500 border-slate-200"
+                            }`}
+                          >
+                            v{v.version}
+                          </button>
+                        )
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     <button
