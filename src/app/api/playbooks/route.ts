@@ -192,6 +192,9 @@ export async function replaceSteps(
           parent_step_id: hasParent
             ? idByIndex.get(Number(step.parent_index)) ?? null
             : null,
+          // Carried from the previous version where the editor knew it;
+          // omitted for a new step, so the default generates one.
+          ...(step.step_key ? { step_key: step.step_key } : {}),
           title: step.title.trim(),
           description: step.description?.trim() || null,
           instructions: step.instructions?.trim() || null,

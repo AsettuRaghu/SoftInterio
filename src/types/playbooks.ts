@@ -75,6 +75,8 @@ export interface PlaybookDefinition {
 
 export interface PlaybookStepDefinition {
   id: string;
+  /** Stable across revisions. The same step in v1 and v3 shares this. */
+  step_key: string;
   definition_id: string;
   parent_step_id?: string | null;
   title: string;

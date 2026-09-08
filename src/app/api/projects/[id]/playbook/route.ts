@@ -45,7 +45,9 @@ export async function GET(
 
     const { data: run } = await supabase
       .from("procedure_runs")
-      .select("id, definition_id, definition_name, definition_version, status, started_at")
+      .select(
+        "id, definition_id, definition_name, definition_version, status, started_at"
+      )
       .eq("related_type", "project")
       .eq("related_id", id)
       .eq("tenant_id", user.tenantId)
@@ -79,6 +81,14 @@ export async function GET(
       .select("id, display_order")
       .eq("definition_id", run.definition_id);
 
+    const { data: runStepKeys } = await supabase
+      .from("procedure_step_definitions")
+      .select("step_key")
+      .in(
+        "id",
+        (tasks ?? []).map((t) => t.procedure_step_id).filter(Boolean) as string[]
+      );
+
     const stepOrder = new Map<string, number>(
       (steps ?? []).map((s) => [s.id as string, s.display_order as number])
     );
@@ -109,6 +119,51 @@ export async function GET(
       users,
     });
 
+    /**
+     * Whether the playbook has moved on since this plan adopted it.
+     *
+     * A run pins its version deliberately, so a plan under way is never
+     * rewritten. But saying nothing about it leaves people wondering why an
+     * edit had no effect - so the plan says which version it follows, and how
+     * many steps it would gain by taking the current one.
+     *
+     * Only additions are counted. A step whose rules changed is not offered,
+     * because rewriting the rules of work already begun is the thing the
+     * version pinning exists to prevent.
+     */
+    const { data: definition } = await supabase
+      .from("procedure_definitions")
+      .select("version, status")
+      .eq("id", run.definition_id)
+      .maybeSingle();
+
+    let drift: {
+      currentVersion: number;
+      behind: boolean;
+      newSteps: number;
+    } | null = null;
+
+    if (definition && definition.version > run.definition_version) {
+      const { data: currentSteps } = await supabase
+        .from("procedure_step_definitions")
+        .select("step_key")
+        .eq("definition_id", run.definition_id)
+        .eq("is_current", true);
+
+      const runKeys = new Set(
+        (runStepKeys ?? []).map((s) => s.step_key as string)
+      );
+      const added = (currentSteps ?? []).filter(
+        (s) => !runKeys.has(s.step_key as string)
+      ).length;
+
+      drift = {
+        currentVersion: definition.version,
+        behind: true,
+        newSteps: added,
+      };
+    }
+
     return NextResponse.json({
       playbook: {
         runId: run.id,
@@ -117,6 +172,7 @@ export async function GET(
         startedAt: run.started_at,
         stepCount: tasks?.length ?? 0,
       },
+      drift,
       phases,
     });
   } catch (error) {

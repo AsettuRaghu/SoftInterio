@@ -18,6 +18,8 @@ import {
 } from "@/types/playbooks";
 
 interface DraftStep {
+  /** Present for a step that already exists; absent for a new one. */
+  step_key?: string;
   title: string;
   action_type: PlaybookActionType;
   /** Index of the parent in this same array; null = top level. */
@@ -191,6 +193,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
         for (const t of tops) {
           idToIndex.set(t.id, flat.length);
           flat.push({
+            step_key: t.step_key,
             title: t.title,
             action_type: t.action_type,
             parent_index: null,
@@ -213,6 +216,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
           });
           for (const c of raw.filter((s: any) => s.parent_step_id === t.id)) {
             flat.push({
+              step_key: c.step_key,
               title: c.title,
               action_type: c.action_type,
               parent_index: idToIndex.get(t.id) ?? null,

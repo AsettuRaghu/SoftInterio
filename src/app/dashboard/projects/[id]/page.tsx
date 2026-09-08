@@ -141,6 +141,12 @@ export default function ProjectDetailPage({ params }: PageProps) {
     stepCount: number;
   } | null>(null);
   const [playbookPhases, setPlaybookPhases] = useState<any[]>([]);
+  // Set when the playbook has moved on since this plan adopted it.
+  const [playbookDrift, setPlaybookDrift] = useState<{
+    currentVersion: number;
+    newSteps: number;
+  } | null>(null);
+  const [syncing, setSyncing] = useState(false);
   const [teamMembers, setTeamMembers] = useState<
     { id: string; name: string; email: string; avatar_url?: string }[]
   >([]);
@@ -203,6 +209,25 @@ export default function ProjectDetailPage({ params }: PageProps) {
     return res.json();
   };
 
+  /**
+   * Take in the steps the playbook has gained. Additive only - nothing already
+   * under way is touched, which is the point of the version being pinned.
+   */
+  const syncPlaybook = async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch(`/api/projects/${id}/playbook/sync`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        await fetchPlaybook();
+        await fetchCounts();
+      }
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const fetchPlaybook = async () => {
     try {
       const res = await fetch(`/api/projects/${id}/playbook`);
@@ -210,6 +235,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
       const data = await res.json();
       setPlaybook(data.playbook);
       setPlaybookPhases(data.phases || []);
+      setPlaybookDrift(data.drift ?? null);
     } catch {
       // The native phases still render; the playbook is additive.
     }
@@ -718,6 +744,38 @@ export default function ProjectDetailPage({ params }: PageProps) {
         <div>
           {activeTab === "project-mgmt" && (
             <>
+              {playbookDrift && (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-amber-900">
+                      This plan follows version {playbook?.version}. The
+                      playbook is now on version {playbookDrift.currentVersion}.
+                    </p>
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      {playbookDrift.newSteps > 0
+                        ? `${playbookDrift.newSteps} step${
+                            playbookDrift.newSteps === 1 ? " has" : "s have"
+                          } been added since. Bringing them in adds them here and changes nothing already under way.`
+                        : "No steps were added — only the rules changed, and work already begun keeps the rules it started with."}
+                    </p>
+                  </div>
+                  {playbookDrift.newSteps > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => void syncPlaybook()}
+                      disabled={syncing}
+                      className="shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-300 bg-white text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                    >
+                      {syncing
+                        ? "Bringing in…"
+                        : `Bring in ${playbookDrift.newSteps} step${
+                            playbookDrift.newSteps === 1 ? "" : "s"
+                          }`}
+                    </button>
+                  )}
+                </div>
+              )}
+
               {playbook && (
                 <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
                   <p className="text-sm font-medium text-blue-900">

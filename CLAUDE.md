@@ -415,6 +415,30 @@ The refusals carry `reason: "assignee_fixed_by_playbook"` or
 out, so the server is the only thing enforcing this — a caller finds out by
 being refused, with a message that says why.
 
+### Drift between a plan and its playbook
+A run pins its version, so a plan under way is never rewritten. Saying nothing
+about that left people wondering why an edit had no effect, so the Plan tab
+reports which version it follows and how many steps it would gain.
+
+`procedure_step_definitions.step_key` is what makes that answerable. Editing a
+playbook marks every step `is_current = false` and inserts fresh rows, so
+nothing connected v3's "Layout Drawings" to v1's — they were unrelated rows
+sharing a title. The key is carried across revisions by the editor, so a step
+keeps its identity while its rules change.
+
+`POST /api/projects/[id]/playbook/sync` is **additive and nothing else**. It
+creates tasks for steps the plan is missing and leaves every existing step
+exactly as it is, whatever the playbook now says about it. Rewriting the rules
+of work already begun is what the pinning exists to prevent; a sync that
+quietly did it would be worse than no sync.
+
+`create_step_requirements(task_id, step_id)` holds the gates a step puts on its
+task, and **both** `start_procedure_run` and the sync call it. It was inline in
+the run function; a second copy would have drifted the moment either changed,
+and a step that gates on a run but not on a sync is the kind of inconsistency
+nobody notices until it matters. It is not idempotent — call it once per new
+task.
+
 ### A playbook has a life: draft, committed, retired
 `procedure_definitions.status` replaced `is_active` doing two jobs badly —
 "inactive" could not distinguish never-finished from taken-out-of-service.
