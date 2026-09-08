@@ -82,6 +82,8 @@ export interface PlaybookStepDefinition {
   action_type: PlaybookActionType;
   form_schema?: Record<string, unknown> | null;
   required_upload_types?: string[] | null;
+  /** For a checklist step: each item becomes a requirement to tick. */
+  checklist_items?: string[] | null;
   approval_role?: string | null;
   /** The person this step is for. Wins over assign_to_role. */
   assign_to_user?: string | null;

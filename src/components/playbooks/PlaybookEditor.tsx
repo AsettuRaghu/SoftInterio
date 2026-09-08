@@ -36,6 +36,7 @@ interface DraftStep {
   approval_role: string | null;
   /** What must be attached before an upload step can complete. */
   required_upload_types: string[] | null;
+  checklist_items: string[] | null;
   /** May run alongside its siblings instead of waiting for them. */
   allow_parallel: boolean;
   /** Skipping has to be explained. */
@@ -102,6 +103,7 @@ const blankStep = (): DraftStep => ({
   instructions: null,
   approval_role: null,
   required_upload_types: null,
+  checklist_items: null,
   allow_parallel: false,
   skip_requires_reason: true,
 });
@@ -199,6 +201,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
             instructions: t.instructions,
             approval_role: t.approval_role ?? null,
             required_upload_types: t.required_upload_types ?? null,
+            checklist_items: t.checklist_items ?? null,
             allow_parallel: t.allow_parallel === true,
             skip_requires_reason: t.skip_requires_reason !== false,
           });
@@ -217,6 +220,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
               instructions: c.instructions,
               approval_role: c.approval_role ?? null,
               required_upload_types: c.required_upload_types ?? null,
+              checklist_items: c.checklist_items ?? null,
               allow_parallel: c.allow_parallel === true,
               skip_requires_reason: c.skip_requires_reason !== false,
             });
@@ -868,6 +872,33 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                               placeholder="drawing, photo — leave blank for any"
                               className="flex-1 px-1.5 py-0.5 border border-slate-200 rounded"
                             />
+                          </span>
+                        )}
+                        {step.action_type === "checklist" && (
+                          <span className="flex items-center gap-1.5 flex-1">
+                            <span className="text-emerald-600 whitespace-nowrap">
+                              must tick:
+                            </span>
+                            <input
+                              type="text"
+                              value={(step.checklist_items ?? []).join(", ")}
+                              onChange={(e) =>
+                                update(i, {
+                                  checklist_items: e.target.value
+                                    .split(",")
+                                    .map((v) => v.trim())
+                                    .filter(Boolean),
+                                })
+                              }
+                              placeholder="comma separated, e.g. site cleared, power on, access granted"
+                              className="flex-1 px-1.5 py-0.5 border border-slate-200 rounded"
+                            />
+                          </span>
+                        )}
+                        {step.action_type === "meeting" && (
+                          <span className="text-violet-600">
+                            asks for confirmation that the meeting took place —
+                            it does not book anything
                           </span>
                         )}
                         {step.action_type === "approval" && (

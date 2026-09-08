@@ -358,13 +358,30 @@ satisfied:
   when a matching file is attached.
 - **approval** — one requirement naming `approval_role`, satisfied by
   `sign_off_requirement`.
+- **checklist** — one requirement per entry in `checklist_items`, each ticked
+  off through `sign_off_requirement`. A checklist step with no items gates
+  nothing, which is the honest outcome.
+- **meeting** — asks for confirmation that the meeting took place, typed
+  `manual` because that is what sign-off accepts. It does **not** book
+  anything; booking is the calendar's job.
 - **form** — a requirement **only if `form_schema` is set**, and nothing can
-  set it, so a form step behaves as manual today.
-- **checklist, meeting, assignment, handover** — write no requirement at all.
-  They colour the chip and nothing more. A meeting step does **not** create a
-  calendar event.
+  set it, so a form step still behaves as manual.
+- **assignment, handover** — write no requirement. Neither has an obvious gate
+  and inventing one would be worse than an honest label.
 
 Do not describe these as gates in the UI until they are one.
+
+### The playbook's assignment decisions hold at run time
+`PATCH /api/tasks/[id]` refuses to move an assignee away from what the playbook
+fixed. A step naming `assign_to_user` cannot be reassigned; a step naming only
+`assign_to_role` can go to anyone holding that role and nobody else; a step
+naming neither is free, which is most of them. **`tasks.edit_all`** (Admin,
+Manager, Owner) overrides all of it.
+
+The refusals carry `reason: "assignee_fixed_by_playbook"` or
+`"assignee_role_fixed_by_playbook"`. The Plan tab does not yet grey the field
+out, so the server is the only thing enforcing this — a caller finds out by
+being refused, with a message that says why.
 
 ### Configure the playbook, not the run
 `start_procedure_run` already does more than the builder used to let you say.

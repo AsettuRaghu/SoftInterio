@@ -256,8 +256,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 // PATCH /api/tasks/[id] - Update task
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
-    // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -272,13 +271,76 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { data: existingTask, error: fetchError } = await supabase
       .from("tasks")
       .select(
-        "id, title, status, priority, due_date, description, is_from_template, template_id, assigned_to, created_by, related_type, related_id"
+        "id, title, status, priority, due_date, description, is_from_template, template_id, assigned_to, created_by, related_type, related_id, procedure_step_id"
       )
       .eq("id", id)
       .single();
 
     if (fetchError || !existingTask) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    /**
+     * What the playbook fixed, the project cannot quietly undo.
+     *
+     * A step that names a person is a decision made once, deliberately, when
+     * the process was written - the point of a template is that not everything
+     * is up for renegotiation on every project. A step that names only a role
+     * leaves the person open but keeps the discipline: whoever ends up with it
+     * has to actually be a project manager.
+     *
+     * A step that names neither is free, which is most of them.
+     *
+     * tasks.edit_all is the way round it, held by Admin, Manager and Owner.
+     */
+    if (
+      "assigned_to" in body &&
+      body.assigned_to !== existingTask.assigned_to &&
+      existingTask.procedure_step_id &&
+      !guard.permissions.has("tasks.edit_all")
+    ) {
+      const { data: step } = await supabase
+        .from("procedure_step_definitions")
+        .select("assign_to_user, assign_to_role")
+        .eq("id", existingTask.procedure_step_id)
+        .maybeSingle();
+
+      if (step?.assign_to_user) {
+        return NextResponse.json(
+          {
+            error:
+              "The playbook assigns this step to a specific person. Ask someone who can override the playbook to change it.",
+            reason: "assignee_fixed_by_playbook",
+          },
+          { status: 403 }
+        );
+      }
+
+      if (step?.assign_to_role && body.assigned_to) {
+        const { data: holdsRole } = await supabase
+          .from("user_roles")
+          .select("user_id, role:roles!inner(slug)")
+          .eq("user_id", body.assigned_to);
+
+        const ok = (holdsRole ?? []).some((r: any) => {
+          const role = Array.isArray(r.role) ? r.role[0] : r.role;
+          return role?.slug === step.assign_to_role;
+        });
+
+        if (!ok) {
+          return NextResponse.json(
+            {
+              error: `The playbook reserves this step for the ${step.assign_to_role.replace(
+                /_/g,
+                " "
+              )} role. Choose someone who holds it.`,
+              reason: "assignee_role_fixed_by_playbook",
+              requiredRole: step.assign_to_role,
+            },
+            { status: 403 }
+          );
+        }
+      }
     }
 
     // Status changes go through task_transition() so that transition rules,

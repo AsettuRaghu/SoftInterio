@@ -199,6 +199,10 @@ export async function replaceSteps(
               ? step.required_upload_types
               : null,
           approval_role: step.approval_role || null,
+          checklist_items:
+            step.action_type === "checklist" && step.checklist_items?.length
+              ? step.checklist_items
+              : null,
           // A named person is an explicit decision; the role is a fallback the
           // run only resolves when exactly one user holds it.
           assign_to_user: step.assign_to_user || null,
