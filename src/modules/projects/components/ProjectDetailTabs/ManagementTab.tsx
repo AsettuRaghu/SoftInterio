@@ -42,6 +42,41 @@ interface ProjectMgmtTabProps {
 }
 
 // Status badge component
+/**
+ * Expected against actual effort.
+ *
+ * This is the pair the playbook is written for: hours are what a step is
+ * estimated in, and hours are what the work log adds up to, so the difference
+ * is where a process is quietly costing more than anyone planned. Shown amber
+ * once it is over, because an overrun that reads the same as an underrun tells
+ * nobody anything.
+ */
+function HoursSpent({
+  estimated,
+  actual,
+}: {
+  estimated?: number;
+  actual?: number;
+}) {
+  if (estimated == null && actual == null) {
+    return <span className="text-slate-400">—</span>;
+  }
+  const over = estimated != null && actual != null && actual > estimated;
+  return (
+    <span
+      className={`whitespace-nowrap ${over ? "text-amber-600 font-medium" : ""}`}
+      title={
+        over
+          ? `Over the estimate by ${Math.round((actual! - estimated!) * 10) / 10}h`
+          : "Hours logged against hours expected"
+      }
+    >
+      {actual != null ? `${actual}h` : "—"}
+      <span className="text-slate-400"> / {estimated != null ? `${estimated}h` : "—"}</span>
+    </span>
+  );
+}
+
 const StatusBadge = ({ status }: { status: string }) => {
   const config: Record<string, { bg: string; text: string; label: string }> = {
     not_started: {
@@ -623,13 +658,14 @@ export default function ManagementTab({
       {/* Table */}
       <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
         {/* Table Header */}
-        <div className="grid grid-cols-[32px_minmax(200px,1.5fr)_minmax(100px,1fr)_100px_100px_minmax(120px,1fr)_minmax(120px,1fr)_90px] gap-3 px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs font-medium text-slate-500 uppercase tracking-wide">
+        <div className="grid grid-cols-[32px_minmax(200px,1.5fr)_minmax(100px,1fr)_100px_100px_minmax(120px,1fr)_90px_minmax(120px,1fr)_90px] gap-3 px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs font-medium text-slate-500 uppercase tracking-wide">
           <div></div>
           <div>Name</div>
           <div>Assignees</div>
           <div>Status</div>
           <div>Progress</div>
           <div>Planned Dates</div>
+          <div title="Hours logged against hours expected">Hours</div>
           <div>Actual Dates</div>
           <div className="text-center">Actions</div>
         </div>
@@ -648,7 +684,7 @@ export default function ManagementTab({
               <div key={phase.id}>
                 {/* Phase Row */}
                 <div
-                  className={`grid grid-cols-[32px_minmax(200px,1.5fr)_minmax(100px,1fr)_100px_100px_minmax(120px,1fr)_minmax(120px,1fr)_90px] gap-3 px-4 py-3 items-center border-b border-slate-100 hover:bg-slate-50 cursor-pointer ${
+                  className={`grid grid-cols-[32px_minmax(200px,1.5fr)_minmax(100px,1fr)_100px_100px_minmax(120px,1fr)_90px_minmax(120px,1fr)_90px] gap-3 px-4 py-3 items-center border-b border-slate-100 hover:bg-slate-50 cursor-pointer ${
                     phase.status === "in_progress"
                       ? "bg-blue-50/30"
                       : phase.status === "completed"
@@ -724,6 +760,14 @@ export default function ManagementTab({
                     )}
                   </div>
 
+                  {/* Hours: logged against expected */}
+                  <div className="text-xs text-slate-600">
+                    <HoursSpent
+                      estimated={phase.estimated_hours}
+                      actual={phase.actual_hours}
+                    />
+                  </div>
+
                   {/* Actual Dates */}
                   <div className="text-xs text-slate-600">
                     {phase.actual_start_date || phase.actual_end_date ? (
@@ -764,7 +808,7 @@ export default function ManagementTab({
                           onClick={() =>
                             onSubPhaseClick?.(phase.id, subPhase.id)
                           }
-                          className={`grid grid-cols-[32px_minmax(200px,1.5fr)_minmax(100px,1fr)_100px_100px_minmax(120px,1fr)_minmax(120px,1fr)_90px] gap-3 px-4 py-2.5 items-center border-b border-slate-100 hover:bg-white/80 cursor-pointer ${
+                          className={`grid grid-cols-[32px_minmax(200px,1.5fr)_minmax(100px,1fr)_100px_100px_minmax(120px,1fr)_90px_minmax(120px,1fr)_90px] gap-3 px-4 py-2.5 items-center border-b border-slate-100 hover:bg-white/80 cursor-pointer ${
                             subPhase.status === "completed"
                               ? "bg-green-50/20"
                               : subPhase.status === "in_progress"
@@ -835,6 +879,14 @@ export default function ManagementTab({
                                 Not planned
                               </span>
                             )}
+                          </div>
+
+                          {/* Hours: logged against expected */}
+                          <div className="text-xs text-slate-600">
+                            <HoursSpent
+                              estimated={subPhase.estimated_hours}
+                              actual={subPhase.actual_hours}
+                            />
                           </div>
 
                           {/* Actual Dates */}

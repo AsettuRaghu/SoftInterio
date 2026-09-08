@@ -37,6 +37,10 @@ export interface PlaybookTask {
   assigned_to?: string | null;
   /** When it actually began. Set by the transition, not by the planner. */
   started_at?: string | null;
+  /** Expected effort, written into the playbook. */
+  estimated_hours?: number | null;
+  /** Effort actually logged. The pair is how overruns become visible. */
+  actual_hours?: number | null;
   completed_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -94,6 +98,19 @@ function toSubPhaseStatus(taskStatus: string): ProjectSubPhaseStatus {
 
 const COUNTS_AS_DONE = new Set(["completed", "skipped", "cancelled"]);
 
+/** A phase's effort is its own plus its steps'. Undefined when nothing has any. */
+function sumHours(
+  root: PlaybookTask,
+  children: PlaybookTask[],
+  field: "estimated_hours" | "actual_hours"
+): number | undefined {
+  const values = [root, ...children]
+    .map((t) => t[field])
+    .filter((v): v is number => typeof v === "number");
+  if (values.length === 0) return undefined;
+  return Math.round(values.reduce((a, b) => a + b, 0) * 10) / 10;
+}
+
 export interface PlaybookToPhasesArgs {
   projectId: string;
   tasks: PlaybookTask[];
@@ -140,6 +157,8 @@ export function playbookRunToPhases({
       progress_mode: "manual",
       assigned_to: child.assigned_to ?? undefined,
       display_order: childIndex,
+      estimated_hours: child.estimated_hours ?? undefined,
+      actual_hours: child.actual_hours ?? undefined,
       planned_start_date: child.start_date ?? undefined,
       planned_end_date: child.due_date ?? undefined,
       due_date: child.due_date ?? undefined,
@@ -176,6 +195,10 @@ export function playbookRunToPhases({
       display_order: index,
       // start_date is the plan; started_at is what happened. Reading only the
       // second made a planned start look as though saving had erased it.
+      // A parent's own hours plus everything under it, so a phase reports the
+      // effort of the work it contains rather than of its header row.
+      estimated_hours: sumHours(root, children, "estimated_hours"),
+      actual_hours: sumHours(root, children, "actual_hours"),
       planned_start_date: root.start_date ?? undefined,
       planned_end_date: root.due_date ?? undefined,
       actual_start_date: root.started_at ?? undefined,

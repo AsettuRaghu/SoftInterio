@@ -538,6 +538,10 @@ export interface ProjectPhase {
   actual_start_date?: string;
   actual_end_date?: string;
   estimated_duration_hours?: number; // Estimated duration in hours (allows for quick phases)
+  /** What this was expected to take. */
+  estimated_hours?: number;
+  /** What it actually took, from logged work. Compared against the estimate. */
+  actual_hours?: number;
 
   notes?: string;
   created_at: string;
@@ -577,6 +581,10 @@ export interface ProjectSubPhase {
   actual_start_date?: string;
   actual_end_date?: string;
   estimated_duration_hours?: number; // Duration in hours (allows for quick sub-phases)
+  /** What this was expected to take. */
+  estimated_hours?: number;
+  /** What it actually took, from logged work. */
+  actual_hours?: number;
   due_date?: string;
 
   completed_at?: string;

@@ -61,7 +61,7 @@ export async function GET(
     const { data: tasks, error: tasksError } = await supabase
       .from("tasks")
       .select(
-        "id, title, status, parent_task_id, procedure_step_id, start_date, due_date, assigned_to, started_at, completed_at, created_at, updated_at"
+        "id, title, status, parent_task_id, procedure_step_id, start_date, due_date, assigned_to, started_at, completed_at, estimated_hours, actual_hours, created_at, updated_at"
       )
       .eq("procedure_run_id", run.id);
 

@@ -371,6 +371,26 @@ satisfied:
 
 Do not describe these as gates in the UI until they are one.
 
+### Progress and hours come from the playbook
+`calculate_project_progress` answers from the **active playbook run** first and
+falls back to phases. That order matters: a converted project can have both —
+`PRJ_20251219_0001` has four phase rows and a live run — and the Plan tab
+prefers the run, so reading phases first would have put two different numbers
+for the same project on one screen.
+
+A phase trigger cannot fire for a project with no phase rows, so
+`trg_project_progress_from_task` recalculates from the tasks a run creates. It
+has no `WHEN` clause — one cannot reference `NEW` and `OLD` across insert and
+delete — and the function returns early for the tasks that belong to no run,
+which is most of them.
+
+Progress is **derived, never stored by hand**. A step is settled when it is
+completed, skipped or cancelled, which is the same rule the tree draws with.
+
+The Plan tab shows **hours logged against hours expected**, amber once over. A
+phase sums its own and its steps'. This is the pair the hours change was for:
+it is where a process quietly costs more than anyone planned.
+
 ### A playbook step is written in hours
 One number: how long the step should take. It is what `tasks.actual_hours` —
 derived from work sessions — gets compared against, which is the only way a
