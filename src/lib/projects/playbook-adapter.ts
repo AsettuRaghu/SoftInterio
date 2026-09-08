@@ -183,3 +183,58 @@ export function playbookRunToPhases({
     };
   });
 }
+
+/**
+ * The mapping above, run backwards.
+ *
+ * The Plan tab edits what it is shown. When what it is shown came from a
+ * playbook, the node is a task and the edit has to land on the task - the
+ * phase routes look up phase rows and answer "Not found" for a task id.
+ */
+export function toTaskStatus(status: string): string {
+  switch (status) {
+    case "not_started":
+      return "todo";
+    case "in_progress":
+    case "on_hold":
+    case "completed":
+    case "skipped":
+    case "cancelled":
+    case "blocked":
+      return status;
+    default:
+      return "todo";
+  }
+}
+
+/** What the Plan tab can change on a node, in task vocabulary. */
+export interface PlaybookNodeUpdate {
+  status?: string;
+  start_date?: string | null;
+  due_date?: string | null;
+  assigned_to?: string | null;
+}
+
+/**
+ * Translates a phase-shaped edit into a task-shaped one. Only the fields the
+ * task API actually accepts are carried; a phase edit form offers a few things
+ * a task has no home for, and silently dropping them here is better than
+ * sending fields that would be ignored anyway.
+ */
+export function phaseEditToTaskUpdate(edit: {
+  status?: string;
+  planned_start_date?: string | null;
+  planned_end_date?: string | null;
+  due_date?: string | null;
+  assigned_to?: string | null;
+}): PlaybookNodeUpdate {
+  const update: PlaybookNodeUpdate = {};
+  if (edit.status) update.status = toTaskStatus(edit.status);
+  if (edit.planned_start_date !== undefined)
+    update.start_date = edit.planned_start_date || null;
+  const end = edit.planned_end_date ?? edit.due_date;
+  if (end !== undefined) update.due_date = end || null;
+  if (edit.assigned_to !== undefined)
+    update.assigned_to = edit.assigned_to || null;
+  return update;
+}

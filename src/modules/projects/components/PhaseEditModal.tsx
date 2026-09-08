@@ -29,6 +29,14 @@ interface PhaseEditModalProps {
   projectId: string;
   onClose: () => void;
   onSave: () => void;
+  /**
+   * Where to send the edit instead of the phase route.
+   *
+   * The Plan tab draws playbook steps with this same modal, and a playbook
+   * step is a task - the phase route resolves phase rows and answers "Not
+   * found" for a task id. When this is given, it owns the save.
+   */
+  onSaveOverride?: (updates: Record<string, any>) => Promise<void>;
 }
 
 // Status options for phase
@@ -71,6 +79,7 @@ export default function PhaseEditModal({
   projectId,
   onClose,
   onSave,
+  onSaveOverride,
 }: PhaseEditModalProps) {
   // Form state
   const [status, setStatus] = useState<ProjectPhaseStatus>("not_started");
@@ -190,18 +199,22 @@ export default function PhaseEditModal({
           : undefined,
       };
 
-      const response = await fetch(
-        `/api/projects/${projectId}/phases/${phase.id}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updates),
-        }
-      );
+      if (onSaveOverride) {
+        await onSaveOverride(updates);
+      } else {
+        const response = await fetch(
+          `/api/projects/${projectId}/phases/${phase.id}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updates),
+          }
+        );
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to update phase");
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to update phase");
+        }
       }
 
       onSave();

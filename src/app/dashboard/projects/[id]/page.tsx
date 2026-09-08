@@ -42,6 +42,7 @@ import {
 } from "@/modules/projects/components";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
+import { phaseEditToTaskUpdate } from "@/lib/projects/playbook-adapter";
 import { formatCurrency as formatCurrencyUtil } from "@/modules/projects/utils";
 import { SpacesTab } from "@/components/property/SpacesTab";
 import { buttonVariants } from "@/components/ui/Button";
@@ -168,6 +169,39 @@ export default function ProjectDetailPage({ params }: PageProps) {
     void fetchTeamMembers();
     void fetchPlaybook();
   }, [id]);
+
+  /**
+   * Every id in the rendered playbook, phases and steps alike.
+   *
+   * The Plan tab draws phases and playbook steps with the same component, so
+   * before saving an edit it has to know which one it is looking at: a phase
+   * id belongs to the phase routes, a playbook id is a task.
+   */
+  const playbookNodeIds = React.useMemo(() => {
+    const ids = new Set<string>();
+    for (const phase of playbookPhases) {
+      ids.add(phase.id);
+      for (const step of phase.sub_phases ?? []) ids.add(step.id);
+    }
+    return ids;
+  }, [playbookPhases]);
+
+  const savePlaybookNode = async (
+    nodeId: string,
+    edit: Parameters<typeof phaseEditToTaskUpdate>[0],
+  ) => {
+    const res = await fetch(`/api/tasks/${nodeId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(phaseEditToTaskUpdate(edit)),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || "Could not update this step");
+    }
+    await fetchPlaybook();
+    return res.json();
+  };
 
   const fetchPlaybook = async () => {
     try {
@@ -374,6 +408,12 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
       const newStatus = statusMap[action];
       if (!newStatus) return null;
+
+      // A playbook step is a task. Sending it to the sub-phase route was the
+      // "Not found" - that route resolves phase rows, and a task id is not one.
+      if (playbookNodeIds.has(subPhaseId)) {
+        return await savePlaybookNode(subPhaseId, { status: newStatus });
+      }
 
       const response = await fetch(
         `/api/projects/${id}/phases/${phaseId}/sub-phases/${subPhaseId}`,
@@ -854,6 +894,12 @@ export default function ProjectDetailPage({ params }: PageProps) {
             onClose={() => setShowPhaseEditModal(false)}
             phase={editingPhase}
             projectId={project.id}
+            onSaveOverride={
+              editingPhase && playbookNodeIds.has(editingPhase.id)
+                ? (updates) =>
+                    savePlaybookNode(editingPhase.id, updates).then(() => {})
+                : undefined
+            }
             onSave={() => {
               fetchProject();
               setShowPhaseEditModal(false);
@@ -870,6 +916,16 @@ export default function ProjectDetailPage({ params }: PageProps) {
             phaseId={editingSubPhase.phaseId}
             phaseName={editingSubPhase.phaseName}
             projectId={project.id}
+            onSaveOverride={
+              editingSubPhase.subPhase &&
+              playbookNodeIds.has(editingSubPhase.subPhase.id)
+                ? (updates) =>
+                    savePlaybookNode(
+                      editingSubPhase.subPhase!.id,
+                      updates,
+                    ).then(() => {})
+                : undefined
+            }
             onSave={() => {
               fetchProject();
               setShowSubPhaseEditModal(false);

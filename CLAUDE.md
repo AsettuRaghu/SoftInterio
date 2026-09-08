@@ -317,11 +317,20 @@ its child tasks to sub-phases, and the project Plan tab draws the 25-step
 the evidence the tree is a view. The Plan tab prefers a playbook where one
 exists and falls back to native phases.
 
+**A Plan node is a phase row or a task, and the difference decides where an
+edit goes.** The page keeps a `playbookNodeIds` set; anything in it is a task,
+so its edits go to `PATCH /api/tasks/[id]` rather than the phase routes.
+`PhaseEditModal` and `SubPhaseEditModal` take an `onSaveOverride` for this.
+Sending a task id to a phase route answers **"Not found"** — that is what the
+404 means, not a missing project.
+
+Statuses translate through `toTaskStatus` / `phaseEditToTaskUpdate` in the
+adapter: `not_started` is `todo`, planned start is `start_date`, planned end is
+`due_date`. Keep the mapping there rather than inline.
+
 **Do not build new workflow features on phase templates.** Still to port before
 the phase engine can go: phase dependencies, progress rollup, planned-vs-actual
-at phase level, and the payment milestone's `linked_phase_id`. Sub-phase
-start/complete/skip routes also still act on phase rows, so a playbook renders
-read-only.
+at phase level, and the payment milestone's `linked_phase_id`.
 
 A protected playbook is one SoftInterio ships; it cannot be edited in place,
 because that would change the process under every business using it. `Copy`

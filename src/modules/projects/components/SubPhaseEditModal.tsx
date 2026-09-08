@@ -49,6 +49,11 @@ interface SubPhaseEditModalProps {
   projectId: string;
   onClose: () => void;
   onSave: () => void;
+  /**
+   * Where to send the edit instead of the sub-phase route. A playbook step is
+   * a task, and the sub-phase route resolves phase rows.
+   */
+  onSaveOverride?: (updates: Record<string, any>) => Promise<void>;
 }
 
 // Status options for sub-phase (now includes on_hold)
@@ -98,6 +103,7 @@ export default function SubPhaseEditModal({
   projectId,
   onClose,
   onSave,
+  onSaveOverride,
 }: SubPhaseEditModalProps) {
   // Form state
   const [status, setStatus] = useState<ProjectSubPhaseStatus>("not_started");
@@ -300,18 +306,22 @@ export default function SubPhaseEditModal({
         updates.completed_at = new Date().toISOString();
       }
 
-      const response = await fetch(
-        `/api/projects/${projectId}/phases/${phaseId}/sub-phases/${subPhase.id}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updates),
-        }
-      );
+      if (onSaveOverride) {
+        await onSaveOverride(updates);
+      } else {
+        const response = await fetch(
+          `/api/projects/${projectId}/phases/${phaseId}/sub-phases/${subPhase.id}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updates),
+          }
+        );
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to update sub-phase");
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to update sub-phase");
+        }
       }
 
       onSave();
