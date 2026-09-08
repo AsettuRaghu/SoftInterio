@@ -26,6 +26,10 @@ interface DraftStep {
   is_required: boolean;
   can_skip: boolean;
   assign_to_role: string | null;
+  /** The person who does this step, chosen when the playbook is written. */
+  assign_to_user: string | null;
+  priority: string;
+  estimated_hours: number | null;
   /** How long the step takes. Dates are derived from this, not typed. */
   duration_days: number | null;
   instructions: string | null;
@@ -92,6 +96,9 @@ const blankStep = (): DraftStep => ({
   // work complete that never happened.
   can_skip: true,
   assign_to_role: null,
+  assign_to_user: null,
+  priority: "medium",
+  estimated_hours: null,
   duration_days: null,
   instructions: null,
   approval_role: null,
@@ -114,7 +121,11 @@ export function PlaybookBuilderModal({
   // says the playbook suits either.
   const [tenantType, setTenantType] = useState<string>("");
   const [steps, setSteps] = useState<DraftStep[]>([blankStep()]);
+  // Naming a person is the point of configuring a playbook once: adopt it,
+  // start it, and the work is already on the right desks.
+  const [people, setPeople] = useState<{ id: string; name: string }[]>([]);
   const [enforceOrder, setEnforceOrder] = useState(false);
+  const [isActive, setIsActive] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -126,6 +137,7 @@ export function PlaybookBuilderModal({
     setAppliesTo("project");
     setSteps([blankStep()]);
     setTenantType("");
+    setIsActive(true);
     setEnforceOrder(false);
     setError(null);
     setExisting(null);
@@ -153,6 +165,7 @@ export function PlaybookBuilderModal({
         setAppliesTo(data.playbook.applies_to);
         setTenantType(data.playbook.tenant_type ?? "");
         setEnforceOrder(data.playbook.enforce_order === true);
+        setIsActive(data.playbook.is_active !== false);
 
         // Flatten: parents in order, each followed by its children, so the
         // editor's parent_index refers to a position in this same array.
@@ -169,6 +182,9 @@ export function PlaybookBuilderModal({
             is_required: t.is_required,
             can_skip: t.can_skip,
             assign_to_role: t.assign_to_role,
+            assign_to_user: t.assign_to_user ?? null,
+            priority: t.priority || "medium",
+            estimated_hours: t.estimated_hours ?? null,
             duration_days: t.duration_days ?? t.relative_due_days,
             instructions: t.instructions,
             approval_role: t.approval_role ?? null,
@@ -184,6 +200,9 @@ export function PlaybookBuilderModal({
               is_required: c.is_required,
               can_skip: c.can_skip,
               assign_to_role: c.assign_to_role,
+              assign_to_user: c.assign_to_user ?? null,
+              priority: c.priority || "medium",
+              estimated_hours: c.estimated_hours ?? null,
               duration_days: c.duration_days ?? c.relative_due_days,
               instructions: c.instructions,
               approval_role: c.approval_role ?? null,
@@ -204,6 +223,23 @@ export function PlaybookBuilderModal({
     setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
 
   const addStep = () => setSteps((prev) => [...prev, blankStep()]);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    void (async () => {
+      try {
+        const res = await fetch("/api/team/members");
+        const data = await res.json();
+        if (res.ok && data.success && data.data) {
+          setPeople(
+            data.data.map((m: any) => ({ id: m.id, name: m.name })),
+          );
+        }
+      } catch {
+        // Without the list a step simply cannot name anyone yet.
+      }
+    })();
+  }, [isOpen]);
 
   const removeStep = (i: number) =>
     setSteps((prev) => {
@@ -344,6 +380,7 @@ export function PlaybookBuilderModal({
             applies_to: appliesTo,
         tenant_type: tenantType || null,
             enforce_order: enforceOrder,
+            is_active: isActive,
             steps: cleaned,
           }),
         }
@@ -468,6 +505,22 @@ export function PlaybookBuilderModal({
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
+
+          <label className="flex items-start gap-2 px-3 py-2 rounded-md bg-slate-50 border border-slate-200 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isActive}
+              onChange={(e) => setIsActive(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span className="text-xs text-slate-600">
+              <span className="font-medium text-slate-700">Ready to use</span>
+              <span className="block text-slate-500">
+                Turn this off while you are still writing it. An inactive
+                playbook cannot be started on anything.
+              </span>
+            </span>
+          </label>
 
           <label className="flex items-start gap-2 px-3 py-2 rounded-md bg-slate-50 border border-slate-200 cursor-pointer">
             <input
@@ -607,6 +660,54 @@ export function PlaybookBuilderModal({
                             className="w-12 px-1.5 py-0.5 border border-slate-200 rounded text-center"
                           />
                           <span>days</span>
+                        </span>
+                        <select
+                          value={step.assign_to_user ?? ""}
+                          onChange={(e) =>
+                            update(i, {
+                              assign_to_user: e.target.value || null,
+                            })
+                          }
+                          title="Who does this step. Set it here and the work arrives owned."
+                          className="px-1.5 py-0.5 border border-slate-200 rounded bg-white max-w-[9rem]"
+                        >
+                          <option value="">Unassigned</option>
+                          {people.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={step.priority}
+                          onChange={(e) => update(i, { priority: e.target.value })}
+                          title="Priority of the task this step becomes"
+                          className="px-1.5 py-0.5 border border-slate-200 rounded bg-white"
+                        >
+                          {["low", "medium", "high", "urgent"].map((v) => (
+                            <option key={v} value={v}>
+                              {v}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            step={0.5}
+                            value={step.estimated_hours ?? ""}
+                            onChange={(e) =>
+                              update(i, {
+                                estimated_hours: e.target.value
+                                  ? Number(e.target.value)
+                                  : null,
+                              })
+                            }
+                            placeholder="—"
+                            title="Effort in hours, carried onto the task"
+                            className="w-12 px-1.5 py-0.5 border border-slate-200 rounded text-center"
+                          />
+                          <span>hrs</span>
                         </span>
                         <label className="flex items-center gap-1 cursor-pointer">
                           <input

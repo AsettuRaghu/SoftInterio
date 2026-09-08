@@ -196,6 +196,9 @@ export async function replaceSteps(
               ? step.required_upload_types
               : null,
           approval_role: step.approval_role || null,
+          // A named person is an explicit decision; the role is a fallback the
+          // run only resolves when exactly one user holds it.
+          assign_to_user: step.assign_to_user || null,
           assign_to_role: step.assign_to_role || null,
           duration_days: step.duration_days ?? null,
           // Kept in step with the new field so anything still reading the old

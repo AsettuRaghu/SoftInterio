@@ -79,6 +79,8 @@ export interface PlaybookStepDefinition {
   form_schema?: Record<string, unknown> | null;
   required_upload_types?: string[] | null;
   approval_role?: string | null;
+  /** The person this step is for. Wins over assign_to_role. */
+  assign_to_user?: string | null;
   assign_to_role?: string | null;
   /** How long the step takes; dates are derived from it. */
   duration_days?: number | null;

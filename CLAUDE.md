@@ -348,6 +348,29 @@ because that would change the process under every business using it. `Copy`
 takes an unprotected, inactive, version-1 copy owned by the tenant. That is the
 mechanism behind "we propose the practice, you decide how you work".
 
+### Configure the playbook, not the run
+`start_procedure_run` already does more than the builder used to let you say.
+It resolves an assignee, carries `priority` and `estimated_hours` onto the
+task, computes each due date from `duration_days`, and honours `allow_parallel`
+when scheduling. The point of a playbook is that all of that is decided once:
+adopt it, start it, and the work arrives owned, dated and prioritised.
+
+**A step names a person** through `assign_to_user`, which wins over
+`assign_to_role`. The role branch only resolves when exactly one active user
+holds it — a deliberate refusal to guess, which also means a role alone leaves
+steps unowned on any team with two designers. `assign_to_user` is
+`ON DELETE SET NULL`: someone leaving must not delete a step from every
+playbook that named them.
+
+`is_active` is a draft switch — an inactive playbook cannot be started.
+
+Still not expressible in a playbook, in the order worth fixing:
+**`form_schema`** (so a `form` step is no different from a manual one),
+**auto-attach** (nothing starts a playbook by itself, so adoption still needs a
+human), and **step-to-step dependencies** — there is only all-or-nothing
+`enforce_order` plus per-step `allow_parallel`, so "3D waits on layout sign-off
+while the ceiling quote runs alongside" cannot be said.
+
 ### Deleting a task, and why a playbook step cannot be
 Three rules, all in `DELETE /api/tasks/[id]`. Before 2026-09-08 there were
 none: the handler asked only for a session, so any signed-in user could
