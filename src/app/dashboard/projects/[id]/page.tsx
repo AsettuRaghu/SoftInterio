@@ -136,9 +136,11 @@ export default function ProjectDetailPage({ params }: PageProps) {
   // A playbook run rendered as a phase tree. This is the convergence proof:
   // if the tree can draw a playbook, it is a view rather than a second engine.
   const [playbook, setPlaybook] = useState<{
+    runId: string;
     name: string;
     version: number;
     stepCount: number;
+    startedAt: string | null;
   } | null>(null);
   const [playbookPhases, setPlaybookPhases] = useState<any[]>([]);
   // Set when the playbook has moved on since this plan adopted it.
@@ -213,6 +215,36 @@ export default function ProjectDetailPage({ params }: PageProps) {
    * Take in the steps the playbook has gained. Additive only - nothing already
    * under way is touched, which is the point of the version being pinned.
    */
+  /**
+   * Stop the playbook this plan is following.
+   *
+   * Settled steps keep the outcome they earned; open ones are cancelled, so
+   * the record of what was done survives. The control lives here because this
+   * is where the playbook is worked - it existed only inside an expanded run
+   * on the Tasks tab, which nobody would find.
+   */
+  const stopPlaybook = async () => {
+    const reason = window.prompt(
+      "Why is this playbook being stopped? Finished steps keep their outcome; anything still open is cancelled.",
+    );
+    if (reason === null) return;
+    if (!playbook?.runId) return;
+
+    const res = await fetch(`/api/playbooks/runs/${playbook.runId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "cancelled", reason }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      window.alert(data.error || "Could not stop the playbook");
+      return;
+    }
+    await fetchPlaybook();
+    await fetchCounts();
+    await fetchProject();
+  };
+
   const syncPlaybook = async () => {
     setSyncing(true);
     try {
@@ -784,9 +816,19 @@ export default function ProjectDetailPage({ params }: PageProps) {
                   </p>
                   <p className="text-xs text-blue-700 mt-0.5">
                     {playbookPhases.length} phases and {playbook.stepCount}{" "}
-                    steps, rendered by this tree without a single phase-template
-                    row. The tree is a view; the playbook is the engine.
+                    steps. Started{" "}
+                    {playbook.startedAt
+                      ? new Date(playbook.startedAt).toLocaleDateString()
+                      : "—"}
+                    .
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => void stopPlaybook()}
+                    className="mt-2 text-xs text-red-600 hover:underline"
+                  >
+                    Stop following this playbook
+                  </button>
                 </div>
               )}
               <ManagementTab
