@@ -439,6 +439,21 @@ and a step that gates on a run but not on a sync is the kind of inconsistency
 nobody notices until it matters. It is not idempotent — call it once per new
 task.
 
+### Saving a playbook is batched
+`replaceSteps` inserted one step at a time inside a two-pass loop, then one
+dependency at a time — about **forty-five sequential round trips** for a
+24-step playbook, which is long enough for someone to start doing something
+else mid-save.
+
+It is now one insert per pass plus one for the dependencies: five round trips.
+Parents still go before children because a child needs its parent's id, and
+inserted rows are matched back on `display_order`, which is unique within a
+definition, rather than trusting the order they come back in.
+
+The editor covers itself while a save is in flight. A save rebuilds every step
+from what was submitted, so an edit made while the request was in the air would
+be written over by the reply and look as though it was never typed.
+
 ### Saving a draft is not a version
 Only **revise** makes a version, and **commit** puts it into service. A save is
 a save.

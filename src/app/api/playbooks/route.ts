@@ -232,75 +232,104 @@ export async function replaceSteps(
   const allIdByIndex = new Map<number, string>();
   let order = 0;
 
-  // Two passes: top-level first, then children, so parents always exist.
+  /*
+   * Two passes, one round trip each.
+   *
+   * This inserted a step at a time - twenty-four steps and twenty-one
+   * dependencies meant about forty-five sequential requests, and a save that
+   * took long enough for someone to start doing something else in the middle
+   * of it. Parents still go before children, because a child needs its
+   * parent's id, but everything within a pass goes together.
+   *
+   * Rows come back matched on display_order, which is unique within a
+   * definition, rather than trusting the order they are returned in.
+   */
+  const usable = steps
+    .map((step: any, index: number) => ({ step, index }))
+    .filter(({ step }: any) => step?.title?.trim());
+
+  const hasParent = (step: any) =>
+    step.parent_index !== undefined &&
+    step.parent_index !== null &&
+    step.parent_index !== "";
+
+  const rowFor = (step: any, displayOrder: number, parentId: string | null) => ({
+    definition_id: definitionId,
+    parent_step_id: parentId,
+    ...(step.step_key ? { step_key: step.step_key } : {}),
+    title: step.title.trim(),
+    description: step.description?.trim() || null,
+    form_schema: step.form_schema ?? null,
+    instructions: step.instructions?.trim() || null,
+    display_order: displayOrder,
+    action_type: step.action_type || "manual",
+    required_upload_types:
+      step.action_type === "upload" && step.required_upload_types?.length
+        ? step.required_upload_types
+        : null,
+    checklist_items:
+      step.action_type === "checklist" && step.checklist_items?.length
+        ? step.checklist_items
+        : null,
+    approval_role: step.approval_role || null,
+    assign_to_user: step.assign_to_user || null,
+    assign_to_role: step.assign_to_role || null,
+    duration_days: step.duration_days ?? null,
+    // Kept in step with the new field so anything still reading the old column
+    // sees a consistent value rather than a stale one.
+    relative_due_days: null,
+    estimated_hours: step.estimated_hours ?? null,
+    priority: step.priority || "medium",
+    is_required: step.is_required !== false,
+    can_skip: step.can_skip === true,
+    skip_requires_reason: step.skip_requires_reason !== false,
+    allow_parallel: step.allow_parallel === true,
+  });
+
   for (const pass of [0, 1]) {
-    for (let i = 0; i < steps.length; i++) {
-      const step = steps[i];
-      const hasParent =
-        step.parent_index !== undefined &&
-        step.parent_index !== null &&
-        step.parent_index !== "";
-      if ((pass === 0) === hasParent) continue;
-      if (!step.title?.trim()) continue;
+    const batch: { index: number; row: ReturnType<typeof rowFor> }[] = [];
 
+    for (const { step, index } of usable) {
+      if ((pass === 0) === hasParent(step)) continue;
       order += 1;
-      const { data, error } = await supabase
-        .from("procedure_step_definitions")
-        .insert({
-          definition_id: definitionId,
-          parent_step_id: hasParent
-            ? idByIndex.get(Number(step.parent_index)) ?? null
-            : null,
-          // Carried from the previous version where the editor knew it;
-          // omitted for a new step, so the default generates one.
-          ...(step.step_key ? { step_key: step.step_key } : {}),
-          title: step.title.trim(),
-          description: step.description?.trim() || null,
-          // Carried through even though nothing edits it yet: dropping a field
-          // on save because the editor has no control for it is how a playbook
-          // quietly loses configuration.
-          form_schema: step.form_schema ?? null,
-          instructions: step.instructions?.trim() || null,
-          display_order: order,
-          action_type: step.action_type || "manual",
-          required_upload_types:
-            step.action_type === "upload" && step.required_upload_types?.length
-              ? step.required_upload_types
-              : null,
-          approval_role: step.approval_role || null,
-          checklist_items:
-            step.action_type === "checklist" && step.checklist_items?.length
-              ? step.checklist_items
-              : null,
-          // A named person is an explicit decision; the role is a fallback the
-          // run only resolves when exactly one user holds it.
-          assign_to_user: step.assign_to_user || null,
-          assign_to_role: step.assign_to_role || null,
-          duration_days: step.duration_days ?? null,
-          // Kept in step with the new field so anything still reading the old
-          // column sees a consistent value rather than a stale one.
-          relative_due_days: null,
-          estimated_hours: step.estimated_hours ?? null,
-          priority: step.priority || "medium",
-          is_required: step.is_required !== false,
-          can_skip: step.can_skip === true,
-          skip_requires_reason: step.skip_requires_reason !== false,
-          allow_parallel: step.allow_parallel === true,
-        })
-        .select("id")
-        .single();
+      const parentId = hasParent(step)
+        ? (idByIndex.get(Number(step.parent_index)) ?? null)
+        : null;
+      batch.push({ index, row: rowFor(step, order, parentId) });
+    }
 
-      if (error || !data) {
-        console.error("Error creating step:", error);
-        return { count: order, error: "Failed to save the steps" };
-      }
-      if (!hasParent) idByIndex.set(i, data.id);
-      allIdByIndex.set(i, data.id);
+    if (batch.length === 0) continue;
+
+    const { data, error } = await supabase
+      .from("procedure_step_definitions")
+      .insert(batch.map((b) => b.row))
+      .select("id, display_order");
+
+    if (error || !data) {
+      console.error("Error creating steps:", error);
+      return { count: order, error: "Failed to save the steps" };
+    }
+
+    const idByOrder = new Map<number, string>(
+      data.map((r: any) => [r.display_order as number, r.id as string])
+    );
+
+    for (const b of batch) {
+      const id = idByOrder.get(b.row.display_order);
+      if (!id) continue;
+      if (pass === 0) idByIndex.set(b.index, id);
+      allIdByIndex.set(b.index, id);
     }
   }
 
-  // A third pass, once every step exists and can be pointed at. Dependencies
-  // are given as indexes into the submitted list, the same way parents are.
+  // Dependencies, also in one go. They are given as indexes into the submitted
+  // list, the same way parents are.
+  const links: {
+    step_id: string;
+    depends_on_step_id: string;
+    dependency_type: string;
+  }[] = [];
+
   for (let i = 0; i < steps.length; i++) {
     const from = allIdByIndex.get(i);
     const wanted: unknown = steps[i]?.depends_on;
@@ -311,15 +340,19 @@ export async function replaceSteps(
       // Self-reference would never start, and the constraint would reject it
       // anyway; skipping keeps the save from failing over a stale index.
       if (!to || to === from) continue;
-
-      const { error } = await supabase
-        .from("procedure_step_dependencies")
-        .insert({ step_id: from, depends_on_step_id: to, dependency_type: "hard" });
-
-      if (error) {
-        console.error("Error saving a step dependency:", error);
-      }
+      links.push({
+        step_id: from,
+        depends_on_step_id: to,
+        dependency_type: "hard",
+      });
     }
+  }
+
+  if (links.length > 0) {
+    const { error } = await supabase
+      .from("procedure_step_dependencies")
+      .insert(links);
+    if (error) console.error("Error saving step dependencies:", error);
   }
 
   return { count: order };

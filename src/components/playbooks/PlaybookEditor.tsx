@@ -626,11 +626,26 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      {/*
+       * Nothing is editable while a save is in flight.
+       *
+       * A save rebuilds every step from what was submitted, so an edit made
+       * while the request was in the air would be written over by the reply
+       * and look as though it had never been typed.
+       */}
+      {isSaving && (
+        <div className="absolute inset-0 z-20 bg-white/60 cursor-wait flex items-start justify-center pt-24">
+          <span className="px-3 py-1.5 rounded-md bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
+            Saving…
+          </span>
+        </div>
+      )}
       {existing && existing.version > 1 && (
         <p className="text-xs text-slate-500">
-          Version {existing.version}. Editing the steps creates a new version;
-          runs already under way keep the rules they started with.
+          Version {existing.version}. Saving does not make a new version —
+          revise does, and plans already running keep the rules they started
+          with.
         </p>
       )}
 
@@ -1318,7 +1333,8 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
           <button
             type="button"
             onClick={onCancel}
-            className="px-3 py-1.5 text-sm font-medium rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            disabled={isSaving}
+            className="px-3 py-1.5 text-sm font-medium rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
             Cancel
           </button>
