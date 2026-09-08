@@ -197,7 +197,9 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
             assign_to_user: t.assign_to_user ?? null,
             priority: t.priority || "medium",
             estimated_hours: t.estimated_hours ?? null,
-            duration_days: t.duration_days ?? t.relative_due_days,
+            // Legacy; hours drive the date now. Cleared on edit so the
+            // number shown is the number that applies.
+            duration_days: null,
             instructions: t.instructions,
             approval_role: t.approval_role ?? null,
             required_upload_types: t.required_upload_types ?? null,
@@ -216,7 +218,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
               assign_to_user: c.assign_to_user ?? null,
               priority: c.priority || "medium",
               estimated_hours: c.estimated_hours ?? null,
-              duration_days: c.duration_days ?? c.relative_due_days,
+              duration_days: null,
               instructions: c.instructions,
               approval_role: c.approval_role ?? null,
               required_upload_types: c.required_upload_types ?? null,
@@ -751,34 +753,13 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                         </select>
                       </div>
 
-                      {/* Expected time. Days drive the due date; hours are the
-                          effort estimate carried onto the task. */}
+                      {/* One number, in hours. It is what actual_hours is
+                          measured against afterwards, which is how a team sees
+                          where the time really goes. The due date is derived
+                          from it. */}
                       <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
-                        <span
-                          className="text-slate-400"
-                          title="Days set the due date from when the step starts. Hours are the effort it takes, which is not the same thing - a two-hour drawing can still be due in five days."
-                        >
-                          Expected time
-                        </span>
                         <span className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            min={0}
-                            value={step.duration_days ?? ""}
-                            onChange={(e) =>
-                              update(i, {
-                                duration_days: e.target.value
-                                  ? Number(e.target.value)
-                                  : null,
-                              })
-                            }
-                            placeholder="—"
-                            title="Working days allowed. The due date is worked out from this."
-                            className="w-12 px-1.5 py-0.5 border border-slate-200 rounded text-center"
-                          />
-                          <span>days to finish</span>
-                        </span>
-                        <span className="flex items-center gap-1">
+                          <span className="text-slate-400">Expected</span>
                           <input
                             type="number"
                             min={0}
@@ -792,11 +773,21 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                               })
                             }
                             placeholder="—"
-                            title="Effort in hours, carried onto the task for planning."
-                            className="w-12 px-1.5 py-0.5 border border-slate-200 rounded text-center"
+                            title="How long this should take. Compared against the hours actually logged, so overruns show up."
+                            className="w-14 px-1.5 py-0.5 border border-slate-200 rounded text-center"
                           />
-                          <span>hrs of work</span>
+                          <span>hours to complete</span>
                         </span>
+                        {step.estimated_hours ? (
+                          <span className="text-slate-400">
+                            due about{" "}
+                            {Math.max(1, Math.ceil(step.estimated_hours / 8))} day
+                            {Math.max(1, Math.ceil(step.estimated_hours / 8)) === 1
+                              ? ""
+                              : "s"}{" "}
+                            after it starts
+                          </span>
+                        ) : null}
 
                         <span className="text-slate-300">|</span>
                         <label className="flex items-center gap-1 cursor-pointer">

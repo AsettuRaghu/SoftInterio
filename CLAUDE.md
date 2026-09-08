@@ -371,6 +371,18 @@ satisfied:
 
 Do not describe these as gates in the UI until they are one.
 
+### A playbook step is written in hours
+One number: how long the step should take. It is what `tasks.actual_hours` —
+derived from work sessions — gets compared against, which is the only way a
+team sees where time actually goes.
+
+The due date is derived at eight hours to a working day, rounded up, never less
+than one. `duration_days` is legacy and still wins where it is set, but the
+editor clears it on save so the number on screen is the number that applies.
+
+Asking for both days and hours was the mistake: they are genuinely different
+things, so people chose one, and the one that matters for improvement is hours.
+
 ### The playbook's assignment decisions hold at run time
 `PATCH /api/tasks/[id]` refuses to move an assignee away from what the playbook
 fixed. A step naming `assign_to_user` cannot be reassigned; a step naming only
