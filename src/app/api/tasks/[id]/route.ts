@@ -514,11 +514,29 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-// DELETE /api/tasks/[id] - Delete task
+/**
+ * DELETE /api/tasks/[id]
+ *
+ * Deleting a task used to require nothing beyond a session: any signed-in user
+ * could hard-delete any of them, and parent_task_id cascades, so one click
+ * could take a parent and every subtask under it.
+ *
+ * Three rules now stand between a task and deletion.
+ *
+ * 1. You deleted what you made, or you hold tasks.delete. Ownership alone
+ *    would strand every task whose creator has left the company, so the
+ *    permission is the way back in - the same shape as everywhere else here:
+ *    granted the permission, allowed the action.
+ * 2. A playbook step is never deleted. It is a record of a governed process,
+ *    and removing one quietly rewrites what the team agreed to do. Skipping is
+ *    the sanctioned way not to do a step, and cancelling the run is the way to
+ *    undo starting one.
+ * 3. A parent takes its children with it, so the count has to be acknowledged
+ *    with ?cascade=true rather than discovered afterwards.
+ */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -530,12 +548,61 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     // Check task exists and get related entity info
     const { data: existingTask, error: fetchError } = await supabase
       .from("tasks")
-      .select("id, title, is_from_template, created_by, related_type, related_id")
+      .select(
+        "id, title, is_from_template, created_by, related_type, related_id, procedure_run_id"
+      )
       .eq("id", id)
       .single();
 
     if (fetchError || !existingTask) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    // Rule 2 first: a playbook step is refused outright, so the answer does not
+    // depend on who is asking.
+    if (existingTask.procedure_run_id) {
+      return NextResponse.json(
+        {
+          error:
+            "This is a playbook step and cannot be deleted. Skip it if it is not needed on this project, or cancel the playbook run if it was started by mistake.",
+          reason: "playbook_step",
+        },
+        { status: 409 }
+      );
+    }
+
+    // Rule 1.
+    const isCreator = existingTask.created_by === user.id;
+    const mayDeleteAny = guard.permissions.has("tasks.delete");
+    if (!isCreator && !mayDeleteAny) {
+      return NextResponse.json(
+        {
+          error:
+            "Only the person who created this task can delete it. Ask them, or someone who can delete any task.",
+          reason: "not_creator",
+        },
+        { status: 403 }
+      );
+    }
+
+    // Rule 3.
+    const { count: childCount } = await supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("parent_task_id", id);
+
+    const { searchParams } = new URL(request.url);
+    if (childCount && childCount > 0 && searchParams.get("cascade") !== "true") {
+      return NextResponse.json(
+        {
+          error: `This task has ${childCount} subtask${
+            childCount === 1 ? "" : "s"
+          }, which will be deleted with it.`,
+          reason: "has_subtasks",
+          childCount,
+        },
+        { status: 409 }
+      );
     }
 
     // Create activity in related entity's timeline before deletion

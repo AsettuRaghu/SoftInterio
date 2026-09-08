@@ -265,7 +265,7 @@ export function EditTaskModal({
     if (
       !(await confirm({
         title: "Delete this task?",
-        message: "Subtasks, comments and attachments go with it.",
+        message: "Comments and attachments go with it.",
       }))
     ) {
       return;
@@ -275,9 +275,33 @@ export function EditTaskModal({
     setError(null);
 
     try {
-      const response = await fetch(`/api/tasks/${task.id}`, {
+      let response = await fetch(`/api/tasks/${task.id}`, {
         method: "DELETE",
       });
+
+      // The server refuses a parent until the number of subtasks going with it
+      // has been acknowledged, because parent_task_id cascades and the loss is
+      // otherwise discovered afterwards.
+      if (response.status === 409) {
+        const data = await response.json();
+        if (data.reason === "has_subtasks") {
+          if (
+            !(await confirm({
+              title: `Delete this task and its ${data.childCount} subtask${
+                data.childCount === 1 ? "" : "s"
+              }?`,
+              message:
+                "The subtasks are deleted with it. This cannot be undone.",
+            }))
+          ) {
+            setIsDeleting(false);
+            return;
+          }
+          response = await fetch(`/api/tasks/${task.id}?cascade=true`, {
+            method: "DELETE",
+          });
+        }
+      }
 
       if (!response.ok) {
         const data = await response.json();

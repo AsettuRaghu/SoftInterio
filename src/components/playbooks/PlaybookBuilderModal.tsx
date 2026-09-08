@@ -87,7 +87,10 @@ const blankStep = (): DraftStep => ({
   action_type: "manual",
   parent_index: null,
   is_required: true,
-  can_skip: false,
+  // Skippable by default, with a reason required. A step nobody can skip and
+  // nobody can delete has no honest way out, and people answer that by marking
+  // work complete that never happened.
+  can_skip: true,
   assign_to_role: null,
   duration_days: null,
   instructions: null,

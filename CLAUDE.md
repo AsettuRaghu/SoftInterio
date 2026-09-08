@@ -337,6 +337,31 @@ because that would change the process under every business using it. `Copy`
 takes an unprotected, inactive, version-1 copy owned by the tenant. That is the
 mechanism behind "we propose the practice, you decide how you work".
 
+### Deleting a task, and why a playbook step cannot be
+Three rules, all in `DELETE /api/tasks/[id]`. Before 2026-09-08 there were
+none: the handler asked only for a session, so any signed-in user could
+hard-delete any task, and `parent_task_id` cascades.
+
+1. **You deleted what you made, or you hold `tasks.delete`.** Ownership alone
+   would strand every task whose creator has left, so the permission is the way
+   back in — eleven manager-shaped roles hold it.
+2. **A playbook step is never deleted.** It records a governed process, and
+   removing one quietly rewrites what the team agreed to do. Answered 409 with
+   `reason: "playbook_step"`.
+3. **A parent takes its children with it**, so the count must be acknowledged
+   with `?cascade=true`. Answered 409 with `reason: "has_subtasks"` and a
+   `childCount`; both delete call sites re-ask and retry.
+
+The sanctioned ways out of a playbook step are **skip** (needs a reason, gated
+by `can_skip`) and **cancelling the run**, which transitions open steps to
+cancelled and leaves settled ones alone — history survives either way.
+
+New steps in the builder are therefore **skippable by default**. A step nobody
+can skip and nobody can delete has no honest way out, and people answer that by
+marking work complete that never happened. Non-skippable is a deliberate choice
+for things like customer sign-off, not the accident of a default — which is why
+16 of the first 25 seeded steps are non-skippable.
+
 ## Traps that have already cost time
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it
