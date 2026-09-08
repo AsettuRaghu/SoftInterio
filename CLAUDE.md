@@ -439,6 +439,20 @@ and a step that gates on a run but not on a sync is the kind of inconsistency
 nobody notices until it matters. It is not idempotent — call it once per new
 task.
 
+### Editing steps: uid, renest, and why nesting is one level
+A draft step carries a client-side `uid`. Not the database id — a step being
+written has none — and not the array index, which changes the moment anything
+moves. Collapsing and dragging both key off it.
+
+`renest()` re-derives every child's parent from where it now sits: nesting is
+one level deep, so a child belongs to the nearest top-level step above it.
+That means dragging a child under a different phase needs no special case — it
+lands somewhere else and belongs to whatever it landed under.
+
+Dragging a phase takes its steps with it; moving a phase and stranding its work
+is never what anyone meant. **Only the handle is `draggable`** — a draggable
+row hijacks selecting text inside its own inputs.
+
 ### A version of a playbook is a row, not a number
 `procedure_definitions` holds one row per version, tied by `root_id`. This
 replaced a single row carrying a `version` number, which had a real flaw:

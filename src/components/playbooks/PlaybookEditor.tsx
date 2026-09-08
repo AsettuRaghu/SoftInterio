@@ -18,6 +18,13 @@ import {
 } from "@/types/playbooks";
 
 interface DraftStep {
+  /**
+   * Identity while being edited, for collapsing and dragging.
+   *
+   * Not the database id - a step being written has none - and not the array
+   * index, which changes the moment anything is reordered.
+   */
+  uid: string;
   /** Present for a step that already exists; absent for a new one. */
   step_key?: string;
   title: string;
@@ -77,6 +84,25 @@ const ENTITY_TYPES: { value: TaskRelatedType; label: string }[] = [
  * Rebuild by matching each child back to the object identity of its old
  * parent - object identity survives the shuffle, indices do not.
  */
+/**
+ * Re-derive every child's parent from where it now sits.
+ *
+ * Nesting is one level deep, so a child belongs to the nearest top-level step
+ * above it. Deriving that after a move means dragging a child under a
+ * different parent needs no special handling - it simply lands somewhere else
+ * and belongs to whatever it landed under.
+ */
+function renest(next: DraftStep[]): DraftStep[] {
+  let lastTop = -1;
+  return next.map((s, i) => {
+    if (s.parent_index === null) {
+      lastTop = i;
+      return s;
+    }
+    return { ...s, parent_index: lastTop >= 0 ? lastTop : null };
+  });
+}
+
 function reindex(next: DraftStep[], prev: DraftStep[]): DraftStep[] {
   const oldParentOf = new Map<DraftStep, DraftStep>();
   prev.forEach((s) => {
@@ -90,7 +116,11 @@ function reindex(next: DraftStep[], prev: DraftStep[]): DraftStep[] {
   });
 }
 
+let uidCounter = 0;
+const newUid = () => `s${++uidCounter}`;
+
 const blankStep = (): DraftStep => ({
+  uid: newUid(),
   title: "",
   action_type: "manual",
   parent_index: null,
@@ -195,6 +225,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
         for (const t of tops) {
           idToIndex.set(t.id, flat.length);
           flat.push({
+            uid: newUid(),
             step_key: t.step_key,
             title: t.title,
             action_type: t.action_type,
@@ -218,6 +249,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
           });
           for (const c of raw.filter((s: any) => s.parent_step_id === t.id)) {
             flat.push({
+              uid: newUid(),
               step_key: c.step_key,
               title: c.title,
               action_type: c.action_type,
@@ -267,6 +299,67 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
     setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
 
   const addStep = () => setSteps((prev) => [...prev, blankStep()]);
+
+  // Collapsed parents, by uid. Twenty-five steps do not fit on a screen, and
+  // moving a phase is much easier when its children are folded away.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<number | null>(null);
+
+  const parentUids = steps
+    .filter((s) => s.parent_index === null)
+    .map((s) => s.uid);
+  const allCollapsed =
+    parentUids.length > 0 && parentUids.every((u) => collapsed.has(u));
+
+  const toggleCollapse = (uid: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(uid)) next.delete(uid);
+      else next.add(uid);
+      return next;
+    });
+
+  const collapseAll = () => setCollapsed(new Set(parentUids));
+  const expandAll = () => setCollapsed(new Set());
+
+  /**
+   * Drop a step, or a whole phase, where it was dragged.
+   *
+   * A top-level step brings its children with it - moving a phase means moving
+   * the work under it, not stranding it. A child moves alone and belongs to
+   * whatever phase it lands under, which renest works out from position.
+   */
+  const handleDrop = (targetIndex: number) => {
+    setDropTarget(null);
+    const uid = dragging;
+    setDragging(null);
+    if (!uid) return;
+
+    setSteps((prev) => {
+      const from = prev.findIndex((s) => s.uid === uid);
+      if (from < 0) return prev;
+
+      const isParent = prev[from].parent_index === null;
+      let end = from;
+      if (isParent) {
+        while (end + 1 < prev.length && prev[end + 1].parent_index !== null) {
+          end += 1;
+        }
+      }
+
+      const block = prev.slice(from, end + 1);
+      const rest = [...prev.slice(0, from), ...prev.slice(end + 1)];
+
+      // The target was measured against the original array, so anything after
+      // the block that was lifted out has shifted down by its length.
+      let at = targetIndex;
+      if (targetIndex > end) at = targetIndex - block.length;
+      at = Math.max(0, Math.min(at, rest.length));
+
+      return renest([...rest.slice(0, at), ...block, ...rest.slice(at)]);
+    });
+  };
 
   /**
    * Commit, revise or retire. Revising opens the next version so the steps can
@@ -726,21 +819,72 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                 Steps
               </label>
-              <span className="text-[11px] text-slate-400">
-                ▲▼ reorder · → nest · days = how long the step takes
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] text-slate-400">
+                  drag ⠿ to move · → nest · a phase moves with its steps
+                </span>
+                {parentUids.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => (allCollapsed ? expandAll() : collapseAll())}
+                    className="text-[11px] font-medium text-blue-600 hover:underline"
+                  >
+                    {allCollapsed ? "Expand all" : "Collapse all"}
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="space-y-1.5">
               {steps.map((step, i) => {
                 const colors = PlaybookActionColors[step.action_type];
                 const isChild = step.parent_index !== null;
+
+                // A child of a folded phase is not rendered at all, so the
+                // list shows the shape of the process rather than every line.
+                const parentUid =
+                  isChild && step.parent_index !== null
+                    ? steps[step.parent_index]?.uid
+                    : null;
+                if (parentUid && collapsed.has(parentUid)) return null;
+
+                const childCount = isChild
+                  ? 0
+                  : steps.filter((c) => c.parent_index === i).length;
+                const isCollapsed = collapsed.has(step.uid);
+
                 return (
                   <div
-                    key={i}
-                    className={`flex items-start gap-1.5 ${isChild ? "pl-8" : ""}`}
+                    key={step.uid}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (dropTarget !== i) setDropTarget(i);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      handleDrop(i);
+                    }}
+                    className={`flex items-start gap-1.5 ${isChild ? "pl-8" : ""} ${
+                      dragging === step.uid ? "opacity-40" : ""
+                    } ${
+                      dropTarget === i && dragging && dragging !== step.uid
+                        ? "border-t-2 border-blue-400"
+                        : "border-t-2 border-transparent"
+                    }`}
                   >
                     <div className="mt-1 shrink-0 flex flex-col">
+                      <span
+                        draggable
+                        onDragStart={() => setDragging(step.uid)}
+                        onDragEnd={() => {
+                          setDragging(null);
+                          setDropTarget(null);
+                        }}
+                        title="Drag to move"
+                        className="w-6 h-4 flex items-center justify-center text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing select-none"
+                      >
+                        ⠿
+                      </span>
                       <button
                         type="button"
                         onClick={() => moveStep(i, -1)}
@@ -767,6 +911,21 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                     >
                       {isChild ? "←" : "→"}
                     </button>
+
+                    {!isChild && childCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleCollapse(step.uid)}
+                        title={
+                          isCollapsed
+                            ? `Show ${childCount} step${childCount === 1 ? "" : "s"}`
+                            : "Fold this phase away"
+                        }
+                        className="mt-1.5 shrink-0 h-6 px-1 flex items-center justify-center rounded text-[10px] text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                      >
+                        {isCollapsed ? `▸ ${childCount}` : "▾"}
+                      </button>
+                    )}
 
                     <div className="flex-1 space-y-1.5">
                       <div className="flex gap-1.5">
