@@ -324,9 +324,20 @@ so its edits go to `PATCH /api/tasks/[id]` rather than the phase routes.
 Sending a task id to a phase route answers **"Not found"** — that is what the
 404 means, not a missing project.
 
-Statuses translate through `toTaskStatus` / `phaseEditToTaskUpdate` in the
-adapter: `not_started` is `todo`, planned start is `start_date`, planned end is
-`due_date`. Keep the mapping there rather than inline.
+Statuses and dates translate through `toTaskStatus` /
+`phaseEditToTaskUpdate` in the adapter: `not_started` is `todo`, planned start
+is `start_date`, planned end is `due_date`, and a status note becomes
+`hold_reason`, which `task_transition` records. Keep the mapping there rather
+than inline, **and keep it symmetric** — writing `start_date` without reading
+it back made a saved planned start look as though saving had erased it.
+
+`start_date` is the plan and `started_at` is what happened; they are different
+columns and the tree shows them in different columns too.
+
+**Clicking a playbook step opens the task page**, not the sub-phase panel. The
+panel reads phase rows, and a step is a task; the task page already has the
+status gates, subtasks, comments and attachments, so there is nothing to
+reimplement.
 
 **Do not build new workflow features on phase templates.** Still to port before
 the phase engine can go: phase dependencies, progress rollup, planned-vs-actual

@@ -412,7 +412,10 @@ export default function ProjectDetailPage({ params }: PageProps) {
       // A playbook step is a task. Sending it to the sub-phase route was the
       // "Not found" - that route resolves phase rows, and a task id is not one.
       if (playbookNodeIds.has(subPhaseId)) {
-        return await savePlaybookNode(subPhaseId, { status: newStatus });
+        return await savePlaybookNode(subPhaseId, {
+          status: newStatus,
+          notes,
+        });
       }
 
       const response = await fetch(
@@ -437,6 +440,14 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
   // Handler for sub-phase click
   const handleSubPhaseClick = (phaseId: string, subPhaseId: string) => {
+    // A playbook step is a task, so its detail view is the task page - which
+    // already has the status gates, subtasks, comments and attachments. The
+    // sub-phase panel reads phase rows and answered "Failed to fetch sub-phase
+    // details" when handed a task id.
+    if (playbookNodeIds.has(subPhaseId)) {
+      router.push(`/dashboard/tasks/${subPhaseId}`);
+      return;
+    }
     setSelectedSubPhase({ phaseId, subPhaseId });
     setShowSubPhasePanel(true);
   };

@@ -31,8 +31,11 @@ export interface PlaybookTask {
   status: string;
   parent_task_id: string | null;
   procedure_step_id: string | null;
+  /** When the work is planned to begin. Distinct from started_at. */
+  start_date?: string | null;
   due_date?: string | null;
   assigned_to?: string | null;
+  /** When it actually began. Set by the transition, not by the planner. */
   started_at?: string | null;
   completed_at?: string | null;
   created_at?: string | null;
@@ -137,6 +140,7 @@ export function playbookRunToPhases({
       progress_mode: "manual",
       assigned_to: child.assigned_to ?? undefined,
       display_order: childIndex,
+      planned_start_date: child.start_date ?? undefined,
       planned_end_date: child.due_date ?? undefined,
       due_date: child.due_date ?? undefined,
       actual_start_date: child.started_at ?? undefined,
@@ -170,6 +174,9 @@ export function playbookRunToPhases({
       progress_mode: "auto",
       assigned_to: root.assigned_to ?? undefined,
       display_order: index,
+      // start_date is the plan; started_at is what happened. Reading only the
+      // second made a planned start look as though saving had erased it.
+      planned_start_date: root.start_date ?? undefined,
       planned_end_date: root.due_date ?? undefined,
       actual_start_date: root.started_at ?? undefined,
       actual_end_date: root.completed_at ?? undefined,
@@ -213,6 +220,12 @@ export interface PlaybookNodeUpdate {
   start_date?: string | null;
   due_date?: string | null;
   assigned_to?: string | null;
+  /**
+   * Why the status changed. The task PATCH hands this to task_transition,
+   * which records it against the transition - so the note the user is asked
+   * for is kept rather than collected and dropped.
+   */
+  hold_reason?: string;
 }
 
 /**
@@ -227,6 +240,8 @@ export function phaseEditToTaskUpdate(edit: {
   planned_end_date?: string | null;
   due_date?: string | null;
   assigned_to?: string | null;
+  notes?: string | null;
+  status_change_notes?: string | null;
 }): PlaybookNodeUpdate {
   const update: PlaybookNodeUpdate = {};
   if (edit.status) update.status = toTaskStatus(edit.status);
@@ -236,5 +251,7 @@ export function phaseEditToTaskUpdate(edit: {
   if (end !== undefined) update.due_date = end || null;
   if (edit.assigned_to !== undefined)
     update.assigned_to = edit.assigned_to || null;
+  const reason = edit.status_change_notes ?? edit.notes;
+  if (reason) update.hold_reason = reason;
   return update;
 }
