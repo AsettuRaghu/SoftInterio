@@ -125,7 +125,10 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
   const [steps, setSteps] = useState<DraftStep[]>([blankStep()]);
   // Naming a person is the point of configuring a playbook once: adopt it,
   // start it, and the work is already on the right desks.
-  const [people, setPeople] = useState<{ id: string; name: string }[]>([]);
+  const [people, setPeople] = useState<
+    { id: string; name: string; roles: string[] }[]
+  >([]);
+  const [roles, setRoles] = useState<{ slug: string; name: string }[]>([]);
   const [enforceOrder, setEnforceOrder] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const [autoStart, setAutoStart] = useState(false);
@@ -234,11 +237,24 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
   React.useEffect(() => {
     void (async () => {
       try {
-        const res = await fetch("/api/team/members");
-        const data = await res.json();
-        if (res.ok && data.success && data.data) {
+        const [membersRes, rolesRes] = await Promise.all([
+          fetch("/api/team/members"),
+          fetch("/api/team/roles"),
+        ]);
+        const members = await membersRes.json();
+        if (membersRes.ok && members.success && members.data) {
           setPeople(
-            data.data.map((m: any) => ({ id: m.id, name: m.name })),
+            members.data.map((m: any) => ({
+              id: m.id,
+              name: m.name,
+              roles: (m.roles || []).map((r: any) => r.slug),
+            })),
+          );
+        }
+        const roleData = await rolesRes.json();
+        if (rolesRes.ok && roleData.success && roleData.data) {
+          setRoles(
+            roleData.data.map((r: any) => ({ slug: r.slug, name: r.name })),
           );
         }
       } catch {
@@ -652,27 +668,94 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                         </button>
                       </div>
 
-                      <div className="flex items-center gap-3 text-[11px] text-slate-500">
-                        <label className="flex items-center gap-1 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={step.can_skip}
-                            onChange={(e) =>
-                              update(i, { can_skip: e.target.checked })
-                            }
-                          />
-                          Skippable
-                        </label>
-                        <label className="flex items-center gap-1 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={step.is_required}
-                            onChange={(e) =>
-                              update(i, { is_required: e.target.checked })
-                            }
-                          />
-                          Required
-                        </label>
+                      {/* Who does it. The role narrows the assignee list, so
+                          picking "Project Manager" leaves only the people who
+                          are one. Setting the role but not the person is the
+                          useful middle: the template fixes the discipline and
+                          the project decides the name. */}
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                        <span className="text-slate-400">Owner</span>
+                        <select
+                          value={step.assign_to_role ?? ""}
+                          onChange={(e) => {
+                            const role = e.target.value || null;
+                            // Drop an assignee who does not hold the new role,
+                            // rather than leaving a contradiction on screen.
+                            const keeps =
+                              !role ||
+                              !step.assign_to_user ||
+                              people.some(
+                                (p) =>
+                                  p.id === step.assign_to_user &&
+                                  p.roles.includes(role),
+                              );
+                            update(i, {
+                              assign_to_role: role,
+                              assign_to_user: keeps ? step.assign_to_user : null,
+                            });
+                          }}
+                          title="Any role, or one that narrows who can be picked"
+                          className="px-1.5 py-0.5 border border-slate-200 rounded bg-white max-w-[9rem]"
+                        >
+                          <option value="">Any role</option>
+                          {roles.map((r) => (
+                            <option key={r.slug} value={r.slug}>
+                              {r.name}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={step.assign_to_user ?? ""}
+                          onChange={(e) =>
+                            update(i, {
+                              assign_to_user: e.target.value || null,
+                            })
+                          }
+                          title="Leave unassigned to let the project decide who"
+                          className="px-1.5 py-0.5 border border-slate-200 rounded bg-white max-w-[9rem]"
+                        >
+                          <option value="">
+                            {step.assign_to_role
+                              ? "Decide per project"
+                              : "Unassigned"}
+                          </option>
+                          {people
+                            .filter(
+                              (p) =>
+                                !step.assign_to_role ||
+                                p.roles.includes(step.assign_to_role),
+                            )
+                            .map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name}
+                              </option>
+                            ))}
+                        </select>
+
+                        <span className="text-slate-300">|</span>
+                        <select
+                          value={step.priority}
+                          onChange={(e) => update(i, { priority: e.target.value })}
+                          title="Priority of the task this step becomes"
+                          className="px-1.5 py-0.5 border border-slate-200 rounded bg-white"
+                        >
+                          {["low", "medium", "high", "urgent"].map((v) => (
+                            <option key={v} value={v}>
+                              {v}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Expected time. Days drive the due date; hours are the
+                          effort estimate carried onto the task. */}
+                      <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
+                        <span
+                          className="text-slate-400"
+                          title="Days set the due date from when the step starts. Hours are the effort it takes, which is not the same thing - a two-hour drawing can still be due in five days."
+                        >
+                          Expected time
+                        </span>
                         <span className="flex items-center gap-1">
                           <input
                             type="number"
@@ -686,40 +769,11 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                               })
                             }
                             placeholder="—"
-                            title="How many days this step takes. Due dates are worked out from this."
+                            title="Working days allowed. The due date is worked out from this."
                             className="w-12 px-1.5 py-0.5 border border-slate-200 rounded text-center"
                           />
-                          <span>days</span>
+                          <span>days to finish</span>
                         </span>
-                        <select
-                          value={step.assign_to_user ?? ""}
-                          onChange={(e) =>
-                            update(i, {
-                              assign_to_user: e.target.value || null,
-                            })
-                          }
-                          title="Who does this step. Set it here and the work arrives owned."
-                          className="px-1.5 py-0.5 border border-slate-200 rounded bg-white max-w-[9rem]"
-                        >
-                          <option value="">Unassigned</option>
-                          {people.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          value={step.priority}
-                          onChange={(e) => update(i, { priority: e.target.value })}
-                          title="Priority of the task this step becomes"
-                          className="px-1.5 py-0.5 border border-slate-200 rounded bg-white"
-                        >
-                          {["low", "medium", "high", "urgent"].map((v) => (
-                            <option key={v} value={v}>
-                              {v}
-                            </option>
-                          ))}
-                        </select>
                         <span className="flex items-center gap-1">
                           <input
                             type="number"
@@ -734,22 +788,32 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                               })
                             }
                             placeholder="—"
-                            title="Effort in hours, carried onto the task"
+                            title="Effort in hours, carried onto the task for planning."
                             className="w-12 px-1.5 py-0.5 border border-slate-200 rounded text-center"
                           />
-                          <span>hrs</span>
+                          <span>hrs of work</span>
                         </span>
+
+                        <span className="text-slate-300">|</span>
                         <label className="flex items-center gap-1 cursor-pointer">
                           <input
                             type="checkbox"
-                            checked={step.allow_parallel}
+                            checked={step.is_required}
                             onChange={(e) =>
-                              update(i, { allow_parallel: e.target.checked })
+                              update(i, { is_required: e.target.checked })
                             }
                           />
-                          <span title="May run alongside its siblings instead of waiting its turn.">
-                            Parallel
-                          </span>
+                          Required
+                        </label>
+                        <label className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={step.can_skip}
+                            onChange={(e) =>
+                              update(i, { can_skip: e.target.checked })
+                            }
+                          />
+                          Skippable
                         </label>
                         {step.can_skip && (
                           <label className="flex items-center gap-1 cursor-pointer">
@@ -767,6 +831,18 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                             </span>
                           </label>
                         )}
+                        <label className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={step.allow_parallel}
+                            onChange={(e) =>
+                              update(i, { allow_parallel: e.target.checked })
+                            }
+                          />
+                          <span title="May run alongside its siblings instead of waiting its turn.">
+                            Parallel
+                          </span>
+                        </label>
                       </div>
 
                       {/* The gate for this step, shown only where it applies -

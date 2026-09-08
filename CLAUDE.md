@@ -348,6 +348,24 @@ because that would change the process under every business using it. `Copy`
 takes an unprotected, inactive, version-1 copy owned by the tenant. That is the
 mechanism behind "we propose the practice, you decide how you work".
 
+### What an action type actually does
+Only two of the eight change behaviour. `start_procedure_run` writes rows into
+`task_completion_requirements`, and the task cannot complete until they are
+satisfied:
+
+- **upload** — one requirement per entry in `required_upload_types`, or a
+  single "Attach at least one file" when none are named. A trigger satisfies it
+  when a matching file is attached.
+- **approval** — one requirement naming `approval_role`, satisfied by
+  `sign_off_requirement`.
+- **form** — a requirement **only if `form_schema` is set**, and nothing can
+  set it, so a form step behaves as manual today.
+- **checklist, meeting, assignment, handover** — write no requirement at all.
+  They colour the chip and nothing more. A meeting step does **not** create a
+  calendar event.
+
+Do not describe these as gates in the UI until they are one.
+
 ### Configure the playbook, not the run
 `start_procedure_run` already does more than the builder used to let you say.
 It resolves an assignee, carries `priority` and `estimated_hours` onto the
