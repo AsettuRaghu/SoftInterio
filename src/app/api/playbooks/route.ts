@@ -272,7 +272,21 @@ export async function replaceSteps(
   const rowFor = (step: any, displayOrder: number, parentId: string | null) => ({
     definition_id: definitionId,
     parent_step_id: parentId,
-    ...(step.step_key ? { step_key: step.step_key } : {}),
+    /**
+     * Always present, never omitted.
+     *
+     * step_key is NOT NULL with a DEFAULT, so leaving it out of a single-row
+     * insert is fine. These are batch inserts, and PostgREST builds one column
+     * list from the union of the rows - a row that omits the key is sent an
+     * explicit NULL rather than falling back to the default. So the moment a
+     * newly added step sat alongside existing ones, the whole save failed with
+     * "null value in column step_key violates not-null constraint", surfaced
+     * to the user as "Failed to save the steps".
+     *
+     * A new step gets its identity here, at the moment it first reaches the
+     * database, and keeps it across every later revision.
+     */
+    step_key: step.step_key || crypto.randomUUID(),
     title: step.title.trim(),
     description: step.description?.trim() || null,
     form_schema: step.form_schema ?? null,
