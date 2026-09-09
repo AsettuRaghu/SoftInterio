@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { requireProjectAccess } from "@/lib/projects/guard";
+import { projectClosingBlockers, describeBlockers } from "@/lib/projects/closing";
 import { requestLogger } from "@/lib/logger/request";
 
 interface RouteParams {
@@ -372,7 +373,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // 1. Update Project Table
     const { data: existingProject, error: fetchError } = await supabase
         .from("projects")
-        .select("property_id")
+        // status is read so a close can be told from an edit that merely
+        // echoes the current status back.
+        .select("property_id, status")
         .eq("id", id)
         .eq("tenant_id", user.tenantId)
         .single();
@@ -445,6 +448,28 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       });
     }
 
+    // Closing a project requires it to be clear, the same way winning a lead
+    // does. Without this, "completed" was a free-text value anyone could set
+    // while the playbook still showed twenty steps open - and the playbook was
+    // the honest one.
+    const isClosing =
+      projectUpdates.status === "completed" &&
+      existingProject?.status !== "completed";
+
+    if (isClosing) {
+      const check = await projectClosingBlockers(supabase, id);
+      if (!check.ok) {
+        return NextResponse.json(
+          {
+            error: describeBlockers(check.blockers),
+            reason: "project_not_clear",
+            blockers: check.blockers,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     const { data: project, error } = await supabase
       .from("projects")
       .update(projectUpdates)
@@ -456,6 +481,29 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (error) {
       log.error("Error updating project", error, { projectId: id });
       return NextResponse.json({ error: "Failed to update project" }, { status: 500 });
+    }
+
+    // The project is finished, so its playbook run is too. Leaving the run
+    // active would keep the plan open on a closed project and keep it counting
+    // toward "one run at a time".
+    if (isClosing) {
+      const { data: activeRun } = await supabase
+        .from("procedure_runs")
+        .select("id")
+        .eq("related_type", "project")
+        .eq("related_id", id)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (activeRun) {
+        await supabase
+          .from("procedure_runs")
+          .update({
+            status: "completed",
+            completed_at: new Date().toISOString(),
+          })
+          .eq("id", activeRun.id);
+      }
     }
 
     log.info("Project updated", {
