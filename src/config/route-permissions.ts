@@ -43,6 +43,13 @@ export const routePermissions: RoutePermission[] = [
     description: "Team management",
   },
   {
+    // CLAUDE.md records this pattern once guarding a page that did not exist,
+    // behind a permission that did not exist either. Both exist now.
+    pattern: "/dashboard/settings/roles",
+    permissions: ["team.permissions.view"],
+    description: "Role permissions",
+  },
+  {
     pattern: "/dashboard/settings/config",
     permissions: ["settings.company.update"],
     description: "Tenant feature switches",

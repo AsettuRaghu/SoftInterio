@@ -162,6 +162,38 @@ permission model is still unenforced.
 `role_permissions` is read-only in the app (no route writes it), so nothing can
 silently drop a grant.
 
+### A shipped role is a proposal; the first edit takes a copy
+
+All 21 seeded roles are global — `tenant_id` NULL, `is_system_role` true — and
+shared by every business on the platform. Editing "Sales" in place would edit
+it for all of them, so `ensureTenantOwnedRole()` copies it to the tenant on the
+first change and edits the copy. Same bargain as protected playbooks, and the
+same reason: we propose the practice, they decide how they work.
+
+The copy has to carry three things or it is not the same role: the definition,
+**every grant including revokes** (`granted` is tri-state — copying only the
+true rows turns an explicit revoke into "not stated"), and **the tenant's own
+members**, moved onto it. That last one is silent when missed: the tenant edits
+a role nobody holds while everyone carries on under the shipped one. The
+reassignment is filtered by tenant, so other businesses never move.
+
+`PUT /api/team/roles/[id]/permissions` may therefore write a **different role
+id than you asked for** — callers must follow `data.roleId` afterwards. The
+Roles page does this and re-selects the copy.
+
+Owner is the one role that cannot be forked: `is_super_admin` and the
+ownership-transfer flow both key off it.
+
+Settings → Roles (`team.permissions.view` to look, `team.roles.manage` to
+change — a new permission, Owner and Admin) shows one entry per role: the
+tenant's copy where it exists, otherwise the shipped one. Showing both invites
+editing the wrong one. `GET /api/team/roles` is deliberately not reused for
+this screen — it filters by what the caller may *assign*, which is a different
+question from what a role can do.
+
+A role with people in it refuses deletion with a 409 and the count; they have
+to be moved first, because `user_roles` cascades.
+
 ### Permissions resolve in one place, roles then user
 
 `src/lib/auth/permissions.ts` is the only thing that decides what a person may

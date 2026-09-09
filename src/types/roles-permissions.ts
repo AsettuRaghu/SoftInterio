@@ -11,7 +11,7 @@
  * flat: a person can do what their granted permissions say, and nothing is
  * inherited. roles.hierarchy_level still exists in the schema and is not used.
  *
- * Generated from 253 permissions and 21 system roles.
+ * Generated from 254 permissions and 21 system roles.
  */
 
 // =====================================================
@@ -287,6 +287,7 @@ export type PermissionKey =
   | 'team.permissions.manage'
   | 'team.permissions.view'
   | 'team.roles.assign'
+  | 'team.roles.manage'
   | 'team.view'
   | 'team.view_limited'
   | 'vendors.create'
@@ -552,6 +553,7 @@ export const PERMISSION_CATALOGUE: readonly PermissionDefinition[] = [
   { key: 'team.permissions.manage', module: 'team', description: 'Manage custom permissions' },
   { key: 'team.permissions.view', module: 'team', description: 'View permissions' },
   { key: 'team.roles.assign', module: 'team', description: 'Assign roles to team members' },
+  { key: 'team.roles.manage', module: 'team', description: 'Create, edit and delete roles' },
   { key: 'team.view', module: 'team', description: 'View team members' },
   { key: 'team.view_limited', module: 'team', description: 'View limited team info' },
   { key: 'vendors.create', module: 'stock', description: 'Create new vendors' },

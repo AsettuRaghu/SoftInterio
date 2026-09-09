@@ -354,6 +354,14 @@ export const navigationConfig: NavigationItem[] = [
         permission: "settings.team.view",
       },
       {
+        // What a role means, as opposed to who is in it. Gated on seeing
+        // permissions rather than on managing them, so a lead can check what
+        // an assistant can reach without being able to change it.
+        name: "Roles",
+        href: "/dashboard/settings/roles",
+        permission: "team.permissions.view",
+      },
+      {
         // Tenant-level feature switches. Gated on the same permission as
         // editing the company: these change how the product behaves for
         // everyone, so they belong with the owner/admin pair.
