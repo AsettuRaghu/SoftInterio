@@ -17,7 +17,7 @@ const nextConfig = {
   // Suppress development server request logs
   staticPageGenerationTimeout: 120,
   // Suppress the output of certain messages
-  output: "standalone",
+  // output: "standalone",
 };
 
 module.exports = nextConfig;
