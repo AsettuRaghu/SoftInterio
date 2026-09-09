@@ -48,6 +48,7 @@ import { SpacesTab } from "@/components/property/SpacesTab";
 import { buttonVariants } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
 import { PaymentsTab } from "@/components/projects/PaymentsTab";
+import { ProcurementTab } from "@/components/projects/ProcurementTab";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -967,6 +968,10 @@ export default function ProjectDetailPage({ params }: PageProps) {
               }}
             />
           ) : null}
+
+          {activeTab === "procurement" && (
+            <ProcurementTab projectId={project.id} />
+          )}
 
           {activeTab === "payments" && (
             <PaymentsTab
