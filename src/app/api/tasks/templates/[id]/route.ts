@@ -11,7 +11,9 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["tasks.templates.view"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -96,7 +98,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["tasks.templates.edit"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -228,7 +232,9 @@ async function createTemplateItems(
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["tasks.templates.delete"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }

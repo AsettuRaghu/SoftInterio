@@ -7,7 +7,9 @@ import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 export async function GET(request: NextRequest) {
   try {
     // Protect API route - requires authentication and checks user status
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["quotations.view"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }

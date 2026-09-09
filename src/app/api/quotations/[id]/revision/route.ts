@@ -14,7 +14,9 @@ interface RouteParams {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["quotations.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }

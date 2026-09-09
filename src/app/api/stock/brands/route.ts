@@ -7,7 +7,9 @@ import type { CreateBrandInput, UpdateBrandInput } from "@/types/stock";
 export async function GET(request: NextRequest) {
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["brands.view"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -96,7 +98,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["brands.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -196,7 +200,9 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["brands.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -265,7 +271,9 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["brands.delete"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }

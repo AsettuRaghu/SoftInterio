@@ -11,7 +11,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   // Protect API route (even deprecated routes should be authenticated)
-  const guard = await protectApiRoute(request);
+  const guard = await protectApiRoute(request, {
+      requiredPermissions: ["po.create"],
+    });
   if (!guard.success) {
     return createErrorResponse(guard.error!, guard.statusCode!);
   }

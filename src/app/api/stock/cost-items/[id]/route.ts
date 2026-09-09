@@ -9,7 +9,9 @@ export async function GET(
 ) {
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["stock.view"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -107,7 +109,9 @@ export async function PUT(
 ) {
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["stock.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }

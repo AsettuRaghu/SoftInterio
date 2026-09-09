@@ -7,7 +7,9 @@ import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 export async function GET(request: NextRequest) {
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["calendar.view"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -581,7 +583,9 @@ export async function GET(request: NextRequest) {
 // POST /api/calendar - Create a new calendar event
 export async function POST(request: NextRequest) {
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["calendar.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }

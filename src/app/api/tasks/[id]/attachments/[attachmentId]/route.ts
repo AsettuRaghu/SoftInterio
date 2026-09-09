@@ -18,7 +18,9 @@ interface RouteParams {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["tasks.edit"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }

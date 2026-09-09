@@ -25,7 +25,9 @@ interface VerifyPaymentRequest {
 export async function POST(request: NextRequest) {
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["settings.billing.manage"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }

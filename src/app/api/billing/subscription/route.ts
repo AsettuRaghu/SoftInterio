@@ -9,7 +9,9 @@ export async function GET(request: NextRequest) {
     console.log("=== SUBSCRIPTION FETCH START ===");
     
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["settings.billing.view"],
+    });
     if (!guard.success) {
       console.log("API guard failed:", guard.error);
       return createErrorResponse(guard.error!, guard.statusCode!);

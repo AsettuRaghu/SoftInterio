@@ -84,7 +84,9 @@ export async function withCoverUrls<T extends { cover_image_path?: string | null
 // GET /api/quotations/print-formats
 export async function GET(request: NextRequest) {
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["quotations.view"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -126,7 +128,9 @@ export async function GET(request: NextRequest) {
 // POST /api/quotations/print-formats
 export async function POST(request: NextRequest) {
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["quotations.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }

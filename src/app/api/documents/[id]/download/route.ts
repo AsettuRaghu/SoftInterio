@@ -12,7 +12,9 @@ interface RouteParams {
 // GET /api/documents/[id]/download - Get download URL for a document
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["documents.view"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }

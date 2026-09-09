@@ -16,7 +16,9 @@ const ALLOWED = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
 
 export async function POST(request: NextRequest) {
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["quotations.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }

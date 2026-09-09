@@ -14,7 +14,9 @@ interface RouteParams {
 // GET /api/documents/[id] - Get single document with signed URL
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["documents.view"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -79,7 +81,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 // PATCH /api/documents/[id] - Update document metadata
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["documents.edit"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -177,7 +181,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 // DELETE /api/documents/[id] - Delete document
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["documents.delete"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }

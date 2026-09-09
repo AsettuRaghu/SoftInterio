@@ -12,7 +12,9 @@ const STORAGE_BUCKET = "documents";
 // GET /api/documents - List documents with filters
 export async function GET(request: NextRequest) {
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["documents.view"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -208,7 +210,9 @@ export async function GET(request: NextRequest) {
 // POST /api/documents - Upload a new document
 export async function POST(request: NextRequest) {
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["documents.upload"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }

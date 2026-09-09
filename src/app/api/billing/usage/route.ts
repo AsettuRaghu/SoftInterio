@@ -12,7 +12,9 @@ import { getTenantUsageLimits } from "@/lib/billing/usage";
 export async function GET(request: NextRequest) {
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["settings.billing.view"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }

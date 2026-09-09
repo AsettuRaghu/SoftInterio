@@ -15,7 +15,9 @@ import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
  */
 export async function GET(request: NextRequest) {
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["documents.view"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }

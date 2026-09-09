@@ -28,7 +28,9 @@ export async function GET(request: NextRequest) {
   const log = requestLogger(request);
 
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["leads.view"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }

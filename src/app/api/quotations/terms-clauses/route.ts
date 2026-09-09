@@ -35,7 +35,9 @@ export function pickWritable(body: Record<string, unknown>) {
 // GET /api/quotations/terms-clauses
 export async function GET(request: NextRequest) {
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["quotations.view"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -75,7 +77,9 @@ export async function GET(request: NextRequest) {
 // POST /api/quotations/terms-clauses
 export async function POST(request: NextRequest) {
   try {
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["quotations.create"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
