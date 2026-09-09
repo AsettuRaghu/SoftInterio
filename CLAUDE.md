@@ -157,6 +157,30 @@ permission model is still unenforced.
 `role_permissions` is read-only in the app (no route writes it), so nothing can
 silently drop a grant.
 
+### The anon key is public, so RLS is the only wall
+
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` ships inside the browser bundle. That is what it
+is for, and it is safe only to the extent that row level security is right. Two
+policies were not.
+
+`tenants` had a policy *named* "Users can view own tenant" whose condition was
+`USING (true)`, so the anon key returned every tenant on the platform — company
+names, registration and GST numbers, emails, phone numbers, postal addresses,
+subscription status. `subscription_payments` never had RLS enabled at all and
+exposed amounts, gateway references and error messages. Both were found by
+probing with the anon key while checking whether it was safe to publish to
+Vercel, and both are fixed (`20260909100000`, `20260909120000`).
+
+A policy's name is not its condition. Before adding a table, probe it:
+
+    anon.from(t).select("*")   // must return [] for anything tenant-owned
+
+Still public **on purpose**, because they describe the product and not any
+customer: `permissions`, `role_permissions`, `subscription_plans`,
+`subscription_plan_features`, `units`, `project_phase_categories`, and the
+`project_*_template` tables plus `roles` — the last two return only their
+shared defaults (`tenant_id IS NULL` / `is_system_role`), never a tenant's own.
+
 ### Every project sub-route must prove lineage
 `requireProjectAccess()` in `src/lib/projects/guard.ts` resolves the project in
 the caller's tenant and checks read/write. `requirePhaseLineage()` then proves
