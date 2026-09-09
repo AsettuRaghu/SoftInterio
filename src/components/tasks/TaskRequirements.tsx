@@ -10,6 +10,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from "react";
+import { TaskFormFields } from "@/components/tasks/TaskFormFields";
 
 interface Requirement {
   id: string;
@@ -155,6 +156,10 @@ export function TaskRequirements({ taskId, readOnly = false, onChanged }: Props)
                   )}
                 </span>
 
+                {r.requirement_type === "form" && (
+                  <span className="sr-only">form fields below</span>
+                )}
+
                 {!readOnly && signable && (
                   <button
                     type="button"
@@ -197,6 +202,16 @@ export function TaskRequirements({ taskId, readOnly = false, onChanged }: Props)
                     Sign off
                   </button>
                 </div>
+              )}
+              {r.requirement_type === "form" && (
+                <TaskFormFields
+                  taskId={taskId}
+                  readOnly={readOnly}
+                  onSaved={() => {
+                    void load();
+                    onChanged?.();
+                  }}
+                />
               )}
             </div>
           );

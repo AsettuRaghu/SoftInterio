@@ -1284,6 +1284,25 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                             />
                           </span>
                         )}
+                        {step.action_type === "form" && (
+                          <span className="flex items-center gap-1.5 flex-1">
+                            <span className="text-sky-600 whitespace-nowrap">
+                              fields to fill:
+                            </span>
+                            <input
+                              type="text"
+                              value={formFieldsToText(step.form_schema)}
+                              onChange={(e) =>
+                                update(i, {
+                                  form_schema: textToFormSchema(e.target.value),
+                                })
+                              }
+                              placeholder="comma separated, e.g. site contact, measured width*, notes"
+                              className="flex-1 px-1.5 py-0.5 border border-slate-200 rounded"
+                              title="Add * after a field name to make it required"
+                            />
+                          </span>
+                        )}
                         {step.action_type === "meeting" && (
                           <span className="text-violet-600">
                             asks for confirmation that the meeting took place —
@@ -1353,3 +1372,54 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
 }
 
 export default PlaybookEditor;
+
+/**
+ * Form fields, written the same way checklist items and upload types already
+ * are: a comma separated list. A trailing * marks a field as required.
+ *
+ * Until now `form_schema` could be stored and passed around but never set, so
+ * a form step created no requirement and behaved exactly like a manual one -
+ * an action type that promised a gate and delivered nothing.
+ *
+ * Deliberately not a drag-and-drop form designer. The step needs to say what
+ * has to be captured before the work counts as done; anything richer belongs
+ * in a document, and inventing a second form builder here would be a second
+ * place for forms to live.
+ */
+export interface FormField {
+  key: string;
+  label: string;
+  required: boolean;
+}
+
+/** A stable key from a label, so renaming a field does not orphan its answer. */
+function fieldKey(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+export function textToFormSchema(
+  text: string
+): Record<string, unknown> | null {
+  const fields: FormField[] = text
+    .split(",")
+    .map((raw) => raw.trim())
+    .filter(Boolean)
+    .map((raw) => {
+      const required = raw.endsWith("*");
+      const label = (required ? raw.slice(0, -1) : raw).trim();
+      return { key: fieldKey(label), label, required };
+    })
+    .filter((f) => f.key);
+
+  return fields.length ? { fields } : null;
+}
+
+export function formFieldsToText(
+  schema: Record<string, unknown> | null | undefined
+): string {
+  const fields = (schema?.fields as FormField[] | undefined) ?? [];
+  return fields.map((f) => `${f.label}${f.required ? "*" : ""}`).join(", ");
+}
