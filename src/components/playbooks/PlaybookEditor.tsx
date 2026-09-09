@@ -330,6 +330,10 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
   // Collapsed parents, by uid. Twenty-five steps do not fit on a screen, and
   // moving a phase is much easier when its children are folded away.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  /** Which lifecycle action is in flight, so its button can say so. */
+  const [pendingAction, setPendingAction] = useState<
+    "commit" | "revise" | "retire" | null
+  >(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
 
@@ -393,24 +397,39 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
    * change again; plans already running keep the version they started under.
    */
   const lifecycle = async (action: "commit" | "revise" | "retire") => {
-    if (!playbookId) return;
+    if (!playbookId || pendingAction) return;
     setError(null);
-    const res = await fetch(`/api/playbooks/${playbookId}/lifecycle`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
-    });
-    const data = await res.json();
+    // Revising copies a whole playbook, so this is not instant even batched.
+    // Without a pending state the button looked dead and people clicked again.
+    setPendingAction(action);
+    let res: Response;
+    let data: any;
+    try {
+      res = await fetch(`/api/playbooks/${playbookId}/lifecycle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      data = await res.json();
+    } catch {
+      setPendingAction(null);
+      setError("Could not reach the server. Nothing was changed.");
+      return;
+    }
     if (!res.ok) {
+      setPendingAction(null);
       setError(data.error || "Could not change the playbook");
       return;
     }
     // Revising opens the next version beside this one, so the editor follows
     // it. The version still in service is left exactly as it was.
     if (data.draftId) {
+      // Deliberately not cleared: the page is navigating, and flicking the
+      // button back to its resting state first reads as "nothing happened".
       window.location.href = `/dashboard/settings/playbooks/${data.draftId}`;
       return;
     }
+    setPendingAction(null);
     setStatus(data.status);
   };
 
@@ -752,37 +771,41 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                 {status === "draft" && (
                   <button
                     type="button"
+                    disabled={pendingAction !== null}
                     onClick={() => void lifecycle("commit")}
-                    className="px-2 py-1 text-xs font-medium rounded border border-green-300 text-green-700 hover:bg-green-50"
+                    className="px-2 py-1 text-xs font-medium rounded border border-green-300 text-green-700 hover:bg-green-50 disabled:opacity-60 disabled:cursor-wait"
                   >
-                    Put into service
+                    {pendingAction === "commit" ? "Putting into service…" : "Put into service"}
                   </button>
                 )}
                 {status === "committed" && (
                   <>
                     <button
                       type="button"
+                      disabled={pendingAction !== null}
                       onClick={() => void lifecycle("revise")}
-                      className="px-2 py-1 text-xs font-medium rounded border border-blue-300 text-blue-700 hover:bg-blue-50"
+                      className="px-2 py-1 text-xs font-medium rounded border border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-60 disabled:cursor-wait"
                     >
-                      Revise
+                      {pendingAction === "revise" ? "Opening a revision…" : "Revise"}
                     </button>
                     <button
                       type="button"
+                      disabled={pendingAction !== null}
                       onClick={() => void lifecycle("retire")}
-                      className="px-2 py-1 text-xs font-medium rounded border border-slate-300 text-slate-600 hover:bg-slate-100"
+                      className="px-2 py-1 text-xs font-medium rounded border border-slate-300 text-slate-600 hover:bg-slate-100 disabled:opacity-60 disabled:cursor-wait"
                     >
-                      Retire
+                      {pendingAction === "retire" ? "Retiring…" : "Retire"}
                     </button>
                   </>
                 )}
                 {status === "retired" && (
                   <button
                     type="button"
+                    disabled={pendingAction !== null}
                     onClick={() => void lifecycle("commit")}
-                    className="px-2 py-1 text-xs font-medium rounded border border-green-300 text-green-700 hover:bg-green-50"
+                    className="px-2 py-1 text-xs font-medium rounded border border-green-300 text-green-700 hover:bg-green-50 disabled:opacity-60 disabled:cursor-wait"
                   >
-                    Put back into service
+                    {pendingAction === "commit" ? "Putting back…" : "Put back into service"}
                   </button>
                 )}
               </div>

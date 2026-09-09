@@ -650,28 +650,32 @@ Cross-tenant access is held by RLS — `procedure_definitions`,
 `get_user_tenant_id()`, and **no playbook route uses the admin client**, so
 that protection actually applies. Keep it that way.
 
-### A revision copies everything or nothing
+### A revision is one transaction, in the database
 
-`POST /api/playbooks/[id]/lifecycle` with `revise` inserts the copied steps one
-at a time, and until 2026-09-09 it **discarded every insert error** — the loop
-read `const { data: made }` and never looked at `error`. A copy that got part
-way through still answered success, so the editor opened on a draft that looked
-finished and was not.
+`revise_playbook(definition_id, user_id)` copies a version into a new draft
+inside a single transaction. The route calls it and does nothing else.
 
-That is worse than an outright failure, because of what happens next: saving
-from that editor calls `replaceSteps`, which rewrites the draft to match what
-the editor can see. The steps that never copied are then deleted for good.
-This is how a v5 came to exist with 8 top-level steps and none of v4's 24
-children.
-
-Now every insert is checked, a child whose parent did not copy is refused
-rather than silently promoted to top level, the final count is compared against
-the source, and any failure **deletes the half-made draft** and answers 500.
-The version in service is never touched either way.
-
-The editor's hydration is the other half of why this was invisible: it nests
+It used to be four statements from the application — the draft, the parents,
+the children, the dependencies — and **between any two of them the draft was
+visible half made**. The editor renders whatever it finds: hydration nests
 children under `parent_step_id` and silently drops any child whose parent is
-not in the set. A partial copy therefore renders as a clean, shorter playbook.
+missing, so a draft caught mid-copy looks like a complete, shorter playbook.
+Saving from that screen then calls `replaceSteps`, which rewrites the draft to
+match what the editor can see — and the steps that never copied are gone.
+
+This happened **twice** to the Modular Design Template, each time leaving a v5
+with 8 phases and none of v4's 24 child steps.
+
+Application-level rollback could not close that window, which is worth
+remembering before reaching for one again: the request can be abandoned between
+statements — a navigation, a dev-server recompile, a dropped connection — and
+then no rollback code runs at all. Only a transaction is atomic.
+
+It is also **twelve times faster**: 32 sequential inserts at ~195ms each took
+6.6 seconds, against 550ms for the function. That mattered, because the
+lifecycle buttons had no pending state, so a six-second revise looked like a
+dead button and people clicked away mid-copy. Those buttons now disable and say
+what they are doing.
 
 ### Saving a playbook is batched
 `replaceSteps` inserted one step at a time inside a two-pass loop, then one

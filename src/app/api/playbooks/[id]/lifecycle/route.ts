@@ -66,209 +66,90 @@ export async function POST(
 
     // ---------------------------------------------------------------- revise
     if (action === "revise") {
-      if (playbook.status !== "committed") {
-        return NextResponse.json(
-          { error: `Only a playbook in service can be revised.` },
-          { status: 409 }
-        );
-      }
-
-      // One draft at a time. Two open drafts of one process is a question
-      // nobody wants to answer at commit time.
-      const { data: openDraft } = await supabase
-        .from("procedure_definitions")
-        .select("id, version")
-        .eq("root_id", playbook.root_id)
-        .eq("status", "draft")
-        .maybeSingle();
-
-      if (openDraft) {
+      if (playbook.is_protected) {
         return NextResponse.json(
           {
-            error: `Version ${openDraft.version} is already being drafted.`,
-            reason: "draft_exists",
-            draftId: openDraft.id,
+            error:
+              "This playbook is provided by SoftInterio. Copy it first, then revise your copy.",
           },
           { status: 409 }
         );
       }
 
-      const { data: highest } = await supabase
-        .from("procedure_definitions")
-        .select("version")
-        .eq("root_id", playbook.root_id)
-        .order("version", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      const nextVersion = (highest?.version ?? playbook.version) + 1;
-
-      const { data: draft, error: draftError } = await supabase
-        .from("procedure_definitions")
-        .insert({
-          tenant_id: playbook.tenant_id,
-          root_id: playbook.root_id,
-          name: playbook.name,
-          description: playbook.description,
-          version: nextVersion,
-          applies_to: playbook.applies_to,
-          tenant_type: playbook.tenant_type,
-          enforce_order: playbook.enforce_order,
-          // The flag belongs to whichever version is in service, so a draft
-          // never competes with the live one for the auto-start slot.
-          auto_start: false,
-          auto_start_project_category: playbook.auto_start_project_category,
-          is_protected: false,
-          is_active: false,
-          status: "draft",
-          created_by: user.id,
-          updated_by: user.id,
-        })
-        .select("id, version")
-        .single();
-
-      if (draftError || !draft) {
-        log.error("Could not open a revision", draftError, { playbookId: id });
+      if (playbook.status !== "committed" && playbook.status !== "retired") {
         return NextResponse.json(
-          { error: "Could not open a revision" },
-          { status: 500 }
+          { error: "Only a playbook in service can be revised." },
+          { status: 409 }
         );
       }
 
-      // Start from what is in service rather than a blank page - a revision is
-      // almost always two changes in twenty-five steps.
-      const { data: steps } = await supabase
-        .from("procedure_step_definitions")
-        .select("*")
-        .eq("definition_id", playbook.id)
-        .eq("is_current", true)
-        .order("display_order");
+      /**
+       * One transaction, in the database.
+       *
+       * This used to be four statements from here - the draft, the parents,
+       * the children, the dependencies - and between any two of them the draft
+       * was visible half made. The editor renders whatever it finds, nesting
+       * children under their parent and silently dropping any child whose
+       * parent is missing, so a draft caught mid-copy looks like a complete,
+       * shorter playbook. Saving from that screen then rewrites the draft to
+       * match, and the steps that never copied are gone for good. That is
+       * twice now, both times leaving 8 phases and none of their 24 steps.
+       *
+       * Application-level rollback could not close the window: the request can
+       * be abandoned between statements - a navigation, a recompile, a dropped
+       * connection - and then no rollback code runs at all. Either the whole
+       * revision exists or none of it does.
+       *
+       * It is also about twelve times faster, which is what made the button
+       * look dead long enough for people to click away mid-copy.
+       */
+      const { data: result, error: rpcError } = await supabase.rpc(
+        "revise_playbook",
+        { p_definition_id: id, p_user_id: user.id }
+      );
 
-      const newIdByOld = new Map<string, string>();
-      const ordered = [
-        ...(steps ?? []).filter((s) => !s.parent_step_id),
-        ...(steps ?? []).filter((s) => s.parent_step_id),
-      ];
-
-      // Every insert is checked, and a single failure abandons the whole
-      // revision. This loop used to discard the error - `const { data: made }`
-      // with no `error` - so a copy that only got part way through still
-      // answered success, and the editor opened on a draft that looked
-      // finished and was not. A revision missing its child steps is worse than
-      // no revision: saving from that editor rewrites the draft to match what
-      // it can see, and the missing steps are then gone for good.
-      let copyFailure: string | null = null;
-
-      for (const step of ordered) {
-        const {
-          id: oldId,
-          definition_id: _d,
-          created_at: _c,
-          updated_at: _u,
-          parent_step_id,
-          ...rest
-        } = step;
-
-        // A child whose parent did not copy would land as a top-level step,
-        // silently changing the shape of the process. Refuse instead.
-        if (parent_step_id && !newIdByOld.has(parent_step_id)) {
-          copyFailure = `"${step.title}" belongs to a step that did not copy`;
-          break;
-        }
-
-        const { data: made, error: stepError } = await supabase
-          .from("procedure_step_definitions")
-          .insert({
-            ...rest,
-            definition_id: draft.id,
-            parent_step_id: parent_step_id
-              ? (newIdByOld.get(parent_step_id) ?? null)
-              : null,
-          })
-          .select("id")
-          .single();
-
-        if (stepError || !made) {
-          copyFailure = `"${step.title}" could not be copied: ${stepError?.message ?? "no row returned"}`;
-          break;
-        }
-
-        newIdByOld.set(oldId, made.id);
-      }
-
-      // The count is checked as well as the errors, in case a row vanishes for
-      // a reason no insert reported.
-      if (!copyFailure && newIdByOld.size !== ordered.length) {
-        copyFailure = `only ${newIdByOld.size} of ${ordered.length} steps copied`;
-      }
-
-      if (copyFailure) {
-        log.error("Revision copy failed, rolling the draft back", undefined, {
-          playbookId: id,
-          draftId: draft.id,
-          reason: copyFailure,
-        });
-
-        // Leave nothing half-made. A draft with some of its steps is the state
-        // that caused this.
-        const copiedIds = [...newIdByOld.values()];
-        if (copiedIds.length > 0) {
-          await supabase
-            .from("procedure_step_dependencies")
-            .delete()
-            .in("step_id", copiedIds);
-          await supabase
-            .from("procedure_step_definitions")
-            .delete()
-            .eq("definition_id", draft.id);
-        }
-        await supabase.from("procedure_definitions").delete().eq("id", draft.id);
-
+      if (rpcError) {
+        log.error("Revision failed", rpcError, { playbookId: id });
         return NextResponse.json(
           {
-            error: `Could not open a revision - ${copyFailure}. Nothing was changed; the version in service is untouched.`,
-            reason: "revision_copy_failed",
+            error:
+              "Could not open a revision. Nothing was changed; the version in service is untouched.",
+            reason: "revision_failed",
           },
           { status: 500 }
         );
       }
 
-      // Dependencies are between steps, so they are remapped onto the copies.
-      const oldIds = [...newIdByOld.keys()];
-      if (oldIds.length > 0) {
-        const { data: deps } = await supabase
-          .from("procedure_step_dependencies")
-          .select("step_id, depends_on_step_id, dependency_type")
-          .in("step_id", oldIds);
+      const outcome = result as {
+        success: boolean;
+        error?: string;
+        draft_id?: string;
+        version?: number;
+        steps?: number;
+      };
 
-        for (const d of deps ?? []) {
-          const from = newIdByOld.get(d.step_id as string);
-          const to = newIdByOld.get(d.depends_on_step_id as string);
-          if (!from || !to) continue;
-          await supabase.from("procedure_step_dependencies").insert({
-            step_id: from,
-            depends_on_step_id: to,
-            dependency_type: d.dependency_type,
-          });
-        }
+      if (!outcome?.success) {
+        return NextResponse.json(
+          { error: outcome?.error ?? "Could not open a revision", draftId: outcome?.draft_id },
+          { status: 409 }
+        );
       }
 
       log.info("Playbook revision opened", {
         rootId: playbook.root_id,
         from: playbook.version,
-        to: draft.version,
-        steps: ordered.length,
+        to: outcome.version,
+        steps: outcome.steps,
       });
 
       return NextResponse.json({
         success: true,
         status: "draft",
-        draftId: draft.id,
-        version: draft.version,
+        draftId: outcome.draft_id,
+        version: outcome.version,
       });
     }
 
-    // ---------------------------------------------------------------- commit
     if (action === "commit") {
       if (playbook.status !== "draft") {
         return NextResponse.json(
