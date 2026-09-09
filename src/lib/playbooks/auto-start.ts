@@ -88,9 +88,92 @@ export async function autoStartProjectPlaybook(
       playbook: chosen.name,
       runId,
     });
+
+    // The project now has a playbook, so the native phases created moments
+    // ago by initialize_project_phases describe the same work a second time.
+    // They are invisible while the run is active - the Plan tab prefers the
+    // run - and reappear the moment it is cancelled, which is what once read
+    // as "it shows a completely different playbook I'm not aware of".
+    await discardUntouchedPhases(supabase, projectId, log);
+
     return { started: true, playbookId: chosen.id, runId };
   } catch (err) {
     log?.warn("Auto-start threw", { projectId, error: String(err) });
     return { started: false };
+  }
+}
+
+
+/**
+ * Remove native phases for a project that has just adopted a playbook.
+ *
+ * Only when **nothing has happened on them**: every phase not_started and
+ * every sub-phase untouched. That is the honest test of "this is scaffolding
+ * nobody has used", and it is true at auto-start because the rows are seconds
+ * old. A project with real progress on its phases keeps them, playbook or not
+ * - deleting somebody's recorded work to tidy up a data model would be a far
+ * worse bug than the duplication it fixes.
+ *
+ * Quiet on failure, like everything else here: a leftover phase row is a
+ * cosmetic problem, a failed conversion is not.
+ */
+async function discardUntouchedPhases(
+  supabase: SupabaseClient,
+  projectId: string,
+  log?: RequestLogger
+): Promise<void> {
+  try {
+    const { data: phases } = await supabase
+      .from("project_phases")
+      .select("id, status")
+      .eq("project_id", projectId);
+
+    if (!phases?.length) return;
+
+    if (phases.some((p) => p.status !== "not_started")) {
+      log?.info("Kept native phases: work has already been recorded on them", {
+        projectId,
+      });
+      return;
+    }
+
+    const phaseIds = phases.map((p) => p.id);
+
+    const { data: subPhases } = await supabase
+      .from("project_sub_phases")
+      .select("id, status")
+      .in("project_phase_id", phaseIds);
+
+    if (subPhases?.some((s) => s.status !== "not_started")) {
+      log?.info("Kept native phases: a sub-phase has been started", { projectId });
+      return;
+    }
+
+    // A milestone pointing at a phase would be orphaned by this, so leave the
+    // phases alone rather than break the payment schedule.
+    const { count: milestones } = await supabase
+      .from("project_payment_milestones")
+      .select("*", { count: "exact", head: true })
+      .in("linked_phase_id", phaseIds);
+
+    if (milestones && milestones > 0) {
+      log?.info("Kept native phases: payment milestones are linked to them", {
+        projectId,
+      });
+      return;
+    }
+
+    await supabase.from("project_sub_phases").delete().in("project_phase_id", phaseIds);
+    await supabase.from("project_phases").delete().eq("project_id", projectId);
+
+    log?.info("Discarded unused native phases in favour of the playbook", {
+      projectId,
+      phases: phaseIds.length,
+    });
+  } catch (err) {
+    log?.warn("Could not tidy native phases after auto-start", {
+      projectId,
+      error: String(err),
+    });
   }
 }

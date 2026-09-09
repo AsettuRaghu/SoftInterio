@@ -49,38 +49,13 @@ import { buttonVariants } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
 import { PaymentsTab } from "@/components/projects/PaymentsTab";
 import { ProcurementTab } from "@/components/projects/ProcurementTab";
+import { StageStrip } from "@/components/projects/StageStrip";
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
 type TabKey = ProjectDetailTab;
-
-// Status workflow for visual stepper
-const STATUS_WORKFLOW = ["new", "in_progress", "completed"];
-
-/**
- * Where a status sits on the new -> in progress -> completed line.
- *
- * on_hold and cancelled are not points on that line. The stepper used to call
- * STATUS_WORKFLOW.indexOf(status) directly, which returned -1 for both, so
- * every dot rendered grey and a cancelled project looked exactly like one that
- * had not started yet. A hold is work in progress that has paused; a
- * cancellation is off the line entirely and is drawn differently.
- */
-function stepIndexForStatus(status: string | undefined): number {
-  switch (status) {
-    case "completed":
-      return 2;
-    case "in_progress":
-    case "on_hold":
-      return 1;
-    case "cancelled":
-      return -1;
-    default:
-      return 0;
-  }
-}
 
 export default function ProjectDetailPage({ params }: PageProps) {
   const { id } = use(params);
@@ -688,34 +663,13 @@ export default function ProjectDetailPage({ params }: PageProps) {
         iconBgClass="from-blue-500 to-blue-600"
         stats={
           <div className="flex items-center gap-4">
-            {/* Progress Stepper (Simplified) */}
-            <div className="flex items-center gap-1">
-              {STATUS_WORKFLOW.map((step, index) => {
-                const currentIndex = stepIndexForStatus(project.status);
-                const isCancelled = project.status === "cancelled";
-                const isOnHold = project.status === "on_hold";
-                const isCompleted = index < currentIndex;
-                const isCurrent = index === currentIndex;
-
-                return (
-                  <div
-                    key={step}
-                    className={`w-2 h-2 rounded-full ${
-                      isCancelled
-                        ? "bg-red-300"
-                        : isCompleted
-                          ? "bg-green-500"
-                          : isCurrent
-                            ? isOnHold
-                              ? "bg-amber-500"
-                              : "bg-blue-600"
-                            : "bg-slate-200"
-                    }`}
-                    title={isCancelled ? "Cancelled" : step}
-                  />
-                );
-              })}
-            </div>
+            {/* Where the work has got to, from the project's own playbook.
+                The three status dots this replaced tracked the record, not the
+                work - "in progress" covered first drawing to last snag. */}
+            <StageStrip
+              projectId={project.id}
+              onStageClick={() => setActiveTab("project-mgmt")}
+            />
 
             {/* Status Badge */}
             <span
