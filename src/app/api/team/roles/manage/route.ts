@@ -109,6 +109,9 @@ export async function GET(request: NextRequest) {
           // a copy first. The screen says so before anyone clicks.
           isSystem: role.is_system_role && role.tenant_id === null,
           isOwn: role.tenant_id === caller.tenant_id,
+          // Locked outright, not merely "shipped by us". The screen needs to
+          // say so before someone starts ticking boxes they cannot save.
+          isLocked: role.slug === "owner" && role.tenant_id === null,
           permissionCount: permissionCount ?? 0,
           memberCount,
         };

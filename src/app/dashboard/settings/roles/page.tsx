@@ -37,6 +37,7 @@ interface RoleSummary {
   hierarchyLevel: number;
   isSystem: boolean;
   isOwn: boolean;
+  isLocked: boolean;
   permissionCount: number;
   memberCount: number;
 }
@@ -52,6 +53,11 @@ const TIER_LABEL: Record<number, string> = {
 export default function RolesPage() {
   const { hasPermission, isLoading: permsLoading } = useUserPermissions();
   const canManage = hasPermission("team.roles.manage");
+  // Owner is locked for everyone, so the editor is read-only on it regardless
+  // of who is looking. The server and the database both refuse it too; this
+  // just means nobody gets as far as a save button that cannot work.
+  const canEditSelected = (role: RoleSummary | null) =>
+    canManage && !!role && !role.isLocked;
 
   const [roles, setRoles] = useState<RoleSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -332,8 +338,8 @@ export default function RolesPage() {
                       </span>
                       {role.isSystem && (
                         <LockClosedIcon
-                          className="w-3.5 h-3.5 text-slate-400 shrink-0"
-                          title="Provided by SoftInterio"
+                          className={`w-3.5 h-3.5 shrink-0 ${role.isLocked ? "text-slate-600" : "text-slate-400"}`}
+                          title={role.isLocked ? "Locked — cannot be changed" : "Provided by SoftInterio"}
                         />
                       )}
                       {role.isOwn && (
@@ -373,7 +379,7 @@ export default function RolesPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {canManage && selected.isOwn && (
+                  {canEditSelected(selected) && selected.isOwn && (
                     <button
                       onClick={() => deleteRole(selected)}
                       disabled={saving}
@@ -383,7 +389,7 @@ export default function RolesPage() {
                       Delete
                     </button>
                   )}
-                  {canManage && (
+                  {canEditSelected(selected) && (
                     <button
                       onClick={save}
                       disabled={!dirty || saving || detailLoading}
@@ -395,7 +401,7 @@ export default function RolesPage() {
                 </div>
               </div>
 
-              {selected.isSystem && canManage && (
+              {selected.isSystem && !selected.isLocked && canManage && (
                 <div className="mx-4 mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                   <strong className="font-semibold">{selected.name}</strong> is provided by
                   SoftInterio and shared with every business using it. Saving a change here
@@ -404,7 +410,19 @@ export default function RolesPage() {
                 </div>
               )}
 
-              {!canManage && (
+              {selected.isLocked && (
+                <div className="mx-4 mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 flex items-start gap-2">
+                  <LockClosedIcon className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
+                  <span>
+                    The Owner role holds every permission and is locked — nobody can
+                    change it, including an administrator or the owner themselves. It
+                    picks up each new permission automatically. To move this access,
+                    transfer ownership.
+                  </span>
+                </div>
+              )}
+
+              {!canManage && !selected.isLocked && (
                 <div className="mx-4 mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
                   You can see what this role does, but changing it needs the
                   &ldquo;Create, edit and delete roles&rdquo; permission.
@@ -442,7 +460,7 @@ export default function RolesPage() {
                               <span className="text-xs text-slate-500 font-mono">
                                 {on}/{perms.length}
                               </span>
-                              {canManage && (
+                              {canEditSelected(selected) && (
                                 <button
                                   onClick={() => toggleModule(mod, on < perms.length)}
                                   className="text-xs text-blue-600 hover:underline"
@@ -457,13 +475,13 @@ export default function RolesPage() {
                               <li key={perm.key}>
                                 <label
                                   className={`flex items-start gap-3 px-4 py-2.5 ${
-                                    canManage ? "cursor-pointer hover:bg-slate-50" : ""
+                                    canEditSelected(selected) ? "cursor-pointer hover:bg-slate-50" : ""
                                   }`}
                                 >
                                   <input
                                     type="checkbox"
                                     checked={selectedKeys.has(perm.key)}
-                                    disabled={!canManage}
+                                    disabled={!canEditSelected(selected)}
                                     onChange={() => toggle(perm.key)}
                                     className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/30"
                                   />

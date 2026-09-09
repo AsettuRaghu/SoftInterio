@@ -63,6 +63,27 @@ export async function PUT(
       );
     }
 
+    // The Owner role is locked. The database refuses the write regardless, but
+    // a check_violation surfacing as a 500 tells the user nothing - this says
+    // what the rule is instead.
+    const { data: target } = await admin
+      .from("roles")
+      .select("slug, tenant_id")
+      .eq("id", roleId)
+      .single();
+
+    if (target?.slug === "owner" && target.tenant_id === null) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "The Owner role holds every permission and cannot be changed, by anyone.",
+          reason: "owner_locked",
+        },
+        { status: 409 }
+      );
+    }
+
     const owned = await ensureTenantOwnedRole(admin, roleId, caller.tenant_id);
     if ("error" in owned) {
       return NextResponse.json(

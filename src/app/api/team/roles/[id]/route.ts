@@ -103,6 +103,7 @@ export async function GET(
           hierarchyLevel: found.role.hierarchy_level,
           isSystem: found.role.is_system_role && found.role.tenant_id === null,
           isOwn: found.role.tenant_id === found.tenantId,
+          isLocked: found.role.slug === "owner" && found.role.tenant_id === null,
         },
         keys: keys.sort(),
       },

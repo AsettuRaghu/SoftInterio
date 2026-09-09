@@ -170,6 +170,36 @@ export async function PUT(
       );
     }
 
+    // An owner's access is not editable by anybody, including an Admin who
+    // otherwise holds team.permissions.manage. The database refuses changes to
+    // the Owner ROLE; without this an Admin could reach the same outcome one
+    // person at a time, by revoking an owner's permissions individually.
+    const { data: ownerRole } = await adminClient
+      .from("roles")
+      .select("id")
+      .eq("slug", "owner")
+      .is("tenant_id", null)
+      .single();
+
+    if (ownerRole) {
+      const { count: holdsOwner } = await adminClient
+        .from("user_roles")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", memberId)
+        .eq("role_id", ownerRole.id);
+
+      if (holdsOwner && holdsOwner > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Owners hold every permission and that cannot be changed. Transfer ownership first if this needs to move.",
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     const { data: permission } = await adminClient
       .from("permissions")
       .select("id, key")

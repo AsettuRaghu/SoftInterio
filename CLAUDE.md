@@ -162,6 +162,45 @@ permission model is still unenforced.
 `role_permissions` is read-only in the app (no route writes it), so nothing can
 silently drop a grant.
 
+### The Owner role is locked, in the database
+
+Owner holds **every** permission, always, and no code path may change that.
+Enforced by triggers rather than by application checks, because "locked at all
+times" should not depend on every future caller remembering to ask first — and
+because the admin client bypasses RLS, so an application-level rule would not
+have stopped a stray server-side write.
+
+- `trg_grant_new_permission_to_owner` — every new row in `permissions` is
+  granted to Owner automatically. Owner held 254/254 only because the migration
+  that added `team.roles.manage` granted it by hand; the next person to forget
+  that step would have left Owner quietly short of "all permissions".
+- `trg_owner_permissions_locked` — Owner's grants cannot be updated, deleted,
+  or inserted as a revoke. An **insert that grants** is the one allowed write,
+  which is how a new permission arrives.
+- `trg_owner_role_locked` — the Owner role cannot be renamed, re-slugged,
+  moved to a tenant, or deleted.
+
+Scoped to the shipped Owner role (`tenant_id IS NULL AND slug = 'owner'`). A
+tenant who creates their own role called "Owner" has made an ordinary custom
+role and may edit it.
+
+**The lock initially broke deleting a permission.** `role_permissions` cascades
+from `permissions`, so removing a permission tried to delete Owner's grant and
+the lock refused the whole statement — a migration like
+`20260909130000`, which retired 12 keys, would have failed. A transaction-local
+flag set by `trg_mark_permission_deletion` distinguishes *removing a permission
+from Owner* (refused) from *removing the permission itself* (allowed, and it
+takes Owner's row with it). Found by the lock's own test, which could not clean
+up its probe row.
+
+Application layer matches, so nobody meets a raw `check_violation`: the roles
+API answers 409 `owner_locked`, the per-user overlay refuses anyone **holding
+the Owner role** — otherwise an Admin could reach the same end one permission
+at a time — and the Roles screen renders Owner read-only for everybody.
+
+Deliberate maintenance still has a way through:
+`ALTER TABLE role_permissions DISABLE TRIGGER trg_owner_permissions_locked;`
+
 ### A shipped role is a proposal; the first edit takes a copy
 
 All 21 seeded roles are global — `tenant_id` NULL, `is_system_role` true — and
