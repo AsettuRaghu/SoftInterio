@@ -47,6 +47,7 @@ import { formatCurrency as formatCurrencyUtil } from "@/modules/projects/utils";
 import { SpacesTab } from "@/components/property/SpacesTab";
 import { buttonVariants } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
+import { PaymentsTab } from "@/components/projects/PaymentsTab";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -968,23 +969,15 @@ export default function ProjectDetailPage({ params }: PageProps) {
           ) : null}
 
           {activeTab === "payments" && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-4 gap-4">
-                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                  <p className="text-xs text-slate-500 uppercase font-bold">
-                    Total Due
-                  </p>
-                  <p className="text-xl font-bold text-slate-900">
-                    {formatCurrencyUtil(project.lead?.won_amount)}
-                  </p>
-                </div>
-                {/* Add other summary cards as needed */}
-              </div>
-              {/* Milestones list would go here */}
-              <div className="bg-white rounded-lg border border-slate-200 p-8 text-center text-slate-500">
-                Payment Milestones Implementation
-              </div>
-            </div>
+            <PaymentsTab
+              projectId={project.id}
+              contractValue={
+                project.contract_value != null
+                  ? Number(project.contract_value)
+                  : null
+              }
+              projectClosed={project.status === "completed"}
+            />
           )}
         </div>
 
