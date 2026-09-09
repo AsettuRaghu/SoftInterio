@@ -586,6 +586,11 @@ export default function QuotationDetailPage() {
   const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
 
+  // Belongs up here with the others: the loading, error and not-found returns
+  // all sit between this and the markup that uses it, so declaring it there
+  // changed how many hooks ran between one render and the next.
+  const [changingStatus, setChangingStatus] = useState(false);
+
   // Create a new revision and open it for editing
   const handleCreateRevision = async () => {
     if (!quotation) return;
@@ -761,8 +766,6 @@ export default function QuotationDetailPage() {
         return null;
     }
   })();
-
-  const [changingStatus, setChangingStatus] = useState(false);
 
   const changeStatus = async (to: string) => {
     setChangingStatus(true);
