@@ -177,13 +177,20 @@ export default function PlaybooksPage() {
                   <td className="px-4 py-3 text-slate-600">
                     {p.step_count ?? 0}
                   </td>
-                  {/* Every version, so the freeze is legible: which one is in
-                      service, what is being drafted beside it, and what came
-                      before. */}
+                  {/* What is live, and a draft if one is open - nothing else.
+                      Showing every version made the page read as five things
+                      to think about when there are only ever two: the version
+                      running the business, and the one being written. Older
+                      versions still exist and are still what superseded plans
+                      followed; they are simply not a decision anybody makes
+                      from this screen. */}
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
-                      {(p.versions ?? [{ id: p.id, version: p.version, status: p.status }]).map(
-                        (v) => (
+                      {(p.versions ?? [{ id: p.id, version: p.version, status: p.status }])
+                        .filter(
+                          (v) => v.status === "committed" || v.status === "draft" || v.status === "retired"
+                        )
+                        .map((v) => (
                           <button
                             key={v.id}
                             type="button"
@@ -195,9 +202,7 @@ export default function PlaybooksPage() {
                                 ? "In service"
                                 : v.status === "draft"
                                   ? "Being written — cannot be used yet"
-                                  : v.status === "retired"
-                                    ? "Retired"
-                                    : "Superseded by a later version"
+                                  : "Retired — no new project adopts it"
                             }
                             className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${
                               v.status === "committed"
@@ -207,10 +212,9 @@ export default function PlaybooksPage() {
                                   : "bg-slate-50 text-slate-500 border-slate-200"
                             }`}
                           >
-                            v{v.version}
+                            {v.status === "draft" ? `v${v.version} draft` : `v${v.version} live`}
                           </button>
-                        )
-                      )}
+                        ))}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">

@@ -330,6 +330,8 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
   // Collapsed parents, by uid. Twenty-five steps do not fit on a screen, and
   // moving a phase is much easier when its children are folded away.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  /** What a lifecycle action just did, when it changed more than this page. */
+  const [notice, setNotice] = useState<string | null>(null);
   /** Which lifecycle action is in flight, so its button can say so. */
   const [pendingAction, setPendingAction] = useState<
     "commit" | "revise" | "retire" | null
@@ -431,6 +433,9 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
     }
     setPendingAction(null);
     setStatus(data.status);
+    // Putting a version live can move running projects onto it, so say what it
+    // actually did rather than silently changing somebody's plan.
+    if (data.message) setNotice(data.message);
   };
 
   React.useEffect(() => {
@@ -675,6 +680,12 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
           {error && (
             <div className="px-3 py-2 rounded-md bg-red-50 border border-red-200">
               <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
+
+          {notice && (
+            <div className="px-3 py-2 rounded-md bg-green-50 border border-green-200">
+              <p className="text-sm text-green-800">{notice}</p>
             </div>
           )}
 

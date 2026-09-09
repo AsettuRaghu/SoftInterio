@@ -736,29 +736,39 @@ Dragging a phase takes its steps with it; moving a phase and stranding its work
 is never what anyone meant. **Only the handle is `draggable`** — a draggable
 row hijacks selecting text inside its own inputs.
 
-### A version of a playbook is a row, not a number
-`procedure_definitions` holds one row per version, tied by `root_id`. This
-replaced a single row carrying a `version` number, which had a real flaw:
-revising flipped that row to draft, and since only a committed playbook can be
-run, **revising took the process out of service** until the editing finished.
+### Going live makes it THE version, everywhere
 
-Now v3 stays committed and adoptable while v4 is drafted beside it.
+Decided 2026-09-09, replacing the opposite rule. A run used to pin the version
+it started under and stay there, so committing v5 changed nothing for a project
+already on v4 — several versions live at once, which was most of what made this
+confusing to work with.
 
-- **draft** — being written; cannot be run. One per family at a time.
-- **committed** — in service. Steps frozen; wording still editable.
-- **superseded** — a later version took over. **Read-only**: a plan may still
-  be following it, and `PRJ_20251219_0001` follows v1 today.
-- **retired** — no new plans; running ones untouched.
+`commit_playbook_version()` now puts the draft into service **and moves every
+running plan onto it**, in one transaction. Existing work is matched by
+`step_key`, which is stable across revisions — that is what the column is for.
 
-Revising copies the committed version's steps and dependencies into the new
-draft, so a revision starts from what is in service rather than a blank page.
-Committing supersedes the outgoing version **first**, because the auto-start
-index allows one committed row per category — and the new version inherits how
-the old one was adopted.
+- **still there** — the task is repointed and takes the new title and hours.
+  Status, logged hours, comments and attachments are untouched: those belong to
+  the work, not the playbook.
+- **newly added** — a task is created, as `start_procedure_run` would.
+- **removed** — the task is cancelled **only if its status is still `todo`**.
+  A step somebody has started, parked or finished is left exactly as it is;
+  deleting recorded work to tidy up a playbook would be the worse bug.
 
-The list groups by `root_id` and shows one entry per playbook: the committed
-version represents it, else the open draft, else the newest. Every version is a
-chip you can open.
+The route reports what it did ("Version 5 is live. 1 running project moved onto
+it, 3 step(s) added") because it changed live projects, and silently reshaping
+somebody's plan is not acceptable.
+
+`task_status` is `todo | in_progress | on_hold | blocked | completed | skipped |
+cancelled`. It does **not** have `not_started` — that is phase vocabulary, and
+borrowing it broke the first version of this function outright.
+
+### The version list shows what is live and what is being written
+
+The playbook list filters to committed, draft and retired. Superseded versions
+still exist and are still what older plans followed, but they are not a
+decision anybody makes from that screen, and showing five chips made the page
+read as five things to think about when there are only ever two.
 
 ### The lifecycle in detail
 `procedure_definitions.status` replaced `is_active` doing two jobs badly —

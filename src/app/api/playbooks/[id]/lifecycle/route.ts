@@ -151,75 +151,78 @@ export async function POST(
     }
 
     if (action === "commit") {
-      if (playbook.status !== "draft") {
-        return NextResponse.json(
-          { error: "Only a draft can be put into service." },
-          { status: 409 }
-        );
-      }
+      /**
+       * One transaction, and it moves everything.
+       *
+       * Putting a version into service used to change only what NEW plans
+       * adopt - a project already running v4 stayed on v4 - which meant
+       * several versions were live at once, and that was most of what made
+       * this confusing. Decided 2026-09-09: going live makes this THE version,
+       * so every running plan moves onto it.
+       *
+       * Existing work is matched by step_key, which is stable across
+       * revisions. A task keeps its status, its logged hours, its comments and
+       * its attachments, and simply points at the same step in the newer
+       * version. A step that is gone has its task cancelled only if nobody has
+       * touched it; one with work on it is left exactly as it is.
+       */
+      const { data: result, error: rpcError } = await supabase.rpc(
+        "commit_playbook_version",
+        { p_definition_id: id, p_user_id: user.id }
+      );
 
-      const { count } = await supabase
-        .from("procedure_step_definitions")
-        .select("id", { count: "exact", head: true })
-        .eq("definition_id", id)
-        .eq("is_current", true);
-
-      if (!count) {
-        return NextResponse.json(
-          { error: "Add at least one step before putting this into service." },
-          { status: 409 }
-        );
-      }
-
-      // Supersede first. The auto-start index allows one committed row per
-      // category, so the outgoing version has to step aside before this one
-      // takes its place.
-      const { data: outgoing } = await supabase
-        .from("procedure_definitions")
-        .select("id, auto_start, auto_start_project_category")
-        .eq("root_id", playbook.root_id)
-        .eq("status", "committed")
-        .maybeSingle();
-
-      if (outgoing) {
-        await supabase
-          .from("procedure_definitions")
-          .update({ status: "superseded", is_active: false, auto_start: false })
-          .eq("id", outgoing.id);
-      }
-
-      const { error } = await supabase
-        .from("procedure_definitions")
-        .update({
-          status: "committed",
-          is_active: true,
-          // The new version inherits how the old one was adopted.
-          auto_start: outgoing?.auto_start ?? playbook.auto_start,
-          auto_start_project_category:
-            outgoing?.auto_start_project_category ??
-            playbook.auto_start_project_category,
-          updated_by: user.id,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id);
-
-      if (error) {
-        log.error("Could not put a playbook into service", error, {
+      if (rpcError) {
+        log.error("Could not put the playbook into service", rpcError, {
           playbookId: id,
         });
         return NextResponse.json(
-          { error: "Could not put this into service" },
+          { error: "Could not put this version into service. Nothing was changed." },
           { status: 500 }
         );
       }
 
-      log.info("Playbook version in service", {
-        rootId: playbook.root_id,
-        version: playbook.version,
-        superseded: outgoing?.id ?? null,
+      const outcome = result as {
+        success: boolean;
+        error?: string;
+        version?: number;
+        runs_moved?: number;
+        tasks_added?: number;
+        tasks_cancelled?: number;
+      };
+
+      if (!outcome?.success) {
+        return NextResponse.json(
+          { error: outcome?.error ?? "Could not put this version into service" },
+          { status: 409 }
+        );
+      }
+
+      log.info("Playbook version put into service", {
+        playbookId: id,
+        version: outcome.version,
+        runsMoved: outcome.runs_moved,
+        tasksAdded: outcome.tasks_added,
+        tasksCancelled: outcome.tasks_cancelled,
       });
 
-      return NextResponse.json({ success: true, status: "committed" });
+      // Said plainly, because it changed live projects.
+      const moved = outcome.runs_moved ?? 0;
+      const parts: string[] = [];
+      if (moved > 0) {
+        parts.push(`${moved} running project${moved === 1 ? "" : "s"} moved onto it`);
+        if (outcome.tasks_added) parts.push(`${outcome.tasks_added} step(s) added`);
+        if (outcome.tasks_cancelled)
+          parts.push(`${outcome.tasks_cancelled} removed step(s) cancelled`);
+      }
+
+      return NextResponse.json({
+        success: true,
+        status: "committed",
+        message: parts.length
+          ? `Version ${outcome.version} is live. ${parts.join(", ")}.`
+          : `Version ${outcome.version} is live.`,
+        runsMoved: moved,
+      });
     }
 
     // ---------------------------------------------------------------- retire
