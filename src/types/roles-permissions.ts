@@ -11,7 +11,7 @@
  * flat: a person can do what their granted permissions say, and nothing is
  * inherited. roles.hierarchy_level still exists in the schema and is not used.
  *
- * Generated from 265 permissions and 21 system roles.
+ * Generated from 253 permissions and 21 system roles.
  */
 
 // =====================================================
@@ -220,18 +220,6 @@ export type PermissionKey =
   | 'sales.convert_to_won'
   | 'sales.create'
   | 'sales.delete'
-  | 'sales.leads.approve_won'
-  | 'sales.leads.assign'
-  | 'sales.leads.create'
-  | 'sales.leads.delete'
-  | 'sales.leads.disqualify'
-  | 'sales.leads.edit_all'
-  | 'sales.leads.edit_own'
-  | 'sales.leads.export'
-  | 'sales.leads.mark_won'
-  | 'sales.leads.view'
-  | 'sales.leads.view_all'
-  | 'sales.leads.view_own'
   | 'sales.reports'
   | 'sales.reports.view'
   | 'sales.settings.manage'
@@ -497,18 +485,6 @@ export const PERMISSION_CATALOGUE: readonly PermissionDefinition[] = [
   { key: 'sales.convert_to_won', module: 'sales', description: 'Move leads to Won status (create project)' },
   { key: 'sales.create', module: 'sales', description: 'Create leads and contacts' },
   { key: 'sales.delete', module: 'sales', description: 'Delete leads and contacts' },
-  { key: 'sales.leads.approve_won', module: 'sales', description: 'Approve won leads' },
-  { key: 'sales.leads.assign', module: 'sales', description: 'Assign leads to others' },
-  { key: 'sales.leads.create', module: 'sales', description: 'Create new leads' },
-  { key: 'sales.leads.delete', module: 'sales', description: 'Delete leads' },
-  { key: 'sales.leads.disqualify', module: 'sales', description: 'Disqualify leads' },
-  { key: 'sales.leads.edit_all', module: 'sales', description: 'Edit any lead' },
-  { key: 'sales.leads.edit_own', module: 'sales', description: 'Edit own leads' },
-  { key: 'sales.leads.export', module: 'sales', description: 'Export leads data' },
-  { key: 'sales.leads.mark_won', module: 'sales', description: 'Mark leads as won' },
-  { key: 'sales.leads.view', module: 'sales', description: 'View leads list' },
-  { key: 'sales.leads.view_all', module: 'sales', description: 'View all leads' },
-  { key: 'sales.leads.view_own', module: 'sales', description: 'View only own leads' },
   { key: 'sales.reports', module: 'sales', description: 'View sales reports and analytics' },
   { key: 'sales.reports.view', module: 'sales', description: 'View sales reports' },
   { key: 'sales.settings.manage', module: 'sales', description: 'Manage sales settings' },

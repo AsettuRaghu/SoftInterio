@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { authLogger } from "@/lib/logger";
 import type { PermissionKey, RoleSlug } from "@/types/roles-permissions";
+import { mergePermissions, type RoleGrant, type UserGrant } from "@/lib/auth/permissions";
 
 interface UserPermissionsState {
   permissions: string[];
@@ -132,41 +133,47 @@ export function useUserPermissions(): UseUserPermissionsReturn {
         // Fetch permissions for user's roles
         const roleIds = userRolesData?.map((ur: any) => ur.role_id) || [];
 
-        if (roleIds.length === 0) {
-          globalState = {
-            permissions: [],
-            roles: [],
-            hierarchyLevel: 999,
-            isLoading: false,
-            error: null,
-          };
-          hasFetched = true;
-          notifySubscribers();
-          return;
+        // No early return for a user with no roles: the per-user overlay can
+        // grant permissions on its own, so bailing out here would have hidden
+        // every individually granted capability behind "has no roles".
+        const [roleGrantResult, userGrantResult] = await Promise.all([
+          roleIds.length > 0
+            ? supabase
+                .from("role_permissions")
+                .select(`
+                  granted,
+                  permissions (
+                    key
+                  )
+                `)
+                .in("role_id", roleIds)
+            : Promise.resolve({ data: [], error: null }),
+          supabase
+            .from("user_permissions")
+            .select("granted, permission:permissions(key)")
+            .eq("user_id", user.id),
+        ]);
+
+        if (roleGrantResult.error) {
+          throw roleGrantResult.error;
+        }
+        if (userGrantResult.error) {
+          throw userGrantResult.error;
         }
 
-        const { data: permissionsData, error: permissionsError } = await supabase
-          .from("role_permissions")
-          .select(`
-            granted,
-            permissions (
-              key
-            )
-          `)
-          .in("role_id", roleIds)
-          .eq("granted", true);
+        // Merged by the shared resolver rather than here. The filter this
+        // replaced required granted === true, so a row with a NULL granted
+        // disappeared from the UI while the API guard counted it as held -
+        // the menu hid a page the server would happily have served.
+        const roleGrants: RoleGrant[] = (roleGrantResult.data ?? [])
+          .filter((rp: any) => rp.permissions?.key)
+          .map((rp: any) => ({ granted: rp.granted, key: rp.permissions.key }));
 
-        if (permissionsError) {
-          throw permissionsError;
-        }
+        const userGrants: UserGrant[] = (userGrantResult.data ?? [])
+          .filter((row: any) => row.permission?.key)
+          .map((row: any) => ({ granted: row.granted, key: row.permission.key }));
 
-        // Extract unique permission keys
-        const permissionSet = new Set(
-          permissionsData
-            ?.filter((rp: any) => rp.granted && rp.permissions)
-            .map((rp: any) => rp.permissions.key) || []
-        );
-        const permissions = Array.from(permissionSet) as string[];
+        const permissions = Array.from(mergePermissions(roleGrants, userGrants));
 
         globalState = {
           permissions,

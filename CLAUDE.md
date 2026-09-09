@@ -143,19 +143,57 @@ bugs: the nav asked for `projects.reports.view` (the real key is
 `/dashboard/settings/roles` was guarded by `settings.roles.view` — neither the
 route nor the permission exists.
 
-**There are two lead permission namespaces.** The code enforces `leads.*`;
-`sales.leads.*` (20 keys) is granted to roles and read nowhere. **Manager holds
-`sales.leads.view` but neither `leads.view` nor `leads.view_own`, so a Manager
-is denied leads entirely.** No current user is affected — every real account
-also holds Admin or Owner — but the grants need reconciling before anyone is
-given Manager alone.
+**There is one lead permission namespace.** `sales.leads.*` was deleted on
+2026-09-09 (migration `20260909130000`) and its 12 keys folded into `leads.*`,
+which is what the code has always enforced.
 
-**202 of 265 permissions are referenced nowhere in `src/`.** `npm run
+It was not a harmless duplicate. Manager held `sales.leads.view` and no
+`leads.*` at all, and because the navigation and the middleware's route table
+*did* read `sales.leads.view`, a Manager was shown the Leads menu, allowed onto
+`/dashboard/sales/leads`, and then refused by `leadAccess()`. The menu worked
+and the page was broken — worse to diagnose than a clean denial. Owner and
+Admin already held all 18 `leads.*` keys and Sales held a coherent own-scoped
+set, so only Manager actually changed.
+
+**190 of 253 permissions are referenced nowhere in `src/`.** `npm run
 perms:check` lists them by module; it is a fair map of how much of the
 permission model is still unenforced.
 
 `role_permissions` is read-only in the app (no route writes it), so nothing can
 silently drop a grant.
+
+### Permissions resolve in one place, roles then user
+
+`src/lib/auth/permissions.ts` is the only thing that decides what a person may
+do. `mergePermissions()` applies two layers and the user layer always wins:
+
+- **roles** — held when a role grants it and none revokes it. `granted` is
+  tri-state, and only an explicit `false` revokes; `NULL` reads as held.
+- **user** — a row in `user_permissions` decides that one key outright, in
+  either direction, whatever the person's roles say.
+
+There were four copies of this and **they disagreed**. The API guard read
+`granted !== false`; the middleware and the client hook required
+`granted === true`, so a NULL row vanished from the UI while the server counted
+it as held; and `getCurrentSession()` ignored `granted` altogether and handed
+back permissions a role had explicitly **revoked**. All 1307 role grants are
+currently `true`, so nothing live exercised the difference — three of the four
+were one row away from disagreeing about the same person. All four now call the
+shared resolver.
+
+The client hook also used to return early with zero permissions for a user with
+no roles, which would have hidden every individually granted capability.
+
+**Granting one capability to one person is `user_permissions`, not a new role.**
+`PUT /api/team/members/[id]/permissions` takes `{ key, granted }`; DELETE with
+`?key=` clears the override and hands the decision back to their roles —
+deliberately different from revoking, which is an active "no". Gated on
+`team.permissions.manage` (Owner, Admin). Managed from Settings → Team, the key
+icon on a member's row.
+
+Note the sibling roles route still gates on `roles.hierarchy_level`, which
+contradicts the flat model everything else follows. It is worth reconciling;
+do not copy it into anything new.
 
 ### The anon key is public, so RLS is the only wall
 
@@ -760,3 +798,13 @@ when they were live.
 - Cover page is wired but dormant; needs an uploaded image
 - Terms are rendered live from the clause library, not snapshotted onto the
   quotation — that belongs with an approve-then-send flow
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

@@ -5,6 +5,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { mergePermissions, type RoleGrant, type UserGrant } from "@/lib/auth/permissions";
 import type {
   SignUpData,
   Tenant,
@@ -718,6 +719,7 @@ export async function getCurrentSession() {
         role:roles(
           *,
           role_permissions(
+            granted,
             permission:permissions(*)
           )
         )
@@ -731,10 +733,40 @@ export async function getCurrentSession() {
     return null;
   }
 
-  // Extract roles and permissions
+  // Extract roles and permissions.
+  //
+  // This used to flatten every role_permissions row straight out, ignoring
+  // `granted` entirely - so a permission a role explicitly REVOKED was still
+  // handed back as held, and hasPermission() below answered true for it. It
+  // also predated the per-user overlay.
   const roles = user.user_roles?.map((ur: any) => ur.role) || [];
-  const permissions = roles.flatMap(
-    (role: any) => role.role_permissions?.map((rp: any) => rp.permission) || []
+
+  const { data: userGrantRows } = await supabase
+    .from("user_permissions")
+    .select("granted, permission:permissions(key)")
+    .eq("user_id", authUser.id);
+
+  const roleGrants: RoleGrant[] = roles.flatMap((role: any) =>
+    (role.role_permissions ?? [])
+      .filter((rp: any) => rp.permission?.key)
+      .map((rp: any) => ({ granted: rp.granted, key: rp.permission.key }))
+  );
+  const userGrants: UserGrant[] = (userGrantRows ?? [])
+    .filter((row: any) => row.permission?.key)
+    .map((row: any) => ({ granted: row.granted, key: row.permission.key }));
+
+  const effective = mergePermissions(roleGrants, userGrants);
+
+  // Callers only read `.key`, but keep the full permission row where a role
+  // supplied one rather than flattening everything to a bare key.
+  const roleObjects = new Map<string, any>();
+  for (const role of roles) {
+    for (const rp of role.role_permissions ?? []) {
+      if (rp.permission?.key) roleObjects.set(rp.permission.key, rp.permission);
+    }
+  }
+  const permissions = Array.from(effective).map(
+    (key) => roleObjects.get(key) ?? { key }
   );
 
   return {

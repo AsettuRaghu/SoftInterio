@@ -8,6 +8,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getSubscriptionStatus, hasAccessToplatform, getAccessBlockedMessage } from "@/lib/billing/subscription-status";
 import type { TenantSubscriptionData } from "@/lib/billing/subscription-status";
 import { accessLogger } from "@/lib/activity-logger";
+import { mergePermissions, type RoleGrant, type UserGrant } from "@/lib/auth/permissions";
 import {
   routePermissions,
   type RoutePermission,
@@ -245,6 +246,13 @@ export async function updateSession(request: NextRequest) {
             `)
             .eq("user_id", user.id);
 
+          // The per-user overlay. Fetched separately because it has no join to
+          // the role chain, and folded in by the shared resolver below.
+          const { data: userGrantsData, error: userGrantsError } = await supabase
+            .from("user_permissions")
+            .select("granted, permission:permissions(key)")
+            .eq("user_id", user.id);
+
           // Check if user is super admin
           const { data: userRecord, error: userRecordError } = await supabase
             .from("users")
@@ -276,11 +284,12 @@ export async function updateSession(request: NextRequest) {
           // NO ERROR - which would read as "this user has no permissions".
           // The users .single() lookup does error in that situation, but
           // relying on that side effect would be fragile.
-          if (rolesError || userRecordError || !userRecord) {
+          if (rolesError || userGrantsError || userRecordError || !userRecord) {
             console.log(
               "[MIDDLEWARE] Could not resolve permissions, allowing through:",
               pathname,
               rolesError?.message ||
+                userGrantsError?.message ||
                 userRecordError?.message ||
                 "no user record returned"
             );
@@ -291,15 +300,23 @@ export async function updateSession(request: NextRequest) {
 
           // Super admins have access to everything
           if (!isSuperAdmin) {
-            // Extract permission keys from user's roles
-            const userPermissions = new Set<string>();
+            // Roles plus the per-user overlay, through the one resolver the
+            // API guard and the client hook also use. This block used to
+            // require granted === true, which silently dropped a row whose
+            // granted was NULL - the API guard read the same row as granted.
+            const roleGrants: RoleGrant[] = [];
             userRolesData?.forEach((ur: any) => {
               ur.roles?.role_permissions?.forEach((rp: any) => {
-                if (rp.granted && rp.permissions?.key) {
-                  userPermissions.add(rp.permissions.key);
+                if (rp.permissions?.key) {
+                  roleGrants.push({ granted: rp.granted, key: rp.permissions.key });
                 }
               });
             });
+            const userGrants: UserGrant[] = (userGrantsData ?? [])
+              .filter((row: any) => row.permission?.key)
+              .map((row: any) => ({ granted: row.granted, key: row.permission.key }));
+
+            const userPermissions = mergePermissions(roleGrants, userGrants);
 
             // Check if user has required permissions
             const { permissions, requireAll } = routePermission;

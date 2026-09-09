@@ -8,6 +8,7 @@ import { ConfirmationModal } from "@/components/team/ConfirmationModal";
 import { CredentialsModal } from "@/components/team/CredentialsModal";
 import { PasswordResetModal } from "@/components/team/PasswordResetModal";
 import { EditMemberModal } from "@/components/team/EditMemberModal";
+import { MemberPermissionsModal } from "@/components/team/MemberPermissionsModal";
 import { ProcessingOverlay } from "@/components/ui/ProcessingOverlay";
 import {
   PageLayout,
@@ -15,7 +16,7 @@ import {
   PageContent,
 } from "@/components/ui/PageLayout";
 import { uiLogger } from "@/lib/logger";
-import { UsersIcon } from "@heroicons/react/24/outline";
+import { UsersIcon, KeyIcon } from "@heroicons/react/24/outline";
 
 interface Role {
   id: string;
@@ -71,6 +72,10 @@ const formatDate = (dateString: string | null | undefined): string => {
 
 export default function TeamSettingsPage() {
   const { hasPermission, hierarchyLevel, isOwner } = useUserPermissions();
+
+  // Gated on the permission rather than hierarchy_level, which is what the
+  // rest of this page still uses. Permissions are flat by decision.
+  const canManagePermissions = hasPermission("team.permissions.manage");
 
   // Multi-select filter - default to Active and Invited
   const [selectedFilters, setSelectedFilters] = useState<FilterStatus[]>([
@@ -132,6 +137,13 @@ export default function TeamSettingsPage() {
     temporaryPassword: "",
     onClose: () => {},
   });
+
+  // Per-user permission overlay. Separate from roles on purpose: this grants
+  // one capability to one person without touching a shared role.
+  const [permissionsModal, setPermissionsModal] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   // Edit member modal state
   const [editModal, setEditModal] = useState<{
@@ -1183,6 +1195,21 @@ export default function TeamSettingsPage() {
                             </td>
                             <td className="px-4 py-2.5 text-right">
                               <div className="flex items-center justify-end gap-1">
+                                {canManagePermissions && !member.is_super_admin && (
+                                  <button
+                                    onClick={() =>
+                                      setPermissionsModal({
+                                        id: member.id,
+                                        name:
+                                          member.name || member.email || "this member",
+                                      })
+                                    }
+                                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                    title="Permissions"
+                                  >
+                                    <KeyIcon className="w-4 h-4" />
+                                  </button>
+                                )}
                                 {canEditMember(member) && (
                                   <>
                                     <button
@@ -1431,6 +1458,14 @@ export default function TeamSettingsPage() {
             temporaryPassword={passwordModal.temporaryPassword}
             onClose={passwordModal.onClose}
           />
+
+          {permissionsModal && (
+            <MemberPermissionsModal
+              memberId={permissionsModal.id}
+              memberName={permissionsModal.name}
+              onClose={() => setPermissionsModal(null)}
+            />
+          )}
 
           <EditMemberModal
             isOpen={editModal.show}

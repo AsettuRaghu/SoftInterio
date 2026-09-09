@@ -190,7 +190,7 @@ export const navigationConfig: NavigationItem[] = [
       {
         name: "Leads",
         href: "/dashboard/sales/leads",
-        permission: "sales.leads.view",
+        permission: "leads.view",
       },
       {
         name: "Reports",

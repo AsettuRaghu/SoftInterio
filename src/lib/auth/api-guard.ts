@@ -13,6 +13,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { fetchEffectivePermissions } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { PermissionKey } from "@/types/roles-permissions";
 
@@ -257,36 +258,19 @@ export async function protectApiRoute(
     // ----------------------------------------
     // Step 4: Check Permissions (if required)
     // ----------------------------------------
-    const permissionKeys = new Set<string>();
+    let permissionKeys = new Set<string>();
 
     if (
       (requiredPermissions.length > 0 || loadPermissions) &&
       !userData.is_super_admin
     ) {
-      const { data: userPermissions } = await adminClient
-        .from("user_roles")
-        .select(
-          `
-          role:roles(
-            role_permissions(
-              granted,
-              permission:permissions(key)
-            )
-          )
-        `
-        )
-        .eq("user_id", authUser.id);
-
-      userPermissions?.forEach((ur: any) => {
-        ur.role?.role_permissions?.forEach((rp: any) => {
-          // granted is a tri-state: a row can exist to *revoke* a permission.
-          // It was not read here, so an explicit revoke would have been
-          // honoured by the settings UI and ignored by the API.
-          if (rp.permission?.key && rp.granted !== false) {
-            permissionKeys.add(rp.permission.key);
-          }
-        });
-      });
+      // Roles plus the per-user overlay, resolved in one shared place so this
+      // route, the middleware, the client hook and getCurrentSession cannot
+      // reach different answers about the same person.
+      permissionKeys = await fetchEffectivePermissions(
+        adminClient,
+        authUser.id
+      );
 
       if (requiredPermissions.length > 0) {
         const hasPermissions = requireAllPermissions
