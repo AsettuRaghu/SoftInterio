@@ -33,7 +33,7 @@ export function Logo({
     "rounded-xl flex items-center justify-center",
     variant === "default" && "bg-blue-600 shadow-sm",
     variant === "white" && "bg-white shadow-sm",
-    variant === "dark" && "bg-gray-900",
+    variant === "dark" && "bg-slate-900",
     className
   );
 
@@ -43,7 +43,7 @@ export function Logo({
       ? "text-blue-600"
       : variant === "dark"
       ? "text-white"
-      : "text-gray-900";
+      : "text-slate-900";
 
   return (
     <div className="flex items-center space-x-3">
@@ -77,7 +77,7 @@ export function Logo({
         <div>
           <span
             className={cn(
-              "font-bold text-gray-900",
+              "font-bold text-slate-900",
               textSizeClasses[size],
               variant === "white" && "text-blue-600",
               variant === "dark" && "text-white"
@@ -89,11 +89,11 @@ export function Logo({
             <div
               className={cn(
                 "text-xs -mt-1",
-                textColor === "text-gray-900"
-                  ? "text-gray-500"
+                textColor === "text-slate-900"
+                  ? "text-slate-500"
                   : variant === "white"
                   ? "text-blue-500"
-                  : "text-gray-300"
+                  : "text-slate-300"
               )}
             >
               Interior Design ERP

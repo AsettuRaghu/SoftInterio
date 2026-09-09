@@ -77,7 +77,7 @@ export default function SamplePage() {
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className="px-4 py-2 border-b text-left bg-gray-50"
+                  className="px-4 py-2 border-b text-left bg-slate-50"
                 >
                   {col.label}
                 </th>
@@ -86,7 +86,7 @@ export default function SamplePage() {
           </thead>
           <tbody>
             {filtered.map((row, idx) => (
-              <tr key={idx} className="hover:bg-gray-100">
+              <tr key={idx} className="hover:bg-slate-100">
                 {columns.map((col) => (
                   <td key={col.key} className="px-4 py-2 border-b">
                     {row[col.key]}

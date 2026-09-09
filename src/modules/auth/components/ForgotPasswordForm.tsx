@@ -61,10 +61,10 @@ export function ForgotPasswordForm() {
                 />
               </svg>
             </div>
-            <h1 className="text-2xl font-semibold text-gray-900">
+            <h1 className="text-2xl font-semibold text-slate-900">
               Check Your Email
             </h1>
-            <p className="text-gray-600 text-sm">
+            <p className="text-slate-600 text-sm">
               We've sent password reset instructions to <strong>{email}</strong>
             </p>
           </div>
@@ -75,7 +75,7 @@ export function ForgotPasswordForm() {
                 Back to Sign In
               </Button>
             </Link>
-            <p className="text-xs text-gray-500 mt-6">
+            <p className="text-xs text-slate-500 mt-6">
               Didn't receive the email? Check your spam folder or{" "}
               <button
                 onClick={() => setIsSubmitted(false)}
@@ -94,10 +94,10 @@ export function ForgotPasswordForm() {
     <div className="max-w-md mx-auto">
       <div className="space-y-6">
         <div className="text-center">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+          <h1 className="text-2xl font-semibold text-slate-900 mb-2">
             Reset Password
           </h1>
-          <p className="text-gray-600 text-sm">
+          <p className="text-slate-600 text-sm">
             Enter your email and we'll send you reset instructions
           </p>
         </div>
@@ -131,7 +131,7 @@ export function ForgotPasswordForm() {
         </form>
 
         <div className="text-center">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-slate-600">
             Remember your password?{" "}
             <Link
               href="/auth/signin"

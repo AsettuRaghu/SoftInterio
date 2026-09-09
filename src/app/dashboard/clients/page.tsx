@@ -39,8 +39,8 @@ export default function ClientsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Clients</h1>
-          <p className="text-gray-600">Manage your client relationships</p>
+          <h1 className="text-2xl font-bold text-slate-900">Clients</h1>
+          <p className="text-slate-600">Manage your client relationships</p>
         </div>
         <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
           + Add Client
@@ -49,11 +49,11 @@ export default function ClientsPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-white rounded-lg border border-slate-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Clients</p>
-              <p className="text-2xl font-bold text-gray-900">156</p>
+              <p className="text-sm text-slate-600">Total Clients</p>
+              <p className="text-2xl font-bold text-slate-900">156</p>
             </div>
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
               <svg
@@ -72,11 +72,11 @@ export default function ClientsPage() {
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-white rounded-lg border border-slate-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Active Clients</p>
-              <p className="text-2xl font-bold text-gray-900">89</p>
+              <p className="text-sm text-slate-600">Active Clients</p>
+              <p className="text-2xl font-bold text-slate-900">89</p>
             </div>
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
               <svg
@@ -95,11 +95,11 @@ export default function ClientsPage() {
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-white rounded-lg border border-slate-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">New This Month</p>
-              <p className="text-2xl font-bold text-gray-900">12</p>
+              <p className="text-sm text-slate-600">New This Month</p>
+              <p className="text-2xl font-bold text-slate-900">12</p>
             </div>
             <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
               <svg
@@ -118,11 +118,11 @@ export default function ClientsPage() {
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-white rounded-lg border border-slate-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Revenue</p>
-              <p className="text-2xl font-bold text-gray-900">$1.8M</p>
+              <p className="text-sm text-slate-600">Total Revenue</p>
+              <p className="text-2xl font-bold text-slate-900">$1.8M</p>
             </div>
             <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
               <svg
@@ -144,59 +144,59 @@ export default function ClientsPage() {
       </div>
 
       {/* Clients Table */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">All Clients</h2>
+      <div className="bg-white rounded-lg border border-slate-200">
+        <div className="px-6 py-4 border-b border-slate-200">
+          <h2 className="text-lg font-semibold text-slate-900">All Clients</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-slate-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Client
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Contact
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Projects
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Total Spent
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Join Date
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white divide-y divide-slate-200">
               {clients.map((client) => (
-                <tr key={client.id} className="hover:bg-gray-50">
+                <tr key={client.id} className="hover:bg-slate-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">
+                      <div className="text-sm font-medium text-slate-900">
                         {client.name}
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-sm text-slate-500">
                         {client.email}
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{client.phone}</div>
+                    <div className="text-sm text-slate-900">{client.phone}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">
+                    <div className="text-sm text-slate-900">
                       {client.projects}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
                     {client.totalSpent}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -204,20 +204,20 @@ export default function ClientsPage() {
                       className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                         client.status === "Active"
                           ? "bg-green-100 text-green-800"
-                          : "bg-gray-100 text-gray-800"
+                          : "bg-slate-100 text-slate-800"
                       }`}
                     >
                       {client.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
                     {client.joinDate}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button className="text-blue-600 hover:text-blue-900 mr-3">
                       View
                     </button>
-                    <button className="text-gray-600 hover:text-gray-900">
+                    <button className="text-slate-600 hover:text-slate-900">
                       Edit
                     </button>
                   </td>

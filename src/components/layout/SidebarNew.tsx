@@ -349,7 +349,7 @@ export function Sidebar({ isExpanded, setIsExpanded }: SidebarProps) {
 
             {/* Tooltip for collapsed state */}
             {!isExpanded && (
-              <div className="absolute left-full ml-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+              <div className="absolute left-full ml-2 px-3 py-2 bg-slate-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
                 Get Help
               </div>
             )}

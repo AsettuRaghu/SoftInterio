@@ -192,7 +192,7 @@ export function LeadsTable({
               return "bg-blue-100 text-blue-700";
             if (stage === "won") return "bg-green-100 text-green-700";
             if (stage === "lost") return "bg-red-100 text-red-700";
-            if (stage === "disqualified") return "bg-gray-100 text-gray-700";
+            if (stage === "disqualified") return "bg-slate-100 text-slate-700";
             return "bg-slate-100 text-slate-700";
           };
 

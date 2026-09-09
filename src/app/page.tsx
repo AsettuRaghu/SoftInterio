@@ -4,7 +4,7 @@ import { Logo } from "@/components/ui/Logo";
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-50">
       {/* Header */}
       <header className="relative z-10">
         <nav className="max-w-7xl mx-auto px-6 py-8">
@@ -13,19 +13,19 @@ export default function HomePage() {
             <div className="hidden md:flex items-center space-x-6">
               <a
                 href="#features"
-                className="text-gray-600 hover:text-gray-900 transition-colors"
+                className="text-slate-600 hover:text-slate-900 transition-colors"
               >
                 Features
               </a>
               <a
                 href="#about"
-                className="text-gray-600 hover:text-gray-900 transition-colors"
+                className="text-slate-600 hover:text-slate-900 transition-colors"
               >
                 About
               </a>
               <a
                 href="#contact"
-                className="text-gray-600 hover:text-gray-900 transition-colors"
+                className="text-slate-600 hover:text-slate-900 transition-colors"
               >
                 Contact
               </a>

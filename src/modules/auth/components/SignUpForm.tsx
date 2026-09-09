@@ -199,10 +199,10 @@ export function SignUpForm() {
   const renderStep1 = () => (
     <div className="w-full max-w-2xl mx-auto px-4">
       <div className="text-center mb-4">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">
+        <h1 className="text-2xl font-bold text-slate-900 mb-1">
           Create Your Account
         </h1>
-        <p className="text-gray-600 text-sm">
+        <p className="text-slate-600 text-sm">
           Step 1 of 2: Personal & Company Details
         </p>
       </div>
@@ -230,7 +230,7 @@ export function SignUpForm() {
                 />
               </svg>
             </div>
-            <p className="text-base text-gray-800 font-medium text-center mb-4">
+            <p className="text-base text-slate-800 font-medium text-center mb-4">
               {error}
             </p>
             <Button onClick={() => setError("")} className="w-full" size="sm">
@@ -291,13 +291,13 @@ export function SignUpForm() {
             required
           />
           <div className="space-y-1">
-            <label className="block text-sm font-medium text-gray-900">
+            <label className="block text-sm font-medium text-slate-900">
               Company Type <span className="text-red-500">*</span>
             </label>
             <select
               value={formData.companyType}
               onChange={(e) => handleInputChange("companyType", e.target.value)}
-              className="w-full h-11 px-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full h-11 px-3 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               {companyTypes.map((type) => (
                 <option key={type.value} value={type.value}>
@@ -339,7 +339,7 @@ export function SignUpForm() {
       </form>
 
       <div className="text-center mt-4">
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-slate-600">
           Already have an account?{" "}
           <Link
             href="/auth/signin"
@@ -355,10 +355,10 @@ export function SignUpForm() {
   const renderStep2 = () => (
     <div className="w-full max-w-5xl mx-auto px-4">
       <div className="text-center mb-4">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">
+        <h1 className="text-2xl font-bold text-slate-900 mb-1">
           Choose Your Plan
         </h1>
-        <p className="text-gray-600 text-sm">
+        <p className="text-slate-600 text-sm">
           Step 2 of 2: Select a subscription plan
         </p>
       </div>
@@ -386,7 +386,7 @@ export function SignUpForm() {
                 />
               </svg>
             </div>
-            <p className="text-base text-gray-800 font-medium text-center mb-4">
+            <p className="text-base text-slate-800 font-medium text-center mb-4">
               {error}
             </p>
             <Button onClick={() => setError("")} className="w-full" size="sm">
@@ -404,7 +404,7 @@ export function SignUpForm() {
             className={`relative flex flex-col rounded-2xl border-2 p-6 cursor-pointer transition-all duration-300 ${
               formData.selectedPlan === plan.id
                 ? "border-blue-500 bg-blue-50 shadow-xl scale-[1.02]"
-                : "border-gray-200 bg-white hover:border-blue-300 hover:shadow-lg"
+                : "border-slate-200 bg-white hover:border-blue-300 hover:shadow-lg"
             } ${plan.popular ? "ring-2 ring-blue-400" : ""}`}
           >
             {plan.popular && (
@@ -419,7 +419,7 @@ export function SignUpForm() {
                 className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
                   formData.selectedPlan === plan.id
                     ? "border-blue-500 bg-blue-500"
-                    : "border-gray-300"
+                    : "border-slate-300"
                 }`}
               >
                 {formData.selectedPlan === plan.id && (
@@ -440,7 +440,7 @@ export function SignUpForm() {
 
             {/* Plan header */}
             <div className="text-center mb-4 pt-2">
-              <h3 className="text-xl font-bold text-gray-900 mb-1">
+              <h3 className="text-xl font-bold text-slate-900 mb-1">
                 {plan.name}
               </h3>
               <p className="text-sm text-blue-600 font-medium">
@@ -450,16 +450,16 @@ export function SignUpForm() {
 
             {/* Price */}
             <div className="text-center mb-4">
-              <span className="text-3xl font-bold text-gray-900">
+              <span className="text-3xl font-bold text-slate-900">
                 {plan.price}
               </span>
-              <span className="text-gray-500 text-sm">
+              <span className="text-slate-500 text-sm">
                 /{plan.period.split(" ")[1]}
               </span>
             </div>
 
             {/* Description */}
-            <p className="text-sm text-gray-600 text-center mb-4">
+            <p className="text-sm text-slate-600 text-center mb-4">
               {plan.description}
             </p>
 
@@ -469,7 +469,7 @@ export function SignUpForm() {
                 {plan.features.map((feature, idx) => (
                   <li
                     key={idx}
-                    className="flex items-start text-sm text-gray-700"
+                    className="flex items-start text-sm text-slate-700"
                   >
                     <svg
                       className="w-4 h-4 text-green-500 mr-2 mt-0.5 shrink-0"
@@ -489,7 +489,7 @@ export function SignUpForm() {
             </div>
 
             {/* Highlight */}
-            <div className="mt-4 pt-4 border-t border-gray-100">
+            <div className="mt-4 pt-4 border-t border-slate-100">
               <p className="text-xs text-blue-600 italic text-center">
                 {plan.highlight}
               </p>

@@ -10,7 +10,7 @@ export default function SignInPage() {
       fallback={
         <div className="max-w-md mx-auto flex flex-col items-center justify-center min-h-[300px]">
           <LoadingSpinner />
-          <p className="text-gray-600 mt-4">Loading...</p>
+          <p className="text-slate-600 mt-4">Loading...</p>
         </div>
       }
     >

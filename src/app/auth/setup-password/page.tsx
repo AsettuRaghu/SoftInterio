@@ -287,7 +287,7 @@ export default function SetupPasswordPage() {
       <div className="max-w-md mx-auto">
         <div className="flex flex-col items-center justify-center min-h-[300px] space-y-4">
           <LoadingSpinner />
-          <p className="text-gray-600">Verifying your invitation...</p>
+          <p className="text-slate-600">Verifying your invitation...</p>
         </div>
       </div>
     );
@@ -313,10 +313,10 @@ export default function SetupPasswordPage() {
                 />
               </svg>
             </div>
-            <h1 className="text-2xl font-semibold text-gray-900">
+            <h1 className="text-2xl font-semibold text-slate-900">
               Account Setup Complete!
             </h1>
-            <p className="text-gray-600 text-sm mt-2">
+            <p className="text-slate-600 text-sm mt-2">
               Your password has been set successfully. Redirecting to
               dashboard...
             </p>
@@ -346,10 +346,10 @@ export default function SetupPasswordPage() {
                 />
               </svg>
             </div>
-            <h1 className="text-2xl font-semibold text-gray-900">
+            <h1 className="text-2xl font-semibold text-slate-900">
               Invalid Invitation
             </h1>
-            <p className="text-gray-600 text-sm mt-2">{error}</p>
+            <p className="text-slate-600 text-sm mt-2">{error}</p>
           </div>
 
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
@@ -395,10 +395,10 @@ export default function SetupPasswordPage() {
               />
             </svg>
           </div>
-          <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+          <h1 className="text-2xl font-semibold text-slate-900 mb-2">
             Welcome to SoftInterio!
           </h1>
-          <p className="text-gray-600 text-sm">
+          <p className="text-slate-600 text-sm">
             Create a password to complete your account setup and get started.
           </p>
           {userEmail && (
@@ -426,10 +426,10 @@ export default function SetupPasswordPage() {
             disabled={isLoading}
           />
           <div className="space-y-1">
-            <p className="text-xs font-medium text-gray-600">
+            <p className="text-xs font-medium text-slate-600">
               Password must contain:
             </p>
-            <ul className="text-xs text-gray-600 space-y-0.5">
+            <ul className="text-xs text-slate-600 space-y-0.5">
               <li className="flex items-center gap-2">
                 <span
                   className={`w-4 h-4 flex items-center justify-center rounded ${

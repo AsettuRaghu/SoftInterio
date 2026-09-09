@@ -225,7 +225,7 @@ function AcceptInviteContent() {
       <div className="max-w-md mx-auto">
         <div className="flex flex-col items-center justify-center min-h-[300px] space-y-4">
           <LoadingSpinner />
-          <p className="text-gray-600">Validating your invitation...</p>
+          <p className="text-slate-600">Validating your invitation...</p>
         </div>
       </div>
     );
@@ -237,7 +237,7 @@ function AcceptInviteContent() {
       <div className="max-w-md mx-auto">
         <div className="flex flex-col items-center justify-center min-h-[300px] space-y-4">
           <LoadingSpinner />
-          <p className="text-gray-600">Joining {inviteData.companyName}...</p>
+          <p className="text-slate-600">Joining {inviteData.companyName}...</p>
         </div>
       </div>
     );
@@ -263,10 +263,10 @@ function AcceptInviteContent() {
                 />
               </svg>
             </div>
-            <h1 className="text-2xl font-semibold text-gray-900">
+            <h1 className="text-2xl font-semibold text-slate-900">
               Invitation Accepted!
             </h1>
-            <p className="text-gray-600 text-sm mt-2">
+            <p className="text-slate-600 text-sm mt-2">
               You have joined <strong>{inviteData?.companyName}</strong>.
               Redirecting to dashboard...
             </p>
@@ -296,10 +296,10 @@ function AcceptInviteContent() {
                 />
               </svg>
             </div>
-            <h1 className="text-2xl font-semibold text-gray-900">
+            <h1 className="text-2xl font-semibold text-slate-900">
               Invalid Invitation
             </h1>
-            <p className="text-gray-600 text-sm mt-2">{error}</p>
+            <p className="text-slate-600 text-sm mt-2">{error}</p>
           </div>
           <div className="text-center">
             <a
@@ -333,10 +333,10 @@ function AcceptInviteContent() {
               />
             </svg>
           </div>
-          <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+          <h1 className="text-2xl font-semibold text-slate-900 mb-2">
             Join {inviteData?.companyName}
           </h1>
-          <p className="text-gray-600 text-sm">
+          <p className="text-slate-600 text-sm">
             You&apos;ve been invited to join{" "}
             <strong>{inviteData?.companyName}</strong>. Sign in with your
             existing password to accept.
@@ -410,7 +410,7 @@ export default function AcceptInvitePage() {
         <div className="max-w-md mx-auto">
           <div className="flex flex-col items-center justify-center min-h-[300px] space-y-4">
             <LoadingSpinner />
-            <p className="text-gray-600">Loading...</p>
+            <p className="text-slate-600">Loading...</p>
           </div>
         </div>
       }

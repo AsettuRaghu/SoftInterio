@@ -26,13 +26,13 @@ export default function ConfirmationPage() {
           </div>
 
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900 mb-3">
+            <h1 className="text-2xl font-semibold text-slate-900 mb-3">
               Account Activated Successfully!
             </h1>
-            <p className="text-gray-600 text-base mb-2">
+            <p className="text-slate-600 text-base mb-2">
               Welcome to SoftInterio! Your account has been activated.
             </p>
-            <p className="text-gray-600 text-sm">
+            <p className="text-slate-600 text-sm">
               You can now sign in to access your dashboard and start managing
               your interior design projects.
             </p>
@@ -45,7 +45,7 @@ export default function ConfirmationPage() {
               Sign In to Your Account
             </Button>
           </Link>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-slate-500">
             You can now sign in with your email and password
           </p>
         </div>

@@ -116,10 +116,10 @@ export default function ResetPasswordForm() {
                 />
               </svg>
             </div>
-            <h1 className="text-2xl font-semibold text-gray-900">
+            <h1 className="text-2xl font-semibold text-slate-900">
               Password Reset Successful
             </h1>
-            <p className="text-gray-600 text-sm mt-2">
+            <p className="text-slate-600 text-sm mt-2">
               Your password has been reset successfully. Redirecting to sign
               in...
             </p>
@@ -133,10 +133,10 @@ export default function ResetPasswordForm() {
     <div className="max-w-md mx-auto">
       <div className="space-y-6">
         <div className="text-center">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+          <h1 className="text-2xl font-semibold text-slate-900 mb-2">
             Reset Your Password
           </h1>
-          <p className="text-gray-600 text-sm">Enter your new password below</p>
+          <p className="text-slate-600 text-sm">Enter your new password below</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -158,10 +158,10 @@ export default function ResetPasswordForm() {
           />
 
           <div className="space-y-1">
-            <p className="text-xs font-medium text-gray-600">
+            <p className="text-xs font-medium text-slate-600">
               Password must contain:
             </p>
-            <ul className="text-xs text-gray-600 space-y-0.5">
+            <ul className="text-xs text-slate-600 space-y-0.5">
               <li className="flex items-center gap-2">
                 <span
                   className={`w-4 h-4 flex items-center justify-center rounded ${
@@ -230,7 +230,7 @@ export default function ResetPasswordForm() {
         </form>
 
         <div className="text-center">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-slate-600">
             Remember your password?{" "}
             <Link
               href="/auth/signin"

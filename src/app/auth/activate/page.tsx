@@ -26,10 +26,10 @@ export default function ActivatePage() {
           </div>
 
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900 mb-3">
+            <h1 className="text-2xl font-semibold text-slate-900 mb-3">
               Check Your Email
             </h1>
-            <p className="text-gray-600 text-sm">
+            <p className="text-slate-600 text-sm">
               Please check your inbox and click the activation link to complete
               your account setup and access your SoftInterio dashboard.
             </p>
@@ -62,13 +62,13 @@ export default function ActivatePage() {
         </div>
 
         <div className="space-y-3">
-          <p className="text-sm text-gray-600">Didn't receive the email?</p>
+          <p className="text-sm text-slate-600">Didn't receive the email?</p>
 
           <Button variant="outline" className="w-full" size="lg">
             Resend Activation Email
           </Button>
 
-          <div className="flex flex-col space-y-2 text-xs text-gray-500">
+          <div className="flex flex-col space-y-2 text-xs text-slate-500">
             <Link
               href="/auth/signin"
               className="text-blue-600 hover:text-blue-500"

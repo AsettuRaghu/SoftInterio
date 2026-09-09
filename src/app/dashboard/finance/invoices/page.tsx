@@ -131,7 +131,7 @@ export default function InvoicesPage() {
     "Viewed": "bg-cyan-100 text-cyan-700",
     "Paid": "bg-green-100 text-green-700",
     "Overdue": "bg-red-100 text-red-700",
-    "Cancelled": "bg-gray-100 text-gray-700",
+    "Cancelled": "bg-slate-100 text-slate-700",
   };
 
   const stats = {

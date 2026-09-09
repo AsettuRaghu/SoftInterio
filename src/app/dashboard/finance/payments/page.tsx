@@ -132,7 +132,7 @@ export default function PaymentsPage() {
     "Completed": "bg-green-100 text-green-700",
     "Pending": "bg-amber-100 text-amber-700",
     "Failed": "bg-red-100 text-red-700",
-    "Refunded": "bg-gray-100 text-gray-700",
+    "Refunded": "bg-slate-100 text-slate-700",
   };
 
   const stats = {
