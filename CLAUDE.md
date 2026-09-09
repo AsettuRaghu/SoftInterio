@@ -650,6 +650,29 @@ Cross-tenant access is held by RLS — `procedure_definitions`,
 `get_user_tenant_id()`, and **no playbook route uses the admin client**, so
 that protection actually applies. Keep it that way.
 
+### A revision copies everything or nothing
+
+`POST /api/playbooks/[id]/lifecycle` with `revise` inserts the copied steps one
+at a time, and until 2026-09-09 it **discarded every insert error** — the loop
+read `const { data: made }` and never looked at `error`. A copy that got part
+way through still answered success, so the editor opened on a draft that looked
+finished and was not.
+
+That is worse than an outright failure, because of what happens next: saving
+from that editor calls `replaceSteps`, which rewrites the draft to match what
+the editor can see. The steps that never copied are then deleted for good.
+This is how a v5 came to exist with 8 top-level steps and none of v4's 24
+children.
+
+Now every insert is checked, a child whose parent did not copy is refused
+rather than silently promoted to top level, the final count is compared against
+the source, and any failure **deletes the half-made draft** and answers 500.
+The version in service is never touched either way.
+
+The editor's hydration is the other half of why this was invisible: it nests
+children under `parent_step_id` and silently drops any child whose parent is
+not in the set. A partial copy therefore renders as a clean, shorter playbook.
+
 ### Saving a playbook is batched
 `replaceSteps` inserted one step at a time inside a two-pass loop, then one
 dependency at a time — about **forty-five sequential round trips** for a

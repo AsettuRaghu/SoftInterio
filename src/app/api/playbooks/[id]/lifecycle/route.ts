@@ -150,6 +150,15 @@ export async function POST(
         ...(steps ?? []).filter((s) => s.parent_step_id),
       ];
 
+      // Every insert is checked, and a single failure abandons the whole
+      // revision. This loop used to discard the error - `const { data: made }`
+      // with no `error` - so a copy that only got part way through still
+      // answered success, and the editor opened on a draft that looked
+      // finished and was not. A revision missing its child steps is worse than
+      // no revision: saving from that editor rewrites the draft to match what
+      // it can see, and the missing steps are then gone for good.
+      let copyFailure: string | null = null;
+
       for (const step of ordered) {
         const {
           id: oldId,
@@ -160,7 +169,14 @@ export async function POST(
           ...rest
         } = step;
 
-        const { data: made } = await supabase
+        // A child whose parent did not copy would land as a top-level step,
+        // silently changing the shape of the process. Refuse instead.
+        if (parent_step_id && !newIdByOld.has(parent_step_id)) {
+          copyFailure = `"${step.title}" belongs to a step that did not copy`;
+          break;
+        }
+
+        const { data: made, error: stepError } = await supabase
           .from("procedure_step_definitions")
           .insert({
             ...rest,
@@ -172,7 +188,49 @@ export async function POST(
           .select("id")
           .single();
 
-        if (made) newIdByOld.set(oldId, made.id);
+        if (stepError || !made) {
+          copyFailure = `"${step.title}" could not be copied: ${stepError?.message ?? "no row returned"}`;
+          break;
+        }
+
+        newIdByOld.set(oldId, made.id);
+      }
+
+      // The count is checked as well as the errors, in case a row vanishes for
+      // a reason no insert reported.
+      if (!copyFailure && newIdByOld.size !== ordered.length) {
+        copyFailure = `only ${newIdByOld.size} of ${ordered.length} steps copied`;
+      }
+
+      if (copyFailure) {
+        log.error("Revision copy failed, rolling the draft back", undefined, {
+          playbookId: id,
+          draftId: draft.id,
+          reason: copyFailure,
+        });
+
+        // Leave nothing half-made. A draft with some of its steps is the state
+        // that caused this.
+        const copiedIds = [...newIdByOld.values()];
+        if (copiedIds.length > 0) {
+          await supabase
+            .from("procedure_step_dependencies")
+            .delete()
+            .in("step_id", copiedIds);
+          await supabase
+            .from("procedure_step_definitions")
+            .delete()
+            .eq("definition_id", draft.id);
+        }
+        await supabase.from("procedure_definitions").delete().eq("id", draft.id);
+
+        return NextResponse.json(
+          {
+            error: `Could not open a revision - ${copyFailure}. Nothing was changed; the version in service is untouched.`,
+            reason: "revision_copy_failed",
+          },
+          { status: 500 }
+        );
       }
 
       // Dependencies are between steps, so they are remapped onto the copies.
