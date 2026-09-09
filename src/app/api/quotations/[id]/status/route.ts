@@ -100,6 +100,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
      * anyone signed in, and quotations.approve existed unused.
      */
     if (status === "approved" && !guard.permissions.has("quotations.approve")) {
+      // Logged with what was actually resolved: a refusal that only says "you
+      // cannot" is impossible to tell apart from permissions failing to load.
+      console.warn("[quotations] approve refused", {
+        userId: user.id,
+        permissionsResolved: guard.permissions.size,
+        hasApprove: guard.permissions.has("quotations.approve"),
+      });
       return NextResponse.json(
         {
           error:

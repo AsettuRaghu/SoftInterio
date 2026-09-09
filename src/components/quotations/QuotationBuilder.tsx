@@ -78,7 +78,16 @@ export function QuotationBuilder({
     "idle" | "saving" | "saved" | "error"
   >("idle");
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isInitialLoadRef = useRef(true);
+  /**
+   * What the quotation looked like when it was opened or last saved.
+   *
+   * "Unsaved changes" used to mean "something set state after an arbitrary
+   * 100ms window closed", which is why a freshly opened quotation claimed to
+   * be dirty - anything that settled late tripped it. It now means the
+   * document differs from the one that was loaded, so it also clears itself
+   * when an edit is undone.
+   */
+  const baselineRef = useRef<string | null>(null);
 
   // Quotation data
   const [quotationNumber, setQuotationNumber] = useState("");
@@ -1487,6 +1496,12 @@ export function QuotationBuilder({
 
       // For auto-save, don't redirect
       if (!redirectAfterSave) {
+        baselineRef.current = JSON.stringify({
+          spaces,
+          quotationName,
+          notes,
+          assignedTo,
+        });
         setHasUnsavedChanges(false);
         setLastSavedAt(new Date());
         setAutoSaveStatus("saved");
@@ -1508,6 +1523,12 @@ export function QuotationBuilder({
       // Saving used to leave the builder for the summary page, which meant
       // every save threw you out of the thing you were working on. It now just
       // stops being dirty; leaving is the Summary button's job.
+      baselineRef.current = JSON.stringify({
+        spaces,
+        quotationName,
+        notes,
+        assignedTo,
+      });
       setHasUnsavedChanges(false);
       setLastSavedAt(new Date());
       setAutoSaveStatus("saved");
@@ -1531,14 +1552,30 @@ export function QuotationBuilder({
     await saveQuotation(false, false);
   }, [hasUnsavedChanges, isSaving, isLoading]);
 
-  // Trigger auto-save when data changes (debounced)
+  // Trigger auto-save when the document actually differs from what was loaded
   useEffect(() => {
-    // Skip initial load
-    if (isInitialLoadRef.current) {
+    if (isLoading) return;
+
+    const current = JSON.stringify({
+      spaces,
+      quotationName,
+      notes,
+      assignedTo,
+    });
+
+    // First settle after a load: this is the document, not a change to it.
+    if (baselineRef.current === null) {
+      baselineRef.current = current;
+      setHasUnsavedChanges(false);
       return;
     }
 
-    // Mark as having unsaved changes
+    if (current === baselineRef.current) {
+      setHasUnsavedChanges(false);
+      setAutoSaveStatus("idle");
+      return;
+    }
+
     setHasUnsavedChanges(true);
     setAutoSaveStatus("idle");
 
@@ -1557,17 +1594,7 @@ export function QuotationBuilder({
         clearTimeout(autoSaveTimeoutRef.current);
       }
     };
-  }, [spaces, quotationName, notes, assignedTo]);
-
-  // Mark initial load complete after data is loaded
-  useEffect(() => {
-    if (!isLoading && isInitialLoadRef.current) {
-      // Small delay to ensure all state is set
-      setTimeout(() => {
-        isInitialLoadRef.current = false;
-      }, 100);
-    }
-  }, [isLoading]);
+  }, [spaces, quotationName, notes, assignedTo, isLoading]);
 
   // Keyboard shortcuts
   useEffect(() => {
