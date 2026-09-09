@@ -748,19 +748,17 @@ export default function QuotationDetailPage() {
    */
   const nextStatus = (() => {
     switch (quotation?.status) {
+      // A draft can be approved without first being declared sent. Requiring
+      // the ceremony was my invention, not a rule anyone asked for, and a
+      // price is often agreed on a call before anything is formally issued.
       case "draft":
-        return {
-          to: "sent",
-          label: "Mark as sent",
-          hint: "The client has been given this quotation.",
-        };
       case "sent":
       case "viewed":
       case "negotiating":
         return {
           to: "approved",
           label: "Approve",
-          hint: "The client has agreed this price. Any other approved quotation on this lead is superseded.",
+          hint: "This is the agreed price. Any other approved quotation on this lead is superseded.",
         };
       default:
         return null;

@@ -69,6 +69,10 @@ export function QuotationBuilder({
 
   // Auto-save state
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  // The builder never knew where the quotation stood, which is why approving
+  // was only possible from a page you had to know to navigate to.
+  const [status, setStatus] = useState<string>("draft");
+  const [approving, setApproving] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<
     "idle" | "saving" | "saved" | "error"
@@ -200,6 +204,7 @@ export function QuotationBuilder({
         if (!q) throw new Error("Quotation not found");
 
         setQuotationNumber(q.quotation_number || "");
+        setStatus(q.status || "draft");
         // Which record this quotation belongs to. The breadcrumb otherwise
         // shows only the quotation number, which says nothing about whose job
         // is being priced.
@@ -1282,6 +1287,44 @@ export function QuotationBuilder({
   };
 
 
+  /**
+   * Approve what is on screen.
+   *
+   * Unsaved work is saved first: approving a price that differs from what the
+   * person is looking at is worse than making them wait a moment. The server
+   * decides whether they may - quotations.approve - and tells us if another
+   * quotation on this lead was superseded by it.
+   */
+  const approveQuotation = async () => {
+    if (!quotationId) return;
+    setApproving(true);
+    try {
+      if (hasUnsavedChanges) {
+        await saveQuotation(false, false);
+      }
+
+      const res = await fetch(`/api/quotations/${quotationId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "approved" }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setSaveError(data.error || "Could not approve this quotation");
+        return;
+      }
+
+      setStatus("approved");
+      if (data.supersededNumber) window.alert(data.message);
+      // An approved quotation is no longer editable, so the builder is the
+      // wrong place to be left standing.
+      onExit?.();
+    } finally {
+      setApproving(false);
+    }
+  };
+
   // Save quotation
   const saveQuotation = async (
     createNewVersion = false,
@@ -1725,6 +1768,27 @@ export function QuotationBuilder({
                 </svg>
                 Print
               </button>
+
+              {/*
+               * Approving where the quotation is built.
+               *
+               * A draft opens straight into the builder, and the builder had
+               * no header - so the only route to approving was a page you had
+               * to know to ask for by URL. Unsaved work is saved first;
+               * approving a price that is not what is on screen would be worse
+               * than making someone press save.
+               */}
+              {!["approved", "superseded", "rejected", "cancelled"].includes(
+                status
+              ) && (
+                <button
+                  onClick={() => void approveQuotation()}
+                  disabled={approving || isSaving}
+                  className="px-3 py-1.5 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  {approving ? "Approving…" : "Approve"}
+                </button>
+              )}
 
               {/* Status, versions, sharing and margin live on the summary; it
                   is not a preview of the printed document, so it no longer
