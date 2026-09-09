@@ -734,6 +734,56 @@ export default function QuotationDetailPage() {
     );
   }
 
+  /**
+   * The one move that makes sense from here.
+   *
+   * A quotation is built, sent, and agreed. Offering every status at once is
+   * what made this confusing; offering the next one is a decision anybody can
+   * make without a diagram.
+   */
+  const nextStatus = (() => {
+    switch (quotation?.status) {
+      case "draft":
+        return {
+          to: "sent",
+          label: "Mark as sent",
+          hint: "The client has been given this quotation.",
+        };
+      case "sent":
+      case "viewed":
+      case "negotiating":
+        return {
+          to: "approved",
+          label: "Approve",
+          hint: "The client has agreed this price. Any other approved quotation on this lead is superseded.",
+        };
+      default:
+        return null;
+    }
+  })();
+
+  const [changingStatus, setChangingStatus] = useState(false);
+
+  const changeStatus = async (to: string) => {
+    setChangingStatus(true);
+    try {
+      const res = await fetch(`/api/quotations/${quotation?.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: to }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        window.alert(data.error || "Could not change the status");
+        return;
+      }
+      if (data.supersededNumber) window.alert(data.message);
+      window.location.reload();
+    } finally {
+      setChangingStatus(false);
+    }
+  };
+
   const statusColors =
     STATUS_COLORS[quotation.status?.toLowerCase()] || STATUS_COLORS.draft;
   const subtotal = quotation.subtotal || calculatedTotals;
@@ -794,6 +844,26 @@ export default function QuotationDetailPage() {
               {quotation.status?.charAt(0).toUpperCase() +
                 quotation.status?.slice(1)}
             </span>
+
+            {/*
+             * Approving where the quotation can be read.
+             *
+             * The only way to approve was a menu on the quotations list - a
+             * decision about a price, made from a row, without the price in
+             * front of you. One button, and only the move that makes sense
+             * from where this quotation actually is.
+             */}
+            {nextStatus && (
+              <button
+                type="button"
+                onClick={() => void changeStatus(nextStatus.to)}
+                disabled={changingStatus}
+                title={nextStatus.hint}
+                className="shrink-0 px-3 py-1.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {changingStatus ? "Working…" : nextStatus.label}
+              </button>
+            )}
 
             {/* Version */}
             <span className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-lg shrink-0">

@@ -257,6 +257,27 @@ project could be edited at all.** Keep one dialog.
 Primary buttons come from `buttonVariants` in `@/components/ui/Button`; cards
 are `rounded-lg`, which is the app-wide majority.
 
+### A lead has one approved quotation
+Enforced by a partial unique index, and by the status route superseding
+whatever was approved before — so the constraint is never the thing a user
+meets; they get a sentence saying which quotation was replaced. Superseding
+sets the old one to `cancelled`, which is already what revising does to the
+version it replaces.
+
+**Baseline copies are excluded.** Converting a lead copies its quotation onto
+the project as a frozen baseline, and that copy is approved too — it carries
+`baseline_quotation_id`, which a lead's own quotation never does. Counting it
+would make the rule unsatisfiable for every converted lead.
+
+**Approving needs `quotations.approve`** (Admin, Owner, Manager, Sales Manager,
+Finance Manager, Project Manager, Senior Designer). It is the moment a price
+becomes the agreed price and was open to anyone signed in.
+
+The action lives on the quotation page, offering only the next sensible move —
+draft → *Mark as sent*, sent/viewed/negotiating → *Approve*. It used to exist
+only as a menu on the list, which meant deciding about a price from a row
+without the price in front of you.
+
 ### Charges are ordinary line items
 Delivery, cleanup and site protection are cost items in a category marked
 `is_charge`. A space made up entirely of such items *prints* below the room

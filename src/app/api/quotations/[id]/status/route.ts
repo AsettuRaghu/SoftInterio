@@ -25,7 +25,7 @@ const STATUS_WORDING: Record<string, string> = {
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     // Protect API route
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
@@ -65,6 +65,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         tenant_id, 
         status, 
         quotation_number,
+        lead_id,
+        baseline_quotation_id,
         lead:leads!lead_id(
           id,
           stage
@@ -90,6 +92,66 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         },
         { status: 403 }
       );
+    }
+
+    /**
+     * Approving is the moment a price becomes the agreed price, so it is the
+     * one status change that needs a say in who may make it. It was open to
+     * anyone signed in, and quotations.approve existed unused.
+     */
+    if (status === "approved" && !guard.permissions.has("quotations.approve")) {
+      return NextResponse.json(
+        {
+          error:
+            "You do not have permission to approve a quotation. Ask someone who can.",
+          reason: "cannot_approve",
+        },
+        { status: 403 }
+      );
+    }
+
+    /**
+     * A lead has one agreed price.
+     *
+     * Approving supersedes whatever was approved before, which is what
+     * revising already does to the version it replaces - v1 is cancelled when
+     * v2 is approved. Doing it here means the database constraint is never the
+     * thing the user meets; they get a sentence saying what was replaced.
+     *
+     * Baseline copies are left alone: they record what a project was sold on,
+     * not a competing offer.
+     */
+    let supersededNumber: string | null = null;
+    if (
+      status === "approved" &&
+      existingQuotation.lead_id &&
+      !existingQuotation.baseline_quotation_id
+    ) {
+      const { data: alreadyApproved } = await supabase
+        .from("quotations")
+        .select("id, quotation_number")
+        .eq("lead_id", existingQuotation.lead_id)
+        .eq("status", "approved")
+        .is("baseline_quotation_id", null)
+        .neq("id", id)
+        .maybeSingle();
+
+      if (alreadyApproved) {
+        const { error: supersedeError } = await supabase
+          .from("quotations")
+          .update({ status: "cancelled", updated_by: user.id })
+          .eq("id", alreadyApproved.id);
+
+        if (supersedeError) {
+          return NextResponse.json(
+            {
+              error: `Could not supersede ${alreadyApproved.quotation_number}, so this was not approved.`,
+            },
+            { status: 500 }
+          );
+        }
+        supersededNumber = alreadyApproved.quotation_number;
+      }
     }
 
     // A quotation may be saved half-measured - that is how one gets built -
@@ -178,7 +240,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({
       success: true,
       quotation: updated,
-      message: `Quotation marked as ${status}`,
+      supersededNumber,
+      message: supersededNumber
+        ? `Approved. ${supersededNumber} was the approved quotation and has been cancelled.`
+        : `Quotation marked as ${status}`,
     });
   } catch (error) {
     console.error("Status update API error:", error);
