@@ -260,9 +260,15 @@ are `rounded-lg`, which is the app-wide majority.
 ### A lead has one approved quotation
 Enforced by a partial unique index, and by the status route superseding
 whatever was approved before — so the constraint is never the thing a user
-meets; they get a sentence saying which quotation was replaced. Superseding
-sets the old one to `cancelled`, which is already what revising does to the
-version it replaces.
+meets; they get a sentence saying which quotation was replaced.
+
+The old one becomes **`superseded`**, not cancelled. Nobody withdrew it and it
+may have been the right price at the time; it is simply not the agreed one any
+more, and that difference is what someone needs when they ask a year later why
+a quotation was dropped. `superseded` is deliberately **not** in the status
+route's `validStatuses` — it is a consequence of approving something else, not
+a state anyone picks — and a superseded quotation is locked from editing, like
+an approved or rejected one, because it records what was once offered.
 
 **Baseline copies are excluded.** Converting a lead copies its quotation onto
 the project as a frozen baseline, and that copy is approved too — it carries

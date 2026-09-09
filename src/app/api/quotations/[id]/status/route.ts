@@ -113,10 +113,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     /**
      * A lead has one agreed price.
      *
-     * Approving supersedes whatever was approved before, which is what
-     * revising already does to the version it replaces - v1 is cancelled when
-     * v2 is approved. Doing it here means the database constraint is never the
-     * thing the user meets; they get a sentence saying what was replaced.
+     * Approving supersedes whatever was approved before. Doing it here means
+     * the database constraint is never the thing the user meets; they get a
+     * sentence saying what was replaced.
+     *
+     * "Superseded", not "cancelled": nobody withdrew it, and it may have been
+     * the right price at the time. It is simply not the agreed one any more,
+     * and that difference is what someone needs a year later when they ask why
+     * a quotation was dropped.
      *
      * Baseline copies are left alone: they record what a project was sold on,
      * not a competing offer.
@@ -139,7 +143,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (alreadyApproved) {
         const { error: supersedeError } = await supabase
           .from("quotations")
-          .update({ status: "cancelled", updated_by: user.id })
+          .update({ status: "superseded", updated_by: user.id })
           .eq("id", alreadyApproved.id);
 
         if (supersedeError) {
@@ -242,7 +246,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       quotation: updated,
       supersededNumber,
       message: supersededNumber
-        ? `Approved. ${supersededNumber} was the approved quotation and has been cancelled.`
+        ? `Approved. ${supersededNumber} was the approved quotation and is now superseded.`
         : `Quotation marked as ${status}`,
     });
   } catch (error) {

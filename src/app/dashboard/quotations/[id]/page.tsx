@@ -540,7 +540,7 @@ export default function QuotationDetailPage() {
     if (quotation.is_locked || quotation.linked_to_project_id) {
       return "This quotation belongs to a project and is read-only";
     }
-    if (["approved", "rejected"].includes(quotation.status)) {
+    if (["approved", "rejected", "superseded"].includes(quotation.status)) {
       return `This quotation is ${quotation.status}. Create a revision to make changes.`;
     }
     if (quotation.status === "sent") {

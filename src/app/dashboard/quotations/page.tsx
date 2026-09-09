@@ -100,7 +100,7 @@ const ALLOWED_STATUS_FILTER_OPTIONS = QUOTATION_STATUS_OPTIONS.filter((opt) =>
  * well, so this only picks an icon; it never grants anything.
  */
 const isEditableStatus = (q: { status: string; lead_stage?: string | null }) =>
-  !["sent", "approved", "rejected"].includes(q.status) &&
+  !["sent", "approved", "rejected", "superseded"].includes(q.status) &&
   !["won", "lost", "disqualified"].includes(q.lead_stage || "");
 
 // Active statuses constant

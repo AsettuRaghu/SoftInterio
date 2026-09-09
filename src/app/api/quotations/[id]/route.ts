@@ -712,7 +712,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // at while the quotation number and version stay the same. A revision
     // makes the change visible on both sides.
     if (
-      ["sent", "approved", "rejected"].includes(existingQuotation.status) &&
+      ["sent", "approved", "rejected", "superseded"].includes(
+        existingQuotation.status
+      ) &&
       !create_new_version
     ) {
       return NextResponse.json(

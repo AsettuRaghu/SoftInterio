@@ -17,6 +17,14 @@ export type QuotationStatus =
   | "rejected"
   | "expired"
   | "cancelled"
+  /**
+   * Replaced by a different approved quotation on the same lead.
+   *
+   * Not cancelled: nobody withdrew it, and it may well have been the right
+   * price at the time. It simply is not the agreed one any more, and that
+   * difference matters when someone asks later why a quotation was dropped.
+   */
+  | "superseded"
   | "linked_to_project"
   | "project_baseline";
 
@@ -675,6 +683,7 @@ export const QuotationStatusLabels: Record<QuotationStatus, string> = {
   rejected: "Rejected",
   expired: "Expired",
   cancelled: "Cancelled",
+  superseded: "Superseded",
   linked_to_project: "Linked to Project",
   project_baseline: "Project Baseline",
 };
@@ -722,6 +731,11 @@ export const QuotationStatusColors: Record<
     bg: "bg-orange-100",
     text: "text-orange-700",
     dot: "bg-orange-500",
+  },
+  superseded: {
+    bg: "bg-amber-100",
+    text: "text-amber-700",
+    dot: "bg-amber-500",
   },
   linked_to_project: {
     bg: "bg-purple-100",

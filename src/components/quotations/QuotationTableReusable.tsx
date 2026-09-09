@@ -62,6 +62,7 @@ const DEFAULT_STATUS_LABELS: Record<QuotationStatus, string> = {
   rejected: "Rejected",
   expired: "Expired",
   cancelled: "Cancelled",
+  superseded: "Superseded",
   linked_to_project: "Linked to Project",
   project_baseline: "Project Baseline",
 };
