@@ -44,15 +44,21 @@ export async function PUT(
 
     // Parse request body for optional password
     let providedPassword: string | undefined;
-    let sendEmail = true;
-    
+
     try {
       const body = await request.json();
       providedPassword = body.password;
-      sendEmail = body.sendEmail !== false;
     } catch (e) {
       // Empty body is fine, will generate password
     }
+
+    // A `sendEmail` flag used to be read here and then never used, so a caller
+    // could ask for the new password to be emailed and be told it worked while
+    // nothing was sent. The route returns the password to the caller instead -
+    // whoever reset it has to pass it on. Removed rather than wired up,
+    // because honouring it needs an application email path that does not
+    // exist: Supabase Auth sends invitations and reset links, but there is no
+    // way for the app to send a message of its own.
 
     // Get current user's roles for hierarchy check
     const { data: currentUserRoles } = await adminClient
