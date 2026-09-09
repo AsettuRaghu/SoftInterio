@@ -16,6 +16,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { requestLogger } from "@/lib/logger/request";
 import { ensureTenantOwnedRole } from "@/lib/auth/role-customise";
+import { checkMayEditRole } from "@/lib/auth/role-guard";
 
 /** Resolves a role the caller's tenant is allowed to see. */
 async function visibleRole(
@@ -159,6 +160,14 @@ export async function PATCH(
       );
     }
 
+    const notAllowed = await checkMayEditRole(admin, guard.user.id, id);
+    if (notAllowed) {
+      return NextResponse.json(
+        { success: false, error: notAllowed.error, reason: notAllowed.reason },
+        { status: notAllowed.status }
+      );
+    }
+
     const owned = await ensureTenantOwnedRole(admin, id, found.tenantId);
     if ("error" in owned) {
       return NextResponse.json(
@@ -218,6 +227,18 @@ export async function DELETE(
       return NextResponse.json(
         { success: false, error: found.error },
         { status: found.status }
+      );
+    }
+
+    const notAllowedToDelete = await checkMayEditRole(admin, guard.user.id, id);
+    if (notAllowedToDelete) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: notAllowedToDelete.error,
+          reason: notAllowedToDelete.reason,
+        },
+        { status: notAllowedToDelete.status }
       );
     }
 

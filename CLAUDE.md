@@ -162,6 +162,40 @@ permission model is still unenforced.
 `role_permissions` is read-only in the app (no route writes it), so nothing can
 silently drop a grant.
 
+### Who may change which role
+
+`team.roles.manage` says you may edit roles. It does not say you may edit your
+own — and without that distinction the permission is equivalent to granting
+yourself anything. Admin holds **252 of 254** permissions (missing only
+`tasks.templates.manage_protected` and `settings.billing.manage`), so an Admin
+editing the Admin role becomes an Owner in all but name.
+
+`src/lib/auth/role-guard.ts`, four rules:
+
+1. **The Owner role is untouchable**, by anyone — also enforced by trigger.
+2. **The Admin role may only be changed by an Owner.** Covers a tenant's own
+   copy of Admin too; it is the same role wearing the same name.
+3. **Nobody edits a role they hold.** Rule 2's reason, generalised — otherwise
+   delegating role management to a custom role hands its holders the same
+   escalation.
+4. **You cannot grant a permission you do not hold.** Rules 2 and 3 stop you
+   editing your own role; this closes the way around them, which is to create a
+   role with everything in it and assign it to yourself. Checked against
+   *effective* permissions, so a per-user grant counts.
+
+**These are application rules, not database ones**, and that is the important
+difference from the Owner lock. They depend on who is asking, and every write
+here goes through the admin client where `auth.uid()` is null, so no trigger
+can see the caller. **Any new route that writes roles must call these — the
+database will not catch it.**
+
+A new role is created empty for the same reason: filling it goes through the
+editor, where rule 4 applies.
+
+The roles screen mirrors rules 2 and 3 to explain why a role is read-only.
+That duplication can drift; the API is what enforces them, so a mismatch shows
+the wrong explanation rather than allowing anything.
+
 ### The Owner role is locked, in the database
 
 Owner holds **every** permission, always, and no code path may change that.

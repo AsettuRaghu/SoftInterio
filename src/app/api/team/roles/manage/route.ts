@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { requestLogger } from "@/lib/logger/request";
+import { holdsOwnerRole } from "@/lib/auth/role-guard";
 
 interface RoleRow {
   id: string;
@@ -82,6 +83,17 @@ export async function GET(request: NextRequest) {
       await admin.from("users").select("id").eq("tenant_id", caller.tenant_id)
     ).data?.map((u) => u.id) ?? [];
 
+    // Which roles this caller may actually change, worked out once rather than
+    // per row. The rules live in lib/auth/role-guard and the API enforces them;
+    // this is only so the screen can say why a role is read-only instead of
+    // letting somebody tick boxes that will be refused on save.
+    const callerIsOwner = await holdsOwnerRole(admin, guard.user.id);
+    const { data: callerRoleRows } = await admin
+      .from("user_roles")
+      .select("role_id")
+      .eq("user_id", guard.user.id);
+    const callerRoleIds = new Set((callerRoleRows ?? []).map((r) => r.role_id));
+
     const summarised = await Promise.all(
       visible.map(async (role) => {
         const { count: permissionCount } = await admin
@@ -112,6 +124,7 @@ export async function GET(request: NextRequest) {
           // Locked outright, not merely "shipped by us". The screen needs to
           // say so before someone starts ticking boxes they cannot save.
           isLocked: role.slug === "owner" && role.tenant_id === null,
+          ...roleRestriction(role, callerIsOwner, callerRoleIds),
           permissionCount: permissionCount ?? 0,
           memberCount,
         };
@@ -225,6 +238,11 @@ export async function POST(request: NextRequest) {
     // inherited a template's access would be a surprise in the direction that
     // matters; the screen opens on its permission list so the next step is
     // obvious.
+    //
+    // This is also why creation needs no permission-escalation check of its
+    // own: an empty role grants nobody anything, and filling it goes through
+    // the editor, where checkMayGrantPermissions() refuses anything the
+    // creator does not hold themselves.
     return NextResponse.json({ success: true, data: { role } });
   } catch (error) {
     log.error("Error creating role", error);
@@ -233,4 +251,33 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * The read-only reason shown on the roles screen, mirroring rules 2 and 3 of
+ * checkMayEditRole(). Rule 1 (Owner) is reported separately as isLocked.
+ *
+ * Duplicating the rules for display is a real risk of drift, so keep this in
+ * step with lib/auth/role-guard - the API is what actually enforces them, and
+ * a mismatch here shows the wrong explanation rather than allowing anything.
+ */
+function roleRestriction(
+  role: RoleRow,
+  callerIsOwner: boolean,
+  callerRoleIds: Set<string>
+): { isRestricted: boolean; restrictedReason: string | null } {
+  if (role.slug === "admin" && !callerIsOwner) {
+    return {
+      isRestricted: true,
+      restrictedReason:
+        "Only an owner can change the Admin role. This stops an administrator from widening their own access.",
+    };
+  }
+  if (callerRoleIds.has(role.id)) {
+    return {
+      isRestricted: true,
+      restrictedReason: `You hold the ${role.name} role, so you cannot change what it may do. Ask an owner.`,
+    };
+  }
+  return { isRestricted: false, restrictedReason: null };
 }

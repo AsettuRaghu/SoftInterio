@@ -38,6 +38,9 @@ interface RoleSummary {
   isSystem: boolean;
   isOwn: boolean;
   isLocked: boolean;
+  /** True when this caller may not change this role - see lib/auth/role-guard. */
+  isRestricted: boolean;
+  restrictedReason: string | null;
   permissionCount: number;
   memberCount: number;
 }
@@ -57,7 +60,7 @@ export default function RolesPage() {
   // of who is looking. The server and the database both refuse it too; this
   // just means nobody gets as far as a save button that cannot work.
   const canEditSelected = (role: RoleSummary | null) =>
-    canManage && !!role && !role.isLocked;
+    canManage && !!role && !role.isLocked && !role.isRestricted;
 
   const [roles, setRoles] = useState<RoleSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -407,6 +410,13 @@ export default function RolesPage() {
                   SoftInterio and shared with every business using it. Saving a change here
                   creates your own copy of this role and moves your team onto it — nobody
                   else is affected.
+                </div>
+              )}
+
+              {!selected.isLocked && selected.isRestricted && (
+                <div className="mx-4 mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 flex items-start gap-2">
+                  <LockClosedIcon className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
+                  <span>{selected.restrictedReason}</span>
                 </div>
               )}
 

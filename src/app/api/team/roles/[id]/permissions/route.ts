@@ -22,6 +22,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { requestLogger } from "@/lib/logger/request";
 import { ensureTenantOwnedRole } from "@/lib/auth/role-customise";
+import { checkMayEditRole, checkMayGrantPermissions } from "@/lib/auth/role-guard";
 
 export async function PUT(
   request: NextRequest,
@@ -63,24 +64,27 @@ export async function PUT(
       );
     }
 
-    // The Owner role is locked. The database refuses the write regardless, but
-    // a check_violation surfacing as a 500 tells the user nothing - this says
-    // what the rule is instead.
-    const { data: target } = await admin
-      .from("roles")
-      .select("slug, tenant_id")
-      .eq("id", roleId)
-      .single();
-
-    if (target?.slug === "owner" && target.tenant_id === null) {
+    // Who may change this role at all: Owner is untouchable, Admin needs an
+    // owner, and nobody edits a role they hold. See lib/auth/role-guard.
+    const notAllowed = await checkMayEditRole(admin, guard.user.id, roleId);
+    if (notAllowed) {
       return NextResponse.json(
-        {
-          success: false,
-          error:
-            "The Owner role holds every permission and cannot be changed, by anyone.",
-          reason: "owner_locked",
-        },
-        { status: 409 }
+        { success: false, error: notAllowed.error, reason: notAllowed.reason },
+        { status: notAllowed.status }
+      );
+    }
+
+    // And what may be put into it: never more than the caller holds, or role
+    // creation becomes a way to grant yourself anything.
+    const beyondCaller = await checkMayGrantPermissions(
+      admin,
+      guard.user.id,
+      keys as string[]
+    );
+    if (beyondCaller) {
+      return NextResponse.json(
+        { success: false, error: beyondCaller.error, reason: beyondCaller.reason },
+        { status: beyondCaller.status }
       );
     }
 
