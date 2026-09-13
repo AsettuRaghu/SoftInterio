@@ -348,6 +348,8 @@ interface QuickActionsProps {
   gate?: PlanGate;
   /** False when the viewer may not change the plan at all. */
   mayEdit?: boolean;
+  /** False while the gates are still being fetched. */
+  gatesReady?: boolean;
   /** Names the row in tooltips, so "Start Installation" reads as a sentence. */
   label?: string;
 }
@@ -358,10 +360,26 @@ const QuickActions = ({
   loading,
   gate,
   mayEdit = true,
+  gatesReady = true,
   label,
 }: QuickActionsProps) => {
   if (loading) {
     return <ArrowPathIcon className="w-4 h-4 animate-spin text-slate-400" />;
+  }
+
+  // Hold everything until the answer is in. Drawing enabled buttons and then
+  // switching some off a second later is worse than a brief wait.
+  if (!gatesReady) {
+    return (
+      <div className="flex items-center gap-0.5 opacity-40" aria-busy="true">
+        <span className="p-1.5 text-slate-300" title="Checking what is available…">
+          <PlayIcon className="w-4 h-4" />
+        </span>
+        <span className="p-1.5 text-slate-300">
+          <CheckCircleIcon className="w-4 h-4" />
+        </span>
+      </div>
+    );
   }
 
   const of = label ? ` ${label}` : "";
@@ -613,6 +631,12 @@ export default function ManagementTab({
    */
   const [gates, setGates] = React.useState<Record<string, PlanGate>>({});
   const [mayEdit, setMayEdit] = React.useState(true);
+  /**
+   * Until this is true the gates are unknown, so the buttons are held disabled.
+   * They used to render enabled and then visibly switch off a second later as
+   * the answer arrived, which reads as the screen changing its mind.
+   */
+  const [gatesReady, setGatesReady] = React.useState(false);
 
   const planSignature = React.useMemo(
     () =>
@@ -636,9 +660,11 @@ export default function ManagementTab({
         if (cancelled) return;
         setGates(json.data?.gates ?? {});
         setMayEdit(json.data?.mayEdit !== false);
+        setGatesReady(true);
       } catch {
         // A missing gate falls back to status-only behaviour, so a failure here
         // degrades rather than blanks the actions.
+        if (!cancelled) setGatesReady(true);
       }
     })();
     return () => {
@@ -656,6 +682,10 @@ export default function ManagementTab({
     phaseName: string,
     action: "start" | "hold" | "resume" | "complete" | "cancel"
   ) => {
+    if (!needsReason(action, gates[phaseId])) {
+      void runQuickAction({ subPhaseId: phaseId, phaseId, action, isPhase: true }, "");
+      return;
+    }
     setNotesPrompt({
       isOpen: true,
       subPhaseId: phaseId,
@@ -666,12 +696,34 @@ export default function ManagementTab({
     });
   };
 
+  /**
+   * Which actions genuinely need a sentence from the person doing them.
+   *
+   * Every status change used to open a modal demanding notes, including Start -
+   * so beginning a step took two clicks and an invented sentence. A reason is
+   * only worth asking for when it explains a departure: why work paused, or why
+   * a step was skipped. Starting and finishing are the expected path and the
+   * timestamps already record them.
+   */
+  const needsReason = (
+    action: "start" | "hold" | "resume" | "complete" | "cancel",
+    gate?: PlanGate
+  ) => {
+    if (action === "hold") return true;
+    if (action === "cancel") return gate?.skipNeedsReason !== false;
+    return false;
+  };
+
   const handleQuickActionClick = (
     subPhaseId: string,
     phaseId: string,
     subPhaseName: string,
     action: "start" | "hold" | "resume" | "complete" | "cancel"
   ) => {
+    if (!needsReason(action, gates[subPhaseId])) {
+      void runQuickAction({ subPhaseId, phaseId, action }, "");
+      return;
+    }
     setNotesPrompt({
       isOpen: true,
       subPhaseId,
@@ -682,10 +734,28 @@ export default function ManagementTab({
   };
 
   // Execute the action after notes are provided
-  const executeQuickAction = async (notes: string) => {
+  const executeQuickActionFromPrompt = async (notes: string) => {
     if (!notesPrompt) return;
-
     const { subPhaseId, phaseId, action, isPhase } = notesPrompt;
+    setNotesPrompt(null);
+    await runQuickAction({ subPhaseId, phaseId, action, isPhase }, notes);
+  };
+
+  /**
+   * Performs the action. Split out from the modal so an action that needs no
+   * reason can call it directly instead of opening a prompt to collect an
+   * empty string.
+   */
+  const runQuickAction = async (
+    target: {
+      subPhaseId: string;
+      phaseId: string;
+      action: "start" | "hold" | "resume" | "complete" | "cancel";
+      isPhase?: boolean;
+    },
+    notes: string
+  ) => {
+    const { subPhaseId, phaseId, action, isPhase } = target;
 
     // A phase takes a different route: its own endpoint, and no sub-phase
     // optimistic update to apply. The parent refreshes, which is what brings
@@ -1002,6 +1072,7 @@ export default function ManagementTab({
                         loading={actionLoading === phase.id}
                         gate={gates[phase.id]}
                         mayEdit={mayEdit}
+                        gatesReady={gatesReady}
                         label={phase.name}
                         onAction={(action) =>
                           handlePhaseActionClick(phase.id, phase.name, action)
@@ -1125,13 +1196,20 @@ export default function ManagementTab({
                             )}
                           </div>
 
-                          {/* Quick Actions */}
-                          <div className="flex justify-center items-center gap-0.5">
+                          {/* Quick Actions. stopPropagation because the row
+                              itself opens the task - without it, pressing
+                              Complete also navigated away. The phase row's
+                              cell already did this; this one did not. */}
+                          <div
+                            className="flex justify-center items-center gap-0.5"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <QuickActions
                               status={subPhase.status}
                               loading={actionLoading === subPhase.id}
                               gate={gates[subPhase.id]}
                               mayEdit={mayEdit}
+                              gatesReady={gatesReady}
                               label={subPhase.name}
                               onAction={(action) =>
                                 handleQuickActionClick(
@@ -1169,7 +1247,7 @@ export default function ManagementTab({
           isOpen={notesPrompt.isOpen}
           action={notesPrompt.action}
           subPhaseName={notesPrompt.subPhaseName}
-          onSubmit={executeQuickAction}
+          onSubmit={executeQuickActionFromPrompt}
           onCancel={() => setNotesPrompt(null)}
         />
       )}

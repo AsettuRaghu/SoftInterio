@@ -609,6 +609,48 @@ The refusals carry `reason: "assignee_fixed_by_playbook"` or
 out, so the server is the only thing enforcing this — a caller finds out by
 being refused, with a message that says why.
 
+### Transitions stamp the actual dates; start_date stays the plan
+
+`task_transition` set status and the hold/skip fields and **never touched
+`started_at` or `completed_at`**. So pressing Start recorded nothing about when
+work began and Complete recorded nothing about when it ended — which is why the
+Plan tab's actual columns read "–" however many times the buttons were used.
+The columns all existed; nothing wrote them.
+
+- **`started_at`** moves every time work restarts; **`first_started_at`** keeps
+  when somebody first picked it up, which is what planned-versus-actual needs.
+- **`completed_at`** is cleared on the way back out of completed, so a reopened
+  task stops claiming an end date; `first_completed_at` keeps the original.
+- **`completion_count`** counts how many times it was called done. A step
+  completed three times is a process problem worth being able to see.
+
+**`start_date` is never touched by a transition.** That is the plan, derived
+from the playbook's hours; `started_at` is what happened. Overwriting one with
+the other loses the ability to tell that something ran late.
+
+`task_work_sessions.duration_seconds` — **not** `duration_minutes`. Recomputing
+`actual_hours` from the wrong column silently yields zero, which is how logged
+hours get erased.
+
+### The Plan tab's actions: no prompt where there is no reason to give
+
+A reason is asked for only where it explains a departure: **hold** (why it
+paused) and **skip** where the playbook requires one. Start, Complete and Resume
+act immediately — every status change used to open a modal demanding notes, so
+starting a step took two clicks and an invented sentence, and the timestamps
+already record it.
+
+The buttons stay **disabled until the gates arrive**. They used to render
+enabled and switch off a second later, which reads as the screen changing its
+mind.
+
+The step row's action cell needs **`stopPropagation`** — the row itself opens
+the task, so without it pressing Complete also navigated away. The phase row's
+cell always had it; the step row's did not.
+
+**Reopen has its own icon.** These buttons are icon-only, so Reopen carrying the
+play triangle made a finished task look unstarted.
+
 ### The Plan tab only offers what the server will accept
 
 `project_plan_gates(project_id)` answers, for every task in the active run,

@@ -316,17 +316,27 @@ export async function GET(request: NextRequest) {
         try {
           const { data: projects } = await supabase
             .from("projects")
-            .select("id, project_number, client:clients(name)")
+            .select("id, name, project_number, client:clients(name)")
             .in("id", projectIds);
 
           if (projects) {
             const projectMap = new Map<string, string>();
             projects.forEach((project: any) => {
-              const clientName = (project.client as { name?: string } | null)?.name || "Unknown Client";
-              // Format: "PROJ-001 • Client Name"
-              const name = project.project_number 
-                ? `${project.project_number} • ${clientName}` 
-                : clientName;
+              const clientName =
+                (project.client as { name?: string } | null)?.name || "Unknown Client";
+              /**
+               * The project's own name, which is what people call it.
+               *
+               * This used to read "PRJ_20251219_0001 • Dileepnath Raju" - a
+               * number and a client, never the project. Nobody refers to work
+               * by its record number, and the column truncates, so the number
+               * was most of what you could see.
+               */
+              const name =
+                project.name ||
+                (project.project_number
+                  ? `${project.project_number} • ${clientName}`
+                  : clientName);
               projectMap.set(project.id, name);
             });
 

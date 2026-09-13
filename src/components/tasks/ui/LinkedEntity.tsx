@@ -272,7 +272,11 @@ export function LinkedEntity({
                 />
               </svg>
             )}
-            <span className="max-w-20 truncate">{item.name}</span>
+            {/* 80px clipped even short names. The full value is the title,
+                so hovering answers what the truncation hides. */}
+            <span className="max-w-[160px] truncate" title={item.name}>
+              {item.name}
+            </span>
           </span>
         ))}
       </div>

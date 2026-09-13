@@ -832,28 +832,36 @@ export default function ProjectDetailPage({ params }: PageProps) {
               )}
 
               {playbook && canManagePlaybook && (
-                <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
-                  <p className="text-sm font-medium text-blue-900">
-                    Drawn from the playbook &ldquo;{playbook.name}&rdquo; (v
-                    {playbook.version})
-                  </p>
-                  <p className="text-xs text-blue-700 mt-0.5">
-                    {playbookPhases.length} phases and {playbook.stepCount}{" "}
-                    steps. Started{" "}
-                    {playbook.startedAt
-                      ? new Date(playbook.startedAt).toLocaleDateString()
-                      : "—"}
-                    .
-                  </p>
+                /* One line. This was a three-line card carrying the playbook
+                   name, a count, a start date and a link, above a plan that is
+                   the actual content of the tab. */
+                <div className="mb-3 flex items-center justify-between gap-3 text-xs text-slate-500">
+                  <span className="truncate">
+                    <span className="text-slate-400">Playbook</span>{" "}
+                    <span className="font-medium text-slate-700">
+                      {playbook.name}
+                    </span>
+                    <span className="text-slate-400"> v{playbook.version}</span>
+                    <span className="text-slate-300"> · </span>
+                    {playbookPhases.length} phases, {playbook.stepCount} steps
+                    {playbook.startedAt && (
+                      <>
+                        <span className="text-slate-300"> · </span>
+                        since {new Date(playbook.startedAt).toLocaleDateString()}
+                      </>
+                    )}
+                  </span>
                   <button
                     type="button"
                     onClick={() => void stopPlaybook()}
-                    className="mt-2 text-xs text-red-600 hover:underline"
+                    className="shrink-0 text-slate-400 hover:text-red-600 hover:underline"
+                    title="Stop following this playbook. Open steps are cancelled; finished work is kept."
                   >
-                    Stop following this playbook
+                    Stop
                   </button>
                 </div>
               )}
+
               <ManagementTab
                 projectId={project.id}
                 phases={
