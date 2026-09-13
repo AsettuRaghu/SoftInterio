@@ -1149,11 +1149,12 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                         <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
                           <span className="text-slate-400">Waits for</span>
                           {(() => {
-                            // A step inside a phase is already inside it, so
-                            // the phase is never an option: waiting for it can
-                            // mean nothing, and the pair deadlocks because the
-                            // phase cannot finish until its steps do. Offering
-                            // it is what made a whole playbook unstartable.
+                            // A step may wait for its own phase to START -
+                            // the useful case, and the one people reach for.
+                            // It may not wait for the phase to FINISH: a phase
+                            // cannot finish until its steps do, so that pair
+                            // deadlocks. The phase is offered, and locked to
+                            // "to start" on its chip below.
                             const parentUid =
                               step.parent_index !== null
                                 ? steps[step.parent_index]?.uid
@@ -1161,12 +1162,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                             const chosen = new Set(step.depends_on.map((l) => l.uid));
                             const options = steps
                               .slice(0, i)
-                              .filter(
-                                (s) =>
-                                  s.title.trim() &&
-                                  s.uid !== parentUid &&
-                                  !chosen.has(s.uid),
-                              );
+                              .filter((s) => s.title.trim() && !chosen.has(s.uid));
 
                             if (!steps.slice(0, i).some((s) => s.title.trim())) {
                               return (
@@ -1186,18 +1182,9 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                              * and pick nothing - so say why instead.
                              */
                             if (options.length === 0 && step.depends_on.length === 0) {
-                              const onlyItsPhase =
-                                parentUid !== undefined &&
-                                steps
-                                  .slice(0, i)
-                                  .filter((s) => s.title.trim())
-                                  .every((s) => s.uid === parentUid);
-
                               return (
                                 <span className="text-slate-400">
-                                  {onlyItsPhase
-                                    ? "nothing earlier to wait for — it is the first step in its phase"
-                                    : "nothing earlier to wait for"}
+                                  nothing earlier to wait for
                                 </span>
                               );
                             }
@@ -1213,7 +1200,16 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                                       update(i, {
                                         depends_on: [
                                           ...step.depends_on,
-                                          { uid, waitType: "after_finish" },
+                                          {
+                                          uid,
+                                          // Its own phase can only be waited on
+                                          // to start, so never offer a setting
+                                          // the database would refuse.
+                                          waitType:
+                                            uid === parentUid
+                                              ? "after_start"
+                                              : "after_finish",
+                                        },
                                         ],
                                       });
                                     }}
@@ -1265,7 +1261,9 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                                       className="bg-transparent border-0 text-amber-800 text-[11px] focus:outline-none cursor-pointer"
                                       title="Which part of that step this one waits for"
                                     >
-                                      <option value="after_finish">to finish</option>
+                                      {link.uid !== parentUid && (
+                                        <option value="after_finish">to finish</option>
+                                      )}
                                       <option value="after_start">to start</option>
                                     </select>
                                     <button

@@ -380,22 +380,23 @@ export async function replaceSteps(
       // anyway; skipping keeps the save from failing over a stale index.
       if (!to || to === from) continue;
 
-      // A step inside a phase is already inside it, so waiting for the phase
-      // can never mean anything - and the pair deadlocks, because the phase
-      // cannot finish until its steps do. The database refuses it too; this
-      // keeps a stale payload from failing the whole save.
+      // A step MAY wait for its own phase to start - that is the useful case,
+      // and what people reach for first. It may not wait for the phase to
+      // finish: the phase cannot finish until its steps do, so that pair
+      // deadlocks. The database refuses it; coercing here keeps a stale payload
+      // from failing the whole save over a setting the editor no longer offers.
       const parentIndex = (steps[i] as any)?.parent_index;
       const parentOfFrom =
         parentIndex === null || parentIndex === undefined
           ? null
           : (idByIndex.get(Number(parentIndex)) ?? null);
-      if (parentOfFrom && parentOfFrom === to) continue;
+      const waitsOnOwnPhase = !!parentOfFrom && parentOfFrom === to;
 
       links.push({
         step_id: from,
         depends_on_step_id: to,
         dependency_type: "hard",
-        wait_type: waitType,
+        wait_type: waitsOnOwnPhase ? "after_start" : waitType,
       });
     }
   }
