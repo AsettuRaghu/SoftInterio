@@ -18,6 +18,7 @@ import {
   ProjectPhase,
   ProjectSubPhase,
   ProjectSubPhaseStatus,
+  ProjectPhaseStatus,
 } from "@/types/projects";
 import { buttonVariants } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
@@ -39,6 +40,16 @@ interface ProjectMgmtTabProps {
     action: "start" | "hold" | "resume" | "complete" | "cancel",
     notes: string
   ) => Promise<ProjectSubPhase | null>;
+  /**
+   * A phase is a task too, so it can be started and completed like a step -
+   * it just goes to a different endpoint. Before this the row that decides
+   * when a stage begins could not be started from the screen showing it.
+   */
+  onPhaseQuickAction?: (
+    phaseId: string,
+    action: "start" | "hold" | "resume" | "complete" | "cancel",
+    notes: string
+  ) => Promise<unknown>;
 }
 
 // Status badge component
@@ -297,95 +308,208 @@ const NotesPromptModal = ({
   );
 };
 
-// Quick action buttons for sub-phases
-interface QuickActionsProps {
-  status: ProjectSubPhaseStatus;
-  onAction: (
-    action: "start" | "hold" | "resume" | "complete" | "cancel"
-  ) => void;
-  loading?: boolean;
+/**
+ * The actions a row may take, and why it may not.
+ *
+ * Every button is drawn from a gate the server supplied - the same
+ * can_start_task / can_complete_task the transition consults - so the screen
+ * cannot offer something that will be refused. Before this, Start was drawn on
+ * every not-started row regardless of whether its predecessors had finished,
+ * the transition refused it, and the tooltip said only "Start".
+ *
+ * A disallowed action is shown disabled with the reason as its tooltip, rather
+ * than hidden. Hiding it answers "can I start this?" with silence; showing it
+ * greyed out with "Waiting for 2D Designs to start" answers the question and
+ * says what to do about it.
+ *
+ * Used for phases and steps alike, because both are tasks.
+ */
+interface PlanGate {
+  status: string;
+  isPhase: boolean;
+  canStart: boolean;
+  startReason: string | null;
+  canComplete: boolean;
+  completeReason: string | null;
+  canSkip: boolean;
+  skipReason: string | null;
+  skipNeedsReason: boolean;
+  canHold: boolean;
+  canResume: boolean;
 }
 
-const QuickActions = ({ status, onAction, loading }: QuickActionsProps) => {
+type QuickAction = "start" | "hold" | "resume" | "complete" | "cancel";
+
+interface QuickActionsProps {
+  status: ProjectSubPhaseStatus | ProjectPhaseStatus;
+  onAction: (action: QuickAction) => void;
+  loading?: boolean;
+  /** Server-supplied gate. Absent for a project on the older phase engine. */
+  gate?: PlanGate;
+  /** False when the viewer may not change the plan at all. */
+  mayEdit?: boolean;
+  /** Names the row in tooltips, so "Start Installation" reads as a sentence. */
+  label?: string;
+}
+
+const QuickActions = ({
+  status,
+  onAction,
+  loading,
+  gate,
+  mayEdit = true,
+  label,
+}: QuickActionsProps) => {
   if (loading) {
     return <ArrowPathIcon className="w-4 h-4 animate-spin text-slate-400" />;
   }
 
+  const of = label ? ` ${label}` : "";
   const buttonClass =
-    "p-1.5 rounded hover:bg-opacity-20 transition-colors disabled:opacity-50";
+    "p-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
 
-  switch (status) {
-    case "not_started":
-      return (
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={() => onAction("start")}
-            className={`${buttonClass} text-blue-600 hover:bg-blue-100`}
-            title="Start"
-          >
-            <PlayIcon className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => onAction("cancel")}
-            className={`${buttonClass} text-slate-400 hover:bg-slate-100`}
-            title="Skip"
-          >
-            <ForwardIcon className="w-4 h-4" />
-          </button>
-        </div>
-      );
-    case "in_progress":
-      return (
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={() => onAction("complete")}
-            className={`${buttonClass} text-green-600 hover:bg-green-100`}
-            title="Complete"
-          >
-            <CheckCircleIcon className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => onAction("hold")}
-            className={`${buttonClass} text-yellow-600 hover:bg-yellow-100`}
-            title="Put On Hold"
-          >
-            <PauseIcon className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => onAction("cancel")}
-            className={`${buttonClass} text-red-500 hover:bg-red-100`}
-            title="Cancel"
-          >
-            <StopIcon className="w-4 h-4" />
-          </button>
-        </div>
-      );
-    case "on_hold":
-      return (
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={() => onAction("resume")}
-            className={`${buttonClass} text-blue-600 hover:bg-blue-100`}
-            title="Resume"
-          >
-            <PlayIcon className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => onAction("cancel")}
-            className={`${buttonClass} text-red-500 hover:bg-red-100`}
-            title="Cancel"
-          >
-            <StopIcon className="w-4 h-4" />
-          </button>
-        </div>
-      );
-    case "completed":
-      return <CheckCircleIcon className="w-4 h-4 text-green-500" />;
-    case "skipped":
-      return <span className="text-xs text-slate-400 italic">Skipped</span>;
-    default:
-      return null;
+  if (!mayEdit) {
+    return (
+      <span
+        className="text-[11px] text-slate-400"
+        title="You do not have permission to change this plan"
+      >
+        view only
+      </span>
+    );
   }
+
+  /**
+   * Without a gate the row belongs to the older phase engine, which has no
+   * per-row rules to ask about. Fall back to what the status alone allows -
+   * the same behaviour this component had before gates existed.
+   */
+  const g: PlanGate =
+    gate ??
+    {
+      status,
+      isPhase: false,
+      canStart: status === "not_started",
+      startReason: status === "not_started" ? null : "Already under way",
+      canComplete: status === "in_progress" || status === "not_started",
+      completeReason: null,
+      canSkip: status !== "completed",
+      skipReason: null,
+      skipNeedsReason: true,
+      canHold: status === "in_progress",
+      canResume: status === "on_hold" || status === "blocked",
+    };
+
+  const settled =
+    status === "completed" || status === "skipped" || status === "cancelled";
+
+  if (settled) {
+    return (
+      <span
+        className="text-[11px] text-slate-400"
+        title={
+          status === "completed"
+            ? `Completed${of ? " — " + label : ""}`
+            : status === "skipped"
+              ? "Skipped, with a reason recorded"
+              : "Cancelled"
+        }
+      >
+        {status === "completed" ? "done" : status}
+      </span>
+    );
+  }
+
+  const Btn = ({
+    action,
+    allowed,
+    reason,
+    tone,
+    tip,
+    children,
+  }: {
+    action: QuickAction;
+    allowed: boolean;
+    reason: string | null;
+    tone: string;
+    tip: string;
+    children: React.ReactNode;
+  }) => (
+    <button
+      type="button"
+      disabled={!allowed}
+      onClick={() => allowed && onAction(action)}
+      // The reason is the tooltip when blocked, so the answer to "why can I
+      // not press this" is on the button itself.
+      title={allowed ? tip : (reason ?? tip)}
+      aria-label={allowed ? tip : `${tip} — unavailable: ${reason ?? ""}`}
+      className={`${buttonClass} ${allowed ? tone : "text-slate-300"}`}
+    >
+      {children}
+    </button>
+  );
+
+  return (
+    <div className="flex items-center gap-0.5">
+      {g.canResume ? (
+        <Btn
+          action="resume"
+          allowed
+          reason={null}
+          tone="text-blue-600 hover:bg-blue-100"
+          tip={`Resume${of}`}
+        >
+          <PlayIcon className="w-4 h-4" />
+        </Btn>
+      ) : (
+        <Btn
+          action="start"
+          allowed={g.canStart}
+          reason={g.startReason}
+          tone="text-blue-600 hover:bg-blue-100"
+          tip={g.isPhase ? `Start${of} — opens this stage` : `Start${of}`}
+        >
+          <PlayIcon className="w-4 h-4" />
+        </Btn>
+      )}
+
+      <Btn
+        action="complete"
+        allowed={g.canComplete}
+        reason={g.completeReason}
+        tone="text-green-600 hover:bg-green-100"
+        tip={g.isPhase ? `Complete${of} — closes this stage` : `Mark${of} complete`}
+      >
+        <CheckCircleIcon className="w-4 h-4" />
+      </Btn>
+
+      {g.canHold && (
+        <Btn
+          action="hold"
+          allowed
+          reason={null}
+          tone="text-yellow-600 hover:bg-yellow-100"
+          tip={`Put${of} on hold — records why it paused`}
+        >
+          <PauseIcon className="w-4 h-4" />
+        </Btn>
+      )}
+
+      <Btn
+        action="cancel"
+        allowed={g.canSkip}
+        reason={g.skipReason}
+        tone="text-slate-400 hover:bg-slate-100"
+        tip={
+          g.skipNeedsReason
+            ? `Skip${of} — a reason is required`
+            : `Skip${of}`
+        }
+      >
+        <ForwardIcon className="w-4 h-4" />
+      </Btn>
+    </div>
+  );
 };
 
 // Assuming ProjectMgmtTabProps is defined elsewhere, adding onSubPhaseClick to its structure
@@ -422,6 +546,7 @@ export default function ManagementTab({
   onEditSubPhase,
   onSubPhaseClick,
   onQuickAction,
+  onPhaseQuickAction,
 }: ProjectMgmtTabProps) {
   // Local state for inline updates (optimistic UI)
   const [phases, setPhases] = useState<ProjectPhase[]>(initialPhases || []);
@@ -437,6 +562,8 @@ export default function ManagementTab({
     phaseId: string;
     subPhaseName: string;
     action: "start" | "hold" | "resume" | "complete" | "cancel";
+    /** True when the row is a phase, which goes to a different endpoint. */
+    isPhase?: boolean;
   } | null>(null);
 
   // Sync with parent when initialPhases change
@@ -476,6 +603,69 @@ export default function ManagementTab({
       : 0;
 
   // Handle quick action - shows notes prompt
+  /**
+   * What the server will actually allow on each row.
+   *
+   * Fetched here rather than threaded through the page, and re-fetched whenever
+   * any status in the plan changes - starting one step can unblock another, and
+   * a screen still showing the old answer is how somebody presses a button that
+   * then gets refused.
+   */
+  const [gates, setGates] = React.useState<Record<string, PlanGate>>({});
+  const [mayEdit, setMayEdit] = React.useState(true);
+
+  const planSignature = React.useMemo(
+    () =>
+      phases
+        .map(
+          (p) =>
+            `${p.id}:${p.status}:` +
+            (p.sub_phases ?? []).map((s) => `${s.id}:${s.status}`).join(","),
+        )
+        .join("|"),
+    [phases],
+  );
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/plan-gates`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled) return;
+        setGates(json.data?.gates ?? {});
+        setMayEdit(json.data?.mayEdit !== false);
+      } catch {
+        // A missing gate falls back to status-only behaviour, so a failure here
+        // degrades rather than blanks the actions.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, planSignature]);
+
+  /**
+   * A phase goes through the same notes prompt as a step, so starting a stage
+   * records why in the same place. phaseId is carried in both slots because
+   * the prompt was written for sub-phases; executeQuickAction reads the flag.
+   */
+  const handlePhaseActionClick = (
+    phaseId: string,
+    phaseName: string,
+    action: "start" | "hold" | "resume" | "complete" | "cancel"
+  ) => {
+    setNotesPrompt({
+      isOpen: true,
+      subPhaseId: phaseId,
+      phaseId,
+      subPhaseName: phaseName,
+      action,
+      isPhase: true,
+    });
+  };
+
   const handleQuickActionClick = (
     subPhaseId: string,
     phaseId: string,
@@ -493,9 +683,27 @@ export default function ManagementTab({
 
   // Execute the action after notes are provided
   const executeQuickAction = async (notes: string) => {
-    if (!notesPrompt || !onQuickAction) return;
+    if (!notesPrompt) return;
 
-    const { subPhaseId, phaseId, action } = notesPrompt;
+    const { subPhaseId, phaseId, action, isPhase } = notesPrompt;
+
+    // A phase takes a different route: its own endpoint, and no sub-phase
+    // optimistic update to apply. The parent refreshes, which is what brings
+    // the new gates back with it.
+    if (isPhase) {
+      if (!onPhaseQuickAction) return;
+      setNotesPrompt(null);
+      setActionLoading(phaseId);
+      try {
+        await onPhaseQuickAction(phaseId, action, notes);
+      } finally {
+        setActionLoading(null);
+        onRefresh();
+      }
+      return;
+    }
+
+    if (!onQuickAction) return;
 
     // Close modal immediately
     setNotesPrompt(null);
@@ -780,16 +988,31 @@ export default function ManagementTab({
                     )}
                   </div>
 
-                  {/* Actions */}
+                  {/* Actions. A phase is a task, so it starts and completes
+                      like a step - and it has to, because steps that wait for
+                      their phase to start cannot begin until somebody opens
+                      it. Previously there was only Edit here. */}
                   <div
-                    className="flex justify-center"
+                    className="flex justify-center items-center gap-0.5"
                     onClick={(e) => e.stopPropagation()}
                   >
+                    {onPhaseQuickAction && (
+                      <QuickActions
+                        status={phase.status}
+                        loading={actionLoading === phase.id}
+                        gate={gates[phase.id]}
+                        mayEdit={mayEdit}
+                        label={phase.name}
+                        onAction={(action) =>
+                          handlePhaseActionClick(phase.id, phase.name, action)
+                        }
+                      />
+                    )}
                     {onEditPhase && (
                       <button
                         onClick={() => onEditPhase(phase)}
-                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                        title="Edit Phase"
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors ml-1"
+                        title={`Edit ${phase.name}`}
                       >
                         <PencilIcon className="w-4 h-4" />
                       </button>
@@ -907,6 +1130,9 @@ export default function ManagementTab({
                             <QuickActions
                               status={subPhase.status}
                               loading={actionLoading === subPhase.id}
+                              gate={gates[subPhase.id]}
+                              mayEdit={mayEdit}
+                              label={subPhase.name}
                               onAction={(action) =>
                                 handleQuickActionClick(
                                   subPhase.id,

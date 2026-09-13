@@ -609,6 +609,41 @@ The refusals carry `reason: "assignee_fixed_by_playbook"` or
 out, so the server is the only thing enforcing this — a caller finds out by
 being refused, with a message that says why.
 
+### The Plan tab only offers what the server will accept
+
+`project_plan_gates(project_id)` answers, for every task in the active run,
+which transitions `task_transition` would accept and why not — in one round
+trip, because asking per task is 33 on one project. `GET
+/api/projects/[id]/plan-gates` exposes it, and the Plan tab draws its buttons
+from it.
+
+It is a **view of `can_start_task` and `can_complete_task`**, the same functions
+the transition consults, never a second copy of the rules. A screen that
+disagrees with the server about what is allowed is worse than one offering
+nothing.
+
+Before this the actions were drawn unconditionally: Start appeared on a step
+whose predecessor had not finished, the transition refused it, and the tooltip
+read "Start". A blocked action is now **disabled with the reason as its
+tooltip** rather than hidden — hiding it answers "can I start this?" with
+silence.
+
+**A phase has actions too**, because a phase is a task. It previously had only
+Edit, which became untenable once steps could wait for their phase to start:
+nothing could ever be opened. `onPhaseQuickAction` routes a playbook phase to
+`PATCH /api/tasks/[id]` and a native phase to `PATCH
+/api/projects/[id]/phases/[phaseId]` — and that route wants
+**`status_change_notes`**, not `notes`, when the status moves.
+
+Gates are re-fetched whenever any status in the plan changes, since starting one
+step can unblock another. A project with no active run gets no gates and falls
+back to status-only behaviour, so the older phase engine still renders.
+
+`can_start_task`'s reason names **which part** it waits for — "Waiting for 2D
+Designs to start" against "Waiting for Layout Drawings to finish". It used to
+say "not finished" for every blocker, which is misleading for an `after_start`
+link and suggests a wait that will never end.
+
 ### Who sees where the plan came from
 
 The Plan tab's provenance banner — "Drawn from the playbook X (v5) … Stop

@@ -485,6 +485,61 @@ export default function ProjectDetailPage({ params }: PageProps) {
     }
   };
 
+  /**
+   * Starting, completing, holding or skipping a PHASE.
+   *
+   * A playbook phase is a task, so it goes to the task route like a step does;
+   * a native phase goes to the phase route. Without this the row that decides
+   * when a stage begins had no action at all, which mattered once steps could
+   * wait for their phase to start - nothing could ever be opened.
+   */
+  const handlePhaseQuickAction = async (
+    phaseId: string,
+    action: "start" | "hold" | "resume" | "complete" | "cancel",
+    notes: string,
+  ) => {
+    const statusMap: Record<string, string> = {
+      start: "in_progress",
+      hold: "on_hold",
+      resume: "in_progress",
+      complete: "completed",
+      cancel: "skipped",
+    };
+    const newStatus = statusMap[action];
+    if (!newStatus) return null;
+
+    try {
+      if (playbookNodeIds.has(phaseId)) {
+        return await savePlaybookNode(phaseId, { status: newStatus, notes });
+      }
+
+      // The phase route wants status_change_notes when the status moves, not
+      // notes - sending only the latter is accepted and then rejected for a
+      // missing reason.
+      const response = await fetch(`/api/projects/${id}/phases/${phaseId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: newStatus,
+          status_change_notes: notes,
+          notes,
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to update the phase");
+      }
+
+      const updated = await response.json();
+      fetchProject();
+      return updated;
+    } catch (err) {
+      console.error("Phase action failed:", err);
+      return null;
+    }
+  };
+
   // Handler for sub-phase click
   const handleSubPhaseClick = (phaseId: string, subPhaseId: string) => {
     // A playbook step is a task, so its detail view is the task page - which
@@ -812,6 +867,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 onEditSubPhase={handleEditSubPhase}
                 onSubPhaseClick={handleSubPhaseClick}
                 onQuickAction={handleQuickAction}
+                onPhaseQuickAction={handlePhaseQuickAction}
               />
             </>
           )}
