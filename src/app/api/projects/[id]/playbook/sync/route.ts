@@ -24,7 +24,13 @@ export async function POST(
   const log = requestLogger(request);
 
   try {
-    const guard = await protectApiRoute(request, { loadPermissions: true });
+    // Bringing steps in changes how a live plan is shaped, which is the same
+    // act as stopping the playbook - not merely editing the project. Gated to
+    // match PATCH /api/playbooks/runs/[runId] and the UI that offers it.
+    const guard = await protectApiRoute(request, {
+      loadPermissions: true,
+      requiredPermissions: ["tasks.edit"],
+    });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }

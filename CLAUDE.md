@@ -609,6 +609,26 @@ The refusals carry `reason: "assignee_fixed_by_playbook"` or
 out, so the server is the only thing enforcing this — a caller finds out by
 being refused, with a message that says why.
 
+### Who sees where the plan came from
+
+The Plan tab's provenance banner — "Drawn from the playbook X (v5) … Stop
+following this playbook" — and the drift banner beside it are shown only to
+holders of **`tasks.edit`** (Owner, Admin, Manager, Designer). They are the
+controls for changing how the business works, not information a site supervisor
+needs, and showing them to everybody invited a click the server would refuse.
+
+`tasks.edit` is chosen because it is what `PATCH /api/playbooks/runs/[runId]`
+already requires to stop a run, so the UI shows exactly what the server will
+allow. It is also the same four roles that may author a playbook at all.
+
+`POST /api/projects/[id]/playbook/sync` was gated on project write only, which
+disagreed with both. Bringing steps into a live plan is the same act as stopping
+it, so it now requires `tasks.edit` too.
+
+**Project Manager holds neither** — it has `projects.edit` but not
+`tasks.edit` — so a project manager sees the plan and cannot stop its playbook.
+That may want reconciling with the grants; it is not a code decision.
+
 ### Drift between a plan and its playbook
 A run pins its version, so a plan under way is never rewritten. Saying nothing
 about that left people wondering why an edit had no effect, so the Plan tab

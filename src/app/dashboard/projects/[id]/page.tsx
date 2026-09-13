@@ -143,6 +143,18 @@ export default function ProjectDetailPage({ params }: PageProps) {
   // The old check was roles.includes("finance"|"admin"|"owner"), which the flat
   // permission model does not use and which quietly excluded Finance Manager -
   // its slug is finance_manager, so it never matched "finance".
+  /**
+   * Who sees where the plan came from, and who may stop it.
+   *
+   * The provenance banner and the stop control are not information a site
+   * supervisor needs - they are the controls for changing how the business
+   * works, and showing them to everybody invited a click that the server would
+   * refuse anyway. tasks.edit is what PATCH /api/playbooks/runs/[runId]
+   * actually requires to stop a run, and it happens to be the same four roles
+   * that may author a playbook at all: Owner, Admin, Manager, Designer.
+   */
+  const canManagePlaybook = hasAnyPermission(["tasks.edit"]);
+
   const canSeePayments = hasAnyPermission([
     "finance.payments.view",
     "projects.milestones.manage",
@@ -732,7 +744,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
         <div>
           {activeTab === "project-mgmt" && (
             <>
-              {playbookDrift && (
+              {playbookDrift && canManagePlaybook && (
                 <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex items-start justify-between gap-4">
                   <div>
                     <p className="text-sm font-medium text-amber-900">
@@ -764,7 +776,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 </div>
               )}
 
-              {playbook && (
+              {playbook && canManagePlaybook && (
                 <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
                   <p className="text-sm font-medium text-blue-900">
                     Drawn from the playbook &ldquo;{playbook.name}&rdquo; (v
