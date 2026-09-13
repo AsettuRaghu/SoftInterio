@@ -1176,29 +1176,57 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                               );
                             }
 
+                            /**
+                             * Nothing to offer, and nothing chosen already.
+                             *
+                             * This is the normal state of the first step inside
+                             * the first phase: the only thing before it is its
+                             * own phase, which is excluded. Rendering an empty
+                             * dropdown there looked broken - you could open it
+                             * and pick nothing - so say why instead.
+                             */
+                            if (options.length === 0 && step.depends_on.length === 0) {
+                              const onlyItsPhase =
+                                parentUid !== undefined &&
+                                steps
+                                  .slice(0, i)
+                                  .filter((s) => s.title.trim())
+                                  .every((s) => s.uid === parentUid);
+
+                              return (
+                                <span className="text-slate-400">
+                                  {onlyItsPhase
+                                    ? "nothing earlier to wait for — it is the first step in its phase"
+                                    : "nothing earlier to wait for"}
+                                </span>
+                              );
+                            }
+
                             return (
                               <>
-                                <select
-                                  value=""
-                                  onChange={(e) => {
-                                    const uid = e.target.value;
-                                    if (!uid || chosen.has(uid)) return;
-                                    update(i, {
-                                      depends_on: [
-                                        ...step.depends_on,
-                                        { uid, waitType: "after_finish" },
-                                      ],
-                                    });
-                                  }}
-                                  className="px-1.5 py-0.5 border border-slate-200 rounded bg-white max-w-[12rem]"
-                                >
-                                  <option value="">add a step…</option>
-                                  {options.map((s) => (
-                                    <option key={s.uid} value={s.uid}>
-                                      {s.title}
-                                    </option>
-                                  ))}
-                                </select>
+                                {options.length > 0 && (
+                                  <select
+                                    value=""
+                                    onChange={(e) => {
+                                      const uid = e.target.value;
+                                      if (!uid || chosen.has(uid)) return;
+                                      update(i, {
+                                        depends_on: [
+                                          ...step.depends_on,
+                                          { uid, waitType: "after_finish" },
+                                        ],
+                                      });
+                                    }}
+                                    className="px-1.5 py-0.5 border border-slate-200 rounded bg-white max-w-[12rem]"
+                                  >
+                                    <option value="">add a step…</option>
+                                    {options.map((s) => (
+                                      <option key={s.uid} value={s.uid}>
+                                        {s.title}
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
 
                                 {step.depends_on.length === 0 && (
                                   <span className="text-slate-400">
