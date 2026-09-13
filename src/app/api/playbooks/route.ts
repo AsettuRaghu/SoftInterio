@@ -358,6 +358,7 @@ export async function replaceSteps(
     step_id: string;
     depends_on_step_id: string;
     dependency_type: string;
+    wait_type: string;
   }[] = [];
 
   for (let i = 0; i < steps.length; i++) {
@@ -365,15 +366,36 @@ export async function replaceSteps(
     const wanted: unknown = steps[i]?.depends_on;
     if (!from || !Array.isArray(wanted) || wanted.length === 0) continue;
 
-    for (const rawIndex of wanted) {
+    for (const raw of wanted) {
+      // A link is { index, waitType }. Bare numbers are still accepted, since
+      // that is what every caller sent before wait types existed.
+      const rawIndex = typeof raw === "object" && raw !== null ? (raw as any).index : raw;
+      const waitType =
+        typeof raw === "object" && raw !== null && (raw as any).waitType === "after_start"
+          ? "after_start"
+          : "after_finish";
+
       const to = allIdByIndex.get(Number(rawIndex));
       // Self-reference would never start, and the constraint would reject it
       // anyway; skipping keeps the save from failing over a stale index.
       if (!to || to === from) continue;
+
+      // A step inside a phase is already inside it, so waiting for the phase
+      // can never mean anything - and the pair deadlocks, because the phase
+      // cannot finish until its steps do. The database refuses it too; this
+      // keeps a stale payload from failing the whole save.
+      const parentIndex = (steps[i] as any)?.parent_index;
+      const parentOfFrom =
+        parentIndex === null || parentIndex === undefined
+          ? null
+          : (idByIndex.get(Number(parentIndex)) ?? null);
+      if (parentOfFrom && parentOfFrom === to) continue;
+
       links.push({
         step_id: from,
         depends_on_step_id: to,
         dependency_type: "hard",
+        wait_type: waitType,
       });
     }
   }

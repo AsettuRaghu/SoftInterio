@@ -841,11 +841,29 @@ fix, a conversion that rolled back is not.
 `/dashboard/settings/playbooks/[id]`, with `new` for a new one.
 `PlaybookEditor` is the form; the page owns navigation.
 
-**A step can wait on named steps.** `procedure_step_dependencies` holds
-`hard` (blocks) and `soft` (recorded, advisory) links, and
-`task_blocking_predecessors` checks them **before** `enforce_order` — a named
-dependency holds whether or not the playbook enforces order, which is how "3D
-waits on layout sign-off while the ceiling quote runs alongside" gets said.
+**A step can wait on named steps, and says which part it waits for.**
+`procedure_step_dependencies` holds `hard` (blocks) and `soft` (advisory) links,
+plus **`wait_type`**:
+
+- **`after_finish`** — the predecessor must be completed, skipped or cancelled.
+  Finish-to-start, and what every link meant before 2026-09-13.
+- **`after_start`** — the predecessor must merely have begun. Start-to-start.
+
+Both are needed, and reading every link as the first kind **deadlocked a whole
+playbook**. Eleven of the Modular Design Template's 34 dependencies pointed a
+step at its own phase, expecting "once the phase is under way". But
+`task_transition` refuses to complete a parent while a subtask is open, and the
+dependency refused to start the subtask until the parent completed — neither
+could ever move, and none of the eight phases could be started.
+
+**A step can never wait for the phase it belongs to.** It is already inside it,
+so the link cannot mean anything, and the pair always deadlocks. Refused by
+`trg_reject_circular_step_dependency`, dropped from the editor's options, and
+skipped by the save so a stale payload cannot fail the whole thing. Self-links
+are refused the same way. Deeper cycles are **not** detected.
+
+`task_blocking_predecessors` checks named links **before** `enforce_order`, so
+a named dependency holds whether or not the playbook enforces order.
 
 The editor works in **indexes**, because a step being written has no id yet;
 the API resolves them after every step exists. Dropping an untitled row shifts

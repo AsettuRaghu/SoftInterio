@@ -50,16 +50,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Dependencies come back attached to the step that waits, so the editor
     // can show "waits for" without a second round trip.
     const stepIds = (steps || []).map((s) => s.id as string);
-    let depsByStep: Record<string, string[]> = {};
+    // Each link carries which part of the predecessor it waits for, so the
+    // editor can show and change it rather than assuming finish-to-start.
+    let depsByStep: Record<string, { id: string; waitType: string }[]> = {};
     if (stepIds.length > 0) {
       const { data: deps } = await supabase
         .from("procedure_step_dependencies")
-        .select("step_id, depends_on_step_id")
+        .select("step_id, depends_on_step_id, wait_type")
         .in("step_id", stepIds);
       for (const d of deps || []) {
-        (depsByStep[d.step_id as string] ||= []).push(
-          d.depends_on_step_id as string
-        );
+        (depsByStep[d.step_id as string] ||= []).push({
+          id: d.depends_on_step_id as string,
+          waitType: (d as any).wait_type ?? "after_finish",
+        });
       }
     }
 
@@ -67,7 +70,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       playbook,
       steps: (steps || []).map((s) => ({
         ...s,
-        depends_on_step_ids: depsByStep[s.id as string] || [],
+        depends_on_links: depsByStep[s.id as string] || [],
       })),
     });
   } catch (error) {

@@ -54,7 +54,16 @@ interface DraftStep {
    * dependency at whatever had taken that position. Identity survives
    * reordering; positions are worked out once, at save.
    */
-  depends_on: string[];
+  /**
+   * What this step waits for, by uid, and which part of it.
+   *
+   * "after_finish" is the predecessor being completed; "after_start" is it
+   * merely having begun. Both are needed: "3D waits for layout sign-off" is
+   * finish-to-start, while "drawings can begin once measurement has begun" is
+   * start-to-start, and reading every link as the first kind is what made a
+   * playbook unstartable.
+   */
+  depends_on: { uid: string; waitType: "after_finish" | "after_start" }[];
   /**
    * Carried through untouched.
    *
@@ -307,12 +316,22 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
         raw.forEach((r: any) => {
           const at = indexOfRawId.get(r.id);
           if (at === undefined) return;
-          flat[at].depends_on = (r.depends_on_step_ids || [])
-            .map((depId: string) => {
-              const n = indexOfRawId.get(depId);
-              return n === undefined ? undefined : flat[n].uid;
+          flat[at].depends_on = (r.depends_on_links || [])
+            .map((link: { id: string; waitType: string }) => {
+              const n = indexOfRawId.get(link.id);
+              if (n === undefined) return undefined;
+              return {
+                uid: flat[n].uid,
+                waitType:
+                  link.waitType === "after_start" ? "after_start" : "after_finish",
+              };
             })
-            .filter((u: string | undefined): u is string => u !== undefined);
+            .filter(
+              (
+                l: { uid: string; waitType: string } | undefined
+              ): l is { uid: string; waitType: "after_finish" | "after_start" } =>
+                l !== undefined
+            );
         });
 
         setSteps(flat.length ? flat : [blankStep()]);
@@ -603,8 +622,11 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
         // Positions are worked out here and nowhere else, from the order the
         // steps are actually being sent in.
         depends_on: s.depends_on
-          .map((uid) => keptIndexes.findIndex((old) => steps[old].uid === uid))
-          .filter((n) => n >= 0),
+          .map((link) => ({
+            index: keptIndexes.findIndex((old) => steps[old].uid === link.uid),
+            waitType: link.waitType,
+          }))
+          .filter((l) => l.index >= 0),
       };
     });
     if (!name.trim()) {
@@ -1118,70 +1140,124 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                         </select>
                       </div>
 
-                      {/* What has to finish first. A named dependency holds
-                          whether or not the playbook enforces order, which is
-                          how "3D waits on the layout sign-off but the ceiling
-                          quote runs alongside" gets said. */}
+                      {/* What has to happen first, and which part of it. A
+                          named dependency holds whether or not the playbook
+                          enforces order, which is how "3D waits on the layout
+                          sign-off but the ceiling quote runs alongside" gets
+                          said. Each link chooses "to finish" or "to start". */}
                       {i > 0 && (
                         <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
                           <span className="text-slate-400">Waits for</span>
-                          {steps.slice(0, i).some((s) => s.title.trim()) ? (
-                            <>
-                              <select
-                                value=""
-                                onChange={(e) => {
-                                  const uid = e.target.value;
-                                  if (!uid || step.depends_on.includes(uid))
-                                    return;
-                                  update(i, {
-                                    depends_on: [...step.depends_on, uid],
-                                  });
-                                }}
-                                className="px-1.5 py-0.5 border border-slate-200 rounded bg-white max-w-[12rem]"
-                              >
-                                <option value="">add a step…</option>
-                                {steps.slice(0, i).map((s) =>
+                          {(() => {
+                            // A step inside a phase is already inside it, so
+                            // the phase is never an option: waiting for it can
+                            // mean nothing, and the pair deadlocks because the
+                            // phase cannot finish until its steps do. Offering
+                            // it is what made a whole playbook unstartable.
+                            const parentUid =
+                              step.parent_index !== null
+                                ? steps[step.parent_index]?.uid
+                                : undefined;
+                            const chosen = new Set(step.depends_on.map((l) => l.uid));
+                            const options = steps
+                              .slice(0, i)
+                              .filter(
+                                (s) =>
                                   s.title.trim() &&
-                                  !step.depends_on.includes(s.uid) ? (
+                                  s.uid !== parentUid &&
+                                  !chosen.has(s.uid),
+                              );
+
+                            if (!steps.slice(0, i).some((s) => s.title.trim())) {
+                              return (
+                                <span className="text-slate-400">
+                                  name an earlier step first
+                                </span>
+                              );
+                            }
+
+                            return (
+                              <>
+                                <select
+                                  value=""
+                                  onChange={(e) => {
+                                    const uid = e.target.value;
+                                    if (!uid || chosen.has(uid)) return;
+                                    update(i, {
+                                      depends_on: [
+                                        ...step.depends_on,
+                                        { uid, waitType: "after_finish" },
+                                      ],
+                                    });
+                                  }}
+                                  className="px-1.5 py-0.5 border border-slate-200 rounded bg-white max-w-[12rem]"
+                                >
+                                  <option value="">add a step…</option>
+                                  {options.map((s) => (
                                     <option key={s.uid} value={s.uid}>
                                       {s.title}
                                     </option>
-                                  ) : null,
+                                  ))}
+                                </select>
+
+                                {step.depends_on.length === 0 && (
+                                  <span className="text-slate-400">
+                                    nothing — starts when its turn comes
+                                  </span>
                                 )}
-                              </select>
-                              {step.depends_on.length === 0 && (
-                                <span className="text-slate-400">
-                                  nothing — starts when its turn comes
-                                </span>
-                              )}
-                              {step.depends_on.map((uid) => (
-                                <span
-                                  key={uid}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200"
-                                >
-                                  {steps.find((s) => s.uid === uid)?.title ||
-                                    "(removed step)"}
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      update(i, {
-                                        depends_on: step.depends_on.filter(
-                                          (x) => x !== uid,
-                                        ),
-                                      })
-                                    }
-                                    className="text-amber-500 hover:text-amber-800"
+
+                                {step.depends_on.map((link) => (
+                                  <span
+                                    key={link.uid}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200"
                                   >
-                                    ×
-                                  </button>
-                                </span>
-                              ))}
-                            </>
-                          ) : (
-                            <span className="text-slate-400">
-                              name an earlier step first
-                            </span>
-                          )}
+                                    {steps.find((s) => s.uid === link.uid)?.title ||
+                                      "(removed step)"}
+                                    {/* Which part of it: finished, or merely
+                                        begun. Reading every link as "finished"
+                                        is what blocked work that only needed
+                                        the earlier step under way. */}
+                                    <select
+                                      value={link.waitType}
+                                      onChange={(e) =>
+                                        update(i, {
+                                          depends_on: step.depends_on.map((l) =>
+                                            l.uid === link.uid
+                                              ? {
+                                                  ...l,
+                                                  waitType:
+                                                    e.target.value === "after_start"
+                                                      ? "after_start"
+                                                      : "after_finish",
+                                                }
+                                              : l,
+                                          ),
+                                        })
+                                      }
+                                      className="bg-transparent border-0 text-amber-800 text-[11px] focus:outline-none cursor-pointer"
+                                      title="Which part of that step this one waits for"
+                                    >
+                                      <option value="after_finish">to finish</option>
+                                      <option value="after_start">to start</option>
+                                    </select>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        update(i, {
+                                          depends_on: step.depends_on.filter(
+                                            (l) => l.uid !== link.uid,
+                                          ),
+                                        })
+                                      }
+                                      className="text-amber-500 hover:text-amber-800"
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                ))}
+                              </>
+                            );
+                          })()}
                         </div>
                       )}
 
