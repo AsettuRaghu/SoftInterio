@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { ShareQuotationModal } from "@/components/quotations/ShareQuotationModal";
+import { PrintQuotationModal } from "@/components/quotations/PrintQuotationModal";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { QuotationBuilder } from "@/components/quotations/QuotationBuilder";
@@ -584,7 +585,14 @@ export default function QuotationDetailPage() {
   const [isCreatingRevision, setIsCreatingRevision] = useState(false);
 
   // PDF and Share state
-  const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
+  /**
+   * The builder chooses a print format before producing anything; this page
+   * downloaded straight from the button with whatever the default was. A print
+   * format decides `itemise_to` and `price_at` - what the client actually sees
+   * priced - so they are genuinely different documents, and picking one is the
+   * decision, not a preference buried in settings.
+   */
+  const [showPrintModal, setShowPrintModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
 
   // Belongs up here with the others: the loading, error and not-found returns
@@ -625,39 +633,6 @@ export default function QuotationDetailPage() {
     }
   };
 
-  // Download PDF
-  const handleDownloadPDF = async () => {
-    if (!quotation) return;
-
-    try {
-      setIsDownloadingPDF(true);
-      const response = await fetch(`/api/quotations/${quotation.id}/pdf`);
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to generate PDF");
-      }
-
-      // Get the blob and create download link
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${quotation.quotation_number}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("Error downloading PDF:", err);
-      setNotice({
-        message: err instanceof Error ? err.message : "Failed to download PDF",
-        variant: "error",
-      });
-    } finally {
-      setIsDownloadingPDF(false);
-    }
-  };
 
   /**
    * Sharing now runs through ShareQuotationModal.
@@ -856,8 +831,19 @@ export default function QuotationDetailPage() {
     <div className="space-y-4">
       {/* Header */}
       <div className="bg-white rounded-lg border border-slate-200 px-5 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4 min-w-0">
+        {/*
+         * Wraps, because it has to.
+         *
+         * This was one non-wrapping row holding a breadcrumb, the title, a
+         * status badge, Approve, the version, the lead, the project and the
+         * property, against four buttons on the right. The left group carried
+         * min-w-0 but every chip inside it is shrink-0, so the group could be
+         * squeezed below its content width while nothing inside would give -
+         * the chips then overflowed their own box and ran underneath the
+         * actions. That is why View Lead sat on top of the property name.
+         */}
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex flex-1 items-center gap-3 min-w-0 flex-wrap">
             {/* Breadcrumb */}
             <div className="flex items-center gap-2 text-sm text-slate-500 shrink-0">
               <Link
@@ -1065,28 +1051,23 @@ export default function QuotationDetailPage() {
               </>
             )}
             <button
-              onClick={handleDownloadPDF}
-              disabled={isDownloadingPDF}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => setShowPrintModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
             >
-              {isDownloadingPDF ? (
-                <div className="w-4 h-4 border-2 border-slate-600 border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  />
-                </svg>
-              )}
-              {isDownloadingPDF ? "Generating..." : "PDF"}
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+              PDF
             </button>
             {/* One action instead of two half-working ones. The modal mints
                 the link, offers WhatsApp / email / copy, and marks the
@@ -2035,6 +2016,13 @@ export default function QuotationDetailPage() {
           </div>
         </div>
       </div>
+
+      <PrintQuotationModal
+        isOpen={showPrintModal}
+        onClose={() => setShowPrintModal(false)}
+        quotationId={quotation.id}
+        quotationNumber={quotation.quotation_number}
+      />
 
       <ShareQuotationModal
         isOpen={showShareModal}
