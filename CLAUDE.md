@@ -733,6 +733,24 @@ Opening the Plan tab now calls `refreshPlan()`, and opening the Tasks tab calls
 simply right when you look at it. Deliberately **not** `fetchCounts`, which
 blanks the page and refetches every tab's data.
 
+### A finished task is read-only until it is reopened
+
+`isEditable` is a property of the **table** — `allowEdit && !readOnly` — and said
+nothing about the row. So every field on a completed task stayed editable
+inline: its title, status, priority, assignee, dates and notes could all be
+changed while it read as done.
+
+`TaskRow` now derives `rowEditable = isEditable && !isSettled`, where settled is
+completed, cancelled or skipped. Twenty-two guards inside the row use it.
+
+**One deliberate exception:** the timer column keeps the table-level
+`isEditable`, because on a settled row that control *is* the Reopen button.
+Gating it on the row being editable would lock a completed task shut with no way
+back. The edit modal is the other way in.
+
+This lands on the Plan tab for free, which is the point of it being the same
+table.
+
 ### The Plan tab IS the tasks table
 
 `PlanTab` is `TaskTableReusable` scoped to the playbook run — 105 lines, not a

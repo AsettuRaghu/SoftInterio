@@ -1002,6 +1002,23 @@ export default function TaskTable({
     const assigneeId =
       typeof task.assigned_to === "string" ? task.assigned_to : null;
 
+    /**
+     * A finished task is read-only until it is reopened.
+     *
+     * isEditable is a property of the TABLE - allowEdit && !readOnly - and says
+     * nothing about the row, so every field on a completed task stayed editable
+     * inline: status, priority, assignee and dates could all be changed while
+     * it read as done. Completing something should settle it.
+     *
+     * The way back is deliberate and still there: the Reopen control in the
+     * timer column, or the edit modal.
+     */
+    const isSettled =
+      task.status === "completed" ||
+      task.status === "cancelled" ||
+      task.status === "skipped";
+    const rowEditable = isEditable && !isSettled;
+
     return (
       <tr
         className={`group border-b border-slate-100 hover:bg-slate-50/50 transition-colors ${
@@ -1064,9 +1081,9 @@ export default function TaskTable({
               />
             ) : (
               <button
-                onClick={() => isEditable && startEditingTitle(task)}
+                onClick={() => rowEditable && startEditingTitle(task)}
                 className="text-left flex items-center gap-1.5 group/title"
-                disabled={!isEditable}
+                disabled={!rowEditable}
               >
                 <span className="text-xs font-medium text-slate-800 hover:text-blue-600 transition-colors">
                   {task.title}
@@ -1083,7 +1100,7 @@ export default function TaskTable({
               </button>
             )}
 
-            {!isSubtask && !isEditingTitle && isEditable && (
+            {!isSubtask && !isEditingTitle && rowEditable && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1104,6 +1121,9 @@ export default function TaskTable({
           <TaskStatusControls
             task={{ ...task, total_active_seconds: task.total_active_seconds ?? 0 }}
             variant="compact"
+            // Table-level, NOT rowEditable: on a settled row this control is
+            // the Reopen button, and gating it on the row being editable would
+            // lock a completed task shut with no way back.
             disabled={!isEditable}
             onTransitioned={(updated, result) => {
               // A subtask transition changes its PARENT's gating state too:
@@ -1149,22 +1169,22 @@ export default function TaskTable({
         <td className="px-2 py-1.5 whitespace-nowrap">
           <button
             onClick={(e) => {
-              if (isEditable) {
+              if (rowEditable) {
                 openNotesPopover(task, e, isSubtask ? parentTaskId : undefined);
               }
             }}
-            disabled={!isEditable}
+            disabled={!rowEditable}
             className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
               task.description
                 ? "text-blue-500 hover:bg-blue-50"
                 : "text-slate-300 hover:text-slate-500 hover:bg-slate-100"
-            } ${!isEditable ? "opacity-50 cursor-not-allowed" : ""}`}
+            } ${!rowEditable ? "opacity-50 cursor-not-allowed" : ""}`}
             title={
               task.description
-                ? isEditable
+                ? rowEditable
                   ? "View/Edit notes"
                   : "View notes"
-                : isEditable
+                : rowEditable
                 ? "Add notes"
                 : "No notes"
             }
@@ -1178,7 +1198,7 @@ export default function TaskTable({
           <StatusBadge
             value={task.status}
             onChange={(val) => {
-              if (isEditable) {
+              if (rowEditable) {
                 updateTaskInline(
                   task.id,
                   "status",
@@ -1189,7 +1209,7 @@ export default function TaskTable({
               }
             }}
             size="sm"
-            readOnly={!isEditable}
+            readOnly={!rowEditable}
           />
         </td>
 
@@ -1198,7 +1218,7 @@ export default function TaskTable({
           <PriorityBadge
             value={task.priority}
             onChange={(val) => {
-              if (isEditable) {
+              if (rowEditable) {
                 updateTaskInline(
                   task.id,
                   "priority",
@@ -1209,7 +1229,7 @@ export default function TaskTable({
               }
             }}
             size="sm"
-            readOnly={!isEditable}
+            readOnly={!rowEditable}
           />
         </td>
 
@@ -1218,7 +1238,7 @@ export default function TaskTable({
           <AssigneeSelector
             selected={assigneeId}
             onChange={(val) => {
-              if (isEditable) {
+              if (rowEditable) {
                 updateTaskInline(
                   task.id,
                   "assigned_to",
@@ -1229,7 +1249,7 @@ export default function TaskTable({
               }
             }}
             teamMembers={teamMembers}
-            readOnly={!isEditable}
+            readOnly={!rowEditable}
           />
         </td>
 
@@ -1238,7 +1258,7 @@ export default function TaskTable({
           <DatePicker
             value={task.start_date || ""}
             onChange={(val) => {
-              if (isEditable) {
+              if (rowEditable) {
                 updateTaskInline(
                   task.id,
                   "start_date",
@@ -1249,7 +1269,7 @@ export default function TaskTable({
               }
             }}
             placeholder="Start"
-            readOnly={!isEditable}
+            readOnly={!rowEditable}
           />
         </td>
 
@@ -1265,7 +1285,7 @@ export default function TaskTable({
             <DatePicker
               value={task.due_date || ""}
               onChange={(val) => {
-                if (isEditable) {
+                if (rowEditable) {
                   updateTaskInline(
                     task.id,
                     "due_date",
@@ -1277,7 +1297,7 @@ export default function TaskTable({
               }}
               placeholder="Due"
               minDate={task.start_date}
-              readOnly={!isEditable}
+              readOnly={!rowEditable}
               // Without this the picker decides on the date alone, and a task
               // completed after its due date still showed red.
               overdue={isOverdue(task)}
@@ -1369,7 +1389,7 @@ export default function TaskTable({
                 : null
             }
             onChange={(val) => {
-              if (!isEditable) return;
+              if (!rowEditable) return;
               const entity = Array.isArray(val) ? val[0] : val;
               if (entity) {
                 updateTaskInline(
@@ -1448,7 +1468,7 @@ export default function TaskTable({
                 }
               }
             }}
-            readOnly={!isEditable}
+            readOnly={!rowEditable}
           />
           </td>
         )}
