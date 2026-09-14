@@ -40,6 +40,11 @@ interface PlanTabProps {
   tasks: Task[];
   /** The active run, when a playbook is driving this project. */
   runId: string | null;
+  /**
+   * The run's phases in playbook order, each carrying its steps. Comes from the
+   * plan API, which sorts on the step definitions' display_order.
+   */
+  orderedPhases: { id: string; sub_phases?: { id: string }[] }[];
   projectClosed?: boolean;
   teamMembers: TeamMember[];
   onRefresh: () => void;
@@ -50,6 +55,7 @@ export function PlanTab({
   projectId,
   tasks,
   runId,
+  orderedPhases,
   projectClosed = false,
   teamMembers,
   onRefresh,
@@ -58,18 +64,48 @@ export function PlanTab({
   const { user } = useCurrentUser();
 
   /**
-   * Only the plan's own tasks.
+   * The plan, in the playbook's own order, nested.
    *
-   * A project carries ad-hoc tasks alongside its playbook; the Tasks tab shows
-   * both, the plan shows the governed process. Subtasks come with their parent,
-   * so filtering on the parents is enough.
+   * Two things the table cannot work out for itself:
+   *
+   * 1. It renders whatever `externalTasks` holds as top-level rows. Handing it
+   *    every task in the run put the steps alongside their phases as siblings.
+   *    It wants PARENTS only, with their children on `subtasks`.
+   *
+   * 2. Its default order is by creation, and a playbook's tasks are created in
+   *    whatever order the copy happened to insert them. The order that means
+   *    something is the one written in the playbook, which `orderedPhases`
+   *    already carries - the plan API sorts by the step definitions'
+   *    display_order.
+   *
+   * So the phase list drives both: which rows exist, and in what sequence.
    */
-  const planTasks = React.useMemo(() => {
-    if (!runId) return [];
-    return tasks.filter(
-      (t) => (t as { procedure_run_id?: string | null }).procedure_run_id === runId
-    );
-  }, [tasks, runId]);
+  const planRows = React.useMemo(() => {
+    if (!runId || orderedPhases.length === 0) return [];
+
+    const byId = new Map(tasks.map((t) => [t.id, t]));
+    const settled = ["completed", "skipped", "cancelled"];
+
+    return orderedPhases
+      .map((phase) => {
+        const parent = byId.get(phase.id);
+        if (!parent) return null;
+
+        const children = (phase.sub_phases ?? [])
+          .map((sub: { id: string }) => byId.get(sub.id))
+          .filter(Boolean) as Task[];
+
+        return {
+          ...parent,
+          subtasks: children,
+          subtask_count: children.length,
+          completed_subtask_count: children.filter((c) =>
+            settled.includes((c as { status: string }).status)
+          ).length,
+        };
+      })
+      .filter(Boolean) as Task[];
+  }, [tasks, runId, orderedPhases]);
 
   if (!user) {
     return <div className="h-32 bg-slate-100 rounded-lg animate-pulse" />;
@@ -93,9 +129,13 @@ export function PlanTab({
       showTabs={false}
       showCreateButton={false}
       showPlanColumns
+      preserveOrder
+      // A plan is read top to bottom; paging it into 25s would cut a phase off
+      // from its own steps.
+      initialPageSize={200}
       allowEdit={!projectClosed}
       readOnly={projectClosed}
-      externalTasks={planTasks as never[]}
+      externalTasks={planRows as never[]}
       onTaskClick={(task) => onTaskClick?.(task as unknown as Task)}
       onRefresh={onRefresh}
     />

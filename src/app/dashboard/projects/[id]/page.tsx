@@ -982,6 +982,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                   projectId={project.id}
                   tasks={tasks}
                   runId={playbook.runId ?? null}
+                  orderedPhases={playbookPhases}
                   projectClosed={project.status === "completed"}
                   teamMembers={teamMembers}
                   onRefresh={() => {

@@ -105,6 +105,16 @@ export interface TaskTableProps {
    * would be noise. Same opt-in shape as showLinkedColumn.
    */
   showPlanColumns?: boolean;
+  /**
+   * Render `externalTasks` in the order given, instead of sorting.
+   *
+   * The plan's order is the playbook's - phase one, then its steps, then phase
+   * two - and that is not recoverable from any column. Sorting by created_at
+   * (the default) scattered the phases among their own steps.
+   */
+  preserveOrder?: boolean;
+  /** Starting page size. A plan is read whole, not 25 rows at a time. */
+  initialPageSize?: number;
   // Optional: Filter by linked entity (lead, project, etc.)
   relatedType?: string;
   relatedId?: string;
@@ -138,6 +148,8 @@ export interface TaskTableProps {
 
 export default function TaskTable({
   showPlanColumns = false,
+  preserveOrder = false,
+  initialPageSize,
   relatedType,
   relatedId,
   currentUserId,
@@ -172,7 +184,7 @@ export default function TaskTable({
   const [sortField, setSortField] = useState<string>("created_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(initialPageSize ?? 25);
 
   // Inline editing state
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -444,6 +456,9 @@ export default function TaskTable({
     }
 
     // Sorting
+    // The caller's order is meaningful and not derivable from a column.
+    if (preserveOrder) return result;
+
     result.sort((a, b) => {
       let aVal: any = "";
       let bVal: any = "";

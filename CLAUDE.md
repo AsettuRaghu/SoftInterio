@@ -747,9 +747,25 @@ that split** — a start button on a completed row, Pause not appearing, a promp
 demanding notes to begin a step, stale statuses, a refresh that blanked the
 page. Each was fixed once in the tasks module and stayed broken here.
 
-What the plan genuinely adds is two columns: expected against logged hours, and
-progress. Those are `showPlanColumns` on the shared table — opt-in, the same
-shape as `showLinkedColumn` — not a reason to own a copy of it.
+What the plan genuinely adds is three opt-in props on the shared table, not a
+reason to own a copy of it:
+
+- **`showPlanColumns`** — expected against logged hours, and progress.
+- **`preserveOrder`** — render `externalTasks` as given. The plan's order is the
+  playbook's (phase, then its steps, then the next phase) and is not derivable
+  from any column; the table's default sort is `created_at`, which is the order
+  the copy happened to insert rows, so phases came out scattered among their own
+  steps.
+- **`initialPageSize`** — a plan is read whole; paging it into 25s cuts a phase
+  off from its steps.
+
+**The table renders `externalTasks` as top-level rows.** Handing it every task
+in a run put the steps beside their phases as siblings. It wants parents only,
+each carrying its children on `subtasks` with `subtask_count` — `PlanTab` builds
+that from the ordered phase list the plan API already returns.
+
+All three props default to the old behaviour, so the project and lead Tasks tabs
+are untouched.
 
 `ManagementTab` survives **only** for projects still on the older native phase
 engine, whose rows really are not tasks. When that engine goes, so does it.
