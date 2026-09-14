@@ -1002,6 +1002,30 @@ export default function ManagementTab({
                       <span className="text-xs text-slate-400">
                         {completedCount}/{subPhases.length} sub-phases
                       </span>
+                      {/**
+                       * Why this row cannot be completed, said out loud.
+                       *
+                       * The reason was only ever a tooltip on a disabled
+                       * button, so "Complete is missing" was really "Complete
+                       * is disabled because a meeting has not been confirmed" -
+                       * and nothing on screen said so. Shown only when the row
+                       * is under way, because "waiting for an earlier stage" on
+                       * everything not yet started is noise.
+                       */}
+                      {gates[phase.id] &&
+                        !gates[phase.id].canComplete &&
+                        gates[phase.id].completeReason &&
+                        (phase.status === "in_progress" ||
+                          phase.status === "on_hold") && (
+                          <a
+                            href={`/dashboard/tasks/${phase.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            title="Open this stage to deal with it"
+                            className="block text-xs text-amber-700 hover:text-amber-900 hover:underline truncate"
+                          >
+                            {gates[phase.id].completeReason}
+                          </a>
+                        )}
                     </div>
                   </div>
 
@@ -1122,8 +1146,21 @@ export default function ManagementTab({
                                   : "bg-slate-300"
                               }`}
                             />
-                            <span className="text-sm text-slate-700 truncate">
-                              {subPhase.name}
+                            <span className="min-w-0">
+                              <span className="block text-sm text-slate-700 truncate">
+                                {subPhase.name}
+                              </span>
+                              {/* Same reason line as a phase row: a blocked
+                                  step should say what is holding it. */}
+                              {gates[subPhase.id] &&
+                                !gates[subPhase.id].canComplete &&
+                                gates[subPhase.id].completeReason &&
+                                (subPhase.status === "in_progress" ||
+                                  subPhase.status === "on_hold") && (
+                                  <span className="block text-xs text-amber-700 truncate">
+                                    {gates[subPhase.id].completeReason}
+                                  </span>
+                                )}
                             </span>
                           </div>
 

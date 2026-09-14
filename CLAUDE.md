@@ -700,9 +700,20 @@ playbook with its gates, in parallel, touching no loading flag. The table simply
 changes. The refresh icon spins while it works rather than looking inert.
 
 A disabled action is styled as a disabled **button** — `text-slate-300` on a
-white row read as nothing there, so "Complete is missing on an in-progress
-phase" was really "Complete is disabled because two steps are still open", with
-the reason in a tooltip nobody knew to hover.
+white row read as nothing there. And the reason is now **printed on the row**,
+under the name, in amber, whenever a row that is under way cannot be completed.
+It was only ever a tooltip, so "Complete is missing" was really "Complete is
+disabled because a meeting has not been confirmed" with nothing on screen
+saying so.
+
+On a phase the reason is a **link to that stage's task page**, because that is
+the only place a requirement can actually be satisfied — clicking a phase row
+merely expands it, so there was no route from seeing the problem to fixing it.
+
+Remember that a `meeting` step gates on a manual "Confirm the meeting took
+place" requirement. A phase whose every sub-step is complete can still be
+uncompletable for that reason alone, and it looks like a bug until the row says
+so.
 
 **A phase completes when its steps do**, and takes both dates. Verified on an
 isolated playbook: blocked at two open steps, blocked at one, allowed at none,
