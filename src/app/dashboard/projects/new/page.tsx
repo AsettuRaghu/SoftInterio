@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, Suspense } from "react";
+import { Toast } from "@/components/ui/Toast";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -58,6 +59,7 @@ function NewProjectForm() {
 
   const { settings: tenantSettings, loading: settingsLoading } =
     useTenantSettings();
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [wonLeads, setWonLeads] = useState<WonLead[]>([]);
@@ -252,7 +254,9 @@ function NewProjectForm() {
       const data = await response.json();
       router.push(`/dashboard/projects/${data.project.id}`);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "An error occurred");
+      setNotice(
+        error instanceof Error ? error.message : "An error occurred"
+      );
     } finally {
       setLoading(false);
     }
@@ -782,6 +786,11 @@ function NewProjectForm() {
           </button>
         </div>
       </form>
+      <Toast
+        message={notice}
+        variant="error"
+        onDismiss={() => setNotice(null)}
+      />
     </div>
   );
 }

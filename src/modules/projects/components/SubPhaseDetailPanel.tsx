@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { usePrompt } from "@/components/ui/PromptDialog";
+import { Toast } from "@/components/ui/Toast";
 import {
   XMarkIcon,
   CloudArrowUpIcon,
@@ -179,6 +181,13 @@ export default function SubPhaseDetailPanel({
   onClose,
   onUpdate,
 }: SubPhaseDetailPanelProps) {
+  const { prompt: askForNotes, promptDialog } = usePrompt();
+  /*
+   * These messages often carry the server's own refusal - "Cannot complete: a
+   * predecessor is still open" - which is the last thing that belongs in an
+   * unstyled OS box the page cannot repaint behind.
+   */
+  const [notice, setNotice] = useState<string | null>(null);
   const [subPhase, setSubPhase] = useState<SubPhaseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -217,7 +226,7 @@ export default function SubPhaseDetailPanel({
   const handleStartSubPhase = async () => {
     // Check if there's an assignee before trying to start
     if (!subPhase?.assigned_to) {
-      alert("Please assign someone to this sub-phase before starting it.");
+      setNotice("Assign someone to this step before starting it.");
       return;
     }
 
@@ -228,7 +237,7 @@ export default function SubPhaseDetailPanel({
       );
       if (!response.ok) {
         const data = await response.json();
-        alert(data.error || data.reason || "Cannot start sub-phase");
+        setNotice(data.error || data.reason || "This step cannot be started.");
         return;
       }
       await fetchSubPhaseDetails();
@@ -239,12 +248,21 @@ export default function SubPhaseDetailPanel({
   };
 
   const handleCompleteSubPhase = async () => {
-    // Prompt for completion notes (required)
-    const notes = prompt("Please provide completion notes (required):");
-    if (!notes?.trim()) {
-      alert("Completion notes are required.");
-      return;
-    }
+    /*
+     * The dialog enforces "required" itself, so there is no second rejection to
+     * write: it will not submit empty, and cancelling returns null. The old
+     * pair - window.prompt then alert("...required") - could tell somebody off
+     * for an empty answer only after closing the box they typed it in.
+     */
+    const notes = await askForNotes({
+      title: "Complete this step?",
+      message: "Say what was done. This is kept on the record.",
+      placeholder: "Measurements confirmed on site with the client…",
+      confirmLabel: "Mark complete",
+      required: true,
+      multiline: true,
+    });
+    if (notes === null) return;
 
     try {
       const response = await fetch(
@@ -252,12 +270,12 @@ export default function SubPhaseDetailPanel({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ notes: notes.trim() }),
+          body: JSON.stringify({ notes }),
         }
       );
       if (!response.ok) {
         const data = await response.json();
-        alert(data.error || data.reason || "Cannot complete sub-phase");
+        setNotice(data.error || data.reason || "This step cannot be completed.");
         return;
       }
       await fetchSubPhaseDetails();
@@ -269,7 +287,7 @@ export default function SubPhaseDetailPanel({
 
   const handleSkipSubPhase = async () => {
     if (!skipReason.trim()) {
-      alert("Please provide a reason for skipping");
+      setNotice("Give a reason for skipping this step.");
       return;
     }
     try {
@@ -283,7 +301,7 @@ export default function SubPhaseDetailPanel({
       );
       if (!response.ok) {
         const data = await response.json();
-        alert(data.error || data.reason || "Cannot skip sub-phase");
+        setNotice(data.error || data.reason || "This step cannot be skipped.");
         return;
       }
       setShowSkipModal(false);
@@ -317,7 +335,7 @@ export default function SubPhaseDetailPanel({
 
       if (!response.ok) {
         const data = await response.json();
-        alert(data.error || "Failed to upload files");
+        setNotice(data.error || "Could not upload those files.");
         return;
       }
 
@@ -325,7 +343,7 @@ export default function SubPhaseDetailPanel({
       onUpdate();
     } catch (err) {
       console.error("Error uploading files:", err);
-      alert("Failed to upload files");
+      setNotice("Could not upload those files.");
     } finally {
       setUploading(false);
       if (fileInputRef.current) {
@@ -353,7 +371,7 @@ export default function SubPhaseDetailPanel({
 
       if (!response.ok) {
         const data = await response.json();
-        alert(data.error || "Failed to add comment");
+        setNotice(data.error || "Could not add that comment.");
         return;
       }
 
@@ -361,7 +379,7 @@ export default function SubPhaseDetailPanel({
       await fetchSubPhaseDetails();
     } catch (err) {
       console.error("Error adding comment:", err);
-      alert("Failed to add comment");
+      setNotice("Could not add that comment.");
     } finally {
       setSubmittingComment(false);
     }
@@ -404,14 +422,14 @@ export default function SubPhaseDetailPanel({
 
       if (!response.ok) {
         const data = await response.json();
-        alert(data.error || "Failed to request approval");
+        setNotice(data.error || "Could not request approval.");
         return;
       }
 
       await fetchSubPhaseDetails();
     } catch (err) {
       console.error("Error requesting approval:", err);
-      alert("Failed to request approval");
+      setNotice("Could not request approval.");
     }
   };
 
@@ -983,6 +1001,12 @@ export default function SubPhaseDetailPanel({
           animation: slide-in-right 0.2s ease-out;
         }
       `}</style>
+      {promptDialog}
+      <Toast
+        message={notice}
+        variant="error"
+        onDismiss={() => setNotice(null)}
+      />
     </div>
   );
 }

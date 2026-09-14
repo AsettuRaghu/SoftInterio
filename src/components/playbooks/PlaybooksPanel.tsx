@@ -10,6 +10,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from "react";
+import { usePrompt } from "@/components/ui/PromptDialog";
 import { Modal } from "@/components/ui/Modal";
 import { Toast } from "@/components/ui/Toast";
 import { isOverdue, TaskStatusLabels, type TaskRelatedType } from "@/types/tasks";
@@ -46,6 +47,7 @@ export function PlaybooksPanel({
   const [starting, setStarting] = useState<string | null>(null);
 
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
+  const { prompt, promptDialog } = usePrompt();
   const [steps, setSteps] = useState<PlaybookRunStep[]>([]);
   const [stepsLoading, setStepsLoading] = useState(false);
 
@@ -127,7 +129,15 @@ export function PlaybooksPanel({
   };
 
   const cancelRun = async (runId: string) => {
-    const reason = window.prompt("Why is this playbook being cancelled?");
+    const reason = await prompt({
+      title: "Stop this playbook?",
+      message:
+        "Finished steps keep their outcome; anything still open is cancelled.",
+      placeholder: "The client changed the scope…",
+      confirmLabel: "Stop the playbook",
+      required: true,
+      multiline: true,
+    });
     if (reason === null) return;
     const response = await fetch(`/api/playbooks/runs/${runId}`, {
       method: "PATCH",
@@ -340,6 +350,7 @@ export function PlaybooksPanel({
           </div>
         )}
       </Modal>
+      {promptDialog}
     </div>
   );
 }

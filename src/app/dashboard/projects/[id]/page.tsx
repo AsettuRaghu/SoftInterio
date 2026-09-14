@@ -51,6 +51,7 @@ import { StageStrip } from "@/components/projects/StageStrip";
 import { PlanTab } from "@/modules/projects/components/ProjectDetailTabs/PlanTab";
 import { useReviseQuotation } from "@/lib/quotations/use-revise-quotation";
 import { Toast } from "@/components/ui/Toast";
+import { usePrompt } from "@/components/ui/PromptDialog";
 import { PlaybooksPanel } from "@/components/playbooks";
 import { EditTaskModal } from "@/components/tasks";
 
@@ -156,6 +157,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
   // Same handler the lead page uses - see lib/quotations/use-revise-quotation.
   const { revise, revisingId } = useReviseQuotation();
+  const { prompt, promptDialog } = usePrompt();
   const [notice, setNotice] = useState<string | null>(null);
 
   /**
@@ -235,11 +237,18 @@ export default function ProjectDetailPage({ params }: PageProps) {
    * on the Tasks tab, which nobody would find.
    */
   const stopPlaybook = async () => {
-    const reason = window.prompt(
-      "Why is this playbook being stopped? Finished steps keep their outcome; anything still open is cancelled.",
-    );
-    if (reason === null) return;
     if (!playbook?.runId) return;
+
+    const reason = await prompt({
+      title: "Stop following this playbook?",
+      message:
+        "Finished steps keep their outcome; anything still open is cancelled. Say why, so the record explains itself later.",
+      placeholder: "The client changed the scope…",
+      confirmLabel: "Stop the playbook",
+      required: true,
+      multiline: true,
+    });
+    if (reason === null) return;
 
     const res = await fetch(`/api/playbooks/runs/${playbook.runId}`, {
       method: "PATCH",
@@ -248,12 +257,12 @@ export default function ProjectDetailPage({ params }: PageProps) {
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      window.alert(data.error || "Could not stop the playbook");
+      setNotice(data.error || "Could not stop the playbook");
       return;
     }
-    await fetchPlaybook();
-    await fetchCounts();
-    await fetchProject();
+    // Quietly: this changes the plan, not the page. fetchProject used to blank
+    // the whole screen and refetch every tab to reflect it.
+    await Promise.all([fetchPlaybook(), fetchCounts(), fetchProject({ quiet: true })]);
   };
 
   const syncPlaybook = async () => {
@@ -401,9 +410,17 @@ export default function ProjectDetailPage({ params }: PageProps) {
     }
   };
 
-  const fetchProject = async () => {
+  /**
+   * Load the project.
+   *
+   * `quiet` skips the page-level loading flag. That flag replaces the whole
+   * detail page with a skeleton, which is right on first load and wrong after an
+   * action - stopping a playbook or completing a phase blew the page away and
+   * refetched every tab to show one change. Same fix as the lead page.
+   */
+  const fetchProject = async (options?: { quiet?: boolean }) => {
     try {
-      setLoading(true);
+      if (!options?.quiet) setLoading(true);
       const response = await fetch(`/api/projects/${id}`);
       if (!response.ok) throw new Error("Failed to fetch project");
       const data = await response.json();
@@ -417,7 +434,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
-      setLoading(false);
+      if (!options?.quiet) setLoading(false);
     }
   };
 
@@ -549,7 +566,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
         const data = await response.json();
         throw new Error(data.error || "Failed to update project");
       }
-      await fetchProject();
+      await fetchProject({ quiet: true });
     } catch (err) {
       console.error("Error updating project:", err);
       throw err;
@@ -596,7 +613,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
       if (!response.ok) throw new Error("Failed to update status");
 
       const updatedSubPhase = await response.json();
-      fetchProject(); // Refresh full state to be sure
+      fetchProject({ quiet: true }); // Refresh full state to be sure
       return updatedSubPhase;
     } catch (err) {
       console.error("Quick action failed:", err);
@@ -651,7 +668,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
       }
 
       const updated = await response.json();
-      fetchProject();
+      fetchProject({ quiet: true });
       return updated;
     } catch (err) {
       console.error("Phase action failed:", err);
@@ -682,10 +699,10 @@ export default function ProjectDetailPage({ params }: PageProps) {
         body: JSON.stringify({ force }),
       });
       if (!response.ok) throw new Error("Failed");
-      await fetchProject();
+      await fetchProject({ quiet: true });
     } catch (err) {
       console.error(err);
-      alert("Failed to initialize phases");
+      setNotice("Failed to initialise phases");
     }
   };
 
@@ -706,7 +723,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
         body: JSON.stringify({ status: newStatus }),
       });
       if (!response.ok) throw new Error("Failed");
-      fetchProject();
+      fetchProject({ quiet: true });
     } catch (err) {
       console.error(err);
     }
@@ -727,7 +744,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
         },
       );
       if (!response.ok) throw new Error("Failed");
-      fetchProject();
+      fetchProject({ quiet: true });
     } catch (err) {
       console.error(err);
     }
@@ -749,7 +766,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
         },
       );
       if (!response.ok) throw new Error("Failed");
-      fetchProject();
+      fetchProject({ quiet: true });
     } catch (err) {
       console.error(err);
     }
@@ -1225,7 +1242,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 : undefined
             }
             onSave={() => {
-              fetchProject();
+              fetchProject({ quiet: true });
               setShowPhaseEditModal(false);
             }}
           />
@@ -1251,12 +1268,13 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 : undefined
             }
             onSave={() => {
-              fetchProject();
+              fetchProject({ quiet: true });
               setShowSubPhaseEditModal(false);
             }}
           />
         )}
 
+        {promptDialog}
         <Toast
           message={notice}
           variant="error"

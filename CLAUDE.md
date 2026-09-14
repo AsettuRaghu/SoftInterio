@@ -1433,6 +1433,79 @@ calls it and does not exist on the table.
 Audited across the whole lead detail page after this: no browser dialogs
 reachable from any tab, and one path that can blank the page - first load.
 
+### The project module follows the lead module's patterns
+
+Everything learned on leads was applied to projects on 2026-09-15. The four
+rules, and what they cost here:
+
+- **No browser dialogs.** Fourteen were left: a `window.prompt` for the reason a
+  playbook is stopped, another in `PlaybooksPanel`, a `prompt`-then-`alert` pair
+  in `SubPhaseDetailPanel` that could only tell somebody off for an empty answer
+  *after* closing the box they typed it in, and eleven `alert()`s in that same
+  panel - several carrying the server's own refusal, which is the last thing
+  that belongs in an unstyled OS box.
+- **`usePrompt()`** (`components/ui/PromptDialog`) is new and is the third of
+  the set, beside `useConfirm` and `Toast`. Promise-based like `useConfirm`:
+  resolves the trimmed string, or `null` when cancelled. It enforces `required`
+  itself, so there is no second rejection to write. Deliberately not folded into
+  `ConfirmDialog` - a dialog that sometimes has an input and sometimes does not
+  is worse than two components.
+- **An action refreshes what it changed.** `fetchProject` now takes
+  `{ quiet: true }`, and nine post-action call sites use it. Only the mount call
+  still blanks the page, which is correct - there is nothing to look at yet.
+- **Read `json.error` on a failure.** Applies to every phase route too; they
+  answer with `error` or `reason` and both are now shown.
+
+### Which playbook drives a project is decided on the Plan tab
+
+`PlaybooksPanel` moved off the project's Tasks tab. Two projects looked like
+different products with nothing explaining why: one has an active run so its
+Plan tab is the task table with a Stop control, the other has six native phases
+and got `ManagementTab` with no playbook controls at all - and the panel that
+starts one was on a different tab.
+
+It now sits on the Plan tab and only when there is no active run, so stopping a
+playbook makes it reappear and "stop this and use a different one" is one flow
+in one place. This does **not** unify the two engines; a native-phase project
+still renders `ManagementTab` and genuinely looks different. What changed is
+that the difference is legible and actionable.
+
+### Revising a quotation is not lead-specific
+
+`useReviseQuotation` (`lib/quotations/use-revise-quotation`) is shared by the
+lead and project pages. Both tabs already rendered the same
+`QuotationTableReusable`, which has accepted `onReviseQuotation` all along - the
+project page simply passed nothing, so the button never rendered. A price is
+renegotiated during delivery as much as before it.
+
+### Payments is not on the project page
+
+Removed 2026-09-15. A project's delivery team works there, and what the client
+has paid is not theirs to see; a permission gate still put the tab in front of
+them while they were looking at delivery. `PaymentsTab` and
+`/api/projects/[id]/payment-milestones` are kept for a finance module.
+
+Still visible and deliberately not part of that change: `contract_value` on the
+Overview tab, and prices on the Quotations tab. Both are commercial rather than
+payment records.
+
+### Project reports are banded by entitlement, and money is omitted not hidden
+
+`GET /api/projects/reports` builds the money band **only** when the caller holds
+`finance.payments.view` or `finance.reports` - the milestones are not even
+fetched otherwise, so there is nothing in the payload to find. On the current
+grants: Owner and Admin see money; Project Manager and Design Manager get the
+whole delivery report without it. `projectAccess` still decides scope
+separately, so a `view_own` holder gets a report about their own projects.
+
+The delivery band is first and largest because that is who opens the page: open,
+overdue, unowned and undated tasks, late work gathered by project with the worst
+delay named, and who is carrying what. Assignee names come from
+`tenant_directory` - `users` would have named one person.
+
+Lead conversion was dropped. Sales Reports answers it, and two pages disagreeing
+about a win rate is worse than one answering it.
+
 ## Traps that have already cost time
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it
