@@ -609,6 +609,26 @@ The refusals carry `reason: "assignee_fixed_by_playbook"` or
 out, so the server is the only thing enforcing this — a caller finds out by
 being refused, with a message that says why.
 
+### A PostgREST embed names a foreign key, and it must exist
+
+`users!task_completion_requirements_satisfied_by_fkey(...)` failed with
+"Could not find a relationship", because `satisfied_by` was a bare uuid column
+with no constraint. The route returned an error, `TaskRequirements` rendered
+nothing, and **every completion gate a playbook step can carry — confirm a
+meeting, tick a checklist, get a sign-off — was invisible and unsatisfiable**.
+A step arrived blocked with nothing on the page able to unblock it, and it read
+as "the Complete button is missing".
+
+It never worked. Not a regression — the panel had never rendered for anyone.
+
+Auditing all 30 `users!<constraint>` embeds in the codebase found exactly one
+other: `project_notes_created_by_fkey`, used by the calendar. Both constraints
+now exist, `ON DELETE SET NULL` — somebody leaving must not delete the record
+of a sign-off, or their note.
+
+**When adding an embed, check the constraint exists.** A wrong name is not a
+compile error and not a runtime crash; it is an empty panel.
+
 ### The Linked column names the project, for subtasks too
 
 `/api/tasks` builds `related_name` twice — once for top-level tasks and again
