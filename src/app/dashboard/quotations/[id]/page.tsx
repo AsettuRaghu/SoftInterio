@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { QuotationBuilder } from "@/components/quotations/QuotationBuilder";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
+import { Toast } from "@/components/ui/Toast";
 
 // ============================================================================
 // V2 Types - Using Cost Items with Calculated Amounts
@@ -590,6 +591,10 @@ export default function QuotationDetailPage() {
   // all sit between this and the markup that uses it, so declaring it there
   // changed how many hooks ran between one render and the next.
   const [changingStatus, setChangingStatus] = useState(false);
+  const [notice, setNotice] = useState<{
+    message: string;
+    variant: "success" | "error";
+  } | null>(null);
 
   // Create a new revision and open it for editing
   const handleCreateRevision = async () => {
@@ -611,7 +616,10 @@ export default function QuotationDetailPage() {
       router.push(`/dashboard/quotations/${data.quotation.id}?edit=1`);
     } catch (err) {
       console.error("Error creating revision:", err);
-      alert(err instanceof Error ? err.message : "Failed to create revision");
+      setNotice({
+        message: err instanceof Error ? err.message : "Failed to create revision",
+        variant: "error",
+      });
     } finally {
       setIsCreatingRevision(false);
     }
@@ -642,7 +650,10 @@ export default function QuotationDetailPage() {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Error downloading PDF:", err);
-      alert(err instanceof Error ? err.message : "Failed to download PDF");
+      setNotice({
+        message: err instanceof Error ? err.message : "Failed to download PDF",
+        variant: "error",
+      });
     } finally {
       setIsDownloadingPDF(false);
     }
@@ -730,9 +741,14 @@ export default function QuotationDetailPage() {
     return (
       <QuotationBuilder
         quotationId={quotation.id}
-        onExit={() => {
+        onExit={(builderNotice) => {
           setIsEditing(false);
           router.replace(`/dashboard/quotations/${quotation.id}?view=1`);
+          // The builder unmounts on exit, so a toast raised in there would go
+          // with it. It hands the message up and this page shows it.
+          if (builderNotice) {
+            setNotice({ message: builderNotice, variant: "success" });
+          }
           void fetchQuotation();
         }}
       />
@@ -765,6 +781,23 @@ export default function QuotationDetailPage() {
     }
   })();
 
+  /**
+   * Move the quotation to its next status.
+   *
+   * Two browser dialogs used to do this work - one for the refusal, one to say
+   * which quotation had been superseded. Neither could be styled, both carried
+   * the app's URL like a security warning, and both blocked the page behind
+   * them from repainting. The outcome is a toast now.
+   *
+   * The `window.location.reload()` that followed them is gone too: a reload
+   * would have thrown the toast away before anyone could read it, and
+   * `fetchQuotation` already reloads everything this page holds.
+   *
+   * Deliberately no confirmation step added here. Approving silently
+   * supersedes another quotation, so a confirm is arguable - but the builder's
+   * own Approve does not ask either, and adding one to a single path would
+   * make the two disagree. If it is wanted, it belongs on both.
+   */
   const changeStatus = async (to: string) => {
     setChangingStatus(true);
     try {
@@ -775,11 +808,21 @@ export default function QuotationDetailPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        window.alert(data.error || "Could not change the status");
+        setNotice({
+          message: data.error || "Could not change the status",
+          variant: "error",
+        });
         return;
       }
-      if (data.supersededNumber) window.alert(data.message);
-      window.location.reload();
+      // Refetch rather than reload: a full reload threw away the toast before
+      // anyone could read which quotation had been superseded.
+      setNotice({
+        message: data.supersededNumber
+          ? data.message
+          : `Quotation marked as ${to}.`,
+        variant: "success",
+      });
+      await fetchQuotation();
     } finally {
       setChangingStatus(false);
     }
@@ -1998,6 +2041,12 @@ export default function QuotationDetailPage() {
         onClose={() => setShowShareModal(false)}
         quotation={quotation}
         onShared={fetchQuotation}
+      />
+
+      <Toast
+        message={notice?.message ?? null}
+        variant={notice?.variant ?? "error"}
+        onDismiss={() => setNotice(null)}
       />
     </div>
   );

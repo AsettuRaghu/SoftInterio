@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { Toast } from "@/components/ui/Toast";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
@@ -54,6 +55,7 @@ export default function EditTemplatePage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // Template data
@@ -764,7 +766,7 @@ export default function EditTemplatePage() {
   // Save template
   const saveTemplate = async () => {
     if (!templateName.trim()) {
-      alert("Please enter a template name");
+      setNotice("Give the template a name before saving.");
       return;
     }
 
@@ -824,7 +826,9 @@ export default function EditTemplatePage() {
       setSavedAt(Date.now());
     } catch (error) {
       console.error("Error saving template:", error);
-      alert(error instanceof Error ? error.message : "Failed to save template");
+      setNotice(
+        error instanceof Error ? error.message : "Failed to save template"
+      );
     } finally {
       setIsSaving(false);
     }
@@ -1306,6 +1310,11 @@ export default function EditTemplatePage() {
           }
         />
       )}
+      <Toast
+        message={notice}
+        variant="error"
+        onDismiss={() => setNotice(null)}
+      />
     </div>
   );
 }

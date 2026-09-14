@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { Toast } from "@/components/ui/Toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TEMPLATE_LEVELS } from "@/types/quotations";
@@ -88,6 +89,10 @@ const PROPERTY_TYPE_LABELS: Record<string, string> = {
 
 export default function QuotationTemplatesPage() {
   const { confirm, confirmDialog } = useConfirm();
+  const [notice, setNotice] = useState<{
+    message: string;
+    variant: "success" | "error";
+  } | null>(null);
   const router = useRouter();
   // Write actions are hidden rather than shown-then-refused. The API guards
   // each of these independently; this only keeps the list honest.
@@ -260,9 +265,10 @@ export default function QuotationTemplatesPage() {
       }
     } catch (err) {
       console.error("Error duplicating template:", err);
-      alert(
-        err instanceof Error ? err.message : "Failed to duplicate template"
-      );
+      setNotice({
+        message: err instanceof Error ? err.message : "Failed to duplicate template",
+        variant: "error",
+      });
     }
   };
 
@@ -297,7 +303,10 @@ export default function QuotationTemplatesPage() {
       fetchTemplates();
     } catch (err) {
       console.error("Error deleting template:", err);
-      alert(err instanceof Error ? err.message : "Failed to delete template");
+      setNotice({
+        message: err instanceof Error ? err.message : "Failed to delete template",
+        variant: "error",
+      });
     }
   };
 
@@ -706,6 +715,11 @@ export default function QuotationTemplatesPage() {
         )}
       </PageContent>
       {confirmDialog}
+      <Toast
+        message={notice?.message ?? null}
+        variant={notice?.variant ?? "error"}
+        onDismiss={() => setNotice(null)}
+      />
     </PageLayout>
   );
 }

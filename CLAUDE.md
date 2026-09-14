@@ -1248,6 +1248,41 @@ entitled only to their own leads, with nothing in the code to object.
 
 The projects report already did this via `projectAccess`. Copy that shape.
 
+### The app has its own dialogs; nothing in it should call the browser's
+
+`window.alert` / `window.confirm` / `window.prompt` render as bare OS modals
+with the app's URL at the top, which reads as a browser security warning rather
+than part of the product, and they block the main thread so nothing behind them
+repaints. Two components already exist and are what to reach for:
+
+- **`useConfirm()`** (`components/ui/ConfirmDialog`) for a question - returns a
+  promise, so `if (!confirm(...))` becomes `if (!(await confirm({...})))`.
+- **`Toast`** (`components/ui/Toast`) for the outcome. No provider and no
+  queue: hold the message in the calling component's state and render it.
+
+The quotations module had eighteen native calls and was converted on
+2026-09-14. Changing a quotation's status was the worst of it, because the
+*question* already used the app's dialog while the *answer* came back as an
+`alert()` - so one action looked like two different products.
+
+Three things worth keeping from that conversion:
+
+- **A toast cannot survive a reload.** The status change ended in
+  `window.location.reload()`, which was fine after a blocking `alert()` and
+  destroys a toast. Refetch instead - here `fetchQuotation()` already reloads
+  everything the page holds.
+- **A toast cannot survive its own component unmounting.** `QuotationBuilder`
+  approves and then exits, so its supersede message had nowhere to live.
+  `onExit` now takes an optional notice and the page behind shows it. Widening
+  that signature immediately caught `onClick={onExit}`, which would have passed
+  a MouseEvent as the message - wrap it as `onClick={() => onExit()}`.
+- **Form validation is not a popup.** "Please select a lead" belongs under the
+  field, not in an OS modal over the form the person is already looking at.
+
+Approving still asks for no confirmation, on either path. It supersedes another
+quotation silently, so one is arguable - but it belongs on both the detail page
+and the builder or not at all.
+
 ## Traps that have already cost time
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it

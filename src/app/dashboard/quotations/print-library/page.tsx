@@ -10,6 +10,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { Toast } from "@/components/ui/Toast";
 import {
   SettingsPageLayout,
   SettingsPageHeader,
@@ -38,6 +39,10 @@ import {
 
 export default function PrintLibraryPage() {
   const { confirm, confirmDialog } = useConfirm();
+  const [notice, setNotice] = useState<{
+    message: string;
+    variant: "success" | "error";
+  } | null>(null);
   const [formats, setFormats] = useState<QuotationPrintFormat[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -250,7 +255,10 @@ export default function PrintLibraryPage() {
       setEditing(data.format);
       setIsModalOpen(true);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to duplicate");
+      setNotice({
+        message: err instanceof Error ? err.message : "Failed to duplicate",
+        variant: "error",
+      });
     } finally {
       setCopyingId(null);
     }
@@ -275,7 +283,10 @@ export default function PrintLibraryPage() {
       if (!response.ok) throw new Error(data.error || "Failed to delete");
       await load();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete");
+      setNotice({
+        message: err instanceof Error ? err.message : "Failed to delete",
+        variant: "error",
+      });
     } finally {
       setDeletingId(null);
     }
@@ -346,6 +357,11 @@ export default function PrintLibraryPage() {
         onSaved={load}
       />
       {confirmDialog}
+      <Toast
+        message={notice?.message ?? null}
+        variant={notice?.variant ?? "error"}
+        onDismiss={() => setNotice(null)}
+      />
     </SettingsPageLayout>
   );
 }

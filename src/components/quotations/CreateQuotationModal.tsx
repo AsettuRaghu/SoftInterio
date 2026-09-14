@@ -76,16 +76,20 @@ export function CreateQuotationModal({
   // and starting from them beats an empty quotation. A template overrides it,
   // since choosing one is a deliberate statement about contents.
   const [useScope, setUseScope] = useState(true);
+  // Validation belongs beside the control it is about. An alert() for "pick a
+  // lead" is an OS-level interruption for a field the person is looking at.
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const handleCreate = async () => {
+    setValidationError(null);
     if (source === "lead" && !selectedLeadId) {
-      alert("Please select a lead");
+      setValidationError("Choose a lead before creating the quotation.");
       return;
     }
     if (source === "project" && !selectedProjectId) {
-      alert("Please select a project");
+      setValidationError("Choose a project before creating the quotation.");
       return;
     }
 
@@ -329,6 +333,9 @@ export function CreateQuotationModal({
 
           {/* Footer */}
           <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-200 bg-slate-50 rounded-b-xl">
+            {validationError && (
+              <p className="mr-auto text-sm text-red-600">{validationError}</p>
+            )}
             <button
               onClick={onClose}
               className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"

@@ -33,7 +33,12 @@ import { DEFAULT_TAX_PERCENT } from "@/utils/quotations";
 interface QuotationBuilderProps {
   quotationId: string;
   /** Leave the builder and go back to reading the quotation. */
-  onExit: () => void;
+  /**
+   * Leave the builder. An optional notice is handed to the page behind it -
+   * the builder unmounts on exit, so anything it raised itself would vanish
+   * with it, which is why approving used to reach for window.alert().
+   */
+  onExit: (notice?: string) => void;
 }
 
 /**
@@ -1203,7 +1208,9 @@ export function QuotationBuilder({
       setTemplateSearch("");
     } catch (error) {
       console.error("Error applying template:", error);
-      alert(error instanceof Error ? error.message : "Failed to apply template");
+      setSaveError(
+        error instanceof Error ? error.message : "Failed to apply template"
+      );
     } finally {
       setLoadingTemplate(false);
     }
@@ -1239,7 +1246,9 @@ export function QuotationBuilder({
       setHasUnsavedChanges(true);
     } catch (error) {
       console.error("Error loading template:", error);
-      alert(error instanceof Error ? error.message : "Failed to load template");
+      setSaveError(
+        error instanceof Error ? error.message : "Failed to load template"
+      );
     } finally {
       setLoadingTemplate(false);
     }
@@ -1325,10 +1334,10 @@ export function QuotationBuilder({
       }
 
       setStatus("approved");
-      if (data.supersededNumber) window.alert(data.message);
       // An approved quotation is no longer editable, so the builder is the
-      // wrong place to be left standing.
-      onExit?.();
+      // wrong place to be left standing. The supersede message goes with us -
+      // the page behind shows it, because this component is about to unmount.
+      onExit?.(data.supersededNumber ? data.message : undefined);
     } finally {
       setApproving(false);
     }
@@ -1821,7 +1830,9 @@ export function QuotationBuilder({
                   is not a preview of the printed document, so it no longer
                   claims to be one. */}
               <button
-                onClick={onExit}
+                // Wrapped: onExit now takes an optional notice, and handing it
+                // the click event straight would send a MouseEvent as the text.
+                onClick={() => onExit()}
                 className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center gap-1.5"
               >
                 <svg

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { Toast } from "@/components/ui/Toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -37,6 +38,7 @@ export default function NewTemplatePage() {
   const [qualityTier, setQualityTier] = useState("standard");
   const [spaces, setSpaces] = useState<BuilderSpace[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Master data
   const [masterData, setMasterData] = useState<MasterData>({
@@ -489,12 +491,12 @@ export default function NewTemplatePage() {
   // Save template
   const saveTemplate = async () => {
     if (!templateName.trim()) {
-      alert("Please enter a template name");
+      setNotice("Give the template a name before saving.");
       return;
     }
 
     if (spaces.length === 0) {
-      alert("Please add at least one space to the template");
+      setNotice("Add at least one space before saving the template.");
       return;
     }
 
@@ -562,7 +564,9 @@ export default function NewTemplatePage() {
       );
     } catch (error) {
       console.error("Error saving template:", error);
-      alert(error instanceof Error ? error.message : "Failed to save template");
+      setNotice(
+        error instanceof Error ? error.message : "Failed to save template"
+      );
     } finally {
       setIsSaving(false);
     }
@@ -966,6 +970,11 @@ export default function NewTemplatePage() {
           }
         />
       )}
+      <Toast
+        message={notice}
+        variant="error"
+        onDismiss={() => setNotice(null)}
+      />
     </div>
   );
 }

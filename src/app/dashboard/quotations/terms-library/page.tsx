@@ -10,6 +10,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { Toast } from "@/components/ui/Toast";
 import {
   SettingsPageLayout,
   SettingsPageHeader,
@@ -34,6 +35,10 @@ import type { QuotationTermsClause } from "@/types/quotations";
 
 export default function TermsLibraryPage() {
   const { confirm, confirmDialog } = useConfirm();
+  const [notice, setNotice] = useState<{
+    message: string;
+    variant: "success" | "error";
+  } | null>(null);
   const [clauses, setClauses] = useState<QuotationTermsClause[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -230,7 +235,10 @@ export default function TermsLibraryPage() {
       setEditing(data.clause);
       setIsModalOpen(true);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to duplicate");
+      setNotice({
+        message: err instanceof Error ? err.message : "Failed to duplicate",
+        variant: "error",
+      });
     } finally {
       setCopyingId(null);
     }
@@ -255,7 +263,10 @@ export default function TermsLibraryPage() {
       if (!response.ok) throw new Error(data.error || "Failed to delete");
       await load();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete");
+      setNotice({
+        message: err instanceof Error ? err.message : "Failed to delete",
+        variant: "error",
+      });
     } finally {
       setDeletingId(null);
     }
@@ -325,6 +336,11 @@ export default function TermsLibraryPage() {
         onSaved={load}
       />
       {confirmDialog}
+      <Toast
+        message={notice?.message ?? null}
+        variant={notice?.variant ?? "error"}
+        onDismiss={() => setNotice(null)}
+      />
     </SettingsPageLayout>
   );
 }

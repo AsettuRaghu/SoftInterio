@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { Toast } from "@/components/ui/Toast";
 import { useRouter } from "next/navigation";
 import type { Quotation, QuotationStatus } from "@/types/quotations";
 import {
@@ -108,6 +109,13 @@ const ACTIVE_STATUSES = ACTIVE_QUOTATION_STATUSES;
 
 export default function QuotationsListPage() {
   const { confirm, confirmDialog } = useConfirm();
+  // This page asked its questions in the app's own dialog and then reported the
+  // answers with window.alert(), so half of one action looked like the product
+  // and half looked like a browser warning.
+  const [notice, setNotice] = useState<{
+    message: string;
+    variant: "success" | "error";
+  } | null>(null);
   const router = useRouter();
   const [allQuotations, setAllQuotations] = useState<Quotation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -368,11 +376,11 @@ export default function QuotationsListPage() {
 
     // For lead/project source, require selection
     if (source === "lead" && !leadId) {
-      alert("Please select a lead");
+      setNotice({ message: "Please select a lead", variant: "error" });
       return;
     }
     if (source === "project" && !projectId) {
-      alert("Please select a project");
+      setNotice({ message: "Please select a project", variant: "error" });
       return;
     }
 
@@ -410,7 +418,10 @@ export default function QuotationsListPage() {
       router.push(`/dashboard/quotations/${data.quotation.id}?edit=1`);
     } catch (err) {
       console.error("Error creating quotation:", err);
-      alert(err instanceof Error ? err.message : "Failed to create quotation");
+      setNotice({
+        message: err instanceof Error ? err.message : "Failed to create quotation",
+        variant: "error",
+      });
     } finally {
       setIsCreating(false);
     }
@@ -512,7 +523,10 @@ export default function QuotationsListPage() {
       router.push(`/dashboard/quotations/${data.quotation.id}?edit=1`);
     } catch (err) {
       console.error("Error creating revision:", err);
-      alert(err instanceof Error ? err.message : "Failed to create revision");
+      setNotice({
+        message: err instanceof Error ? err.message : "Failed to create revision",
+        variant: "error",
+      });
     }
   };
 
@@ -551,9 +565,11 @@ export default function QuotationsListPage() {
     });
 
     if (validIds.length === 0) {
-      alert(
-        "Cannot change status for selected quotations - all leads are closed (won/lost/disqualified)"
-      );
+      setNotice({
+        message:
+          "Cannot change status for selected quotations - all leads are closed (won/lost/disqualified)",
+        variant: "error",
+      });
       return;
     }
 
@@ -594,12 +610,15 @@ export default function QuotationsListPage() {
       );
       await fetchQuotations();
       setSelectedIds(new Set());
-      alert(
-        `Successfully updated ${validIds.length} quotation(s) to ${newStatus}`
-      );
+      setNotice({
+        message: `Updated ${validIds.length} quotation${
+          validIds.length === 1 ? "" : "s"
+        } to ${newStatus}.`,
+        variant: "success",
+      });
     } catch (err) {
       console.error("Bulk status change error:", err);
-      alert("Failed to update status");
+      setNotice({ message: "Failed to update status", variant: "error" });
     }
   };
 
@@ -1179,6 +1198,11 @@ export default function QuotationsListPage() {
         isCreating={isCreating}
       />
       {confirmDialog}
+      <Toast
+        message={notice?.message ?? null}
+        variant={notice?.variant ?? "error"}
+        onDismiss={() => setNotice(null)}
+      />
     </PageLayout>
   );
 }
