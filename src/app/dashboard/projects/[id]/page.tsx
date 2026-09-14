@@ -19,7 +19,6 @@ import {
   ProjectDetailTab,
   ProjectCategoryLabels,
   ProjectStatusLabels,
-  PaymentMilestoneStatusLabels,
 } from "@/types/projects";
 import {
   PageLayout,
@@ -47,7 +46,6 @@ import { formatCurrency as formatCurrencyUtil } from "@/modules/projects/utils";
 import { SpacesTab } from "@/components/property/SpacesTab";
 import { buttonVariants } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
-import { PaymentsTab } from "@/components/projects/PaymentsTab";
 import { ProcurementTab } from "@/components/projects/ProcurementTab";
 import { StageStrip } from "@/components/projects/StageStrip";
 import { PlanTab } from "@/modules/projects/components/ProjectDetailTabs/PlanTab";
@@ -153,10 +151,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
   // tab keyed off tabDataLoading, which was harmless only by accident.
   const [tabDataLoading, setTabDataLoading] = useState(true);
 
-  // Payments is gated on a permission, not on a hardcoded list of role names.
-  // The old check was roles.includes("finance"|"admin"|"owner"), which the flat
-  // permission model does not use and which quietly excluded Finance Manager -
-  // its slug is finance_manager, so it never matched "finance".
   /**
    * Who sees where the plan came from, and who may stop it.
    *
@@ -169,10 +163,16 @@ export default function ProjectDetailPage({ params }: PageProps) {
    */
   const canManagePlaybook = hasAnyPermission(["tasks.edit"]);
 
-  const canSeePayments = hasAnyPermission([
-    "finance.payments.view",
-    "projects.milestones.manage",
-  ]);
+  /*
+   * Payments has been taken off the project page deliberately.
+   *
+   * A project's delivery team works here, and what a client has paid is not
+   * theirs to see - a permission gate still put the tab in front of anyone
+   * holding finance.payments.view while they were looking at delivery. It
+   * belongs in a finance module of its own, so `PaymentsTab` and
+   * /api/projects/[id]/payment-milestones are left in place for that to pick
+   * up rather than deleted.
+   */
 
   useEffect(() => {
     fetchProject();
@@ -802,8 +802,9 @@ export default function ProjectDetailPage({ params }: PageProps) {
    * Leads run overview -> spaces -> quotations -> tasks -> notes -> documents
    * -> calendar -> timeline. Project Mgmt sits third, beside Overview and
    * Spaces, because it is the working view of the project rather than another
-   * record of correspondence. Procurement and Payments have no counterpart on
-   * a lead and follow at the end.
+   * record of correspondence. Procurement has no counterpart on a lead and
+   * follows at the end; Payments used to sit beside it and has been removed -
+   * see the note on canSeePayments above.
    *
    * No icons and no count badges: the lead tab bar has neither, and the two
    * sitting side by side is what made them look like different products.
@@ -819,9 +820,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
     { key: "calendar", label: "Calendar" },
     { key: "timeline", label: "Timeline" },
     { key: "procurement", label: "Procurement" },
-    ...(canSeePayments
-      ? [{ key: "payments" as TabKey, label: "Payments" }]
-      : []),
   ];
 
   return (
@@ -1136,18 +1134,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
           {activeTab === "procurement" && (
             <ProcurementTab projectId={project.id} />
-          )}
-
-          {activeTab === "payments" && (
-            <PaymentsTab
-              projectId={project.id}
-              contractValue={
-                project.contract_value != null
-                  ? Number(project.contract_value)
-                  : null
-              }
-              projectClosed={project.status === "completed"}
-            />
           )}
         </div>
 
