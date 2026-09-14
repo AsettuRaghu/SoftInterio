@@ -862,20 +862,32 @@ export default function QuotationDetailPage() {
       {/* Header */}
       <div className="bg-white rounded-lg border border-slate-200 px-5 py-4">
         {/*
-         * Wraps, because it has to.
+         * One line, and it holds at any width.
          *
-         * This was one non-wrapping row holding a breadcrumb, the title, a
-         * status badge, Approve, the version, the lead, the project and the
-         * property, against four buttons on the right. The left group carried
-         * min-w-0 but every chip inside it is shrink-0, so the group could be
-         * squeezed below its content width while nothing inside would give -
-         * the chips then overflowed their own box and ran underneath the
+         * It began as a non-wrapping row whose left group carried min-w-0
+         * while every chip inside was shrink-0 - so the group could be
+         * squeezed below its content width with nothing inside willing to
+         * give, and the chips overflowed their own box and ran under the
          * actions. That is why View Lead sat on top of the property name.
+         *
+         * Letting it wrap fixed the overlap and spent a second line, so this
+         * puts less in the row instead of letting it grow:
+         *
+         *   - View Lead is gone. The lead chip two places along already links
+         *     to the same lead, so the row offered one destination twice.
+         *   - Approve moved to the actions, where it belongs. It had been
+         *     sitting among the metadata chips as though it were one.
+         *   - The title takes the squeeze - truncate on a min-w-0 flex child -
+         *     and the chips that carry least drop out at narrow widths rather
+         *     than wrapping.
+         *
+         * overflow-hidden is the backstop: anything that still exceeds the row
+         * is clipped at the edge instead of drawn over the actions.
          */}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex flex-1 items-center gap-3 min-w-0 flex-wrap">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-1 items-center gap-3 min-w-0 overflow-hidden">
             {/* Breadcrumb */}
-            <div className="flex items-center gap-2 text-sm text-slate-500 shrink-0">
+            <div className="hidden sm:flex items-center gap-2 text-sm text-slate-500 shrink-0">
               <Link
                 href="/dashboard/quotations"
                 className="hover:text-blue-600"
@@ -888,7 +900,7 @@ export default function QuotationDetailPage() {
               </span>
             </div>
 
-            <div className="h-5 w-px bg-slate-200 shrink-0" />
+            <div className="hidden sm:block h-5 w-px bg-slate-200 shrink-0" />
 
             <h1 className="text-xl font-bold text-slate-900 truncate">
               {quotation.client_name || quotation.title || "Untitled Quotation"}
@@ -905,25 +917,6 @@ export default function QuotationDetailPage() {
                 quotation.status?.slice(1)}
             </span>
 
-            {/*
-             * Approving where the quotation can be read.
-             *
-             * The only way to approve was a menu on the quotations list - a
-             * decision about a price, made from a row, without the price in
-             * front of you. One button, and only the move that makes sense
-             * from where this quotation actually is.
-             */}
-            {nextStatus && (
-              <button
-                type="button"
-                onClick={() => void changeStatus(nextStatus.to)}
-                disabled={changingStatus}
-                title={nextStatus.hint}
-                className="shrink-0 px-3 py-1.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                {changingStatus ? "Working…" : nextStatus.label}
-              </button>
-            )}
 
             {/* Version */}
             <span className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-lg shrink-0">
@@ -937,7 +930,7 @@ export default function QuotationDetailPage() {
             {quotation.lead_id && quotation.lead?.lead_number && (
               <Link
                 href={`/dashboard/sales/leads/${quotation.lead_id}`}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded-lg shrink-0 bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded-lg shrink-0 bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
                 title={`Lead ${quotation.lead.lead_number}`}
               >
                 <span className="font-medium">{quotation.lead.lead_number}</span>
@@ -952,7 +945,7 @@ export default function QuotationDetailPage() {
             {quotation.project_id && quotation.project && (
               <Link
                 href={`/dashboard/projects/${quotation.project_id}`}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded-lg shrink-0 bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded-lg shrink-0 bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
                 title={quotation.project.name || "Project"}
               >
                 <span className="font-medium">
@@ -968,7 +961,7 @@ export default function QuotationDetailPage() {
 
             {/* Property */}
             {quotation.property_name && (
-              <span className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-lg shrink-0">
+              <span className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-lg shrink-0">
                 <svg
                   className="w-4 h-4"
                   fill="none"
@@ -991,26 +984,24 @@ export default function QuotationDetailPage() {
 
           {/* Actions */}
           <div className="flex items-center gap-2 shrink-0">
-            {quotation.lead_id && (
-              <Link
-                href={`/dashboard/sales/leads/${quotation.lead_id}`}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+            {/*
+             * Approving where the quotation can be read.
+             *
+             * The only way to approve was a menu on the quotations list - a
+             * decision about a price, made from a row, without the price in
+             * front of you. One button, and only the move that makes sense
+             * from where this quotation actually is.
+             */}
+            {nextStatus && (
+              <button
+                type="button"
+                onClick={() => void changeStatus(nextStatus.to)}
+                disabled={changingStatus}
+                title={nextStatus.hint}
+                className="shrink-0 px-3 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
               >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                  />
-                </svg>
-                View Lead
-              </Link>
+                {changingStatus ? "Working…" : nextStatus.label}
+              </button>
             )}
             {/* Edit is offered only when the API would actually accept the
                 save; everything else routes to Revise, which is the supported
