@@ -50,6 +50,14 @@ interface ProjectMgmtTabProps {
     action: "start" | "hold" | "resume" | "complete" | "cancel",
     notes: string
   ) => Promise<unknown>;
+  /**
+   * What the server will allow on each row, supplied by the page so it arrives
+   * with the plan. Fetching it here meant a second round trip AFTER the plan
+   * had rendered, and the action column sat empty for about a second.
+   */
+  gates?: Record<string, PlanGate>;
+  mayEdit?: boolean;
+  gatesReady?: boolean;
 }
 
 // Status badge component
@@ -568,6 +576,9 @@ export default function ManagementTab({
   onSubPhaseClick,
   onQuickAction,
   onPhaseQuickAction,
+  gates = {},
+  mayEdit = true,
+  gatesReady = false,
 }: ProjectMgmtTabProps) {
   // Local state for inline updates (optimistic UI)
   const [phases, setPhases] = useState<ProjectPhase[]>(initialPhases || []);
@@ -624,56 +635,6 @@ export default function ManagementTab({
       : 0;
 
   // Handle quick action - shows notes prompt
-  /**
-   * What the server will actually allow on each row.
-   *
-   * Fetched here rather than threaded through the page, and re-fetched whenever
-   * any status in the plan changes - starting one step can unblock another, and
-   * a screen still showing the old answer is how somebody presses a button that
-   * then gets refused.
-   */
-  const [gates, setGates] = React.useState<Record<string, PlanGate>>({});
-  const [mayEdit, setMayEdit] = React.useState(true);
-  /**
-   * Until this is true the gates are unknown, so the buttons are held disabled.
-   * They used to render enabled and then visibly switch off a second later as
-   * the answer arrived, which reads as the screen changing its mind.
-   */
-  const [gatesReady, setGatesReady] = React.useState(false);
-
-  const planSignature = React.useMemo(
-    () =>
-      phases
-        .map(
-          (p) =>
-            `${p.id}:${p.status}:` +
-            (p.sub_phases ?? []).map((s) => `${s.id}:${s.status}`).join(","),
-        )
-        .join("|"),
-    [phases],
-  );
-
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/projects/${projectId}/plan-gates`);
-        if (!res.ok) return;
-        const json = await res.json();
-        if (cancelled) return;
-        setGates(json.data?.gates ?? {});
-        setMayEdit(json.data?.mayEdit !== false);
-        setGatesReady(true);
-      } catch {
-        // A missing gate falls back to status-only behaviour, so a failure here
-        // degrades rather than blanks the actions.
-        if (!cancelled) setGatesReady(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, planSignature]);
 
   /**
    * A phase goes through the same notes prompt as a step, so starting a stage

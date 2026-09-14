@@ -125,6 +125,10 @@ export default function ProjectDetailPage({ params }: PageProps) {
     currentVersion: number;
     newSteps: number;
   } | null>(null);
+  /** What the server will allow on each plan row, loaded with the plan. */
+  const [planGates, setPlanGates] = useState<Record<string, any>>({});
+  const [planMayEdit, setPlanMayEdit] = useState(true);
+  const [planGatesReady, setPlanGatesReady] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [teamMembers, setTeamMembers] = useState<
     { id: string; name: string; email: string; avatar_url?: string }[]
@@ -251,7 +255,29 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
   const fetchPlaybook = async () => {
     try {
-      const res = await fetch(`/api/projects/${id}/playbook`);
+      /**
+       * The plan and what may be done to it, together.
+       *
+       * The gates used to be fetched by ManagementTab on mount - so after the
+       * plan had already loaded and rendered. That is a second round trip in
+       * series, and it showed: the action column sat empty for about a second
+       * and then filled in. Asking for both at once means the tab paints once,
+       * with its buttons already correct.
+       */
+      const [res, gateRes] = await Promise.all([
+        fetch(`/api/projects/${id}/playbook`),
+        fetch(`/api/projects/${id}/plan-gates`),
+      ]);
+
+      if (gateRes.ok) {
+        const gateData = await gateRes.json();
+        setPlanGates(gateData.data?.gates ?? {});
+        setPlanMayEdit(gateData.data?.mayEdit !== false);
+      }
+      // Ready either way: a failed gate fetch falls back to status-only
+      // behaviour, which is better than holding the buttons for ever.
+      setPlanGatesReady(true);
+
       if (!res.ok) return;
       const data = await res.json();
       setPlaybook(data.playbook);
@@ -876,6 +902,9 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 onSubPhaseClick={handleSubPhaseClick}
                 onQuickAction={handleQuickAction}
                 onPhaseQuickAction={handlePhaseQuickAction}
+                gates={planGates}
+                mayEdit={planMayEdit}
+                gatesReady={planGatesReady}
               />
             </>
           )}

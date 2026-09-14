@@ -706,9 +706,16 @@ nothing could ever be opened. `onPhaseQuickAction` routes a playbook phase to
 /api/projects/[id]/phases/[phaseId]` — and that route wants
 **`status_change_notes`**, not `notes`, when the status moves.
 
-Gates are re-fetched whenever any status in the plan changes, since starting one
-step can unblock another. A project with no active run gets no gates and falls
-back to status-only behaviour, so the older phase engine still renders.
+**The page fetches the gates alongside the plan**, in one `Promise.all`, and
+passes them down. ManagementTab used to fetch them itself on mount — after the
+plan had already loaded and rendered — so the action column sat empty for about
+a second and then filled in. In series that was ~940ms; together it is ~540ms
+and the tab paints once with its buttons already correct.
+
+They refresh through `fetchPlaybook()`, which every action path already calls,
+so starting one step re-asks and unblocks the next. A project with no active run
+gets no gates and falls back to status-only behaviour, so the older phase engine
+still renders.
 
 `can_start_task`'s reason names **which part** it waits for — "Waiting for 2D
 Designs to start" against "Waiting for Layout Drawings to finish". It used to
