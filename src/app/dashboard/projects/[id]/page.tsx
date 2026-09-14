@@ -171,6 +171,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
     void fetchPlaybook();
   }, [id]);
 
+
   /**
    * Every id in the rendered playbook, phases and steps alike.
    *
@@ -280,6 +281,53 @@ export default function ProjectDetailPage({ params }: PageProps) {
       // known to be true. Better than emptying the tab.
     }
   }, [id]);
+
+  /**
+   * The plan is re-read every time you open the tab.
+   *
+   * Everything above loads once, on mount, keyed on the project id - switching
+   * tabs fetches nothing. So completing a step on the Tasks tab (or anywhere
+   * else) left the Plan tab showing whatever it had when the page opened: a
+   * phase that was finished minutes ago still reading "In Progress".
+   *
+   * refreshPlan touches no loading flag, so this is silent - the table is
+   * simply right when you look at it. Deliberately only the plan: the other
+   * tabs share fetchCounts, which blanks the page.
+   */
+  useEffect(() => {
+    if (activeTab !== "project-mgmt") return;
+    void refreshPlan();
+  }, [activeTab, refreshPlan]);
+
+  /**
+   * The same for the Tasks tab, in the other direction.
+   *
+   * The Plan tab and the Tasks tab are two views of the same task rows, so
+   * whichever you left is stale the moment you act on the other. This reads
+   * only the task list - not fetchCounts, which blanks the page - so it is
+   * silent.
+   */
+  const refreshTasks = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/tasks?related_type=project&related_id=${id}`,
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const list = data.tasks || [];
+      setTasks(list);
+      // The tab badge is set by fetchCounts; keep it in step or it drifts from
+      // the list beneath it.
+      setTasksCount(list.length);
+    } catch {
+      // Leave what is on screen rather than emptying the tab.
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (activeTab !== "tasks") return;
+    void refreshTasks();
+  }, [activeTab, refreshTasks]);
 
   const fetchPlaybook = async () => {
     try {

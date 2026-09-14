@@ -720,6 +720,19 @@ back, not starting.
 tab's `QuickActions` already showed text for a settled row, so the compact
 controls were the only place offering it.
 
+### Switching tabs re-reads that tab's data
+
+The project page loads everything **once on mount**, keyed on the project id.
+Switching tabs fetched nothing, and the Plan tab and the Tasks tab are two views
+of the same task rows — so completing a step on one left the other showing what
+it had when the page opened. A phase finished minutes earlier still read "In
+Progress".
+
+Opening the Plan tab now calls `refreshPlan()`, and opening the Tasks tab calls
+`refreshTasks()`. Both are silent: they touch no loading flag, so the table is
+simply right when you look at it. Deliberately **not** `fetchCounts`, which
+blanks the page and refetches every tab's data.
+
 ### The Plan tab refreshes the plan, not the page
 
 `onRefresh` on ManagementTab was `fetchProject`, which calls `setLoading(true)`
