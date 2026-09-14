@@ -469,7 +469,26 @@ const QuickActions = ({
 
   return (
     <div className="flex items-center gap-0.5">
-      {g.canResume ? (
+      {/**
+       * One primary button, and it IS the action - never a disabled Start.
+       *
+       * A row under way used to render Start (greyed), Complete and Pause, so
+       * it read as "start it again" rather than "pause it". The first slot now
+       * carries exactly one of Start / Pause / Resume, which is also what the
+       * compact task controls do - the same row should behave the same way
+       * wherever it appears.
+       */}
+      {status === "in_progress" ? (
+        <Btn
+          action="hold"
+          allowed
+          reason={null}
+          tone="text-amber-600 hover:bg-amber-100"
+          tip={`Pause${of} — records why it stopped`}
+        >
+          <PauseIcon className="w-4 h-4" />
+        </Btn>
+      ) : g.canResume ? (
         <Btn
           action="resume"
           allowed
@@ -501,28 +520,12 @@ const QuickActions = ({
         <CheckCircleIcon className="w-4 h-4" />
       </Btn>
 
-      {g.canHold && (
-        <Btn
-          action="hold"
-          allowed
-          reason={null}
-          tone="text-yellow-600 hover:bg-yellow-100"
-          tip={`Put${of} on hold — records why it paused`}
-        >
-          <PauseIcon className="w-4 h-4" />
-        </Btn>
-      )}
-
       <Btn
         action="cancel"
         allowed={g.canSkip}
         reason={g.skipReason}
         tone="text-slate-400 hover:bg-slate-100"
-        tip={
-          g.skipNeedsReason
-            ? `Skip${of} — a reason is required`
-            : `Skip${of}`
-        }
+        tip={g.skipNeedsReason ? `Skip${of} — a reason is required` : `Skip${of}`}
       >
         <ForwardIcon className="w-4 h-4" />
       </Btn>
@@ -933,10 +936,15 @@ export default function ManagementTab({
         </div>
       </div>
 
-      {/* Table */}
-      <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      {/* Table.
+          overflow-x-auto with a min-width on the rows, rather than
+          overflow-hidden: starting a step fills the actual-dates column, the
+          flexible columns grew to fit, and the Edit button was pushed past the
+          right edge with no way to reach it. The card still fits the page; the
+          columns keep their widths and the table scrolls under them. */}
+      <div className="border border-slate-200 rounded-lg bg-white overflow-x-auto">
         {/* Table Header */}
-        <div className="grid grid-cols-[32px_minmax(200px,1.5fr)_minmax(100px,1fr)_100px_100px_minmax(120px,1fr)_90px_minmax(120px,1fr)_90px] gap-3 px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs font-medium text-slate-500 uppercase tracking-wide">
+        <div className="grid grid-cols-[32px_minmax(200px,1.5fr)_minmax(100px,1fr)_100px_100px_minmax(120px,1fr)_90px_minmax(120px,1fr)_90px] gap-3 min-w-[1080px] px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs font-medium text-slate-500 uppercase tracking-wide">
           <div></div>
           <div>Name</div>
           <div>Assignees</div>
@@ -962,7 +970,7 @@ export default function ManagementTab({
               <div key={phase.id}>
                 {/* Phase Row */}
                 <div
-                  className={`grid grid-cols-[32px_minmax(200px,1.5fr)_minmax(100px,1fr)_100px_100px_minmax(120px,1fr)_90px_minmax(120px,1fr)_90px] gap-3 px-4 py-3 items-center border-b border-slate-100 hover:bg-slate-50 cursor-pointer ${
+                  className={`grid grid-cols-[32px_minmax(200px,1.5fr)_minmax(100px,1fr)_100px_100px_minmax(120px,1fr)_90px_minmax(120px,1fr)_90px] gap-3 min-w-[1080px] px-4 py-3 items-center border-b border-slate-100 hover:bg-slate-50 cursor-pointer ${
                     phase.status === "in_progress"
                       ? "bg-blue-50/30"
                       : phase.status === "completed"
@@ -1102,7 +1110,7 @@ export default function ManagementTab({
                           onClick={() =>
                             onSubPhaseClick?.(phase.id, subPhase.id)
                           }
-                          className={`grid grid-cols-[32px_minmax(200px,1.5fr)_minmax(100px,1fr)_100px_100px_minmax(120px,1fr)_90px_minmax(120px,1fr)_90px] gap-3 px-4 py-2.5 items-center border-b border-slate-100 hover:bg-white/80 cursor-pointer ${
+                          className={`grid grid-cols-[32px_minmax(200px,1.5fr)_minmax(100px,1fr)_100px_100px_minmax(120px,1fr)_90px_minmax(120px,1fr)_90px] gap-3 min-w-[1080px] px-4 py-2.5 items-center border-b border-slate-100 hover:bg-white/80 cursor-pointer ${
                             subPhase.status === "completed"
                               ? "bg-green-50/20"
                               : subPhase.status === "in_progress"

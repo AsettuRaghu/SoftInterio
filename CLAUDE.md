@@ -624,6 +624,14 @@ The columns all existed; nothing wrote them.
 - **`completion_count`** counts how many times it was called done. A step
   completed three times is a process problem worth being able to see.
 
+**Completing something never started stamps both dates the same.** Marking a
+step done straight from `todo` is normal — the work happened, nobody pressed
+Start — and it used to leave `started_at` NULL against a set `completed_at`, so
+the Plan tab showed a step that finished without beginning and any duration from
+the pair was meaningless. A zero-length record is the honest reading of
+"completed without tracking", and it beats a blank. It never overwrites a start
+that was actually recorded.
+
 **`start_date` is never touched by a transition.** That is the plan, derived
 from the playbook's hours; `started_at` is what happened. Overwriting one with
 the other loses the ability to tell that something ran late.
@@ -643,6 +651,17 @@ already record it.
 The buttons stay **disabled until the gates arrive**. They used to render
 enabled and switch off a second later, which reads as the screen changing its
 mind.
+
+**The primary button IS the action** — never a disabled Start. A row under way
+used to draw Start (greyed), Complete and Pause, which reads as "start it
+again". The first slot now carries exactly one of Start / Pause / Resume, which
+is what the compact task controls do: the same row should behave the same way
+wherever it appears.
+
+**The plan table scrolls sideways** (`overflow-x-auto` with `min-w-[1080px]` on
+each grid row) rather than `overflow-hidden`. Starting a step fills the
+actual-dates column, the flexible columns grew, and the Edit button was pushed
+past the right edge with no way to reach it.
 
 The step row's action cell needs **`stopPropagation`** — the row itself opens
 the task, so without it pressing Complete also navigated away. The phase row's
