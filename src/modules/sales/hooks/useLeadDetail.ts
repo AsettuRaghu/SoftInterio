@@ -11,6 +11,7 @@ import type { Task } from "@/types/tasks";
 import type { DocumentWithUrl, Document } from "@/types/documents";
 import type { EditFormData } from "../components/EditLeadModal";
 import { uiLogger } from "@/lib/logger";
+import { useReviseQuotation } from "@/lib/quotations/use-revise-quotation";
 
 export interface TaskWithUser extends Task {
   assigned_user?: {
@@ -52,7 +53,6 @@ export function useLeadDetail() {
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [revisingId, setRevisingId] = useState<string | null>(null);
   const [previewDocument, setPreviewDocument] =
     useState<DocumentWithUrl | null>(null);
 
@@ -273,40 +273,12 @@ export function useLeadDetail() {
   );
 
   // Create quotation revision
-  const handleRevise = useCallback(
-    async (quotationId: string) => {
-      if (revisingId) return;
-
-      try {
-        setRevisingId(quotationId);
-        const response = await fetch(`/api/quotations/${quotationId}/revision`, {
-          method: "POST",
-        });
-
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || "Failed to create revision");
-        }
-
-        const data = await response.json();
-        // The route replies { quotation }, not the quotation itself. Reading
-        // data.id gave undefined, so this navigated to
-        // /dashboard/quotations/undefined and the page reported "Failed to
-        // fetch quotation" - the revision had actually been created.
-        const newId = data.quotation?.id;
-        if (!newId) {
-          throw new Error("The revision was created but could not be opened.");
-        }
-        router.push(`/dashboard/quotations/${newId}?edit=1`);
-      } catch (err) {
-        uiLogger.error("Error creating revision", err);
-        throw err;
-      } finally {
-        setRevisingId(null);
-      }
-    },
-    [revisingId, router]
-  );
+  /*
+   * Revising is not lead-specific, so it lives in useReviseQuotation and the
+   * project page drives the same handler. Kept on this hook's surface so the
+   * lead page's call sites do not change.
+   */
+  const { revise: handleRevise, revisingId } = useReviseQuotation();
 
   // Delete document
   const handleDocumentDelete = useCallback(async (doc: Document) => {

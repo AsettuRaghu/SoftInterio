@@ -49,6 +49,8 @@ import { cn } from "@/utils/cn";
 import { ProcurementTab } from "@/components/projects/ProcurementTab";
 import { StageStrip } from "@/components/projects/StageStrip";
 import { PlanTab } from "@/modules/projects/components/ProjectDetailTabs/PlanTab";
+import { useReviseQuotation } from "@/lib/quotations/use-revise-quotation";
+import { Toast } from "@/components/ui/Toast";
 import { EditTaskModal } from "@/components/tasks";
 
 interface PageProps {
@@ -150,6 +152,10 @@ export default function ProjectDetailPage({ params }: PageProps) {
   // could never disagree. tabDataLoading was never read at all, and the Timeline
   // tab keyed off tabDataLoading, which was harmless only by accident.
   const [tabDataLoading, setTabDataLoading] = useState(true);
+
+  // Same handler the lead page uses - see lib/quotations/use-revise-quotation.
+  const { revise, revisingId } = useReviseQuotation();
+  const [notice, setNotice] = useState<string | null>(null);
 
   /**
    * Who sees where the plan came from, and who may stop it.
@@ -1129,6 +1135,18 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 // Navigate to quotation view page
                 router.push(`/dashboard/quotations/${quotation.id}`);
               }}
+              onReviseQuotation={(quotationId, e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                void revise(quotationId).catch((err) =>
+                  setNotice(
+                    err instanceof Error
+                      ? err.message
+                      : "Failed to create revision"
+                  )
+                );
+              }}
+              revisingId={revisingId}
             />
           ) : null}
 
@@ -1204,6 +1222,11 @@ export default function ProjectDetailPage({ params }: PageProps) {
           />
         )}
 
+        <Toast
+          message={notice}
+          variant="error"
+          onDismiss={() => setNotice(null)}
+        />
       </PageContent>
     </PageLayout>
   );
