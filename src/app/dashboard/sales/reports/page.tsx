@@ -358,19 +358,35 @@ function Panel({
 function Section({
   title,
   note,
+  action,
   children,
 }: {
   title: string;
   note?: string;
+  /**
+   * A control belonging to this band, on the trailing edge of its heading row.
+   *
+   * The range presets were a row of their own directly beneath this heading,
+   * which spent a line restating what the heading already said. On the right
+   * they sit level with the period they set, and because every section heading
+   * is the same height the control lands in the same place each time rather
+   * than at whatever x the note happens to end on.
+   */
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="space-y-3">
-      <div className="flex items-baseline gap-2.5 flex-wrap">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-          {title}
-        </h2>
-        {note && <span className="text-[11px] text-slate-400">{note}</span>}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        {/* Title and note stay one group on a shared baseline; the action is
+            pushed away from them rather than spaced off the note. */}
+        <div className="flex items-baseline gap-2.5 flex-wrap min-w-0">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+            {title}
+          </h2>
+          {note && <span className="text-[11px] text-slate-400">{note}</span>}
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
       </div>
       {children}
     </section>
@@ -591,24 +607,30 @@ export default function SalesReportsPage() {
                     ).toLocaleDateString()}`
                   : undefined
               }
+              action={
+                /* One segmented control rather than four loose buttons: they
+                   are four values of one setting, and joining them says so.
+                   Only the selected one carries a fill, so the group reads as
+                   a single control with a current position. */
+                <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+                  {PRESETS.map((p) => (
+                    <button
+                      key={p.key}
+                      onClick={() => setPreset(p.key)}
+                      disabled={isLoading}
+                      aria-pressed={preset === p.key}
+                      className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors disabled:opacity-60 ${
+                        preset === p.key
+                          ? "bg-blue-600 text-white"
+                          : "text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              }
             >
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {PRESETS.map((p) => (
-                  <button
-                    key={p.key}
-                    onClick={() => setPreset(p.key)}
-                    disabled={isLoading}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-60 ${
-                      preset === p.key
-                        ? "bg-blue-600 text-white"
-                        : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-
               {emptyPeriod && (
                 <div className="flex items-start justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
                   <p className="text-sm text-blue-900">
