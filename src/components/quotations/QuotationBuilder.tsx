@@ -29,6 +29,7 @@ import { TemplateModal } from "@/components/quotations/TemplateModal";
 import { SaveAsTemplateModal } from "@/components/quotations/SaveAsTemplateModal";
 import { NewVersionModal } from "@/components/quotations/NewVersionModal";
 import { DEFAULT_TAX_PERCENT } from "@/utils/quotations";
+import { toBuilderSpaces } from "@/lib/quotations/to-builder-spaces";
 
 interface QuotationBuilderProps {
   quotationId: string;
@@ -239,62 +240,9 @@ export function QuotationBuilder({
         setTaxPercent(q.tax_percent ?? 18); // Load tax percent, default to 18%
         setAssignedTo(q.assigned_to || null);
 
-        // Transform API spaces to builder format
-        const transformedSpaces: BuilderSpace[] = (data.spaces || []).map(
-          (space: any, idx: number) => ({
-            id: space.id,
-            spaceTypeId: space.space_type_id || "",
-            name: space.space_type?.name || "Space",
-            defaultName: space.name || `Space ${idx + 1}`,
-            expanded: true,
-            components: (space.components || []).map(
-              (comp: any, compIdx: number) => ({
-                id: comp.id,
-                componentTypeId: comp.component_type_id || "",
-                name:
-                  comp.component_type?.name ||
-                  comp.name ||
-                  `Component ${compIdx + 1}`,
-                description: comp.description || "",
-                expanded: true,
-                width: comp.width ?? null,
-                height: comp.height ?? null,
-                measurementUnit: (comp.metadata?.measurement_unit ||
-                  "mm") as MeasurementUnit,
-                lineItems: (comp.lineItems || []).map((item: any) => ({
-                  id: item.id,
-                  costItemId: item.cost_item_id,
-                  costItemName:
-                    item.cost_item?.name || item.name || "Cost Item",
-                  categoryName: item.cost_item?.category?.name || "Other",
-                  categoryColor: item.cost_item?.category?.color || "#718096",
-                  unitCode: item.unit_code || "nos",
-                  // Rate is the ACTUAL rate from quotation_line_items (what client pays)
-                  rate: item.rate || 0,
-                  // Default rate is the BASE COST from cost_items (suggested price)
-                  defaultRate: item.cost_item?.default_rate || 0,
-                  // Company cost is what we consider for internal costing
-                  companyCost: item.cost_item?.company_cost || 0,
-                  // Vendor cost is what we pay to purchase
-                  vendorCost: item.cost_item?.vendor_cost || 0,
-                  length: item.length,
-                  width: item.width,
-                  // Use stored measurement_unit from DB, default to mm
-                  measurementUnit: (item.measurement_unit ||
-                    "mm") as MeasurementUnit,
-                  quantity: item.quantity || 1,
-                  amount: item.amount || 0,
-                  notes: item.notes || "",
-                  // Existing lines pre-date this and have no flag; they keep
-                  // the sizes already typed into them rather than being
-                  // adopted by a component size entered later.
-                  followsComponent:
-                    item.metadata?.follows_component === true,
-                })),
-              })
-            ),
-          })
-        );
+        // Shared with the summary page, so the two cannot read the same
+        // payload differently. See lib/quotations/to-builder-spaces.
+        const transformedSpaces = toBuilderSpaces(data.spaces);
 
         setSpaces(transformedSpaces);
         setCanViewCosts(!!data.can_view_costs);

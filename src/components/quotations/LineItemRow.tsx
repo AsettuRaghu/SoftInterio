@@ -20,6 +20,16 @@ interface LineItemRowProps {
   onUpdateMeasurementUnit?: (unit: MeasurementUnit) => void;
   onUpdateQuantity?: (quantity: number) => void;
   onDelete: () => void;
+  /**
+   * Render the row as the document it is, not a form.
+   *
+   * An approved quotation is read on the same screen it was built on, so the
+   * layout must not move - the fields stay exactly where they were and simply
+   * stop accepting input, and the controls that would change the figures are
+   * not drawn at all. A greyed-out delete button on a document nobody may
+   * change is noise offering nothing.
+   */
+  readOnly?: boolean;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   showValidation?: boolean; // Show validation errors
@@ -34,6 +44,7 @@ export function LineItemRow({
   onUpdateMeasurementUnit,
   onUpdateQuantity,
   onDelete,
+  readOnly = false,
   onMoveUp,
   onMoveDown,
   showValidation = false,
@@ -230,8 +241,10 @@ export function LineItemRow({
           onChange={(e) => handleRateChange(e.target.value)}
           onBlur={handleRateBlur}
           onFocus={(e) => e.target.select()}
-          className="col-span-2 text-sm border border-slate-200 rounded px-2 py-1 w-full"
+          readOnly={readOnly}
+          className="col-span-2 text-sm border border-slate-200 rounded px-2 py-1 w-full read-only:bg-slate-50 read-only:cursor-default read-only:focus:ring-0"
         />
+        {!readOnly && (
         <div className="col-span-1 flex items-center gap-1">
           {onMoveUp && (
             <button
@@ -294,6 +307,7 @@ export function LineItemRow({
             </svg>
           </button>
         </div>
+        )}
       </div>
     );
   }
@@ -322,6 +336,7 @@ export function LineItemRow({
             {measureInfo.label}
           </span>
         </div>
+        {!readOnly && (
         <div className="flex items-center gap-1">
           {onMoveUp && (
             <button
@@ -385,6 +400,7 @@ export function LineItemRow({
             </svg>
           </button>
         </div>
+        )}
       </div>
 
       {/* Row 2: All input fields with consistent grid layout - 9 columns */}
@@ -396,10 +412,11 @@ export function LineItemRow({
             <label className="block text-xs text-slate-500 mb-1">Unit</label>
             <select
               value={unit}
+              disabled={readOnly}
               onChange={(e) =>
                 onUpdateMeasurementUnit?.(e.target.value as MeasurementUnit)
               }
-              className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded bg-white"
+              className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded bg-white read-only:bg-slate-50 read-only:cursor-default read-only:focus:ring-0"
             >
               {MEASUREMENT_UNITS.map((u) => (
                 <option key={u.value} value={u.value}>
@@ -428,6 +445,7 @@ export function LineItemRow({
               onChange={(e) => handleQuantityChange(e.target.value)}
               onBlur={handleQuantityBlur}
               onFocus={(e) => e.target.select()}
+              readOnly={readOnly}
               onKeyDown={(e) => {
                 // Prevent decimal point, minus, plus
                 if ([".", "-", "+", "e", "E"].includes(e.key)) {
@@ -479,6 +497,7 @@ export function LineItemRow({
               onChange={(e) => handleLengthChange(e.target.value)}
               onBlur={handleLengthBlur}
               onFocus={(e) => e.target.select()}
+              readOnly={readOnly}
               onKeyDown={(e) => {
                 // Prevent decimal point, minus, plus
                 if ([".", "-", "+", "e", "E"].includes(e.key)) {
@@ -519,6 +538,7 @@ export function LineItemRow({
               onChange={(e) => handleLengthChange(e.target.value)}
               onBlur={handleLengthBlur}
               onFocus={(e) => e.target.select()}
+              readOnly={readOnly}
               onPaste={(e) => {
                 e.preventDefault();
                 const pasted = (e.clipboardData?.getData("text") || "").replace(
@@ -565,6 +585,7 @@ export function LineItemRow({
               onChange={(e) => handleWidthChange(e.target.value)}
               onBlur={handleWidthBlur}
               onFocus={(e) => e.target.select()}
+              readOnly={readOnly}
               onKeyDown={(e) => {
                 // Prevent decimal point, minus, plus
                 if ([".", "-", "+", "e", "E"].includes(e.key)) {
@@ -647,6 +668,7 @@ export function LineItemRow({
             onChange={(e) => handleRateChange(e.target.value)}
             onBlur={handleRateBlur}
             onFocus={(e) => e.target.select()}
+            readOnly={readOnly}
             onKeyDown={(e) => {
               // Prevent decimal point, minus, plus
               if ([".", "-", "+", "e", "E"].includes(e.key)) {

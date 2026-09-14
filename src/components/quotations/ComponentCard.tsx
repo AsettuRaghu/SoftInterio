@@ -16,6 +16,8 @@ interface ComponentCardProps {
   mode: "template" | "quotation";
   onToggleExpand: () => void;
   onDelete: () => void;
+  /** Read the component rather than edit it. See LineItemRow's readOnly. */
+  readOnly?: boolean;
   onUpdateDescription?: (description: string) => void;
   onAddCostItem: () => void;
   /** Opens the template picker filtered to cost item bundles. */
@@ -47,6 +49,7 @@ export function ComponentCard({
   mode,
   onToggleExpand,
   onDelete,
+  readOnly = false,
   onUpdateDescription,
   onAddCostItem,
   onAddFromBundle,
@@ -187,8 +190,13 @@ export function ComponentCard({
                   onUpdateName?.(e.target.value);
                 }}
                 onClick={(e) => e.stopPropagation()}
+                readOnly={readOnly}
                 placeholder={component.name}
-                className="text-sm font-medium text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-purple-500 focus:outline-none px-1 max-w-[180px]"
+                className={`text-sm font-medium text-slate-900 bg-transparent border-b border-transparent focus:outline-none px-1 max-w-[180px] ${
+                  readOnly
+                    ? "cursor-default"
+                    : "hover:border-slate-300 focus:border-purple-500"
+                }`}
               />
             </div>
             <p className="text-xs text-slate-500">
@@ -228,6 +236,8 @@ export function ComponentCard({
               {component.lineItems.length} items
             </span>
           )}
+          {!readOnly && (
+          <>
           {/* Move buttons */}
           {onMoveUp && (
             <button
@@ -322,6 +332,8 @@ export function ComponentCard({
               />
             </svg>
           </button>
+          </>
+          )}
         </div>
       </div>
 
@@ -366,6 +378,7 @@ export function ComponentCard({
                       measurementUnit: component.measurementUnit || "mm",
                     })
                   }
+                  readOnly={readOnly}
                   placeholder="—"
                   className="w-24 px-2 py-1.5 text-sm border border-slate-200 rounded-md focus:ring-1 focus:ring-purple-500 outline-none"
                 />
@@ -385,6 +398,7 @@ export function ComponentCard({
                       measurementUnit: component.measurementUnit || "mm",
                     })
                   }
+                  readOnly={readOnly}
                   placeholder="—"
                   className="w-24 px-2 py-1.5 text-sm border border-slate-200 rounded-md focus:ring-1 focus:ring-purple-500 outline-none"
                 />
@@ -394,6 +408,7 @@ export function ComponentCard({
                   Unit
                 </label>
                 <select
+                  disabled={readOnly}
                   value={component.measurementUnit || "mm"}
                   onChange={(e) =>
                     onUpdateDimensions({
@@ -434,6 +449,7 @@ export function ComponentCard({
               )}
               {component.lineItems.map((item, index) => (
                 <LineItemRow
+                  readOnly={readOnly}
                   key={item.id}
                   item={item}
                   mode={mode}
@@ -468,6 +484,7 @@ export function ComponentCard({
           )}
 
           {/* Add Cost Item Button */}
+          {!readOnly && (
           <div className="flex gap-2">
           <button
             onClick={onAddCostItem}
@@ -518,6 +535,7 @@ export function ComponentCard({
             </button>
           )}
           </div>
+          )}
         </div>
       )}
     </div>

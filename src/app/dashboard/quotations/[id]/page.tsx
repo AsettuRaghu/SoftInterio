@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { ShareQuotationModal } from "@/components/quotations/ShareQuotationModal";
 import { PrintQuotationModal } from "@/components/quotations/PrintQuotationModal";
+import { SpaceCard } from "@/components/quotations/SpaceCard";
+import { toBuilderSpaces } from "@/lib/quotations/to-builder-spaces";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { QuotationBuilder } from "@/components/quotations/QuotationBuilder";
@@ -275,6 +277,12 @@ export default function QuotationDetailPage() {
   const [expandedComponents, setExpandedComponents] = useState<Set<string>>(
     new Set()
   );
+  /**
+   * Whether internal cost and margin may be shown. The quotation API strips
+   * the underlying figures for anyone without cost_items.pricing, so false
+   * here means they are genuinely absent rather than merely hidden.
+   */
+  const [canViewCosts, setCanViewCosts] = useState(false);
 
   // Fetch quotation data
   const fetchQuotation = useCallback(async () => {
@@ -290,6 +298,7 @@ export default function QuotationDetailPage() {
       const data = await response.json();
       setQuotation(data.quotation);
       setSpaces(data.spaces || []);
+      setCanViewCosts(!!data.can_view_costs);
       setOrphanComponents(data.components || []);
       setOrphanLineItems(data.lineItems || []);
       setVersions(data.versions || []);
@@ -404,18 +413,39 @@ export default function QuotationDetailPage() {
     });
   }, [spaces]);
 
-  // Component totals with area calculation
-  const getComponentTotals = useCallback((component: QuotationComponent) => {
-    let total = 0;
-    let totalSqft = 0;
+  /**
+   * This quotation, in the shape the builder renders.
+   *
+   * The document below is `SpaceCard` - the same component the builder uses,
+   * with `readOnly` set. It used to be 533 lines of hand-written markup here
+   * walking the same spaces, components and line items, which meant one
+   * quotation had two renderings that drifted: different dimension handling,
+   * different treatment of a line that follows its component's size, and a
+   * different idea of which rate is the one the client pays.
+   *
+   * Expansion is this page's own - `SpaceCard` reads it off each node, so the
+   * existing Expand all / Collapse all keeps working untouched.
+   */
+  const documentSpaces = useMemo(
+    () =>
+      toBuilderSpaces(spaces).map((space) => ({
+        ...space,
+        expanded: expandedSpaces.has(space.id),
+        components: space.components.map((component) => ({
+          ...component,
+          expanded: expandedComponents.has(component.id),
+        })),
+      })),
+    [spaces, expandedSpaces, expandedComponents]
+  );
 
-    component.lineItems?.forEach((item) => {
-      total += item.amount || 0;
-      totalSqft += calculateSqftFromItem(item);
-    });
-
-    return { total, sqft: totalSqft };
-  }, []);
+  /**
+   * Nothing here may change the quotation, so every mutation SpaceCard asks
+   * for is a no-op. It takes them as required props because the builder always
+   * has them; on a document the controls that would call them are not drawn at
+   * all, so none of these can actually be reached.
+   */
+  const noop = () => {};
 
   const toggleSpace = (spaceId: string) => {
     setExpandedSpaces((prev) => {
@@ -1282,537 +1312,30 @@ export default function QuotationDetailPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {/* Spaces */}
-                {spaces.map((space) => (
-                  <div
+                {documentSpaces.map((space) => (
+                  <SpaceCard
                     key={space.id}
-                    className="border border-slate-200 rounded-lg overflow-hidden"
-                  >
-                    {/* Space Header */}
-                    <div
-                      className="flex items-center justify-between px-4 py-3 bg-slate-50 cursor-pointer"
-                      onClick={() => toggleSpace(space.id)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <button className="text-slate-600">
-                          <svg
-                            className={`w-5 h-5 transition-transform ${
-                              expandedSpaces.has(space.id) ? "rotate-90" : ""
-                            }`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M9 5l7 7-7 7"
-                            />
-                          </svg>
-                        </button>
-                        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                          <svg
-                            className="w-4 h-4 text-white"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                            />
-                          </svg>
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-semibold text-slate-900">
-                            {space.name}
-                          </h4>
-                          <p className="text-xs text-slate-500">
-                            {space.space_type?.name || "Space"} •{" "}
-                            {space.components?.length || 0} components
-                            {(() => {
-                              const spaceData = spaceTotals.find(
-                                (t) => t.id === space.id
-                              );
-                              return spaceData?.sqft
-                                ? ` • ${spaceData.sqft.toFixed(2)} sqft`
-                                : "";
-                            })()}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        {(() => {
-                          const spaceData = spaceTotals.find(
-                            (t) => t.id === space.id
-                          );
-                          const spaceTotal = spaceData?.total || 0;
-                          const spaceSqft = spaceData?.sqft || 0;
-                          const costPerSqft =
-                            spaceSqft > 0 ? spaceTotal / spaceSqft : 0;
-                          return (
-                            <>
-                              {spaceSqft > 0 && costPerSqft > 0 && (
-                                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                                  {formatCurrency(costPerSqft)}/sqft
-                                </span>
-                              )}
-                              <span className="text-sm font-bold text-blue-600">
-                                {formatCurrency(spaceTotal)}
-                              </span>
-                            </>
-                          );
-                        })()}
-                      </div>
-                    </div>
-
-                    {/* Space Content */}
-                    {expandedSpaces.has(space.id) && (
-                      <div className="p-4 space-y-3 border-t border-slate-100">
-                        {/* Components */}
-                        {space.components?.map((component) => (
-                          <div
-                            key={component.id}
-                            className="border border-slate-200 rounded-lg overflow-hidden"
-                          >
-                            {/* Component Header */}
-                            <div
-                              className="flex items-center justify-between px-4 py-2.5 bg-slate-50 cursor-pointer"
-                              onClick={() => toggleComponent(component.id)}
-                            >
-                              <div className="flex items-center gap-3">
-                                <button className="text-slate-500">
-                                  <svg
-                                    className={`w-4 h-4 transition-transform ${
-                                      expandedComponents.has(component.id)
-                                        ? "rotate-90"
-                                        : ""
-                                    }`}
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M9 5l7 7-7 7"
-                                    />
-                                  </svg>
-                                </button>
-                                <div className="w-6 h-6 bg-purple-600 rounded flex items-center justify-center">
-                                  <svg
-                                    className="w-3 h-3 text-white"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                                    />
-                                  </svg>
-                                </div>
-                                <div>
-                                  <h5 className="text-sm font-medium text-slate-900">
-                                    {component.name ||
-                                      component.component_type?.name}
-                                  </h5>
-                                  <p className="text-xs text-slate-500">
-                                    {component.lineItems?.length || 0} cost
-                                    items
-                                    {(() => {
-                                      const compData =
-                                        getComponentTotals(component);
-                                      return compData.sqft > 0
-                                        ? ` • ${compData.sqft.toFixed(2)} sqft`
-                                        : "";
-                                    })()}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                {(() => {
-                                  const compData =
-                                    getComponentTotals(component);
-                                  const costPerSqft =
-                                    compData.sqft > 0
-                                      ? compData.total / compData.sqft
-                                      : 0;
-                                  return (
-                                    <>
-                                      {compData.sqft > 0 && costPerSqft > 0 && (
-                                        <span className="text-xs text-slate-500 bg-purple-50 px-2 py-0.5 rounded">
-                                          {formatCurrency(costPerSqft)}/sqft
-                                        </span>
-                                      )}
-                                      <span className="text-sm font-semibold text-purple-600">
-                                        {formatCurrency(compData.total)}
-                                      </span>
-                                    </>
-                                  );
-                                })()}
-                              </div>
-                            </div>
-
-                            {/* Component Line Items */}
-                            {expandedComponents.has(component.id) && (
-                              <div className="p-3 border-t border-slate-100">
-                                {/* Component Description */}
-                                {component.description && (
-                                  <div className="mb-3 p-2 bg-purple-50 rounded-lg">
-                                    <p className="text-xs text-purple-700">
-                                      <span className="font-medium">
-                                        Notes:
-                                      </span>{" "}
-                                      {component.description}
-                                    </p>
-                                  </div>
-                                )}
-
-                                {component.lineItems?.length === 0 ? (
-                                  <p className="text-sm text-slate-500 text-center py-2">
-                                    No cost items in this component
-                                  </p>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {/* Header Row */}
-                                    <div className="grid grid-cols-[1fr_80px_20px_80px_45px_90px_1fr_100px_100px_130px] gap-2 px-3 py-2 bg-slate-100 rounded-lg text-xs font-medium text-slate-500 uppercase">
-                                      <div>Cost Item</div>
-                                      <div className="text-center">Height</div>
-                                      <div></div>
-                                      <div className="text-center">Width</div>
-                                      <div className="text-center">Unit</div>
-                                      <div className="text-center">
-                                        Qty/Area
-                                      </div>
-                                      <div></div>
-                                      <div className="text-right">
-                                        Base Rate
-                                      </div>
-                                      <div className="text-right">Rate</div>
-                                      <div className="text-right">Amount</div>
-                                    </div>
-                                    {/* Data Rows */}
-                                    {component.lineItems?.map((item) => (
-                                      <div
-                                        key={item.id}
-                                        className="grid grid-cols-[1fr_80px_20px_80px_45px_90px_1fr_100px_100px_130px] gap-2 px-3 py-2 bg-slate-50 rounded-lg items-center hover:bg-slate-100 transition-colors"
-                                      >
-                                        <div>
-                                          <span className="font-medium text-slate-900 text-sm">
-                                            {item.name || item.cost_item?.name}
-                                          </span>
-                                          {item.cost_item?.category && (
-                                            <span
-                                              className={`ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${getCategoryColor(
-                                                item.cost_item.category.slug
-                                              )}`}
-                                            >
-                                              {item.cost_item.category.name}
-                                            </span>
-                                          )}
-                                        </div>
-                                        <div className="text-center text-sm text-slate-600">
-                                          {item.length ? (
-                                            <span className="px-2 py-1 bg-white rounded border border-slate-200">
-                                              {item.length}
-                                            </span>
-                                          ) : (
-                                            <span className="text-slate-400">
-                                              —
-                                            </span>
-                                          )}
-                                        </div>
-                                        <div className="text-center text-slate-400">
-                                          {item.length && item.width ? "×" : ""}
-                                        </div>
-                                        <div className="text-center text-sm text-slate-600">
-                                          {item.width ? (
-                                            <span className="px-2 py-1 bg-white rounded border border-slate-200">
-                                              {item.width}
-                                            </span>
-                                          ) : (
-                                            <span className="text-slate-400">
-                                              —
-                                            </span>
-                                          )}
-                                        </div>
-                                        <div className="text-center text-xs text-slate-500 uppercase">
-                                          {item.length || item.width
-                                            ? item.measurement_unit || "mm"
-                                            : "—"}
-                                        </div>
-                                        <div className="text-center">
-                                          {(() => {
-                                            const qtyArea =
-                                              getDisplayQtyArea(item);
-                                            return (
-                                              <span className="px-2 py-1 text-sm bg-blue-50 text-blue-700 font-medium rounded">
-                                                {qtyArea.value} {qtyArea.unit}
-                                              </span>
-                                            );
-                                          })()}
-                                        </div>
-                                        <div></div>
-                                        <div className="text-right">
-                                          {item.cost_item?.default_rate ? (
-                                            <span className="text-sm text-amber-600">
-                                              {formatCurrency(
-                                                item.cost_item.default_rate
-                                              )}
-                                              /{item.unit_code}
-                                            </span>
-                                          ) : (
-                                            <span className="text-slate-400 text-sm">
-                                              —
-                                            </span>
-                                          )}
-                                        </div>
-                                        <div className="text-right">
-                                          <span className="text-sm text-slate-700 font-medium">
-                                            {formatCurrency(item.rate)}/
-                                            {item.unit_code}
-                                          </span>
-                                        </div>
-                                        <div className="text-right">
-                                          <span className="px-3 py-1 text-sm font-semibold bg-green-50 text-green-700 rounded">
-                                            {formatCurrency(item.amount)}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-
-                        {/* Direct line items under space */}
-                        {space.lineItems && space.lineItems.length > 0 && (
-                          <div className="border border-dashed border-slate-300 rounded-lg p-3">
-                            <h5 className="text-xs font-medium text-slate-500 uppercase mb-2">
-                              Other Cost Items
-                            </h5>
-                            <div className="space-y-2">
-                              {space.lineItems.map((item) => (
-                                <div
-                                  key={item.id}
-                                  className="grid grid-cols-[1fr_80px_20px_80px_45px_90px_1fr_100px_100px_130px] gap-2 px-3 py-2 bg-slate-50 rounded-lg items-center hover:bg-slate-100 transition-colors"
-                                >
-                                  <div>
-                                    <span className="font-medium text-slate-900 text-sm">
-                                      {item.name || item.cost_item?.name}
-                                    </span>
-                                  </div>
-                                  <div className="text-center text-sm text-slate-600">
-                                    {item.length ? (
-                                      <span className="px-2 py-1 bg-white rounded border border-slate-200">
-                                        {item.length}
-                                      </span>
-                                    ) : (
-                                      <span className="text-slate-400">—</span>
-                                    )}
-                                  </div>
-                                  <div className="text-center text-slate-400">
-                                    {item.length && item.width ? "×" : ""}
-                                  </div>
-                                  <div className="text-center text-sm text-slate-600">
-                                    {item.width ? (
-                                      <span className="px-2 py-1 bg-white rounded border border-slate-200">
-                                        {item.width}
-                                      </span>
-                                    ) : (
-                                      <span className="text-slate-400">—</span>
-                                    )}
-                                  </div>
-                                  <div className="text-center text-xs text-slate-500 uppercase">
-                                    {item.length || item.width
-                                      ? item.measurement_unit || "mm"
-                                      : "—"}
-                                  </div>
-                                  <div className="text-center">
-                                    {(() => {
-                                      const qtyArea = getDisplayQtyArea(item);
-                                      return (
-                                        <span className="px-2 py-1 text-sm bg-blue-50 text-blue-700 font-medium rounded">
-                                          {qtyArea.value} {qtyArea.unit}
-                                        </span>
-                                      );
-                                    })()}
-                                  </div>
-                                  <div></div>
-                                  <div className="text-right">
-                                    {item.cost_item?.default_rate ? (
-                                      <span className="text-sm text-amber-600">
-                                        {formatCurrency(
-                                          item.cost_item.default_rate
-                                        )}
-                                        /{item.unit_code}
-                                      </span>
-                                    ) : (
-                                      <span className="text-slate-400 text-sm">
-                                        —
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="text-right">
-                                    <span className="text-sm text-slate-700 font-medium">
-                                      {formatCurrency(item.rate)}/
-                                      {item.unit_code}
-                                    </span>
-                                  </div>
-                                  <div className="text-right">
-                                    <span className="px-3 py-1 text-sm font-semibold bg-green-50 text-green-700 rounded">
-                                      {formatCurrency(item.amount)}
-                                    </span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {(!space.components || space.components.length === 0) &&
-                          (!space.lineItems ||
-                            space.lineItems.length === 0) && (
-                            <p className="text-sm text-slate-500 text-center py-4">
-                              No cost items in this space
-                            </p>
-                          )}
-                      </div>
-                    )}
-                  </div>
+                    space={space}
+                    mode="quotation"
+                    readOnly
+                    canViewCosts={canViewCosts}
+                    formatCurrency={formatCurrency}
+                    onToggleExpand={() => toggleSpace(space.id)}
+                    onToggleComponentExpand={toggleComponent}
+                    onDelete={noop}
+                    onUpdateName={noop}
+                    onAddComponent={noop}
+                    onDeleteComponent={noop}
+                    onAddCostItem={noop}
+                    // Not to change them, but because ComponentCard gates the
+                    // whole width/height row on this prop existing - without it
+                    // a component's size would be absent from the document
+                    // rather than merely uneditable.
+                    onUpdateDimensions={noop}
+                    onUpdateLineItem={noop}
+                    onDeleteLineItem={noop}
+                  />
                 ))}
-
-                {/* Orphan components */}
-                {orphanComponents.length > 0 && (
-                  <div className="border border-dashed border-slate-300 rounded-lg p-4">
-                    <h4 className="text-sm font-medium text-slate-700 mb-3">
-                      Components (Not in a Space)
-                    </h4>
-                    {orphanComponents.map((component) => (
-                      <div
-                        key={component.id}
-                        className="border border-slate-200 rounded-lg mb-2 last:mb-0"
-                      >
-                        <div className="px-4 py-2 bg-slate-50 flex justify-between items-center">
-                          <span className="font-medium text-slate-900">
-                            {component.name || component.component_type?.name}
-                          </span>
-                          <span className="font-semibold text-purple-600">
-                            {formatCurrency(
-                              component.lineItems?.reduce(
-                                (sum, item) => sum + (item.amount || 0),
-                                0
-                              ) || 0
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Orphan line items */}
-                {orphanLineItems.length > 0 && (
-                  <div className="border border-dashed border-slate-300 rounded-lg p-4">
-                    <h4 className="text-sm font-medium text-slate-700 mb-3">
-                      Additional Cost Items
-                    </h4>
-                    <div className="space-y-2">
-                      {/* Header Row */}
-                      <div className="grid grid-cols-[1fr_80px_20px_80px_45px_90px_1fr_100px_100px_130px] gap-2 px-3 py-2 bg-slate-100 rounded-lg text-xs font-medium text-slate-500 uppercase">
-                        <div>Cost Item</div>
-                        <div className="text-center">Height</div>
-                        <div></div>
-                        <div className="text-center">Width</div>
-                        <div className="text-center">Unit</div>
-                        <div className="text-center">Qty/Area</div>
-                        <div></div>
-                        <div className="text-right">Base Rate</div>
-                        <div className="text-right">Rate</div>
-                        <div className="text-right">Amount</div>
-                      </div>
-                      {/* Data Rows */}
-                      {orphanLineItems.map((item) => (
-                        <div
-                          key={item.id}
-                          className="grid grid-cols-[1fr_80px_20px_80px_45px_90px_1fr_100px_100px_130px] gap-2 px-3 py-2 bg-slate-50 rounded-lg items-center hover:bg-slate-100 transition-colors"
-                        >
-                          <div>
-                            <span className="font-medium text-slate-900 text-sm">
-                              {item.name || item.cost_item?.name}
-                            </span>
-                          </div>
-                          <div className="text-center text-sm text-slate-600">
-                            {item.length ? (
-                              <span className="px-2 py-1 bg-white rounded border border-slate-200">
-                                {item.length}
-                              </span>
-                            ) : (
-                              <span className="text-slate-400">—</span>
-                            )}
-                          </div>
-                          <div className="text-center text-slate-400">
-                            {item.length && item.width ? "×" : ""}
-                          </div>
-                          <div className="text-center text-sm text-slate-600">
-                            {item.width ? (
-                              <span className="px-2 py-1 bg-white rounded border border-slate-200">
-                                {item.width}
-                              </span>
-                            ) : (
-                              <span className="text-slate-400">—</span>
-                            )}
-                          </div>
-                          <div className="text-center text-xs text-slate-500 uppercase">
-                            {item.length || item.width
-                              ? item.measurement_unit || "mm"
-                              : "—"}
-                          </div>
-                          <div className="text-center">
-                            {(() => {
-                              const qtyArea = getDisplayQtyArea(item);
-                              return (
-                                <span className="px-2 py-1 text-sm bg-blue-50 text-blue-700 font-medium rounded">
-                                  {qtyArea.value} {qtyArea.unit}
-                                </span>
-                              );
-                            })()}
-                          </div>
-                          <div></div>
-                          <div className="text-right">
-                            {item.cost_item?.default_rate ? (
-                              <span className="text-sm text-amber-600">
-                                {formatCurrency(item.cost_item.default_rate)}/
-                                {item.unit_code}
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 text-sm">—</span>
-                            )}
-                          </div>
-                          <div className="text-right">
-                            <span className="text-sm text-slate-700 font-medium">
-                              {formatCurrency(item.rate)}/{item.unit_code}
-                            </span>
-                          </div>
-                          <div className="text-right">
-                            <span className="px-3 py-1 text-sm font-semibold bg-green-50 text-green-700 rounded">
-                              {formatCurrency(item.amount)}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             )}
           </div>

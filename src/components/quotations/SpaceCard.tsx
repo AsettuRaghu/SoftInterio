@@ -16,6 +16,15 @@ interface SpaceCardProps {
   mode: "template" | "quotation";
   onToggleExpand: () => void;
   onDelete: () => void;
+  /**
+   * Read the space rather than edit it, and pass that down.
+   *
+   * This is what lets an approved quotation be shown on the screen it was
+   * built on. The summary page used to re-implement this whole tree - space,
+   * component and line item - so the same quotation had two renderings that
+   * could disagree about how it looked.
+   */
+  readOnly?: boolean;
   onUpdateName: (name: string) => void;
   onAddComponent: () => void;
   /** Opens the template picker filtered to component templates. */
@@ -76,6 +85,7 @@ export function SpaceCard({
   mode,
   onToggleExpand,
   onDelete,
+  readOnly = false,
   onUpdateName,
   onAddComponent,
   onAddComponentFromTemplate,
@@ -161,7 +171,7 @@ export function SpaceCard({
           ? "border-blue-500 border-2 shadow-lg"
           : "border-slate-200"
       }`}
-      draggable={!!onDragStart}
+      draggable={!readOnly && !!onDragStart}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = "move";
         onDragStart?.();
@@ -222,7 +232,12 @@ export function SpaceCard({
                 onUpdateName(e.target.value);
               }}
               onClick={(e) => e.stopPropagation()}
-              className="font-semibold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:outline-none px-1"
+              readOnly={readOnly}
+              className={`font-semibold text-slate-900 bg-transparent border-b border-transparent focus:outline-none px-1 ${
+                readOnly
+                  ? "cursor-default"
+                  : "hover:border-slate-300 focus:border-blue-500"
+              }`}
             />
           </div>
         </div>
@@ -244,6 +259,8 @@ export function SpaceCard({
               {space.components.length} components
             </span>
           )}
+          {!readOnly && (
+          <>
           {/* Move up/down buttons */}
           {onMoveUp && canMoveUp && (
             <button
@@ -339,6 +356,8 @@ export function SpaceCard({
               />
             </svg>
           </button>
+          </>
+          )}
         </div>
       </div>
 
@@ -347,6 +366,7 @@ export function SpaceCard({
         <div className="p-4 space-y-3">
           {space.components.map((component, index) => (
             <ComponentCard
+              readOnly={readOnly}
               key={component.id}
               component={component}
               mode={mode}
@@ -422,6 +442,7 @@ export function SpaceCard({
           ))}
 
           {/* Action Buttons */}
+          {!readOnly && (
           <div className="flex gap-2">
             {onSaveAsTemplate && (
               <button
@@ -461,6 +482,7 @@ export function SpaceCard({
               Add Component
             </button>
           </div>
+          )}
         </div>
       )}
     </div>

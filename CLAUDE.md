@@ -1283,6 +1283,39 @@ Approving still asks for no confirmation, on either path. It supersedes another
 quotation silently, so one is arguable - but it belongs on both the detail page
 and the builder or not at all.
 
+### A quotation has one rendering, and `readOnly` decides if you may change it
+
+The summary page (`/dashboard/quotations/[id]`) used to hand-write its own
+space / component / line-item tree - 533 lines walking the same rows the
+builder walks - so one quotation had two renderings of the same payload from
+the same endpoint. They had already drifted: different dimension handling,
+different treatment of a line that follows its component's size, and a
+different idea of which rate the client actually pays.
+
+The document is now `SpaceCard` on both pages. `readOnly` threads
+`SpaceCard -> ComponentCard -> LineItemRow` and does two things: fields stop
+accepting input, and the controls that would change the figures are **not
+drawn at all**. A greyed-out delete button on a document nobody may change is
+noise offering nothing. It defaults to false, so the builder is untouched.
+
+`src/lib/quotations/to-builder-spaces.ts` is the one mapping from the API's
+rows to `BuilderSpace[]`, shared by both. The builder did this inline through
+`any`, which was hiding that a line whose cost item has left the catalogue
+hands `undefined` to `LineItem.costItemId`, declared non-optional.
+
+Two things to know when passing `readOnly`:
+
+- **`ComponentCard` gates the whole width/height row on `onUpdateDimensions`
+  existing.** Omit it and a component's size vanishes from the document rather
+  than merely being uneditable, so pass a no-op.
+- The mutation callbacks are required props because the builder always has
+  them. On a document they are no-ops, and nothing that would call them is
+  rendered.
+
+The two pages keep their separate jobs. The builder is the editor; the summary
+carries status, versions, Share and the meta, which is why it was not simply
+replaced by a locked builder. They now share the rendering, not the role.
+
 ## Traps that have already cost time
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it
