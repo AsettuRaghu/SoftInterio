@@ -1348,6 +1348,43 @@ leads. It keeps the fallback path, which is now correctly awaited.
 timeline, and note create/edit/delete do write timeline entries. Only the hot
 path - ticking or dating a follow-up - was moved off it.
 
+### Only two lead tabs hit the network, and both did it expensively
+
+Overview, Quotations, Tasks, Notes and Timeline all render from what the lead
+page already loaded in its one GET. **Spaces and Calendar are the only tabs
+that fetch when opened**, which is the whole reason they were the only two that
+felt slow.
+
+**Every API route costs ~650ms before it reads a row.** `protectApiRoute` calls
+`supabase.auth.getUser()`, which is a round trip to the Auth server (~370ms
+measured), then looks the user up again through the admin client (~280ms).
+Baseline round-trip to this Supabase project is ~170ms, so latency - not query
+time - is what these screens are made of. **The lever that matters is fewer
+round trips per screen**, not faster SQL.
+
+- **Spaces fired four requests**, and three were tenant-wide catalogue lists -
+  space types, component types, quality tiers - refetched every single time the
+  tab was opened. They now go through `fetchConfigOnce`
+  (`lib/quotations/config-cache`), which caches the *promise* for five minutes
+  so simultaneous mounts share one request, evicts failures, and is dropped by
+  `invalidateQuotationConfig()` from the config screen that edits them.
+- **Calendar re-selected the user the guard had already resolved**, and awaited
+  a `user_roles` query whose only use is filtering the merged list at the very
+  end. The first is gone (`guard.user` carries `tenantId` and `isSuperAdmin`);
+  the second is started early and awaited where it is needed.
+
+Still there, and worth knowing before the calendar grows:
+
+- **An N+1 on standalone events.** Each linked event gets its own lead or
+  project lookup. It costs one extra query today because only one event is
+  linked, so it is a scaling problem rather than a current one.
+- **Its three source queries still run in sequence** (lead activities, note
+  follow-ups, due tasks) though nothing makes them dependent.
+
+**`projects.project_name` does not exist - the column is `name`.** The calendar
+selected it in two places, neither checked the error, so a project-linked event
+silently lost its name. Fixed, and verified against the schema.
+
 ## Traps that have already cost time
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it

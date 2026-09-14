@@ -20,6 +20,7 @@ import {
   SettingsPageContent,
 } from "@/components/ui/SettingsPageLayout";
 import { uiLogger } from "@/lib/logger";
+import { invalidateQuotationConfig } from "@/lib/quotations/config-cache";
 
 interface SpaceType {
   id: string;
@@ -703,6 +704,10 @@ export default function QuotationsConfigPage() {
         });
       }
 
+      // The Spaces tab caches these lists for five minutes; this screen is the
+      // only thing that edits them, so it drops the cache rather than leaving
+      // somebody to wonder why their new space type is not offered yet.
+      invalidateQuotationConfig();
       closeModal();
       if (activeTab === "spaces") await fetchSpaces();
       else if (activeTab === "components") await fetchComponents();
@@ -757,6 +762,7 @@ export default function QuotationsConfigPage() {
           : null
       );
 
+      invalidateQuotationConfig();
       uiLogger.info("Item deleted successfully", {
         type: deleteModal.type,
         id: deleteModal.item.id,

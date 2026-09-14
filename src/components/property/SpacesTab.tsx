@@ -15,6 +15,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { fetchConfigOnce } from "@/lib/quotations/config-cache";
 import { AddSpacesModal } from "./AddSpacesModal";
 import {
   PlusIcon,
@@ -92,21 +93,35 @@ export function SpacesTab({
     }
     try {
       setError(null);
-      const [scopeRes, typesRes, compRes, tiersRes] = await Promise.all([
+      /*
+       * Only the scope is genuinely per-property. The other three are
+       * tenant-wide catalogue lists that change when somebody edits them on
+       * the config screen, and this tab was refetching all of them every time
+       * it was opened - three separate API routes, each paying the guard's
+       * fixed cost (an Auth-server round trip plus a users lookup, ~650ms
+       * together) before reading a row. See lib/quotations/config-cache.
+       */
+      const [scopeRes, types, comps, tiers] = await Promise.all([
         fetch(`/api/properties/${propertyId}/scope`),
-        fetch("/api/quotations/config/space-types"),
-        fetch("/api/quotations/config/component-types"),
-        fetch("/api/quotations/config/quality-tiers"),
+        fetchConfigOnce<{ data?: SpaceTypeOption[] }>(
+          "/api/quotations/config/space-types"
+        ).catch(() => null),
+        fetchConfigOnce<{ data?: SpaceTypeOption[] }>(
+          "/api/quotations/config/component-types"
+        ).catch(() => null),
+        fetchConfigOnce<{ tiers?: { name: string }[] }>(
+          "/api/quotations/config/quality-tiers"
+        ).catch(() => null),
       ]);
       if (!scopeRes.ok) throw new Error("Failed to load property scope");
       const scope = await scopeRes.json();
       setItems(scope.items || []);
-      // Both config endpoints return { data }.
-      if (typesRes.ok) setSpaceTypes((await typesRes.json()).data || []);
-      if (compRes.ok) setComponentTypes((await compRes.json()).data || []);
-      if (tiersRes.ok) {
-        const t = await tiersRes.json();
-        setQualityTiers((t.tiers || []).map((x: { name: string }) => x.name));
+      // Config is best-effort: a failure there leaves the pickers empty rather
+      // than hiding the scope this tab exists to show.
+      if (types) setSpaceTypes(types.data || []);
+      if (comps) setComponentTypes(comps.data || []);
+      if (tiers) {
+        setQualityTiers((tiers.tiers || []).map((x) => x.name));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");

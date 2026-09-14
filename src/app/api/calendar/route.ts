@@ -26,20 +26,25 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
     const supabaseAdmin = createAdminClient();
 
-    // Get user's tenant info
-    const { data: userData, error: userDataError } = await supabase
-      .from("users")
-      .select("tenant_id, is_super_admin")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.tenant_id) {
-      console.log("[CALENDAR API] User not found or no tenant");
+    /*
+     * The guard already resolved this user - tenant and super-admin flag
+     * included - so re-selecting them here was a second round trip for
+     * something already in hand.
+     */
+    if (!user.tenantId) {
+      console.log("[CALENDAR API] User has no tenant");
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Get user's role from user_roles table
-    const { data: userRoles } = await supabase
+    /*
+     * Started now, awaited at the end.
+     *
+     * This only decides whether the merged list is filtered down to events the
+     * caller created or attends, which happens after every source has been
+     * read. Awaiting it here put a whole round trip in front of work that does
+     * not depend on it.
+     */
+    const userRolesPromise = supabase
       .from("user_roles")
       .select(`
         role:roles (
@@ -49,16 +54,7 @@ export async function GET(request: NextRequest) {
       `)
       .eq("user_id", user.id);
 
-    // Check if user is admin/owner (hierarchy_level <= 1 means owner/admin)
-    const isAdminOrOwner = userData.is_super_admin || userRoles?.some(
-      (ur) =>
-        ur.role &&
-        typeof ur.role === "object" &&
-        "hierarchy_level" in ur.role &&
-        (ur.role as { hierarchy_level: number }).hierarchy_level <= 1
-    );
-
-    const tenantId = userData.tenant_id;
+    const tenantId = user.tenantId;
     let allEvents: any[] = [];
 
     // Lead meetings. Excluded for source="project": a project asking for its
@@ -220,12 +216,15 @@ export async function GET(request: NextRequest) {
               } else if (event.linked_type === "project") {
                 const { data: project } = await supabaseAdmin
                   .from("projects")
-                  .select("id, project_name, project_number")
+                  // `projects.project_name` does not exist - the column is
+                  // `name`. This select errored, nothing checked the error,
+                  // and a project-linked event silently lost its name.
+                  .select("id, name, project_number")
                   .eq("id", event.linked_id)
                   .single();
 
                 if (project) {
-                  sourceName = project.project_name;
+                  sourceName = project.name;
                   sourceNumber = project.project_number;
                 }
               }
@@ -456,7 +455,7 @@ export async function GET(request: NextRequest) {
           projectIds.length
             ? supabaseAdmin
                 .from("projects")
-                .select("id, project_number, project_name")
+                .select("id, project_number, name")
                 .in("id", projectIds)
             : Promise.resolve({ data: [] as any[] }),
         ]);
@@ -484,7 +483,7 @@ export async function GET(request: NextRequest) {
                 : "standalone") as any,
               source_id: t.related_id,
               source_number: rel?.lead_number || rel?.project_number,
-              source_name: rel?.client?.name || rel?.project_name,
+              source_name: rel?.client?.name || rel?.name,
               activity_type: "task_due",
               event_type: "task_due",
               meeting_type: "task_due",
@@ -526,6 +525,17 @@ export async function GET(request: NextRequest) {
     // Filter events based on user role and attendee status
     // Admin/Owner can see all events
     // Other users can only see events where they are creator or attendee
+    const { data: userRoles } = await userRolesPromise;
+    const isAdminOrOwner =
+      user.isSuperAdmin ||
+      userRoles?.some(
+        (ur) =>
+          ur.role &&
+          typeof ur.role === "object" &&
+          "hierarchy_level" in ur.role &&
+          (ur.role as { hierarchy_level: number }).hierarchy_level <= 1
+      );
+
     const events = isAdminOrOwner
       ? allEvents
       : allEvents.filter((event) => {
