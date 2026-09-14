@@ -165,6 +165,36 @@ export async function GET(request: NextRequest) {
           }
         }
 
+        // The same for projects. A subtask of a playbook phase is linked to the
+        // project, and without this its Linked column showed the bare word
+        // "Project" beside a parent naming the real one.
+        const subtaskProjectIds = allSubtasks
+          .filter((st) => st.related_type === "project" && st.related_id)
+          .map((st) => st.related_id);
+
+        const subtaskProjectMap = new Map<string, string>();
+        if (subtaskProjectIds.length > 0) {
+          const { data: subtaskProjects } = await supabase
+            .from("projects")
+            .select("id, name, project_number, client:clients(name)")
+            .in("id", subtaskProjectIds);
+
+          if (subtaskProjects) {
+            subtaskProjects.forEach((project: any) => {
+              const clientName =
+                (project.client as { name?: string } | null)?.name ||
+                "Unknown Client";
+              subtaskProjectMap.set(
+                project.id,
+                project.name ||
+                  (project.project_number
+                    ? `${project.project_number} • ${clientName}`
+                    : clientName)
+              );
+            });
+          }
+        }
+
         const subtaskMap = new Map<string, any[]>();
         const countMap = new Map<
           string,
@@ -177,10 +207,16 @@ export async function GET(request: NextRequest) {
             subtaskMap.set(st.parent_task_id, []);
           }
 
-          // Get related_name for subtask
+          // Get related_name for subtask.
+          //
+          // Projects were never resolved here - only leads - so every subtask
+          // came back with an empty related_name and the list fell back to the
+          // literal word "Project" while its parent showed the real name.
           let relatedName = "";
           if (st.related_type === "lead" && st.related_id) {
             relatedName = subtaskLeadMap.get(st.related_id) || "";
+          } else if (st.related_type === "project" && st.related_id) {
+            relatedName = subtaskProjectMap.get(st.related_id) || "";
           }
 
           subtaskMap.get(st.parent_task_id)!.push({

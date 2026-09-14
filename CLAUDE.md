@@ -609,6 +609,17 @@ The refusals carry `reason: "assignee_fixed_by_playbook"` or
 out, so the server is the only thing enforcing this — a caller finds out by
 being refused, with a message that says why.
 
+### The Linked column names the project, for subtasks too
+
+`/api/tasks` builds `related_name` twice — once for top-level tasks and again
+for subtasks — and the subtask pass resolved **leads only**. Every subtask of a
+playbook phase therefore came back with an empty name and the list fell back to
+the literal word "Project", beside a parent naming the real one.
+
+Both passes now prefer the project's own `name` ("Dileepnath Raju - Modular
+Project") over `project_number • client`, which is a record number and a client
+and not what anybody calls the work.
+
 ### Transitions stamp the actual dates; start_date stays the plan
 
 `task_transition` set status and the hold/skip fields and **never touched
@@ -674,14 +685,16 @@ The step row's action cell needs **`stopPropagation`** — the row itself opens
 the task, so without it pressing Complete also navigated away. The phase row's
 cell always had it; the step row's did not.
 
-**A finished task shows no start button anywhere.** The compact controls — used
-on the tasks list, the project Tasks tab, the table rows and the edit modal —
-render the word "Completed" or "Cancelled" instead of the play/pause pair.
+**A finished task never shows a play triangle — it shows a slate u-turn.** The
+compact controls (tasks list, project Tasks tab, table rows, edit modal) draw a
+single Reopen button on a completed or cancelled row: the same u-turn as the
+task page, in slate rather than the blue of an action you are expected to take.
 
-Changing the icon was not enough, and that is the point worth keeping: whatever
-glyph it carries, **a button in the "start" position on a completed row says the
-work has not begun.** Reopening stays available on the task's own page (the
-`full` variant), where there is a label and the context to mean it.
+Two wrong answers preceded it, and both are worth remembering. Changing the
+icon while leaving it blue and in the play position still read as "not begun".
+Removing the button entirely then took away the only way to undo a mistaken
+completion from a list. The affordance has to exist and has to look like going
+back, not starting.
 
 `SubPhaseDetailPanel` already gated Start behind `not_started`, and the Plan
 tab's `QuickActions` already showed text for a settled row, so the compact

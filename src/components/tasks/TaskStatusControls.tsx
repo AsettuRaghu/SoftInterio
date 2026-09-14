@@ -308,18 +308,45 @@ export function TaskStatusControls({
       : "Resume";
 
     if (settled) {
+      /**
+       * A finished row still offers a way back - it just must not look like
+       * Start.
+       *
+       * The play triangle said "not begun" on a task that was done; removing
+       * the button entirely took away the only way to undo a mistaken
+       * completion from a list. So: the same u-turn used on the task page,
+       * drawn in slate rather than the blue of an action you are expected to
+       * take, and labelled Reopen.
+       */
+      const reopen = actions.find((x) => x.to === "in_progress");
       return (
         <div className="flex items-center gap-1">
-          <span
-            className="text-[11px] font-medium text-slate-400 px-1"
-            title={
-              task.status === "completed"
-                ? "Completed. Reopen it from the task page if that was wrong."
-                : "Cancelled"
-            }
-          >
-            {task.status === "completed" ? "Completed" : "Cancelled"}
-          </span>
+          {reopen ? (
+            <Tooltip
+              label={
+                error ||
+                (task.status === "completed"
+                  ? "Reopen — this task is completed"
+                  : "Reopen — this task was cancelled")
+              }
+            >
+              <button
+                type="button"
+                disabled={isSaving || disabled}
+                aria-label="Reopen"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAction(reopen);
+                }}
+                className={`${iconButton} bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40`}
+              >
+                {REOPEN}
+              </button>
+            </Tooltip>
+          ) : (
+            <span className="w-7 h-7" />
+          )}
+          <span className="w-7 h-7" />
         </div>
       );
     }
