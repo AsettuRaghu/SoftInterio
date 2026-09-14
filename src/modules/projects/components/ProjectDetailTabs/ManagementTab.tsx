@@ -478,13 +478,18 @@ const QuickActions = ({
   return (
     <div className="flex items-center gap-0.5">
       {/**
-       * One primary button, and it IS the action - never a disabled Start.
+       * WHICH button appears is decided by the row's own status. WHETHER it is
+       * allowed is decided by the gate.
        *
-       * A row under way used to render Start (greyed), Complete and Pause, so
-       * it read as "start it again" rather than "pause it". The first slot now
-       * carries exactly one of Start / Pause / Resume, which is also what the
-       * compact task controls do - the same row should behave the same way
-       * wherever it appears.
+       * Letting the gate choose the button made it possible to show the wrong
+       * one: the row's status updates optimistically the moment you act, while
+       * the gate only catches up when the parent's refetch resolves. Putting a
+       * step on hold therefore rendered a disabled Start - which reads as no
+       * button at all - beside an enabled Complete, until the refresh landed.
+       *
+       * Status is always current; the gate can lag. So status picks the slot,
+       * and the gate only ever disables and explains. Start is the one action
+       * that can be refused outright, and it is the one that consults the gate.
        */}
       {status === "in_progress" ? (
         <Btn
@@ -496,7 +501,7 @@ const QuickActions = ({
         >
           <PauseIcon className="w-4 h-4" />
         </Btn>
-      ) : g.canResume ? (
+      ) : status === "on_hold" || status === "blocked" ? (
         <Btn
           action="resume"
           allowed

@@ -652,11 +652,18 @@ The buttons stay **disabled until the gates arrive**. They used to render
 enabled and switch off a second later, which reads as the screen changing its
 mind.
 
-**The primary button IS the action** — never a disabled Start. A row under way
-used to draw Start (greyed), Complete and Pause, which reads as "start it
-again". The first slot now carries exactly one of Start / Pause / Resume, which
-is what the compact task controls do: the same row should behave the same way
-wherever it appears.
+**Status picks the button; the gate only enables it.** The first slot carries
+exactly one of Start / Pause / Resume, chosen from the row's own status — the
+same thing the compact task controls do, so a row behaves identically wherever
+it appears.
+
+Letting the **gate** choose the button showed the wrong one. A row's status
+updates optimistically the moment somebody acts, while the gate only catches up
+when the parent's refetch resolves; in between, a step put on hold rendered a
+disabled Start — which reads as no button at all — next to an enabled Complete.
+Status is always current and the gate can lag, so status decides the slot and
+the gate only ever disables and explains. Start is the one action that can be
+refused outright, and it is the one that consults the gate.
 
 **The plan table scrolls sideways** (`overflow-x-auto` with `min-w-[1080px]` on
 each grid row) rather than `overflow-hidden`. Starting a step fills the
