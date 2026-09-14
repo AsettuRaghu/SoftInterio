@@ -44,6 +44,10 @@ import {
 
 // Types
 interface Task {
+  /** Plan fields. Present on every task; only the Plan tab renders them. */
+  actual_hours?: number;
+  procedure_run_id?: string | null;
+  procedure_step_id?: string | null;
   id: string;
   task_number: string;
   title: string;
@@ -94,6 +98,13 @@ export interface TaskTableProps {
    * at /dashboard/tasks has its own separate table and is unaffected.
    */
   showLinkedColumn?: boolean;
+  /**
+   * Show the expected-vs-logged hours and progress columns.
+   *
+   * The Plan tab needs them; the tasks list does not, and adding them there
+   * would be noise. Same opt-in shape as showLinkedColumn.
+   */
+  showPlanColumns?: boolean;
   // Optional: Filter by linked entity (lead, project, etc.)
   relatedType?: string;
   relatedId?: string;
@@ -126,6 +137,7 @@ export interface TaskTableProps {
 }
 
 export default function TaskTable({
+  showPlanColumns = false,
   relatedType,
   relatedId,
   currentUserId,
@@ -1268,6 +1280,64 @@ export default function TaskTable({
           </div>
         </td>
 
+        {/* Hours and progress, for the plan view.
+            A playbook step is written in expected hours and measured in logged
+            ones, and the difference is the whole point of the Plan tab - it is
+            where a process quietly costs more than anyone planned. Off by
+            default: on the tasks list these columns are noise. */}
+        {showPlanColumns && (
+          <td className="px-2 py-1.5 whitespace-nowrap text-xs tabular-nums">
+            {(() => {
+              const est = Number(task.estimated_hours ?? 0);
+              const act = Number(task.actual_hours ?? 0);
+              if (!est && !act) return <span className="text-slate-300">—</span>;
+              const over = est > 0 && act > est;
+              return (
+                <span
+                  className={over ? "text-amber-700 font-medium" : "text-slate-600"}
+                  title={
+                    over
+                      ? `${act}h logged against ${est}h expected — over by ${Math.round((act - est) * 100) / 100}h`
+                      : `${act}h logged of ${est}h expected`
+                  }
+                >
+                  {act}h <span className="text-slate-400">/ {est}h</span>
+                </span>
+              );
+            })()}
+          </td>
+        )}
+        {showPlanColumns && (
+          <td className="px-2 py-1.5 whitespace-nowrap">
+            {(() => {
+              // A parent reports its children; a leaf is all or nothing, since
+              // there is nothing finer to count.
+              const kids = task.subtasks ?? [];
+              const done = kids.filter((k: any) =>
+                ["completed", "skipped", "cancelled"].includes(k.status),
+              ).length;
+              const pct = kids.length
+                ? Math.round((done / kids.length) * 100)
+                : ["completed", "skipped"].includes(task.status)
+                  ? 100
+                  : task.status === "in_progress"
+                    ? 50
+                    : 0;
+              return (
+                <span className="flex items-center gap-1.5" title={`${pct}% complete`}>
+                  <span className="w-12 h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                    <span
+                      className={`block h-full rounded-full ${pct === 100 ? "bg-emerald-500" : "bg-blue-500"}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </span>
+                  <span className="text-[11px] text-slate-500 tabular-nums">{pct}%</span>
+                </span>
+              );
+            })()}
+          </td>
+        )}
+
         {/* Linked - hidden by default: inside a lead or project tab
             every task links to that same entity, so the column only repeats
             the page you are already on. */}
@@ -1703,6 +1773,16 @@ export default function TaskTable({
                     >
                       Due <SortIndicator field="due_date" />
                     </th>
+                    {showPlanColumns && (
+                      <th className="px-2 py-2 text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider">
+                        Hours
+                      </th>
+                    )}
+                    {showPlanColumns && (
+                      <th className="px-2 py-2 text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider">
+                        Progress
+                      </th>
+                    )}
                     {showLinkedColumn && (
                     <th
                       onClick={() => handleSort("linked")}
@@ -1728,7 +1808,11 @@ export default function TaskTable({
                               so the inline subtask row stopped one short. */}
                           <td
                             className="px-2 py-1.5 pl-8"
-                            colSpan={showLinkedColumn ? 11 : 10}
+                            colSpan={
+                              10 +
+                              (showLinkedColumn ? 1 : 0) +
+                              (showPlanColumns ? 2 : 0)
+                            }
                           >
                             <div className="flex items-center gap-1.5">
                               <div className="w-4 h-4 flex items-center justify-center text-blue-400">

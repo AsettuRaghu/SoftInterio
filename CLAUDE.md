@@ -733,6 +733,34 @@ Opening the Plan tab now calls `refreshPlan()`, and opening the Tasks tab calls
 simply right when you look at it. Deliberately **not** `fetchCounts`, which
 blanks the page and refetches every tab's data.
 
+### The Plan tab IS the tasks table
+
+`PlanTab` is `TaskTableReusable` scoped to the playbook run — 105 lines, not a
+second table. A phase is a task and a step is its subtask, so there was never a
+second thing to render.
+
+It replaced `ManagementTab`, which was 1,287 lines carrying its own
+`StatusBadge`, its own start/pause/complete buttons, its own notes prompt and
+its own hand-drawn assignee and date cells, beside a tasks module that already
+had every one of them. **Every Plan tab bug reported over a fortnight came from
+that split** — a start button on a completed row, Pause not appearing, a prompt
+demanding notes to begin a step, stale statuses, a refresh that blanked the
+page. Each was fixed once in the tasks module and stayed broken here.
+
+What the plan genuinely adds is two columns: expected against logged hours, and
+progress. Those are `showPlanColumns` on the shared table — opt-in, the same
+shape as `showLinkedColumn` — not a reason to own a copy of it.
+
+`ManagementTab` survives **only** for projects still on the older native phase
+engine, whose rows really are not tasks. When that engine goes, so does it.
+
+Editing anything on the project page — a plan row or a task row — opens the one
+`EditTaskModal` the page owns. The Tasks tab's Edit button previously called an
+`onTaskClick` nobody had passed, so it did nothing at all.
+
+**Before adding a control to a project screen, look in `components/tasks`
+first.** That is where this went wrong, repeatedly.
+
 ### The Plan tab refreshes the plan, not the page
 
 `onRefresh` on ManagementTab was `fetchProject`, which calls `setLoading(true)`

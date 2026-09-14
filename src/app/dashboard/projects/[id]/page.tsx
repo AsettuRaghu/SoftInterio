@@ -50,6 +50,8 @@ import { cn } from "@/utils/cn";
 import { PaymentsTab } from "@/components/projects/PaymentsTab";
 import { ProcurementTab } from "@/components/projects/ProcurementTab";
 import { StageStrip } from "@/components/projects/StageStrip";
+import { PlanTab } from "@/modules/projects/components/ProjectDetailTabs/PlanTab";
+import { EditTaskModal } from "@/components/tasks";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -129,6 +131,14 @@ export default function ProjectDetailPage({ params }: PageProps) {
   const [planGates, setPlanGates] = useState<Record<string, any>>({});
   const [planMayEdit, setPlanMayEdit] = useState(true);
   const [planGatesReady, setPlanGatesReady] = useState(false);
+  /**
+   * One task editor for the whole page.
+   *
+   * A playbook phase and step are tasks, so editing one opens the same modal as
+   * editing any other task. This also revives the Edit button on the Tasks tab,
+   * which called an onTaskClick nobody had passed and therefore did nothing.
+   */
+  const [editingTask, setEditingTask] = useState<any | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [teamMembers, setTeamMembers] = useState<
     { id: string; name: string; email: string; avatar_url?: string }[]
@@ -964,24 +974,42 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 </div>
               )}
 
-              <ManagementTab
-                projectId={project.id}
-                phases={
-                  playbookPhases.length > 0
-                    ? playbookPhases
-                    : project.phases || []
-                }
-                onInitializePhases={initializePhases}
-                onRefresh={refreshPlan}
-                onEditPhase={handleEditPhase}
-                onEditSubPhase={handleEditSubPhase}
-                onSubPhaseClick={handleSubPhaseClick}
-                onQuickAction={handleQuickAction}
-                onPhaseQuickAction={handlePhaseQuickAction}
-                gates={planGates}
-                mayEdit={planMayEdit}
-                gatesReady={planGatesReady}
-              />
+              {/* A playbook-driven plan IS the tasks table, scoped to the
+                  run. ManagementTab remains only for projects still on the
+                  older native phase engine, whose rows are not tasks. */}
+              {playbook ? (
+                <PlanTab
+                  projectId={project.id}
+                  tasks={tasks}
+                  runId={playbook.runId ?? null}
+                  projectClosed={project.status === "completed"}
+                  teamMembers={teamMembers}
+                  onRefresh={() => {
+                    void refreshPlan();
+                    void refreshTasks();
+                  }}
+                  onTaskClick={(task) => setEditingTask(task)}
+                />
+              ) : (
+                              <ManagementTab
+                  projectId={project.id}
+                  phases={
+                    playbookPhases.length > 0
+                      ? playbookPhases
+                      : project.phases || []
+                  }
+                  onInitializePhases={initializePhases}
+                  onRefresh={refreshPlan}
+                  onEditPhase={handleEditPhase}
+                  onEditSubPhase={handleEditSubPhase}
+                  onSubPhaseClick={handleSubPhaseClick}
+                  onQuickAction={handleQuickAction}
+                  onPhaseQuickAction={handlePhaseQuickAction}
+                  gates={planGates}
+                  mayEdit={planMayEdit}
+                  gatesReady={planGatesReady}
+                />
+              )}
             </>
           )}
 
@@ -1018,6 +1046,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
               projectClosed={project.status === "completed"}
               teamMembers={teamMembers}
               onCountChange={(count) => setTasksCount(count)}
+              onEditTask={(task) => setEditingTask(task)}
               onRefresh={fetchCounts}
             />
           ) : null}
@@ -1120,6 +1149,17 @@ export default function ProjectDetailPage({ params }: PageProps) {
             />
           )}
         </div>
+
+        <EditTaskModal
+          task={editingTask}
+          isOpen={!!editingTask}
+          onClose={() => setEditingTask(null)}
+          onUpdate={() => {
+            setEditingTask(null);
+            void refreshTasks();
+            void refreshPlan();
+          }}
+        />
 
         {/* Sub-phase Detail Panel */}
         <SubPhaseDetailPanel
