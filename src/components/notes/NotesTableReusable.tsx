@@ -46,7 +46,15 @@ export interface NoteItem {
 interface NotesTableReusableProps {
   notes?: NoteItem[];
   externalNotes?: NoteItem[];
-  onRefresh?: () => void;
+  /** Awaited, so the row stays busy until the refresh has actually landed. */
+  onRefresh?: () => void | Promise<void>;
+  /**
+   * Apply one changed note in place, instead of refetching everything.
+   *
+   * The note arrives from the PATCH response and carries no `created_user`,
+   * so merge it into the note already held rather than replacing it.
+   */
+  onNoteUpdated?: (note: NoteItem) => void;
 
   /** When set, this component owns creation and follow-up editing. */
   createEndpoint?: string;
@@ -100,6 +108,7 @@ export default function NotesTableReusable({
   notes = [],
   externalNotes,
   onRefresh,
+  onNoteUpdated,
   createEndpoint,
   updateEndpoint,
   showNoteTitle = false,
@@ -241,6 +250,26 @@ export default function NotesTableReusable({
     [filtered, currentPage, pageSize]
   );
 
+  /**
+   * Change one field on one note.
+   *
+   * This used to fire the PATCH and then call `onRefresh()` - which, on a
+   * lead, refetches the **entire lead**: thirteen queries across six
+   * sequential round trips covering quotations, documents, calendar events,
+   * tasks and their subtasks, none of which a follow-up tick can affect. About
+   * 1.3 seconds of work to flip one boolean.
+   *
+   * Worse, `onRefresh()` was not awaited while `setBusy(null)` sat in a
+   * `finally`, so the button stopped looking busy the instant the PATCH
+   * returned - re-enabled, with the row still showing the old state, for the
+   * second or so the refresh was still in flight. That gap is the "nothing
+   * seems to be happening".
+   *
+   * The PATCH already returns the updated note, so the row is updated from
+   * that and nothing is refetched. `onNoteUpdated` is merged rather than
+   * swapped in because the response's `.select()` carries no `created_user`,
+   * and replacing the note outright would blank the author column.
+   */
   const patchNote = async (noteId: string, payload: Record<string, unknown>) => {
     if (!updateEndpoint) return;
     setBusy(noteId);
@@ -250,7 +279,18 @@ export default function NotesTableReusable({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (response.ok) onRefresh?.();
+      if (!response.ok) return;
+
+      if (onNoteUpdated) {
+        const json = await response.json().catch(() => null);
+        if (json?.note) {
+          onNoteUpdated(json.note as NoteItem);
+          return;
+        }
+      }
+      // No in-place handler, or the response did not carry the note: fall back
+      // to a refetch, and stay busy until it has actually finished.
+      await onRefresh?.();
     } finally {
       setBusy(null);
     }

@@ -11,6 +11,8 @@ interface NotesTabProps {
   onEditNote?: (note: LeadNote) => void;
   onDeleteNote?: (note: LeadNote) => void;
   onRefresh?: () => void;
+  /** Apply one changed note without refetching the whole lead. */
+  onNoteUpdated?: (note: LeadNote) => void;
   formatDateTime: (date: string) => string;
 }
 
@@ -22,6 +24,7 @@ export default function NotesTab({
   onEditNote,
   onDeleteNote,
   onRefresh,
+  onNoteUpdated,
   formatDateTime,
 }: NotesTabProps) {
   return (
@@ -32,6 +35,7 @@ export default function NotesTab({
       createEndpoint={`/api/sales/leads/${leadId}/notes`}
       updateEndpoint="/api/sales/leads/notes"
       onRefresh={onRefresh}
+      onNoteUpdated={onNoteUpdated as never}
       allowCreate={!leadClosed}
       allowEdit={!leadClosed}
       allowDelete={false}

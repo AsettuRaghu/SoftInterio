@@ -487,6 +487,15 @@ export default function LeadDetailPage() {
             onAddNoteClick={() => setShowNoteModal(true)}
             onEditNote={(note) => setEditingNote(note)}
             onRefresh={fetchNotes}
+            // Ticking a follow-up changes one boolean on one note. The PATCH
+            // hands the note back, so it is merged into the list here rather
+            // than refetching the whole lead - thirteen queries over six round
+            // trips, for a checkbox.
+            onNoteUpdated={(note) =>
+              setNotes((prev) =>
+                prev.map((n) => (n.id === note.id ? { ...n, ...note } : n))
+              )
+            }
             formatDateTime={formatDateTime}
           />
         )}

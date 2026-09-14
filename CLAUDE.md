@@ -1316,6 +1316,38 @@ The two pages keep their separate jobs. The builder is the editor; the summary
 carries status, versions, Share and the meta, which is why it was not simply
 replaced by a locked builder. They now share the rendering, not the role.
 
+### A small change refreshes a small thing
+
+Ticking a follow-up done on a lead's Notes tab took about a second and a half
+and looked like nothing was happening. Two separate faults, and both are worth
+recognising elsewhere.
+
+**The refresh was out of all proportion to the change.** `patchNote` called
+`onRefresh()`, which on a lead is `fetchNotes` - and `fetchNotes` refetches the
+*entire lead* from `GET /api/sales/leads/[id]`: thirteen queries across six
+sequential round trips, covering quotations, documents, calendar events, tasks
+and their subtasks, none of which a follow-up tick can affect. Measured at
+~1.27s server-to-Supabase, on top of the PATCH and the browser hop.
+
+`PATCH /api/sales/leads/notes/[noteId]` already returned the updated note, so
+the row is now updated from that and nothing is refetched. **Merge it, do not
+replace it** - that response's `.select()` carries no `created_user`, so
+swapping the note in blanks the author column.
+
+**The button lied about being busy.** `onRefresh()` was not awaited while
+`setBusy(null)` sat in a `finally`, so the control re-enabled the instant the
+PATCH returned, with the row still showing the old value, for the whole second
+the refresh was still in flight. Any `finally` that clears a pending flag must
+await everything the action actually kicked off.
+
+The project page's `refetchNotes` was already scoped to
+`/api/projects/[id]/notes`, one query - which is why this was only ever slow on
+leads. It keeps the fallback path, which is now correctly awaited.
+
+`fetchNotes` still reads the whole lead, deliberately: it also refreshes the
+timeline, and note create/edit/delete do write timeline entries. Only the hot
+path - ticking or dating a follow-up - was moved off it.
+
 ## Traps that have already cost time
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it
