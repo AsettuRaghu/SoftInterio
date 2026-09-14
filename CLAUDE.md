@@ -1385,6 +1385,46 @@ Still there, and worth knowing before the calendar grows:
 selected it in two places, neither checked the error, so a project-linked event
 silently lost its name. Fixed, and verified against the schema.
 
+### The server says why; do not throw that away
+
+Marking a calendar event complete on a lead popped `Failed to complete task` in
+a browser alert. The task in question had two open subtasks, and
+`task_transition` had said exactly that - the route answers **409 with the real
+reason** in `error`:
+
+    "2 subtasks still open. Complete or cancel them first."
+
+The calendar did `if (!response.ok) throw new Error("Failed to complete task")`,
+which replaces a sentence telling you what to do next with one saying only that
+something went wrong. **Read `json.error` on a failed response.** Every task
+status change goes through the transition RPC, so a refusal always carries a
+reason worth showing - an unsatisfied completion requirement, a blocking
+predecessor, open subtasks.
+
+### An action refreshes what it changed, never the page
+
+`onRefresh={fetchLead}` on the lead's Calendar tab meant completing one event
+replaced the whole detail page with a skeleton and refetched every tab -
+thirteen queries over six round trips. Reassigning a lead did the same, because
+`handleAssigneeChange` also ended in `fetchLead()`.
+
+`fetchLead` now takes `{ quiet: true }`, which skips the page-level loading
+flag. It still refetches everything, deliberately: the assignee, client and
+property are rendered from **embeds**, so they cannot be reconstructed in the
+client from a PATCH response. What changes is that the person keeps looking at
+their data while it happens. The mount call stays loud - there is nothing to
+look at yet.
+
+The Calendar tab passes `fetchActivities`, not `fetchLead`: the calendar owns
+its own rows and the only thing the page needs is the timeline, since completing
+a meeting writes an activity.
+
+`leads.assigned_to` is the column. `assigned_user_id` is what the PATCH body
+calls it and does not exist on the table.
+
+Audited across the whole lead detail page after this: no browser dialogs
+reachable from any tab, and one path that can blank the page - first load.
+
 ## Traps that have already cost time
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it

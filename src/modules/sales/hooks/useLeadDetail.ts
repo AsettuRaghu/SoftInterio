@@ -56,10 +56,21 @@ export function useLeadDetail() {
   const [previewDocument, setPreviewDocument] =
     useState<DocumentWithUrl | null>(null);
 
-  // Fetch lead data
-  const fetchLead = useCallback(async () => {
+  /**
+   * Load the lead and everything the tabs render from.
+   *
+   * `quiet` skips the page-level loading flag. That flag replaces the entire
+   * detail page with a skeleton, which is right on first load and wrong after
+   * an action: reassigning a lead, or marking one calendar event complete, blew
+   * the whole page away and refetched every tab to reflect a single change.
+   *
+   * It still refetches everything, because that is what keeps the embeds - the
+   * assignee, client and property this page renders from - consistent. What
+   * changes is that the person keeps looking at their data while it happens.
+   */
+  const fetchLead = useCallback(async (options?: { quiet?: boolean }) => {
     try {
-      setIsLoading(true);
+      if (!options?.quiet) setIsLoading(true);
       const response = await fetch(`/api/sales/leads/${leadId}`);
       if (!response.ok) {
         if (response.status === 404) {
@@ -80,7 +91,7 @@ export function useLeadDetail() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
-      setIsLoading(false);
+      if (!options?.quiet) setIsLoading(false);
     }
   }, [leadId]);
 
@@ -332,7 +343,13 @@ export function useLeadDetail() {
           throw new Error(data.error || "Failed to update assignee");
         }
 
-        await fetchLead();
+        /*
+         * Quietly. The assignee is rendered from the `assigned_user` embed, not
+         * from the id, so it cannot be reconstructed here - but blanking the
+         * whole page to pick that embed up was never the right price. The
+         * column is `assigned_to`, incidentally, not `assigned_user_id`.
+         */
+        await fetchLead({ quiet: true });
       } catch (err) {
         uiLogger.error("Error updating assignee", err);
         throw err;

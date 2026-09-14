@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { SearchBox } from "@/components/ui/SearchBox";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { Toast } from "@/components/ui/Toast";
 import {
   CalendarIcon,
   ClockIcon,
@@ -123,6 +124,14 @@ export default function CalendarTableReusable({
   onCompleteEvent,
 }: CalendarTableReusableProps) {
   const { confirm, confirmDialog } = useConfirm();
+  /**
+   * Why something could not be done, in the app's own voice.
+   *
+   * These messages carry the server's own sentence - "2 subtasks still open" -
+   * so they have to be readable and dismissable, not an OS alert that stops the
+   * page repainting behind it.
+   */
+  const [notice, setNotice] = useState<string | null>(null);
   // =====================================================
   // STATE MANAGEMENT
   // =====================================================
@@ -305,7 +314,25 @@ export default function CalendarTableReusable({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status: "completed" }),
         });
-        if (!response.ok) throw new Error("Failed to complete task");
+
+        if (!response.ok) {
+          /*
+           * The server explains itself; this used to throw the explanation
+           * away and pop "Failed to complete task" in a browser alert.
+           *
+           * A status change runs through `task_transition`, so a refusal is a
+           * 409 carrying the actual reason - "2 subtasks still open. Complete
+           * or cancel them first.", or an unsatisfied completion requirement.
+           * That sentence is the whole point: it says what to do next, where
+           * "Failed to complete task" says only that something went wrong.
+           */
+          const json = await response.json().catch(() => null);
+          setNotice(
+            json?.error ||
+              "This task could not be completed, and the server gave no reason."
+          );
+          return;
+        }
 
         // Completing the task removes it from the calendar entirely - the
         // source query excludes finished work - so drop the row rather than
@@ -315,7 +342,7 @@ export default function CalendarTableReusable({
         if (onRefresh) onRefresh();
       } catch (error) {
         console.error("Error completing task:", error);
-        alert("Failed to complete task");
+        setNotice("Could not reach the server to complete this task.");
       }
       return;
     }
@@ -347,7 +374,11 @@ export default function CalendarTableReusable({
         ),
       });
 
-      if (!response.ok) throw new Error("Failed to complete event");
+      if (!response.ok) {
+        const json = await response.json().catch(() => null);
+        setNotice(json?.error || "This event could not be marked complete.");
+        return;
+      }
 
       // Update local state optimistically
       setEvents((prev) =>
@@ -360,6 +391,7 @@ export default function CalendarTableReusable({
       if (onRefresh) onRefresh();
     } catch (error) {
       console.error("Error completing event:", error);
+      setNotice("Could not reach the server to complete this event.");
     }
   };
 
@@ -377,7 +409,7 @@ export default function CalendarTableReusable({
     // A follow-up has no event row to delete - it belongs to a note. Deleting
     // it here would either 404 or, worse, remove an unrelated activity.
     if (event.is_derived) {
-      alert(
+      setNotice(
         event.task_id
           ? "This is a task's due date. Change or clear the due date on the task instead."
           : "This follow-up belongs to a note. Clear the follow-up date on the note instead."
@@ -1057,6 +1089,11 @@ export default function CalendarTableReusable({
         </div>
       )}
       {confirmDialog}
+      <Toast
+        message={notice}
+        variant="error"
+        onDismiss={() => setNotice(null)}
+      />
     </div>
   );
 }

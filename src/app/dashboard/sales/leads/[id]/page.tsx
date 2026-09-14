@@ -28,6 +28,7 @@ import {
   TaskPriorityLabels,
 } from "@/types/tasks";
 import { CreateTaskModal, EditTaskModal } from "@/components/tasks";
+import { Toast } from "@/components/ui/Toast";
 import {
   AddDocumentModal,
   DocumentList,
@@ -112,7 +113,6 @@ export default function LeadDetailPage() {
     setActivities,
     setNotes,
     setTasks,
-    fetchLead,
     fetchTasks,
     fetchNotes,
     fetchActivities,
@@ -126,6 +126,9 @@ export default function LeadDetailPage() {
 
   // Local UI state
   const [activeTab, setActiveTab] = useState<TabType>("overview");
+  // Failures reach the person in the app's own voice. These were browser
+  // alerts, which cannot be styled and stop the page behind them repainting.
+  const [notice, setNotice] = useState<string | null>(null);
   const [showStageModal, setShowStageModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -167,7 +170,7 @@ export default function LeadDetailPage() {
       await handleSaveEdit(editForm);
       setShowEditModal(false);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to update lead");
+      setNotice(err instanceof Error ? err.message : "Failed to update lead");
     }
   };
 
@@ -181,7 +184,9 @@ export default function LeadDetailPage() {
     try {
       await handleRevise(quotationId);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to create revision");
+      setNotice(
+        err instanceof Error ? err.message : "Failed to create revision"
+      );
     }
   };
 
@@ -190,7 +195,9 @@ export default function LeadDetailPage() {
     try {
       await handleAssigneeChange(userId);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to update assignee");
+      setNotice(
+        err instanceof Error ? err.message : "Failed to update assignee"
+      );
     }
   };
 
@@ -447,7 +454,18 @@ export default function LeadDetailPage() {
                 setShowMeetingModal(true);
               }
             }}
-            onRefresh={fetchLead}
+            /*
+             * Not fetchLead. That sets the page-level loading flag, so marking
+             * one event complete replaced the entire lead page with a skeleton
+             * and refetched every tab's data - which is what "it refreshed the
+             * whole screen" was.
+             *
+             * The calendar owns its own rows and already updates them, so the
+             * only thing the page needs is the timeline: completing a meeting
+             * writes an activity. fetchActivities does that without blanking
+             * anything.
+             */
+            onRefresh={fetchActivities}
           />
         )}
 
@@ -657,6 +675,11 @@ export default function LeadDetailPage() {
             }}
           />
         )}
+        <Toast
+          message={notice}
+          variant="error"
+          onDismiss={() => setNotice(null)}
+        />
       </PageContent>
     </PageLayout>
   );
