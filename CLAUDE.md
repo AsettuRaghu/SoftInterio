@@ -648,8 +648,18 @@ The step row's action cell needs **`stopPropagation`** — the row itself opens
 the task, so without it pressing Complete also navigated away. The phase row's
 cell always had it; the step row's did not.
 
-**Reopen has its own icon.** These buttons are icon-only, so Reopen carrying the
-play triangle made a finished task look unstarted.
+**A finished task shows no start button anywhere.** The compact controls — used
+on the tasks list, the project Tasks tab, the table rows and the edit modal —
+render the word "Completed" or "Cancelled" instead of the play/pause pair.
+
+Changing the icon was not enough, and that is the point worth keeping: whatever
+glyph it carries, **a button in the "start" position on a completed row says the
+work has not begun.** Reopening stays available on the task's own page (the
+`full` variant), where there is a label and the context to mean it.
+
+`SubPhaseDetailPanel` already gated Start behind `not_started`, and the Plan
+tab's `QuickActions` already showed text for a settled row, so the compact
+controls were the only place offering it.
 
 ### The Plan tab only offers what the server will accept
 

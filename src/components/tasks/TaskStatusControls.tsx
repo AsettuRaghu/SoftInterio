@@ -279,10 +279,22 @@ export function TaskStatusControls({
   if (variant === "compact") {
     // The play/pause toggle. Never offer Block here - it needs a reason to be
     // worth recording, and there is nowhere in a row to ask for one.
-    const primary = isRunning
-      ? actions.find((a) => a.to === "on_hold")
-      : actions.find((a) => a.to === "in_progress");
-    const complete = actions.find((a) => a.to === "completed");
+    //
+    // And nothing at all on a finished task. Reopening is a deliberate act, not
+    // something to put one mis-click away in a list: whatever icon it carried,
+    // a button in the "start" position on a completed row says the work has not
+    // begun. It stays available on the task's own page, where there is a label
+    // and the context to mean it.
+    const settled = task.status === "completed" || task.status === "cancelled";
+
+    const primary = settled
+      ? undefined
+      : isRunning
+        ? actions.find((a) => a.to === "on_hold")
+        : actions.find((a) => a.to === "in_progress");
+    const complete = settled
+      ? undefined
+      : actions.find((a) => a.to === "completed");
 
     const iconButton =
       "w-7 h-7 flex items-center justify-center rounded-md border transition-all disabled:cursor-not-allowed";
@@ -294,6 +306,23 @@ export function TaskStatusControls({
       : task.status === "todo"
       ? "Start"
       : "Resume";
+
+    if (settled) {
+      return (
+        <div className="flex items-center gap-1">
+          <span
+            className="text-[11px] font-medium text-slate-400 px-1"
+            title={
+              task.status === "completed"
+                ? "Completed. Reopen it from the task page if that was wrong."
+                : "Cancelled"
+            }
+          >
+            {task.status === "completed" ? "Completed" : "Cancelled"}
+          </span>
+        </div>
+      );
+    }
 
     return (
       <div className="flex items-center gap-1">
