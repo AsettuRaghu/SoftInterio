@@ -1368,6 +1368,14 @@ round trips per screen**, not faster SQL.
   (`lib/quotations/config-cache`), which caches the *promise* for five minutes
   so simultaneous mounts share one request, evicts failures, and is dropped by
   `invalidateQuotationConfig()` from the config screen that edits them.
+- **The fourth request still ran on every open**, because switching tabs
+  unmounts the tab. `SpacesTab` now keeps a module-level `scopeCache` per
+  property: cached rows paint immediately and the fetch runs behind them, so
+  nothing is stale for longer than one round trip. It needs no invalidation
+  because the tab already treats `items` as the authority - every add, edit and
+  delete updates it directly rather than refetching - so the cache just mirrors
+  it, guarded on the first load having completed so the empty initial state
+  cannot overwrite a good cache.
 - **Calendar re-selected the user the guard had already resolved**, and awaited
   a `user_roles` query whose only use is filtering the merged list at the very
   end. The first is gone (`guard.user` carries `tenantId` and `isSuperAdmin`);

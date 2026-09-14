@@ -35,6 +35,24 @@ import {
   type QualityTier,
 } from "@/types/property-scope";
 
+/**
+ * The scope rows this tab last had, per property.
+ *
+ * Switching tabs unmounts the tab, so coming back re-ran the whole load and
+ * sat on a spinner for it - the scope request is ~270ms of queries behind the
+ * API guard's fixed ~650ms, so about a second every time, to show rows that had
+ * not changed since the last look.
+ *
+ * Cached rows go on screen immediately and the fetch still runs behind them, so
+ * the data is never stale for longer than one round trip. Same bargain the
+ * calendar table already makes: stale rows for a moment beat an empty spinner.
+ *
+ * Keeping it in step needs no invalidation logic, because this tab already
+ * treats `items` as the authority - every add, edit and delete updates it
+ * directly rather than refetching - so the cache simply mirrors it.
+ */
+const scopeCache = new Map<string, PropertyScopeItem[]>();
+
 interface SpaceTypeOption {
   id: string;
   name: string;
@@ -84,12 +102,19 @@ export function SpacesTab({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const loadedRef = useRef(false);
   const [savingId, setSavingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!propertyId) {
       setIsLoading(false);
       return;
+    }
+    // Whatever this property showed last time, on screen now.
+    const cached = scopeCache.get(propertyId);
+    if (cached) {
+      setItems(cached);
+      setIsLoading(false);
     }
     try {
       setError(null);
@@ -116,6 +141,7 @@ export function SpacesTab({
       if (!scopeRes.ok) throw new Error("Failed to load property scope");
       const scope = await scopeRes.json();
       setItems(scope.items || []);
+      loadedRef.current = true;
       // Config is best-effort: a failure there leaves the pickers empty rather
       // than hiding the scope this tab exists to show.
       if (types) setSpaceTypes(types.data || []);
@@ -133,6 +159,17 @@ export function SpacesTab({
   useEffect(() => {
     void load();
   }, [load]);
+
+  /*
+   * Mirror what is on screen, so the next visit starts from it. Guarded on the
+   * load having completed: without that, the empty initial state would be
+   * written over a good cache and the next open would paint nothing.
+   */
+  useEffect(() => {
+    if (propertyId && loadedRef.current) {
+      scopeCache.set(propertyId, items);
+    }
+  }, [propertyId, items]);
 
   /**
    * Only the components that suit the space being added to.
