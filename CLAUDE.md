@@ -687,6 +687,27 @@ work has not begun.** Reopening stays available on the task's own page (the
 tab's `QuickActions` already showed text for a settled row, so the compact
 controls were the only place offering it.
 
+### The Plan tab refreshes the plan, not the page
+
+`onRefresh` on ManagementTab was `fetchProject`, which calls `setLoading(true)`
+— the **page-level** flag. So the refresh icon above the plan table, and any
+phase action, replaced the whole project detail page with a skeleton and
+refetched every tab's data. Sub-step actions never called it, which is why only
+phases and that button behaved this way.
+
+It is now `refreshPlan`: the project row (native phases live on it) and the
+playbook with its gates, in parallel, touching no loading flag. The table simply
+changes. The refresh icon spins while it works rather than looking inert.
+
+A disabled action is styled as a disabled **button** — `text-slate-300` on a
+white row read as nothing there, so "Complete is missing on an in-progress
+phase" was really "Complete is disabled because two steps are still open", with
+the reason in a tooltip nobody knew to hover.
+
+**A phase completes when its steps do**, and takes both dates. Verified on an
+isolated playbook: blocked at two open steps, blocked at one, allowed at none,
+accepted, and stamped with a start and an end.
+
 ### The Plan tab only offers what the server will accept
 
 `project_plan_gates(project_id)` answers, for every task in the active run,

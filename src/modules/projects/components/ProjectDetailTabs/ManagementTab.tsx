@@ -30,7 +30,7 @@ interface ProjectMgmtTabProps {
   initializingPhases?: boolean;
   onInitializePhases?: () => void;
   onResetPhases?: () => void;
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<void>;
   onEditPhase?: (phase: ProjectPhase) => void;
   onEditSubPhase?: (subPhase: ProjectSubPhase, phaseId: string) => void;
   onSubPhaseClick?: (phaseId: string, subPhaseId: string) => void;
@@ -469,7 +469,13 @@ const QuickActions = ({
       // not press this" is on the button itself.
       title={allowed ? tip : (reason ?? tip)}
       aria-label={allowed ? tip : `${tip} — unavailable: ${reason ?? ""}`}
-      className={`${buttonClass} ${allowed ? tone : "text-slate-300"}`}
+      // A disabled button must still look like a button. text-slate-300 on a
+      // white row read as nothing there, so "Complete is missing" was really
+      // "Complete is disabled because two steps are still open" - and the
+      // reason was in a tooltip nobody knew to hover.
+      className={`${buttonClass} ${
+        allowed ? tone : "text-slate-400 bg-slate-100/70 border border-slate-200"
+      }`}
     >
       {children}
     </button>
@@ -593,6 +599,9 @@ export default function ManagementTab({
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   // Notes prompt modal state
+  /** So the refresh icon shows it is working rather than looking inert. */
+  const [refreshing, setRefreshing] = useState(false);
+
   const [notesPrompt, setNotesPrompt] = useState<{
     isOpen: boolean;
     subPhaseId: string;
@@ -884,11 +893,22 @@ export default function ManagementTab({
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={onRefresh}
-            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded"
-            title="Refresh"
+            onClick={async () => {
+              if (refreshing) return;
+              setRefreshing(true);
+              try {
+                await onRefresh();
+              } finally {
+                setRefreshing(false);
+              }
+            }}
+            disabled={refreshing}
+            title="Refresh the plan"
+            className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1 hover:bg-slate-100 rounded disabled:opacity-50"
           >
-            <ArrowPathIcon className="w-4 h-4" />
+            <ArrowPathIcon
+              className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
+            />
           </button>
           {onResetPhases && (
             <button

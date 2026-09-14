@@ -253,6 +253,34 @@ export default function ProjectDetailPage({ params }: PageProps) {
     }
   };
 
+  /**
+   * Refresh the plan, and nothing else.
+   *
+   * The Plan tab's refresh - the icon above the table, and a phase action -
+   * used to call fetchProject, which sets the PAGE-level loading state: the
+   * whole project detail page was replaced by a skeleton and every tab's data
+   * was refetched. That is what "the page gets refreshed" was. Sub-step actions
+   * never called it, which is why only phases did it.
+   *
+   * This updates the project row (native phases live on it) and the playbook
+   * with its gates, and touches no loading flag, so the table simply changes.
+   */
+  const refreshPlan = useCallback(async () => {
+    try {
+      const [projectRes] = await Promise.all([
+        fetch(`/api/projects/${id}`),
+        fetchPlaybook(),
+      ]);
+      if (projectRes.ok) {
+        const data = await projectRes.json();
+        if (data.project) setProject(data.project);
+      }
+    } catch {
+      // A failed refresh leaves what is on screen, which is the last thing
+      // known to be true. Better than emptying the tab.
+    }
+  }, [id]);
+
   const fetchPlaybook = async () => {
     try {
       /**
@@ -896,7 +924,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                     : project.phases || []
                 }
                 onInitializePhases={initializePhases}
-                onRefresh={fetchProject}
+                onRefresh={refreshPlan}
                 onEditPhase={handleEditPhase}
                 onEditSubPhase={handleEditSubPhase}
                 onSubPhaseClick={handleSubPhaseClick}
