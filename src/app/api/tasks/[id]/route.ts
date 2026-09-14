@@ -484,7 +484,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           Boolean
         ) as string[];
         const { data: people } = ids.length
-          ? await supabase.from("users").select("id, name").in("id", ids)
+          ? await supabase.from("tenant_directory").select("id, name").in("id", ids)
           : { data: [] as { id: string; name: string }[] };
         const nameOf = (uid: unknown) =>
           uid

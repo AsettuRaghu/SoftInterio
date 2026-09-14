@@ -84,8 +84,10 @@ export async function GET(request: NextRequest) {
     console.log("[PM API] User IDs with PM role:", userIds);
 
     // Step 4: Fetch users with these IDs from the tenant
+    // tenant_directory: against `users` this returned only the person using
+    // the picker, so nobody else could be named project manager.
     const { data: users, error: usersError } = await supabase
-      .from("users")
+      .from("tenant_directory")
       .select("id, name, email, avatar_url, tenant_id")
       .in("id", userIds)
       .eq("tenant_id", userData.tenant_id);

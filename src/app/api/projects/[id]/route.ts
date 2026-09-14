@@ -153,8 +153,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Fetch project manager data separately if project_manager_id exists
     let pManager = null;
     if (fullProject?.project_manager_id) {
+      // tenant_directory, because `users` only ever returns the caller's own
+      // row - so this .single() resolved to null for every manager but
+      // yourself and the manager card rendered blank.
       const { data: managerData } = await supabase
-        .from("users")
+        .from("tenant_directory")
         .select("id, name, email, avatar_url")
         .eq("id", fullProject.project_manager_id)
         .single();

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { requestLogger } from "@/lib/logger/request";
+import { leadAccess } from "@/lib/leads/access";
 
 /**
  * The lead list as CSV, for the analysis nobody anticipated.
@@ -27,6 +28,16 @@ export async function GET(request: NextRequest) {
     });
     if (!guard.success) return createErrorResponse(guard.error!, guard.statusCode!);
 
+    // A download answers to the same rule as the list it comes from: leads.view
+    // is the tenant's leads, leads.view_own is the caller's. RLS checks only
+    // tenant membership, so this is the only thing scoping the file - and a
+    // spreadsheet leaves the building, which makes it the worst place to be
+    // generous by accident.
+    const access = leadAccess(guard.permissions, guard.user.isSuperAdmin);
+    if (access.denied) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
     const supabase = await createClient();
 
     // Which slice of the list. The aggregate tables on the report page are
@@ -34,15 +45,21 @@ export async function GET(request: NextRequest) {
     // recomputing them here would give two sets of numbers that could drift.
     const report = request.nextUrl.searchParams.get("report") || "leads";
 
+    const leadQuery = supabase
+      .from("leads")
+      .select(
+        "id, lead_number, stage, lead_source, service_type, priority, budget_range, won_amount, assigned_to, created_at, won_at, last_activity_at, next_follow_up_at, lost_reason, disqualification_reason, client:clients(name, phone, email), property:properties(property_name, city)"
+      )
+      .order("created_at", { ascending: false });
+
     const [{ data: leads }, { data: users }, { data: quotations }] =
       await Promise.all([
-        supabase
-          .from("leads")
-          .select(
-            "id, lead_number, stage, lead_source, service_type, priority, budget_range, won_amount, assigned_to, created_at, won_at, last_activity_at, next_follow_up_at, lost_reason, disqualification_reason, client:clients(name, phone, email), property:properties(property_name, city)"
-          )
-          .order("created_at", { ascending: false }),
-        supabase.from("users").select("id, name"),
+        access.readAll
+          ? leadQuery
+          : leadQuery.eq("assigned_to", guard.user.id),
+        // Own-row-only policies on `users` put every colleague's leads under
+        // "Unassigned" in the downloaded file. See tenant_directory.
+        supabase.from("tenant_directory").select("id, name"),
         supabase
           .from("quotations")
           .select("lead_id, quotation_number, grand_total")

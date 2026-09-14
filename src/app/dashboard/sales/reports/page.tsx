@@ -22,6 +22,8 @@ type Preset = "30d" | "90d" | "ytd" | "all";
 
 interface Analytics {
   range: { from: string; to: string };
+  /** "tenant" for a leads.view holder, "own" for leads.view_own. */
+  scope: "tenant" | "own";
   headline: {
     new_leads: number;
     won_leads: number;
@@ -528,7 +530,13 @@ export default function SalesReportsPage() {
     all: "All time",
   }[preset];
 
-  const allTime = `All ${h?.total_leads ?? 0} leads on record`;
+  // Someone limited to their own leads gets a report about their own leads, and
+  // the page has to say so - otherwise a one-person funnel reads as the whole
+  // business having almost no pipeline.
+  const own = data?.scope === "own";
+  const allTime = own
+    ? `Your ${h?.total_leads ?? 0} leads`
+    : `All ${h?.total_leads ?? 0} leads on record`;
 
   // A period with no intake and nothing closed is not a broken report, but a
   // page of zeroes reads like one. This tenant's leads all arrived in one
@@ -666,7 +674,9 @@ export default function SalesReportsPage() {
 
             <Section
               title="The pipeline"
-              note="Open work and full history — not limited to the period above"
+              note={`Open work and full history${
+                own ? ", yours only" : ""
+              } — not limited to the period above`}
             >
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {/* The question a sales review opens with, and the one this

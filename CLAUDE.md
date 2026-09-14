@@ -1188,6 +1188,66 @@ long they have been there, measured from `stage_changed_at` and falling back to
 creation for a lead that never moved - which is itself the finding. It is what
 surfaced a proposal sitting untouched for 246 days.
 
+### A colleague's name comes from `tenant_directory`, not `users`
+
+The only SELECT policies on `users` are `id = auth.uid()` - stated twice, as
+"Users can read own record" and "Users can see their own profile", which is the
+tell that nobody designed it. Through the session client a person can read
+exactly one user row: their own.
+
+So every surface naming a colleague was wrong, and wrong **silently**, because
+each one had a friendly fallback that hid the cause:
+
+- the sales report's By owner table put 14 of 15 leads under **"Unassigned"** -
+  `userName[id] || "Unassigned"` cannot tell "nobody owns this" from "I may not
+  see who does";
+- the leads CSV export did the same, in a file people keep;
+- lead and task history showed **"Unknown user"** for a colleague's action;
+- a project's manager card rendered **blank**, because that lookup ends in
+  `.single()`, which returns null rather than erroring;
+- the project-manager picker offered **only the person using it**, so nobody
+  else could be made a project manager.
+
+`tenant_directory` (migration `20260914120000`) is a view over `users` carrying
+`id, tenant_id, name, email, avatar_url, status` and scoped by
+`get_user_tenant_id()`. It is `security_invoker = false` deliberately: it runs as
+its owner so the own-row policy does not apply, which makes the WHERE clause the
+only wall. Verified under a real session - two colleagues visible, the other
+tenant's user not, `phone` absent.
+
+It is a **directory, not a widening of `users`**: no `phone`, no
+`last_login_at`, no `email_verified_at`, no `is_super_admin`. Within one
+business a colleague's name and work email are not secrets; their phone number
+and login history are not the app's to hand out. Do not add a column without
+deciding it is directory data.
+
+`anon` is refused outright, and because `auth.uid()` is null for the service
+role the predicate yields **zero rows** there too - so this view cannot be used
+with the admin client, which is the right constraint. Name a person through the
+session client and this view.
+
+**The leads list only ever looked correct because it uses the admin client**,
+which bypasses RLS. That is the habit to break: reaching for the admin client to
+get around a policy also throws away the tenant wall.
+
+### A report answers to the same access rule as its list
+
+`/api/sales/leads/analytics` and `/api/sales/leads/export` now call
+`leadAccess()` and, for a `view_own` holder, narrow `allLeads` before anything
+is computed - the funnel, segments, velocity and attention lists all derive from
+it - plus the three sets that hang off leads by id, so a funnel is never built
+from stage history belonging to leads the caller cannot open. The response
+carries `scope`, and the page says "Your 15 leads" rather than "All 15 leads on
+record".
+
+**Nothing changes for anyone today**, and that is the reason it was worth doing:
+the three roles holding `leads.reports` / `leads.export` (Owner, Admin, Sales
+Manager) all hold `leads.view` as well, so the report was one grant away from
+showing a whole business's pipeline - and a spreadsheet of it - to somebody
+entitled only to their own leads, with nothing in the code to object.
+
+The projects report already did this via `projectAccess`. Copy that shape.
+
 ## Traps that have already cost time
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it

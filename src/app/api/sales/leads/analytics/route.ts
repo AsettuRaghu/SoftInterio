@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { requestLogger } from "@/lib/logger/request";
+import { leadAccess } from "@/lib/leads/access";
 
 /**
  * Everything the sales report needs, computed in one place.
@@ -187,6 +188,24 @@ export async function GET(request: NextRequest) {
     });
     if (!guard.success) return createErrorResponse(guard.error!, guard.statusCode!);
 
+    /**
+     * A report is a different shape of the same data, so it answers to the same
+     * rule: `leads.view` is every lead in the tenant, `leads.view_own` is the
+     * ones assigned to you. RLS enforces neither - the policy on `leads` checks
+     * tenant membership and nothing else - so this has to be done here or it is
+     * not done.
+     *
+     * Today the three roles that hold `leads.reports` (Owner, Admin, Sales
+     * Manager) all hold `leads.view` too, so nothing changes for anyone. That
+     * is precisely why it was worth adding: the report was one grant away from
+     * showing a whole business's pipeline to somebody entitled to their own
+     * leads, and nothing in the code would have objected.
+     */
+    const access = leadAccess(guard.permissions, guard.user.isSuperAdmin);
+    if (access.denied) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
     const supabase = await createClient();
     const params = request.nextUrl.searchParams;
 
@@ -212,7 +231,9 @@ export async function GET(request: NextRequest) {
 
     // RLS scopes these to the caller's tenant. The four sets that grow without
     // bound are paged; the calendar is already bounded to seven days.
-    const [leads, history, quotations, { data: users }, tasks, { data: events }] =
+    // eslint-disable-next-line prefer-const -- history, quotations and tasks are
+    // narrowed below when the caller may only see their own leads.
+    let [leads, history, quotations, { data: users }, tasks, { data: events }] =
       await Promise.all([
         pageAll<LeadRow>((a, b) =>
           supabase
@@ -238,7 +259,9 @@ export async function GET(request: NextRequest) {
             .order("lead_id", { ascending: true })
             .range(a, b)
         ),
-        supabase.from("users").select("id, name"),
+        // The directory, not `users`: the policies on that table are own-row-only,
+        // so this returned one name and every other owner read "Unassigned".
+        supabase.from("tenant_directory").select("id, name"),
         pageAll<TaskRow>((a, b) =>
           supabase
             .from("tasks")
@@ -257,7 +280,26 @@ export async function GET(request: NextRequest) {
           .order("scheduled_at", { ascending: true }),
       ]);
 
-    const allLeads = leads;
+    /**
+     * Scope before anything is computed.
+     *
+     * Every figure on this page is derived from `allLeads`, so narrowing it
+     * here narrows the whole report - the funnel, the segments, the velocity
+     * and the attention lists all follow. The three sets that hang off leads by
+     * id are filtered against what survived, because a funnel built from
+     * colleagues' stage history would describe leads the caller cannot open.
+     */
+    const allLeads = access.readAll
+      ? leads
+      : leads.filter((l) => l.assigned_to === guard.user.id);
+
+    const visible = new Set(allLeads.map((l) => l.id));
+    if (!access.readAll) {
+      history = history.filter((h) => visible.has(h.lead_id));
+      quotations = quotations.filter((q) => q.lead_id && visible.has(q.lead_id));
+      tasks = tasks.filter((t) => t.related_id && visible.has(t.related_id));
+    }
+
     const userName = Object.fromEntries((users || []).map((u) => [u.id, u.name]));
 
     // Best quotation per lead, for valuing open pipeline.
@@ -536,7 +578,11 @@ export async function GET(request: NextRequest) {
     // Only events attached to a lead - an unlinked calendar entry is somebody's
     // personal reminder, not sales activity, and counting it would overstate
     // the week.
-    const salesEvents = (events || []).filter((e) => e.linked_type === "lead");
+    const salesEvents = (events || []).filter(
+      (e) =>
+        e.linked_type === "lead" &&
+        (access.readAll || (e.linked_id && visible.has(e.linked_id)))
+    );
 
     const weekAhead = {
       from: todayStart.toISOString(),
@@ -592,6 +638,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       range: { from: from.toISOString(), to: to.toISOString() },
+      scope: access.readAll ? "tenant" : "own",
       headline: {
         new_leads: createdInRange.length,
         won_leads: wonInRange.length,
