@@ -33,6 +33,7 @@ interface Analytics {
     avg_deal_size: number;
     win_rate: number;
     closed_in_range: number;
+    total_leads: number;
   };
   funnel: Array<{
     stage: string;
@@ -47,6 +48,15 @@ interface Analytics {
   by_owner: Array<{
     user_id: string; name: string; total: number; won: number; lost: number;
     open: number; won_value: number; pipeline_value: number; win_rate: number;
+  }>;
+  by_service: Array<{
+    service: string; total: number; won: number; lost: number; open: number;
+    won_value: number; pipeline_value: number; win_rate: number;
+  }>;
+  pipeline_by_stage: Array<{
+    stage: string; count: number; value: number; unvalued: number;
+    avg_days_in_stage: number; oldest_days: number;
+    oldest: { id: string; label: string; owner: string; days: number };
   }>;
   velocity: {
     avg_days_to_win: number;
@@ -279,8 +289,11 @@ function DownloadRow({
       </span>
     </>
   );
+  // Full width of the panel, because the panel is flush. The old rule pulled
+  // itself out of the padding with -mx-2 and stopped six pixels short of the
+  // border, so a hovered row looked like it was leaking out of its panel.
   const cls =
-    "group w-full flex items-center justify-between gap-3 py-2 px-2 -mx-2 rounded hover:bg-blue-50 text-left transition-colors";
+    "group w-full flex items-center justify-between gap-3 py-2 px-4 hover:bg-blue-50 text-left transition-colors";
   return href ? (
     <a href={href} className={cls}>
       {inner}
@@ -292,22 +305,174 @@ function DownloadRow({
   );
 }
 
+/**
+ * A panel.
+ *
+ * `flush` is for panels whose content is a list of rows: the rows carry their
+ * own `px-4` and run the full width, so a hover highlight meets the border
+ * instead of stopping just short of it. Padded panels are for everything that
+ * is a block rather than a list.
+ */
 function Panel({
   title,
   hint,
+  flush = false,
   children,
 }: {
   title: string;
   hint?: string;
+  flush?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-lg border border-slate-200 p-3.5">
-      <div className="flex items-baseline justify-between gap-3 mb-2.5">
+    <div className="bg-white rounded-lg border border-slate-200">
+      <div
+        className={`flex items-baseline justify-between gap-3 px-4 pt-3.5 ${
+          flush ? "pb-2" : "pb-3"
+        }`}
+      >
         <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
-        {hint && <span className="text-[11px] text-slate-400">{hint}</span>}
+        {hint && (
+          <span className="text-[11px] text-slate-400 text-right shrink-0">
+            {hint}
+          </span>
+        )}
+      </div>
+      <div className={flush ? "pb-2" : "px-4 pb-4"}>{children}</div>
+    </div>
+  );
+}
+
+/**
+ * A band of the report, with a heading that says what its figures cover.
+ *
+ * The page was one flat stack of eleven panels twelve pixels apart under a
+ * single date filter, which made two different claims impossible to tell
+ * apart: the filter drives the summary figures only, and everything below is
+ * computed over every lead on record. The headings now say which is which, and
+ * the extra room between bands is what makes them read as separate questions
+ * rather than adjacent borders.
+ */
+function Section({
+  title,
+  note,
+  children,
+}: {
+  title: string;
+  note?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="flex items-baseline gap-2.5 flex-wrap">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          {title}
+        </h2>
+        {note && <span className="text-[11px] text-slate-400">{note}</span>}
       </div>
       {children}
+    </section>
+  );
+}
+
+/** How worried to look about a lead that has not moved. */
+const ageTint = (days: number) =>
+  days >= 60
+    ? "text-red-600"
+    : days >= 30
+    ? "text-amber-600"
+    : "text-slate-400";
+
+/**
+ * A segment table - by source, by owner, by service.
+ *
+ * One component rather than three copies of the same thead/tbody, for the same
+ * reason the API computes all three through one reducer: the win rate column
+ * has to mean the same thing in each.
+ */
+function SegmentTable({
+  nameHeader,
+  rows,
+  wide = false,
+  empty,
+}: {
+  nameHeader: string;
+  rows: Array<{
+    key: string; label: string; total: number; open: number; won: number;
+    lost: number; win_rate: number; won_value: number; pipeline_value: number;
+  }>;
+  wide?: boolean;
+  empty: string;
+}) {
+  const columns = wide ? 7 : 5;
+  return (
+    <div className="overflow-x-auto">
+      <table className={`w-full text-sm ${wide ? "" : "min-w-[320px]"}`}>
+        <thead>
+          <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
+            <th className="py-2 pl-4 font-medium">{nameHeader}</th>
+            {wide && <th className="py-2 px-2 font-medium text-right">Leads</th>}
+            <th className="py-2 px-2 font-medium text-right">Open</th>
+            <th className="py-2 px-2 font-medium text-right">Won</th>
+            <th className="py-2 px-2 font-medium text-right">
+              {wide ? "Win rate" : "Rate"}
+            </th>
+            <th className="py-2 px-2 font-medium text-right">
+              {wide ? "Won value" : "Value"}
+            </th>
+            {wide && (
+              <th className="py-2 pr-4 pl-2 font-medium text-right">In pipeline</th>
+            )}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-50">
+          {!rows.length && (
+            <tr>
+              <td
+                colSpan={columns}
+                className="py-8 text-center text-sm text-slate-400"
+              >
+                {empty}
+              </td>
+            </tr>
+          )}
+          {rows.map((row) => (
+            <tr key={row.key} className="hover:bg-slate-50/70">
+              <td className="py-2 pl-4 text-slate-800 truncate max-w-[180px]">
+                {row.label}
+              </td>
+              {wide && (
+                <td className="py-2 px-2 text-right tabular-nums">{row.total}</td>
+              )}
+              <td className="py-2 px-2 text-right tabular-nums text-slate-500">
+                {row.open}
+              </td>
+              <td className="py-2 px-2 text-right tabular-nums">{row.won}</td>
+              <td className="py-2 px-2 text-right">
+                {row.won + row.lost ? (
+                  <span
+                    className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium tabular-nums ${rankTint(
+                      row.win_rate
+                    )}`}
+                  >
+                    {row.win_rate.toFixed(0)}%
+                  </span>
+                ) : (
+                  <span className="text-slate-300">—</span>
+                )}
+              </td>
+              <td className="py-2 px-2 text-right tabular-nums font-medium text-emerald-700">
+                {row.won_value ? money(row.won_value) : "—"}
+              </td>
+              {wide && (
+                <td className="py-2 pr-4 pl-2 text-right tabular-nums text-blue-700">
+                  {row.pipeline_value ? money(row.pipeline_value) : "—"}
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -347,6 +512,35 @@ export default function SalesReportsPage() {
   const h = data?.headline;
   const maxFunnel = data?.funnel?.[0]?.reached || 1;
 
+  /**
+   * The date range drives the summary figures and nothing else.
+   *
+   * Every other panel is computed over every lead on record - the funnel needs
+   * the whole history to be a funnel, the source table would turn to noise on
+   * a fortnight's leads, and what needs chasing is a question about today. That
+   * was true before and the page did not say so, which left a reader assuming
+   * the whole report moved when they changed the range.
+   */
+  const periodLabel = {
+    "30d": "The last 30 days",
+    "90d": "The last 90 days",
+    ytd: "Year to date",
+    all: "All time",
+  }[preset];
+
+  const allTime = `All ${h?.total_leads ?? 0} leads on record`;
+
+  // A period with no intake and nothing closed is not a broken report, but a
+  // page of zeroes reads like one. This tenant's leads all arrived in one
+  // month, so the ninety-day default lands on exactly this case.
+  const emptyPeriod =
+    !!h && preset !== "all" && h.total_leads > 0 && !h.new_leads && !h.closed_in_range;
+
+  const stageRows = data?.pipeline_by_stage ?? [];
+  const maxStageValue = Math.max(1, ...stageRows.map((r) => r.value));
+  const trend = data?.trend ?? [];
+  const maxCreated = Math.max(1, ...trend.map((t) => t.created));
+
   return (
     <PageLayout isLoading={isLoading && !data} loadingText="Loading reports...">
       <PageHeader
@@ -365,7 +559,7 @@ export default function SalesReportsPage() {
         }
       />
 
-      <div className="p-4 space-y-3">
+      <div className="p-5 space-y-7">
         {error && (
           <div className="flex items-center justify-between gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
             <p className="text-sm text-red-700">{error}</p>
@@ -378,517 +572,626 @@ export default function SalesReportsPage() {
           </div>
         )}
 
-        {/* The range applies to intake and revenue, not to the whole page -
-            pipeline and what needs attention are always "right now". */}
-        <div className="flex items-center gap-1.5">
-          {PRESETS.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => setPreset(p.key)}
-              disabled={isLoading}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-60 ${
-                preset === p.key
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-
-        {/* A refetch keeps the previous figures on screen, which is better than
-            a blank page - but they belong to the old range until the new ones
-            land, so they are dimmed rather than presented as current. */}
         <div className={isLoading && data ? "opacity-50 transition-opacity" : ""}>
-        {h && (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            <Metric
-              label="Open pipeline"
-              value={money(h.pipeline_value)}
-              hint={
-                h.unvalued_open_leads
-                  ? `${h.open_leads} open · ${h.unvalued_open_leads} unvalued`
-                  : `${h.open_leads} open leads`
+          <div className="space-y-7">
+            <Section
+              title={periodLabel}
+              note={
+                data
+                  ? `${new Date(data.range.from).toLocaleDateString()} – ${new Date(
+                      data.range.to
+                    ).toLocaleDateString()}`
+                  : undefined
               }
-              hintTone={h.unvalued_open_leads ? "warn" : "muted"}
-              tone="blue"
-              icon={<Icon d={ICONS.pipeline} />}
-            />
-            <Metric
-              label="Won in period"
-              value={money(h.won_value)}
-              hint={`${h.won_leads} deal${h.won_leads === 1 ? "" : "s"} closed`}
-              hintTone="good"
-              tone="emerald"
-              icon={<Icon d={ICONS.money} />}
-            />
-            <Metric
-              label="Win rate"
-              value={`${h.win_rate.toFixed(0)}%`}
-              hint={`${h.won_leads} of ${h.closed_in_range} closed`}
-              tone="violet"
-              icon={<Icon d={ICONS.target} />}
-            />
-            <Metric
-              label="Average deal"
-              value={money(h.avg_deal_size)}
-              hint="Won in period"
-              tone="amber"
-              icon={<Icon d={ICONS.deal} />}
-            />
-            <Metric
-              label="New leads"
-              value={String(h.new_leads)}
-              hint="Created in period"
-              tone="slate"
-              icon={<Icon d={ICONS.people} />}
-            />
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-          {/* Funnel from stage history: a won lead passed through qualified, so
-              counting where leads sit today understates every earlier stage. */}
-          <Panel title="Funnel" hint="Leads that ever reached each stage">
-            <div className="space-y-2">
-              {data?.funnel.map((step, i) => (
-                <div key={step.stage}>
-                  <div className="flex items-baseline justify-between text-sm">
-                    <span className="text-slate-700">
-                      {LeadStageLabels[step.stage as keyof typeof LeadStageLabels] ||
-                        humanise(step.stage)}
-                    </span>
-                    <span className="tabular-nums text-slate-900 font-medium">
-                      {step.reached}
-                      {i > 0 && (
-                        <span
-                          className={`ml-2 text-xs font-normal ${
-                            step.conversion_from_previous >= 60
-                              ? "text-emerald-600"
-                              : step.conversion_from_previous >= 30
-                              ? "text-amber-600"
-                              : "text-orange-600"
-                          }`}
-                        >
-                          {step.conversion_from_previous.toFixed(0)}%
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  <div className="mt-1 h-2 bg-slate-100 rounded overflow-hidden">
-                    <div
-                      className={`h-2 rounded ${
-                        STAGE_TINT[step.stage]?.bar || "bg-slate-400"
-                      }`}
-                      style={{
-                        width: `${Math.max((step.reached / maxFunnel) * 100, 2)}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Panel>
-
-          <Panel
-            title="How long it takes"
-            hint={`${data?.velocity.won_sample || 0} won`}
-          >
-            <div className="flex gap-6 mb-3">
-              <div>
-                <p className="text-2xl font-semibold text-slate-900 tabular-nums">
-                  {Math.round(data?.velocity.median_days_to_win || 0)}
-                </p>
-                <p className="text-[11px] text-slate-400">
-                  median days to win
-                </p>
-              </div>
-              <div>
-                <p className="text-2xl font-semibold text-slate-400 tabular-nums">
-                  {Math.round(data?.velocity.avg_days_to_win || 0)}
-                </p>
-                <p className="text-[11px] text-slate-400">average</p>
-              </div>
-            </div>
-            {data?.velocity.stages.length ? (
-              <div className="space-y-1.5 pt-3 border-t border-slate-100">
-                {data.velocity.stages.map((s) => (
-                  <div
-                    key={s.stage}
-                    className="flex items-baseline justify-between text-sm"
+            >
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p.key}
+                    onClick={() => setPreset(p.key)}
+                    disabled={isLoading}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-60 ${
+                      preset === p.key
+                        ? "bg-blue-600 text-white"
+                        : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                    }`}
                   >
-                    <span className="text-slate-600">
-                      {LeadStageLabels[s.stage as keyof typeof LeadStageLabels] ||
-                        humanise(s.stage)}
-                    </span>
-                    <span className="tabular-nums text-slate-700">
-                      {s.avg_days.toFixed(1)} days
-                    </span>
-                  </div>
+                    {p.label}
+                  </button>
                 ))}
               </div>
-            ) : (
-              <p className="text-sm text-slate-400">
-                Not enough stage history yet.
-              </p>
-            )}
-          </Panel>
 
-          <Panel title="Why we lose" hint="Lost and disqualified">
-            {data?.loss_reasons.length ? (
-              <div className="space-y-1.5">
-                {data.loss_reasons.map((r) => {
-                  const top = data.loss_reasons[0].count || 1;
-                  return (
-                    <div key={r.reason}>
-                      <div className="flex items-baseline justify-between text-sm">
-                        <span className="text-slate-700">
-                          {humanise(r.reason)}
-                        </span>
-                        <span className="tabular-nums text-slate-900">
-                          {r.count}
-                        </span>
-                      </div>
-                      <div className="mt-1 h-1.5 bg-slate-100 rounded">
-                        <div
-                          className="h-1.5 bg-red-400 rounded"
-                          style={{ width: `${(r.count / top) * 100}%` }}
-                        />
-                      </div>
+              {emptyPeriod && (
+                <div className="flex items-start justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+                  <p className="text-sm text-blue-900">
+                    No leads were created or closed in this period. The figures
+                    below the summary cover every lead on record, so they are
+                    still worth reading.
+                  </p>
+                  <button
+                    onClick={() => setPreset("all")}
+                    className="shrink-0 px-3 py-1.5 text-xs font-medium text-blue-700 bg-white border border-blue-300 rounded-md hover:bg-blue-100"
+                  >
+                    Show all time
+                  </button>
+                </div>
+              )}
+
+              {h && (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                  <Metric
+                    label="Open pipeline"
+                    value={money(h.pipeline_value)}
+                    hint={
+                      h.unvalued_open_leads
+                        ? `${h.open_leads} open · ${h.unvalued_open_leads} unvalued`
+                        : `${h.open_leads} open leads`
+                    }
+                    hintTone={h.unvalued_open_leads ? "warn" : "muted"}
+                    tone="blue"
+                    icon={<Icon d={ICONS.pipeline} />}
+                  />
+                  <Metric
+                    label="Won in period"
+                    value={money(h.won_value)}
+                    hint={`${h.won_leads} deal${h.won_leads === 1 ? "" : "s"} closed`}
+                    hintTone="good"
+                    tone="emerald"
+                    icon={<Icon d={ICONS.money} />}
+                  />
+                  <Metric
+                    label="Win rate"
+                    value={`${h.win_rate.toFixed(0)}%`}
+                    hint={`${h.won_leads} of ${h.closed_in_range} closed`}
+                    tone="violet"
+                    icon={<Icon d={ICONS.target} />}
+                  />
+                  <Metric
+                    label="Average deal"
+                    value={money(h.avg_deal_size)}
+                    hint="Won in period"
+                    tone="amber"
+                    icon={<Icon d={ICONS.deal} />}
+                  />
+                  <Metric
+                    label="New leads"
+                    value={String(h.new_leads)}
+                    hint="Created in period"
+                    tone="slate"
+                    icon={<Icon d={ICONS.people} />}
+                  />
+                </div>
+              )}
+            </Section>
+
+            <Section
+              title="The pipeline"
+              note="Open work and full history — not limited to the period above"
+            >
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* The question a sales review opens with, and the one this
+                    page could not answer: not how many leads reached a stage,
+                    but which ones are sitting in one now, for how long, and
+                    what they are worth. */}
+                <Panel
+                  title="Where the pipeline is sitting"
+                  hint="Open leads, by current stage"
+                >
+                  {stageRows.length ? (
+                    <div className="space-y-3.5">
+                      {stageRows.map((row) => (
+                        <div key={row.stage}>
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-sm text-slate-700">
+                              {LeadStageLabels[
+                                row.stage as keyof typeof LeadStageLabels
+                              ] || humanise(row.stage)}
+                            </span>
+                            <span className="text-sm font-semibold tabular-nums text-slate-900">
+                              {row.value ? money(row.value) : "—"}
+                            </span>
+                          </div>
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <div className="flex-1 h-2 bg-slate-100 rounded overflow-hidden">
+                              <div
+                                className={`h-2 rounded ${
+                                  STAGE_TINT[row.stage]?.bar || "bg-slate-400"
+                                }`}
+                                style={{
+                                  width: `${Math.max(
+                                    (row.value / maxStageValue) * 100,
+                                    2
+                                  )}%`,
+                                }}
+                              />
+                            </div>
+                            <span className="shrink-0 text-[11px] text-slate-400 tabular-nums">
+                              {row.count} lead{row.count === 1 ? "" : "s"}
+                            </span>
+                          </div>
+                          <Link
+                            href={`/dashboard/sales/leads/${row.oldest.id}`}
+                            className="mt-1 flex items-baseline justify-between gap-2 text-[11px] hover:bg-slate-50 rounded px-1 -mx-1 py-0.5"
+                          >
+                            <span className="truncate text-slate-500">
+                              Longest here: {row.oldest.label}
+                              <span className="text-slate-400">
+                                {" "}
+                                · {row.oldest.owner}
+                              </span>
+                            </span>
+                            <span
+                              className={`shrink-0 tabular-nums font-medium ${ageTint(
+                                row.oldest.days
+                              )}`}
+                            >
+                              {row.oldest.days}d
+                            </span>
+                          </Link>
+                          {row.unvalued > 0 && (
+                            <p className="mt-0.5 text-[11px] text-amber-600">
+                              {row.unvalued} with no quotation or budget yet
+                            </p>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-sm text-slate-400">Nothing lost yet.</p>
-            )}
-          </Panel>
-        </div>
+                  ) : (
+                    <p className="text-sm text-slate-400">
+                      Nothing open — every lead has closed.
+                    </p>
+                  )}
+                </Panel>
 
-        {/* The most consequential table on the page: it decides where the next
-            marketing rupee goes. */}
-        <Panel title="Where leads come from" hint="Win rate is won ÷ closed">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
-                  <th className="py-1.5 font-medium">Source</th>
-                  <th className="py-1.5 font-medium text-right">Leads</th>
-                  <th className="py-1.5 font-medium text-right">Open</th>
-                  <th className="py-1.5 font-medium text-right">Won</th>
-                  <th className="py-1.5 font-medium text-right">Win rate</th>
-                  <th className="py-1.5 font-medium text-right">Won value</th>
-                  <th className="py-1.5 font-medium text-right">In pipeline</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {!data?.by_source.length && (
-                  <tr>
-                    <td colSpan={7} className="py-6 text-center text-sm text-slate-400">
-                      No leads in this period yet.
-                    </td>
-                  </tr>
-                )}
-                {data?.by_source.map((row) => (
-                  <tr key={row.source}>
-                    <td className="py-1.5 text-slate-800">{humanise(row.source)}</td>
-                    <td className="py-1.5 text-right tabular-nums">{row.total}</td>
-                    <td className="py-1.5 text-right tabular-nums text-slate-500">
-                      {row.open}
-                    </td>
-                    <td className="py-1.5 text-right tabular-nums">{row.won}</td>
-                    <td className="py-1.5 text-right">
-                      {row.won + row.lost ? (
-                        <span
-                          className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium tabular-nums ${rankTint(
-                            row.win_rate
-                          )}`}
-                        >
-                          {row.win_rate.toFixed(0)}%
-                        </span>
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
-                    </td>
-                    <td className="py-1.5 text-right tabular-nums font-medium text-emerald-700">
-                      {row.won_value ? money(row.won_value) : "—"}
-                    </td>
-                    <td className="py-1.5 text-right tabular-nums text-blue-700">
-                      {row.pipeline_value ? money(row.pipeline_value) : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Panel>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          <Panel title="By owner" hint="Win rate is won ÷ closed">
-            {/* Five columns in half a row: narrow enough on a laptop, tight on
-                a phone, so it scrolls rather than squashing the numbers. */}
-            <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[320px]">
-              <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
-                  <th className="py-1.5 font-medium">Owner</th>
-                  <th className="py-1.5 font-medium text-right">Open</th>
-                  <th className="py-1.5 font-medium text-right">Won</th>
-                  <th className="py-1.5 font-medium text-right">Rate</th>
-                  <th className="py-1.5 font-medium text-right">Value</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {!data?.by_owner.length && (
-                  <tr>
-                    <td colSpan={5} className="py-6 text-center text-sm text-slate-400">
-                      No leads assigned yet.
-                    </td>
-                  </tr>
-                )}
-                {data?.by_owner.map((row) => (
-                  <tr key={row.user_id}>
-                    <td className="py-1.5 text-slate-800 truncate max-w-[140px]">
-                      {row.name}
-                    </td>
-                    <td className="py-1.5 text-right tabular-nums text-slate-500">
-                      {row.open}
-                    </td>
-                    <td className="py-1.5 text-right tabular-nums">{row.won}</td>
-                    <td className="py-1.5 text-right">
-                      {row.won + row.lost ? (
-                        <span
-                          className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium tabular-nums ${rankTint(
-                            row.win_rate
-                          )}`}
-                        >
-                          {row.win_rate.toFixed(0)}%
-                        </span>
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
-                    </td>
-                    <td className="py-1.5 text-right tabular-nums font-medium text-emerald-700">
-                      {row.won_value ? money(row.won_value) : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-          </Panel>
-
-        <Panel title="Download" hint="Opens in Excel or Sheets">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5">
-              <div>
-                <DownloadRow
-                  label="All leads"
-                  hint="Every lead with source, owner, age and value"
-                  href="/api/sales/leads/export"
-                />
-                <DownloadRow
-                  label="Open pipeline"
-                  hint="Leads still in play"
-                  href="/api/sales/leads/export?report=pipeline"
-                />
-                <DownloadRow
-                  label="Won deals"
-                  hint="Closed won, with amounts"
-                  href="/api/sales/leads/export?report=won"
-                />
-              </div>
-              <div>
-                <DownloadRow
-                  label="Lost and disqualified"
-                  hint="With the reason recorded"
-                  href="/api/sales/leads/export?report=lost"
-                />
-                <DownloadRow
-                  label="Source performance"
-                  hint="The table above, as shown"
-                  onClick={() =>
-                    data &&
-                    downloadCsv(
-                      "sales-by-source",
-                      ["Source", "Leads", "Open", "Won", "Lost", "Win rate %", "Won value", "Pipeline value"],
-                      data.by_source.map((r) => [
-                        humanise(r.source), r.total, r.open, r.won, r.lost,
-                        r.win_rate.toFixed(1), r.won_value, r.pipeline_value,
-                      ])
-                    )
-                  }
-                />
-                <DownloadRow
-                  label="Owner performance"
-                  hint="The table above, as shown"
-                  onClick={() =>
-                    data &&
-                    downloadCsv(
-                      "sales-by-owner",
-                      ["Owner", "Leads", "Open", "Won", "Lost", "Win rate %", "Won value", "Pipeline value"],
-                      data.by_owner.map((r) => [
-                        r.name, r.total, r.open, r.won, r.lost,
-                        r.win_rate.toFixed(1), r.won_value, r.pipeline_value,
-                      ])
-                    )
-                  }
-                />
-              </div>
-            </div>
-          </Panel>
-        </div>
-
-
-        {/* Forward-looking, and deliberately counts rather than a list. */}
-        {data?.week_ahead && (
-          <Panel
-            title="Week ahead"
-            hint={`${new Date(data.week_ahead.from).toLocaleDateString(undefined, {
-              day: "numeric", month: "short",
-            })} – ${new Date(data.week_ahead.to).toLocaleDateString(undefined, {
-              day: "numeric", month: "short",
-            })}`}
-          >
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6">
-              <div className="divide-y divide-slate-50">
-                <CoverageRow
-                  label="Meetings & visits"
-                  count={data.week_ahead.events.count}
-                  byOwner={data.week_ahead.events.by_owner}
-                  tone="text-blue-700"
-                />
-                <CoverageRow
-                  label="Follow-ups due"
-                  count={data.week_ahead.follow_ups.count}
-                  byOwner={data.week_ahead.follow_ups.by_owner}
-                  tone="text-violet-700"
-                />
-                <CoverageRow
-                  label="Tasks due"
-                  count={data.week_ahead.tasks.count}
-                  byOwner={data.week_ahead.tasks.by_owner}
-                  tone="text-slate-800"
-                />
-              </div>
-
-              <div className="mt-3 lg:mt-0 space-y-1.5">
-                {data.week_ahead.warnings.overdue_tasks > 0 && (
-                  <div className="flex items-center gap-2 px-2.5 py-1.5 bg-red-50 border border-red-100 rounded text-xs text-red-700">
-                    <span className="font-semibold tabular-nums">
-                      {data.week_ahead.warnings.overdue_tasks}
-                    </span>
-                    <span>task(s) already overdue</span>
-                  </div>
-                )}
-                {/* The real finding: a "due this week" count means little while
-                    most open work carries no date at all. */}
-                {data.week_ahead.warnings.undated_tasks > 0 && (
-                  <div className="flex items-center gap-2 px-2.5 py-1.5 bg-amber-50 border border-amber-100 rounded text-xs text-amber-800">
-                    <span className="font-semibold tabular-nums">
-                      {data.week_ahead.warnings.undated_tasks}
-                    </span>
-                    <span>
-                      of {data.week_ahead.warnings.open_tasks} open tasks have no
-                      due date, so they cannot appear above
-                    </span>
-                  </div>
-                )}
-                {data.week_ahead.warnings.unlinked_events > 0 && (
-                  <div className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-50 border border-slate-100 rounded text-xs text-slate-600">
-                    <span className="font-semibold tabular-nums">
-                      {data.week_ahead.warnings.unlinked_events}
-                    </span>
-                    <span>calendar event(s) not linked to a lead</span>
-                  </div>
-                )}
-                {data.week_ahead.events.items.length > 0 && (
-                  <div className="pt-1">
-                    {data.week_ahead.events.items.map((e) => (
-                      <div
-                        key={e.id}
-                        className="flex items-baseline justify-between gap-3 py-1 text-xs"
-                      >
-                        <span className="truncate text-slate-600">{e.title}</span>
-                        <span className="shrink-0 text-slate-400">
-                          {new Date(e.at).toLocaleDateString(undefined, {
-                            weekday: "short", day: "numeric",
-                          })}
-                        </span>
+                {/* Funnel from stage history: a won lead passed through
+                    qualified, so counting where leads sit today understates
+                    every earlier stage. */}
+                <Panel title="Funnel" hint="Leads that ever reached each stage">
+                  <div className="space-y-2.5">
+                    {data?.funnel.map((step, i) => (
+                      <div key={step.stage}>
+                        <div className="flex items-baseline justify-between text-sm">
+                          <span className="text-slate-700">
+                            {LeadStageLabels[
+                              step.stage as keyof typeof LeadStageLabels
+                            ] || humanise(step.stage)}
+                          </span>
+                          <span className="tabular-nums text-slate-900 font-medium">
+                            {step.reached}
+                            {i > 0 && (
+                              <span
+                                className={`ml-2 text-xs font-normal ${
+                                  step.conversion_from_previous >= 60
+                                    ? "text-emerald-600"
+                                    : step.conversion_from_previous >= 30
+                                    ? "text-amber-600"
+                                    : "text-orange-600"
+                                }`}
+                              >
+                                {step.conversion_from_previous.toFixed(0)}%
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="mt-1 h-2 bg-slate-100 rounded overflow-hidden">
+                          <div
+                            className={`h-2 rounded ${
+                              STAGE_TINT[step.stage]?.bar || "bg-slate-400"
+                            }`}
+                            style={{
+                              width: `${Math.max(
+                                (step.reached / maxFunnel) * 100,
+                                2
+                              )}%`,
+                            }}
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
-                )}
-              </div>
-            </div>
-          </Panel>
-        )}
+                </Panel>
 
-        {/* Deliberately last and deliberately clickable - this is the part
-            somebody is meant to act on today. */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          <Panel
-            title="Gone quiet"
-            hint="Open, no activity for 14 days"
-          >
-            {data?.attention.stale.length ? (
-              <div className="divide-y divide-slate-50">
-                {data.attention.stale.slice(0, 10).map((l) => (
-                  <Link
-                    key={l.id}
-                    href={`/dashboard/sales/leads/${l.id}`}
-                    className="flex items-baseline justify-between gap-3 py-1.5 text-sm hover:bg-slate-50 -mx-2 px-2 rounded"
-                  >
-                    <span className="truncate text-slate-800">
-                      {l.client || l.lead_number || "Lead"}
-                      <span className="ml-2 text-xs text-slate-400">
-                        {l.owner}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-xs text-amber-600 tabular-nums">
-                      {l.days_quiet}d
-                    </span>
-                  </Link>
-                ))}
-                {data.attention.stale.length > 10 && (
-                  <p className="pt-2 text-xs text-slate-400">
-                    and {data.attention.stale.length - 10} more
-                  </p>
-                )}
+                <Panel
+                  title="How long it takes"
+                  hint={`${data?.velocity.won_sample || 0} won`}
+                >
+                  <div className="flex gap-8 mb-3.5">
+                    <div>
+                      <p className="text-2xl font-semibold text-slate-900 tabular-nums">
+                        {Math.round(data?.velocity.median_days_to_win || 0)}
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        median days to win
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-semibold text-slate-400 tabular-nums">
+                        {Math.round(data?.velocity.avg_days_to_win || 0)}
+                      </p>
+                      <p className="text-[11px] text-slate-400">average</p>
+                    </div>
+                  </div>
+                  {data?.velocity.stages.length ? (
+                    <div className="space-y-2 pt-3.5 border-t border-slate-100">
+                      {data.velocity.stages.map((s) => (
+                        <div
+                          key={s.stage}
+                          className="flex items-baseline justify-between text-sm"
+                        >
+                          <span className="text-slate-600">
+                            {LeadStageLabels[
+                              s.stage as keyof typeof LeadStageLabels
+                            ] || humanise(s.stage)}
+                          </span>
+                          <span className="tabular-nums text-slate-700">
+                            {s.avg_days.toFixed(1)} days
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-400">
+                      Not enough stage history yet.
+                    </p>
+                  )}
+                </Panel>
               </div>
-            ) : (
-              <p className="text-sm text-slate-400">
-                Every open lead has been touched recently.
-              </p>
-            )}
-          </Panel>
+            </Section>
 
-          <Panel title="Follow-ups overdue" hint="Scheduled, not yet done">
-            {data?.attention.overdue_follow_ups.length ? (
-              <div className="divide-y divide-slate-50">
-                {data.attention.overdue_follow_ups.slice(0, 10).map((l) => (
-                  <Link
-                    key={l.id}
-                    href={`/dashboard/sales/leads/${l.id}`}
-                    className="flex items-baseline justify-between gap-3 py-1.5 text-sm hover:bg-slate-50 -mx-2 px-2 rounded"
-                  >
-                    <span className="truncate text-slate-800">
-                      {l.client || l.lead_number || "Lead"}
-                      <span className="ml-2 text-xs text-slate-400">
-                        {l.owner}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-xs text-red-600">
-                      {l.due ? new Date(l.due).toLocaleDateString() : ""}
-                    </span>
-                  </Link>
-                ))}
+            <Section title="What works" note={allTime}>
+              {/* The most consequential table on the page: it decides where the
+                  next marketing rupee goes. */}
+              <Panel
+                title="Where leads come from"
+                hint="Win rate is won ÷ closed"
+                flush
+              >
+                <SegmentTable
+                  nameHeader="Source"
+                  wide
+                  empty="No leads recorded yet."
+                  rows={(data?.by_source ?? []).map((r) => ({
+                    ...r,
+                    key: r.source,
+                    label: humanise(r.source),
+                  }))}
+                />
+              </Panel>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* service_type has been collected on every lead since the
+                    module was built and reported nowhere. Source says where to
+                    advertise; this says which kind of work to chase. */}
+                <Panel
+                  title="What we sell"
+                  hint="Win rate is won ÷ closed"
+                  flush
+                >
+                  <SegmentTable
+                    nameHeader="Service"
+                    empty="No service type recorded yet."
+                    rows={(data?.by_service ?? []).map((r) => ({
+                      ...r,
+                      key: r.service,
+                      label: humanise(r.service),
+                    }))}
+                  />
+                </Panel>
+
+                <Panel title="By owner" hint="Win rate is won ÷ closed" flush>
+                  <SegmentTable
+                    nameHeader="Owner"
+                    empty="No leads assigned yet."
+                    rows={(data?.by_owner ?? []).map((r) => ({
+                      ...r,
+                      key: r.user_id,
+                      label: r.name,
+                    }))}
+                  />
+                </Panel>
               </div>
-            ) : (
-              <p className="text-sm text-slate-400">Nothing overdue.</p>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Computed by the API since it was written and never drawn.
+                    Two months is a thin series, which is why it is a strip of
+                    bars rather than a chart pretending to a trend. */}
+                <Panel title="Month by month" hint="Created, and won">
+                  {trend.length ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3 text-[11px] text-slate-400">
+                        <span className="w-16" />
+                        <span className="flex-1">Leads created</span>
+                        <span className="w-8 text-right">New</span>
+                        <span className="w-24 text-right">Won</span>
+                      </div>
+                      {trend.map((m) => (
+                        <div key={m.month} className="flex items-center gap-3">
+                          <span className="w-16 shrink-0 text-[11px] text-slate-500">
+                            {new Date(`${m.month}-01`).toLocaleDateString(
+                              undefined,
+                              { month: "short", year: "2-digit" }
+                            )}
+                          </span>
+                          <div className="flex-1 h-2 bg-slate-100 rounded overflow-hidden">
+                            <div
+                              className="h-2 rounded bg-blue-400"
+                              style={{
+                                width: `${Math.max(
+                                  (m.created / maxCreated) * 100,
+                                  2
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="w-8 shrink-0 text-right text-xs tabular-nums text-slate-700">
+                            {m.created}
+                          </span>
+                          <span className="w-24 shrink-0 text-right text-xs tabular-nums text-emerald-700">
+                            {m.won
+                              ? `${m.won} · ${money(m.won_value)}`
+                              : "—"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-400">
+                      No leads recorded yet.
+                    </p>
+                  )}
+                </Panel>
+
+                <Panel title="Why we lose" hint="Lost and disqualified">
+                  {data?.loss_reasons.length ? (
+                    <div className="space-y-2.5">
+                      {data.loss_reasons.map((r) => {
+                        const top = data.loss_reasons[0].count || 1;
+                        return (
+                          <div key={r.reason}>
+                            <div className="flex items-baseline justify-between text-sm">
+                              <span className="text-slate-700">
+                                {humanise(r.reason)}
+                              </span>
+                              <span className="tabular-nums text-slate-900">
+                                {r.count}
+                              </span>
+                            </div>
+                            <div className="mt-1 h-1.5 bg-slate-100 rounded overflow-hidden">
+                              <div
+                                className="h-1.5 bg-red-400 rounded"
+                                style={{ width: `${(r.count / top) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-400">Nothing lost yet.</p>
+                  )}
+                </Panel>
+              </div>
+            </Section>
+
+            {/* Forward-looking, and deliberately counts rather than a list. */}
+            {data?.week_ahead && (
+              <Section
+                title="The week ahead"
+                note={`${new Date(data.week_ahead.from).toLocaleDateString(
+                  undefined,
+                  { day: "numeric", month: "short" }
+                )} – ${new Date(data.week_ahead.to).toLocaleDateString(undefined, {
+                  day: "numeric",
+                  month: "short",
+                })}`}
+              >
+                <Panel title="Coverage" hint="Who is booked, and what has no date">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
+                    <div className="divide-y divide-slate-100">
+                      <CoverageRow
+                        label="Meetings & visits"
+                        count={data.week_ahead.events.count}
+                        byOwner={data.week_ahead.events.by_owner}
+                        tone="text-blue-700"
+                      />
+                      <CoverageRow
+                        label="Follow-ups due"
+                        count={data.week_ahead.follow_ups.count}
+                        byOwner={data.week_ahead.follow_ups.by_owner}
+                        tone="text-violet-700"
+                      />
+                      <CoverageRow
+                        label="Tasks due"
+                        count={data.week_ahead.tasks.count}
+                        byOwner={data.week_ahead.tasks.by_owner}
+                        tone="text-slate-800"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      {data.week_ahead.warnings.overdue_tasks > 0 && (
+                        <div className="flex items-center gap-2 px-2.5 py-1.5 bg-red-50 border border-red-100 rounded text-xs text-red-700">
+                          <span className="font-semibold tabular-nums">
+                            {data.week_ahead.warnings.overdue_tasks}
+                          </span>
+                          <span>task(s) already overdue</span>
+                        </div>
+                      )}
+                      {/* The real finding: a "due this week" count means little
+                          while most open work carries no date at all. */}
+                      {data.week_ahead.warnings.undated_tasks > 0 && (
+                        <div className="flex items-center gap-2 px-2.5 py-1.5 bg-amber-50 border border-amber-100 rounded text-xs text-amber-800">
+                          <span className="font-semibold tabular-nums">
+                            {data.week_ahead.warnings.undated_tasks}
+                          </span>
+                          <span>
+                            of {data.week_ahead.warnings.open_tasks} open tasks
+                            have no due date, so they cannot appear beside
+                          </span>
+                        </div>
+                      )}
+                      {data.week_ahead.warnings.unlinked_events > 0 && (
+                        <div className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-50 border border-slate-100 rounded text-xs text-slate-600">
+                          <span className="font-semibold tabular-nums">
+                            {data.week_ahead.warnings.unlinked_events}
+                          </span>
+                          <span>calendar event(s) not linked to a lead</span>
+                        </div>
+                      )}
+                      {data.week_ahead.events.items.length > 0 && (
+                        <div className="pt-1">
+                          {data.week_ahead.events.items.map((e) => (
+                            <div
+                              key={e.id}
+                              className="flex items-baseline justify-between gap-3 py-1 text-xs"
+                            >
+                              <span className="truncate text-slate-600">
+                                {e.title}
+                              </span>
+                              <span className="shrink-0 text-slate-400">
+                                {new Date(e.at).toLocaleDateString(undefined, {
+                                  weekday: "short",
+                                  day: "numeric",
+                                })}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </Panel>
+              </Section>
             )}
-          </Panel>
-        </div>
+
+            {/* Deliberately last and deliberately clickable - this is the part
+                somebody is meant to act on today. */}
+            <Section title="Act on today" note="Open leads only">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <Panel title="Gone quiet" hint="Open, no activity for 14 days" flush>
+                  {data?.attention.stale.length ? (
+                    <div className="divide-y divide-slate-100">
+                      {data.attention.stale.slice(0, 10).map((l) => (
+                        <Link
+                          key={l.id}
+                          href={`/dashboard/sales/leads/${l.id}`}
+                          className="flex items-baseline justify-between gap-3 px-4 py-2 text-sm hover:bg-slate-50"
+                        >
+                          <span className="truncate text-slate-800">
+                            {l.client || l.lead_number || "Lead"}
+                            <span className="ml-2 text-xs text-slate-400">
+                              {l.owner}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-xs text-amber-600 tabular-nums">
+                            {l.days_quiet}d
+                          </span>
+                        </Link>
+                      ))}
+                      {data.attention.stale.length > 10 && (
+                        <p className="px-4 py-2 text-xs text-slate-400">
+                          and {data.attention.stale.length - 10} more
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="px-4 pb-2 text-sm text-slate-400">
+                      Every open lead has been touched recently.
+                    </p>
+                  )}
+                </Panel>
+
+                <Panel title="Follow-ups overdue" hint="Scheduled, not yet done" flush>
+                  {data?.attention.overdue_follow_ups.length ? (
+                    <div className="divide-y divide-slate-100">
+                      {data.attention.overdue_follow_ups.slice(0, 10).map((l) => (
+                        <Link
+                          key={l.id}
+                          href={`/dashboard/sales/leads/${l.id}`}
+                          className="flex items-baseline justify-between gap-3 px-4 py-2 text-sm hover:bg-slate-50"
+                        >
+                          <span className="truncate text-slate-800">
+                            {l.client || l.lead_number || "Lead"}
+                            <span className="ml-2 text-xs text-slate-400">
+                              {l.owner}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-xs text-red-600">
+                            {l.due ? new Date(l.due).toLocaleDateString() : ""}
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="px-4 pb-2 text-sm text-slate-400">
+                      Nothing overdue.
+                    </p>
+                  )}
+                </Panel>
+              </div>
+            </Section>
+
+            <Section title="Download" note="Opens in Excel or Sheets">
+              <Panel title="Spreadsheets" hint="Aggregates export as shown" flush>
+                <div className="grid grid-cols-1 sm:grid-cols-2">
+                  <div>
+                    <DownloadRow
+                      label="All leads"
+                      hint="Every lead with source, owner, age and value"
+                      href="/api/sales/leads/export"
+                    />
+                    <DownloadRow
+                      label="Open pipeline"
+                      hint="Leads still in play"
+                      href="/api/sales/leads/export?report=pipeline"
+                    />
+                    <DownloadRow
+                      label="Won deals"
+                      hint="Closed won, with amounts"
+                      href="/api/sales/leads/export?report=won"
+                    />
+                  </div>
+                  <div>
+                    <DownloadRow
+                      label="Lost and disqualified"
+                      hint="With the reason recorded"
+                      href="/api/sales/leads/export?report=lost"
+                    />
+                    <DownloadRow
+                      label="Source performance"
+                      hint="The source table, as shown"
+                      onClick={() =>
+                        data &&
+                        downloadCsv(
+                          "sales-by-source",
+                          ["Source", "Leads", "Open", "Won", "Lost", "Win rate %", "Won value", "Pipeline value"],
+                          data.by_source.map((r) => [
+                            humanise(r.source), r.total, r.open, r.won, r.lost,
+                            r.win_rate.toFixed(1), r.won_value, r.pipeline_value,
+                          ])
+                        )
+                      }
+                    />
+                    <DownloadRow
+                      label="Owner performance"
+                      hint="The owner table, as shown"
+                      onClick={() =>
+                        data &&
+                        downloadCsv(
+                          "sales-by-owner",
+                          ["Owner", "Leads", "Open", "Won", "Lost", "Win rate %", "Won value", "Pipeline value"],
+                          data.by_owner.map((r) => [
+                            r.name, r.total, r.open, r.won, r.lost,
+                            r.win_rate.toFixed(1), r.won_value, r.pipeline_value,
+                          ])
+                        )
+                      }
+                    />
+                  </div>
+                </div>
+              </Panel>
+            </Section>
+          </div>
         </div>
       </div>
     </PageLayout>

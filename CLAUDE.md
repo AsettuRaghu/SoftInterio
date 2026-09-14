@@ -1159,6 +1159,35 @@ marking work complete that never happened. Non-skippable is a deliberate choice
 for things like customer sign-off, not the accident of a default — which is why
 16 of the first 25 seeded steps are non-skippable.
 
+### The sales report's date range covers the summary and nothing else
+
+`/api/sales/leads/analytics` scopes only the five headline figures - intake,
+revenue, win rate, average deal - to `from`/`to`. The funnel needs the whole
+history to be a funnel, the source, owner and service tables would turn to
+noise on a fortnight's leads, and what needs chasing is a question about today.
+That was always true and the page did not say so, so a reader assumed the whole
+report moved when they changed the range.
+
+The section headings now state what each band is computed over. If the segment
+tables are ever made range-scoped, the headings have to change with them.
+
+The range also has an empty case worth keeping: this tenant's leads all arrived
+in one month, so the ninety-day default lands on zero intake and zero closed.
+The page says so and offers All time rather than showing a page of zeroes that
+reads as a broken report.
+
+### Two figures a lead carries and the report never used
+
+`service_type` was collected on every lead and aggregated nowhere; it is now
+the "What we sell" table, and on real data it says modular closes at 50% against
+turnkey's 29% - a different decision from the source table's "where to
+advertise". `trend` was computed by the API and never rendered at all.
+
+Pipeline ageing is new: open leads by the stage they are in **now**, with how
+long they have been there, measured from `stage_changed_at` and falling back to
+creation for a lead that never moved - which is itself the finding. It is what
+surfaced a proposal sitting untouched for 246 days.
+
 ## Traps that have already cost time
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it
@@ -1182,6 +1211,13 @@ for things like customer sign-off, not the accident of a default — which is wh
   while the middleware still guarded `/dashboard/settings/roles` — a page that
   does not exist — behind `settings.roles.view`, a permission that does not
   exist. The module is types and a literal array, so Edge imports it fine.
+- **A plain PostgREST select stops at 1000 rows and says nothing.** `.limit()`
+  does not raise that cap. It matters most where figures are computed in
+  TypeScript from a whole set: a truncated fetch does not fail, it reports a
+  smaller pipeline and a better win rate than the tenant has. The lead
+  analytics endpoint pages every unbounded fetch through `pageAll`; its stage
+  history is 71 rows for 15 leads, so roughly 200 leads would have reached the
+  cap silently.
 - **Never `next build` in this directory** while `npm run dev` is running; it
   corrupts the dev server's `.next`. Build from a hardlinked copy.
 

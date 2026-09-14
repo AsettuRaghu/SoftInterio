@@ -29,6 +29,50 @@ const BUDGET_MIDPOINT: Record<string, number> = {
   not_disclosed: 0,
 };
 
+/** The shapes the paged fetches return, so `pageAll` has something to be. */
+interface LeadRow {
+  id: string;
+  lead_number: string | null;
+  stage: string;
+  lead_source: string | null;
+  service_type: string | null;
+  priority: string | null;
+  budget_range: string | null;
+  won_amount: number | null;
+  assigned_to: string | null;
+  created_at: string;
+  won_at: string | null;
+  stage_changed_at: string | null;
+  last_activity_at: string | null;
+  next_follow_up_at: string | null;
+  lost_reason: string | null;
+  disqualification_reason: string | null;
+  client: { name: string | null } | { name: string | null }[] | null;
+}
+
+interface HistoryRow {
+  lead_id: string;
+  from_stage: string | null;
+  to_stage: string;
+  created_at: string;
+}
+
+interface QuotationRow {
+  lead_id: string | null;
+  grand_total: number | null;
+  status: string | null;
+}
+
+interface TaskRow {
+  id: string;
+  title: string | null;
+  due_date: string | null;
+  status: string;
+  assigned_to: string | null;
+  related_type: string | null;
+  related_id: string | null;
+}
+
 /** The order a lead is meant to travel in. Drives the funnel. */
 const FUNNEL_STAGES = [
   "new",
@@ -51,6 +95,88 @@ const median = (values: number[]) => {
     ? sorted[mid]
     : (sorted[mid - 1] + sorted[mid]) / 2;
 };
+
+/**
+ * Every row, not the first thousand.
+ *
+ * PostgREST caps a plain select at 1000 rows and says nothing about it, and
+ * `.limit()` does not raise that cap. Every figure on this page is computed in
+ * TypeScript from these sets, so a truncated fetch would not fail - it would
+ * quietly report a smaller pipeline, a shorter funnel and a better win rate
+ * than the tenant actually has. The stage history is the nearest: 71 rows for
+ * 15 leads, so roughly 200 leads reaches the cap.
+ */
+async function pageAll<T>(
+  makeQuery: (from: number, to: number) => PromiseLike<{
+    data: T[] | null;
+    error: { message: string } | null;
+  }>
+): Promise<T[]> {
+  const size = 1000;
+  const all: T[] = [];
+  for (let page = 0; ; page++) {
+    const { data, error } = await makeQuery(page * size, page * size + size - 1);
+    if (error) throw new Error(error.message);
+    const rows = data ?? [];
+    all.push(...rows);
+    if (rows.length < size) return all;
+  }
+}
+
+/**
+ * One segment table - by source, by owner, by service - computed once.
+ *
+ * These were three near-identical forty-line reducers differing only in which
+ * column they grouped on. Win rate is won over closed in all three, and three
+ * copies of that is three chances for the page to disagree with itself about
+ * what a win rate is.
+ */
+interface SegmentRow {
+  key: string;
+  total: number;
+  won: number;
+  lost: number;
+  open: number;
+  won_value: number;
+  pipeline_value: number;
+  win_rate: number;
+}
+
+function segment<L extends { stage: string; won_amount: unknown }>(
+  leads: L[],
+  keyOf: (lead: L) => string,
+  openValue: (lead: L) => number,
+  closedStages: readonly string[]
+): SegmentRow[] {
+  const rows: Record<string, SegmentRow> = {};
+  for (const lead of leads) {
+    const key = keyOf(lead);
+    const row = (rows[key] ??= {
+      key,
+      total: 0,
+      won: 0,
+      lost: 0,
+      open: 0,
+      won_value: 0,
+      pipeline_value: 0,
+      win_rate: 0,
+    });
+    row.total += 1;
+    if (lead.stage === "won") {
+      row.won += 1;
+      row.won_value += Number(lead.won_amount) || 0;
+    } else if (closedStages.includes(lead.stage)) {
+      row.lost += 1;
+    } else {
+      row.open += 1;
+      row.pipeline_value += openValue(lead);
+    }
+  }
+  return Object.values(rows).map((r) => ({
+    ...r,
+    win_rate: r.won + r.lost ? (r.won / (r.won + r.lost)) * 100 : 0,
+  }));
+}
 
 export async function GET(request: NextRequest) {
   const log = requestLogger(request);
@@ -84,34 +210,44 @@ export async function GET(request: NextRequest) {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    // RLS scopes these to the caller's tenant.
-    const [
-      { data: leads },
-      { data: history },
-      { data: quotations },
-      { data: users },
-      { data: tasks },
-      { data: events },
-    ] = await Promise.all([
-        supabase
-          .from("leads")
-          .select(
-            "id, lead_number, stage, lead_source, service_type, priority, budget_range, won_amount, assigned_to, created_at, won_at, stage_changed_at, last_activity_at, next_follow_up_at, lost_reason, disqualification_reason, client:clients(name)"
-          ),
-        supabase
-          .from("lead_stage_history")
-          .select("lead_id, from_stage, to_stage, created_at")
-          .order("created_at", { ascending: true }),
-        supabase
-          .from("quotations")
-          .select("lead_id, grand_total, status")
-          .not("lead_id", "is", null),
+    // RLS scopes these to the caller's tenant. The four sets that grow without
+    // bound are paged; the calendar is already bounded to seven days.
+    const [leads, history, quotations, { data: users }, tasks, { data: events }] =
+      await Promise.all([
+        pageAll<LeadRow>((a, b) =>
+          supabase
+            .from("leads")
+            .select(
+              "id, lead_number, stage, lead_source, service_type, priority, budget_range, won_amount, assigned_to, created_at, won_at, stage_changed_at, last_activity_at, next_follow_up_at, lost_reason, disqualification_reason, client:clients(name)"
+            )
+            .order("created_at", { ascending: true })
+            .range(a, b)
+        ),
+        pageAll<HistoryRow>((a, b) =>
+          supabase
+            .from("lead_stage_history")
+            .select("lead_id, from_stage, to_stage, created_at")
+            .order("created_at", { ascending: true })
+            .range(a, b)
+        ),
+        pageAll<QuotationRow>((a, b) =>
+          supabase
+            .from("quotations")
+            .select("lead_id, grand_total, status")
+            .not("lead_id", "is", null)
+            .order("lead_id", { ascending: true })
+            .range(a, b)
+        ),
         supabase.from("users").select("id, name"),
-        supabase
-          .from("tasks")
-          .select("id, title, due_date, status, assigned_to, related_type, related_id")
-          .eq("related_type", "lead")
-          .in("status", ["todo", "in_progress", "on_hold"]),
+        pageAll<TaskRow>((a, b) =>
+          supabase
+            .from("tasks")
+            .select("id, title, due_date, status, assigned_to, related_type, related_id")
+            .eq("related_type", "lead")
+            .in("status", ["todo", "in_progress", "on_hold"])
+            .order("id", { ascending: true })
+            .range(a, b)
+        ),
         supabase
           .from("calendar_events")
           .select("id, title, event_type, scheduled_at, linked_type, linked_id, created_by")
@@ -121,12 +257,12 @@ export async function GET(request: NextRequest) {
           .order("scheduled_at", { ascending: true }),
       ]);
 
-    const allLeads = leads || [];
+    const allLeads = leads;
     const userName = Object.fromEntries((users || []).map((u) => [u.id, u.name]));
 
     // Best quotation per lead, for valuing open pipeline.
     const bestQuote: Record<string, number> = {};
-    (quotations || []).forEach((q) => {
+    quotations.forEach((q) => {
       const value = Number(q.grand_total) || 0;
       if (!q.lead_id || value <= 0) return;
       bestQuote[q.lead_id] = Math.max(bestQuote[q.lead_id] || 0, value);
@@ -152,6 +288,11 @@ export async function GET(request: NextRequest) {
     );
     const openLeads = allLeads.filter((l) => !CLOSED_STAGES.includes(l.stage));
 
+    // One clock for the whole report. Ageing, staleness and overdue follow-ups
+    // are all "how long since", and reading the time twice would let two
+    // panels disagree by however long the computation took.
+    const now = Date.now();
+
     const wonValue = wonInRange.reduce(
       (sum, l) => sum + (Number(l.won_amount) || 0),
       0
@@ -173,7 +314,7 @@ export async function GET(request: NextRequest) {
     const everReached: Record<string, Set<string>> = {};
     FUNNEL_STAGES.forEach((s) => (everReached[s] = new Set()));
     allLeads.forEach((l) => everReached["new"].add(l.id));
-    (history || []).forEach((h) => {
+    history.forEach((h) => {
       if (everReached[h.to_stage]) everReached[h.to_stage].add(h.lead_id);
     });
 
@@ -190,76 +331,88 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // --- Where the good leads come from ------------------------------------
-    const bySource = Object.values(
-      allLeads.reduce((acc, l) => {
-        const key = l.lead_source || "unspecified";
-        const row = (acc[key] ??= {
-          source: key,
-          total: 0,
-          won: 0,
-          lost: 0,
-          open: 0,
-          won_value: 0,
-          pipeline_value: 0,
-        });
-        row.total += 1;
-        if (l.stage === "won") {
-          row.won += 1;
-          row.won_value += Number(l.won_amount) || 0;
-        } else if (CLOSED_STAGES.includes(l.stage)) {
-          row.lost += 1;
-        } else {
-          row.open += 1;
-          row.pipeline_value += openValue(l);
-        }
-        return acc;
-      }, {} as Record<string, {
-        source: string; total: number; won: number; lost: number;
-        open: number; won_value: number; pipeline_value: number;
-      }>)
+    // --- Where the pipeline is sitting -------------------------------------
+    /**
+     * Open leads by the stage they are in now, with how long they have been
+     * there. The funnel above says how many leads ever reached a stage and the
+     * velocity panel says how long a stage usually takes; neither answers the
+     * question a sales review actually opens with - what is stuck, and what is
+     * it worth.
+     *
+     * Ageing is measured from `stage_changed_at`, falling back to creation for
+     * a lead that has never moved, which is itself the finding: a lead sitting
+     * in New since it arrived has not been worked.
+     */
+    const clientName = (l: LeadRow) =>
+      (l.client as { name?: string } | null)?.name || null;
+
+    const daysInStage = (l: LeadRow) =>
+      Math.floor(
+        (now - new Date(l.stage_changed_at || l.created_at).getTime()) / 86400000
+      );
+
+    const pipelineByStage = FUNNEL_STAGES.filter((stage) => stage !== "won")
+      .map((stage) => {
+        const inStage = openLeads.filter((l) => l.stage === stage);
+        if (!inStage.length) return null;
+        const ages = inStage.map(daysInStage);
+        const oldest = inStage.reduce((worst, l) =>
+          daysInStage(l) > daysInStage(worst) ? l : worst
+        );
+        return {
+          stage,
+          count: inStage.length,
+          value: inStage.reduce((sum, l) => sum + openValue(l), 0),
+          unvalued: inStage.filter((l) => openValue(l) === 0).length,
+          avg_days_in_stage: ages.reduce((a, b) => a + b, 0) / ages.length,
+          oldest_days: Math.max(...ages),
+          oldest: {
+            id: oldest.id,
+            label: clientName(oldest) || oldest.lead_number || "Lead",
+            owner: userName[oldest.assigned_to || ""] || "Unassigned",
+            days: daysInStage(oldest),
+          },
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null);
+
+    // --- Segments: where leads come from, who closes them, what we sell ----
+    // All three are the same reduction over a different column, so they share
+    // one implementation and cannot disagree about what a win rate is.
+    const bySource = segment(
+      allLeads,
+      (l) => l.lead_source || "unspecified",
+      openValue,
+      CLOSED_STAGES
     )
-      .map((r) => ({
-        ...r,
-        win_rate: r.won + r.lost ? (r.won / (r.won + r.lost)) * 100 : 0,
-      }))
+      .map(({ key, ...r }) => ({ source: key, ...r }))
       .sort((a, b) => b.total - a.total);
 
-    // --- Who is closing ----------------------------------------------------
-    const byOwner = Object.values(
-      allLeads.reduce((acc, l) => {
-        const key = l.assigned_to || "unassigned";
-        const row = (acc[key] ??= {
-          user_id: key,
-          name: userName[key] || "Unassigned",
-          total: 0,
-          won: 0,
-          lost: 0,
-          open: 0,
-          won_value: 0,
-          pipeline_value: 0,
-        });
-        row.total += 1;
-        if (l.stage === "won") {
-          row.won += 1;
-          row.won_value += Number(l.won_amount) || 0;
-        } else if (CLOSED_STAGES.includes(l.stage)) {
-          row.lost += 1;
-        } else {
-          row.open += 1;
-          row.pipeline_value += openValue(l);
-        }
-        return acc;
-      }, {} as Record<string, {
-        user_id: string; name: string; total: number; won: number;
-        lost: number; open: number; won_value: number; pipeline_value: number;
-      }>)
+    const byOwner = segment(
+      allLeads,
+      (l) => l.assigned_to || "unassigned",
+      openValue,
+      CLOSED_STAGES
     )
-      .map((r) => ({
+      .map(({ key, ...r }) => ({
+        user_id: key,
+        name: userName[key] || "Unassigned",
         ...r,
-        win_rate: r.won + r.lost ? (r.won / (r.won + r.lost)) * 100 : 0,
       }))
       .sort((a, b) => b.won_value - a.won_value);
+
+    // What the business actually sells. `service_type` has been fetched and
+    // discarded since this endpoint was written; for an interior practice the
+    // turnkey-against-modular split is a different decision from the source
+    // one - it says which kind of work to chase, not where to advertise.
+    const byService = segment(
+      allLeads,
+      (l) => l.service_type || "unspecified",
+      openValue,
+      CLOSED_STAGES
+    )
+      .map(({ key, ...r }) => ({ service: key, ...r }))
+      .sort((a, b) => b.total - a.total);
 
     // --- How long it takes -------------------------------------------------
     const daysToWin = allLeads
@@ -270,7 +423,7 @@ export async function GET(request: NextRequest) {
     // stage a lead entered has no successor, so it is left out rather than
     // measured against today - that would make current stages look slowest.
     const byLead: Record<string, Array<{ stage: string; at: string }>> = {};
-    (history || []).forEach((h) => {
+    history.forEach((h) => {
       (byLead[h.lead_id] ??= []).push({ stage: h.to_stage, at: h.created_at });
     });
     const stageDurations: Record<string, number[]> = {};
@@ -310,7 +463,6 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.count - a.count);
 
     // --- What needs attention today ----------------------------------------
-    const now = Date.now();
     const stale = openLeads
       .filter((l) => {
         const last = l.last_activity_at || l.created_at;
@@ -360,7 +512,7 @@ export async function GET(request: NextRequest) {
         .map(([name, count]) => ({ name, count }))
         .sort((a, b) => b.count - a.count);
 
-    const openTasks = tasks || [];
+    const openTasks = tasks;
     const dueThisWeek = openTasks.filter(
       (t) =>
         t.due_date &&
@@ -453,10 +605,15 @@ export async function GET(request: NextRequest) {
         avg_deal_size: wonInRange.length ? wonValue / wonInRange.length : 0,
         win_rate: winRate,
         closed_in_range: closedInRange.length,
+        // So an empty range can say "nothing in these 90 days" rather than
+        // showing a page of zeros that reads as a broken report.
+        total_leads: allLeads.length,
       },
       funnel,
       by_source: bySource,
       by_owner: byOwner,
+      by_service: byService,
+      pipeline_by_stage: pipelineByStage,
       velocity,
       loss_reasons: lossReasons,
       attention: { stale, overdue_follow_ups: overdueFollowUps },
