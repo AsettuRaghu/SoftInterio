@@ -51,6 +51,7 @@ import { StageStrip } from "@/components/projects/StageStrip";
 import { PlanTab } from "@/modules/projects/components/ProjectDetailTabs/PlanTab";
 import { useReviseQuotation } from "@/lib/quotations/use-revise-quotation";
 import { Toast } from "@/components/ui/Toast";
+import { PlaybooksPanel } from "@/components/playbooks";
 import { EditTaskModal } from "@/components/tasks";
 
 interface PageProps {
@@ -975,6 +976,40 @@ export default function ProjectDetailPage({ params }: PageProps) {
                   >
                     Stop
                   </button>
+                </div>
+              )}
+
+              {/*
+                * No playbook: say so, and offer one here.
+                *
+                * Two projects looked like different products and there was no
+                * way to tell why. PRJ_20251219_0001 has an active run, so its
+                * Plan tab is the task table with a "Stop" beside the playbook
+                * name; PRJ-25-0002 has six native phases and no run, so it got
+                * ManagementTab and no playbook controls at all - with nothing
+                * on screen explaining that a playbook was even an option.
+                *
+                * The panel that starts one used to be on the Tasks tab, which
+                * is not where anybody deciding how a project should run would
+                * look. It sits here now, and only when there is no active run:
+                * stopping a playbook above makes it reappear, so "stop this and
+                * use a different one" is one flow in one place.
+                */}
+              {!playbook && canManagePlaybook && (
+                <div className="mb-3 rounded-lg border border-slate-200 bg-white p-4">
+                  <p className="mb-3 text-xs text-slate-500">
+                    This project follows its own phases. Applying a playbook
+                    replaces them with its steps, as tasks.
+                  </p>
+                  <PlaybooksPanel
+                    relatedType="project"
+                    relatedId={project.id}
+                    readOnly={project.status === "completed"}
+                    onRunChange={() => {
+                      void refreshPlan();
+                      void refreshTasks();
+                    }}
+                  />
                 </div>
               )}
 

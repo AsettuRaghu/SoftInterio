@@ -3,7 +3,6 @@
 import React from "react";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import TaskTableReusable from "@/components/tasks/TaskTableReusable";
-import { PlaybooksPanel } from "@/components/playbooks";
 import type { Task } from "@/types/tasks";
 
 interface TaskWithUser extends Task {
@@ -54,17 +53,14 @@ export default function TasksTab({
 
   return (
     <div className="space-y-4">
-      {/* Playbook steps ARE tasks, so the panel sits above the table they
-          appear in rather than living on a separate screen. */}
-      <div className="bg-white rounded-lg border border-slate-200 p-4">
-        <PlaybooksPanel
-          relatedType="project"
-          relatedId={projectId}
-          readOnly={projectClosed}
-          onRunChange={onRefresh}
-        />
-      </div>
-
+      {/*
+       * The playbook panel has moved to the Plan tab.
+       *
+       * Which playbook drives a project is a decision about the plan, and the
+       * Plan tab is where the plan is - having it here meant a project with no
+       * playbook showed nothing on its Plan tab to say one was even available.
+       * This tab lists tasks, which is its job.
+       */}
       <TaskTableReusable
       // Filter by this project
       relatedType="project"
