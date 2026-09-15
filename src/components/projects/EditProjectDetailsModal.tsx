@@ -1,6 +1,10 @@
 "use client";
 
 import React from "react";
+import {
+  PropertyCategoryLabels,
+  PropertySubtypeLabels,
+} from "@/types/leads";
 import { Project, ProjectStatusLabels } from "@/types/projects";
 import { X } from "lucide-react";
 
@@ -84,7 +88,8 @@ interface EditFormData {
   site_address: string;
   city: string;
   pincode: string;
-  block_tower: string;
+  property_category: string;
+  property_subtype: string;
 }
 
 interface EditProjectDetailsModalProps {
@@ -136,7 +141,8 @@ export function EditProjectDetailsModal({
     site_address: "",
     city: "",
     pincode: "",
-    block_tower: "",
+    property_category: "",
+    property_subtype: "",
   });
   const [error, setError] = React.useState<string | null>(null);
 
@@ -178,7 +184,8 @@ export function EditProjectDetailsModal({
         site_address: project.property?.address_line1 || "",
         city: project.property?.city || "",
         pincode: project.property?.pincode || "",
-        block_tower: project.block_tower || "",
+        property_category: project.property?.category || "",
+        property_subtype: project.property?.property_subtype || "",
       });
       setError(null);
     }
@@ -323,128 +330,41 @@ export function EditProjectDetailsModal({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Property Type
+                      Category
                     </label>
                     <select
-                      value={editForm.property_type}
+                      value={editForm.property_category}
                       onChange={(e) =>
-                        handleInputChange("property_type", e.target.value)
+                        handleInputChange("property_category", e.target.value)
                       }
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
-                      {propertyTypeOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
+                      <option value="">Select category</option>
+                      {Object.entries(PropertyCategoryLabels).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
                         </option>
                       ))}
                     </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Property Name <span className="text-red-500">*</span>
+                      Subtype
                     </label>
-                    <input
-                      type="text"
-                      value={editForm.property_name}
+                    <select
+                      value={editForm.property_subtype}
                       onChange={(e) =>
-                        handleInputChange("property_name", e.target.value)
+                        handleInputChange("property_subtype", e.target.value)
                       }
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="e.g., NCC Urban Mayfair"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Flat/Unit Number
-                    </label>
-                    <input
-                      type="text"
-                      value={editForm.flat_number}
-                      onChange={(e) =>
-                        handleInputChange("flat_number", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="e.g., E1302"
-                    />
-                  </div>
-                </div>
-
-                {/* Address Details */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Address
-                    </label>
-                    <input
-                      type="text"
-                      value={editForm.site_address}
-                      onChange={(e) =>
-                        handleInputChange("site_address", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Street address"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      City
-                    </label>
-                    <input
-                      type="text"
-                      value={editForm.city}
-                      onChange={(e) =>
-                        handleInputChange("city", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="City"
-                    />
-                  </div>
-                </div>
-
-                {/* Area and Pincode */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Carpet Area (sqft)
-                    </label>
-                    <input
-                      type="number"
-                      value={editForm.carpet_area_sqft}
-                      onChange={(e) =>
-                        handleInputChange("carpet_area_sqft", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Pincode
-                    </label>
-                    <input
-                      type="text"
-                      value={editForm.pincode}
-                      onChange={(e) =>
-                        handleInputChange("pincode", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Pincode"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Block/Tower
-                    </label>
-                    <input
-                      type="text"
-                      value={editForm.block_tower}
-                      onChange={(e) =>
-                        handleInputChange("block_tower", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Block/Tower"
-                    />
+                    >
+                      <option value="">Select subtype</option>
+                      {Object.entries(PropertySubtypeLabels).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 

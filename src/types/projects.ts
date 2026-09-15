@@ -380,6 +380,14 @@ export interface Project {
   property?: {
     property_name: string;
     unit_number: string;
+    /**
+     * Note: this nested type declares a good deal that `properties` does not
+     * actually have - block_tower, built_up_area, bedrooms, facing and the rest.
+     * That fiction is why sending those columns in an UPDATE went unnoticed for
+     * so long: TypeScript was happy and PostgREST refused the statement. Only
+     * `category` was genuinely missing, and it is added here.
+     */
+    category?: string;
     block_tower: string;
     property_type: string;
     property_subtype: string;

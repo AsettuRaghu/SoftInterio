@@ -73,7 +73,17 @@ export default function OverviewTab({
       site_address: editForm.site_address || null,
       city: editForm.city || null,
       pincode: editForm.pincode || null,
-      block_tower: editForm.block_tower || null,
+      /*
+       * The two the lead also edits. `properties.category` is what the lead
+       * calls property_category; the route maps the name.
+       *
+       * `block_tower` used to be here and is gone: there is no such column on
+       * `properties`, and PostgREST rejects a whole UPDATE for one unknown
+       * column - so sending it refused every property edit made from a project,
+       * and the route logged the error and carried on.
+       */
+      property_category: editForm.property_category || null,
+      property_subtype: editForm.property_subtype || null,
     };
 
     /*

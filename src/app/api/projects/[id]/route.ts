@@ -337,16 +337,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // Separate property updates from project updates
     // Extended property fields need to be extracted
     const {
-        block_tower,
-        built_up_area,
-        super_built_up_area,
-        bedrooms,
-        bathrooms,
-        balconies,
-        floor_number,
-        total_floors,
-        facing,
-        furnishing_status,
+        property_category,
+        property_subtype,
         age_of_property,
         parking_slots,
         has_lift,
@@ -514,6 +506,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       fields: Object.keys(projectUpdates),
     });
 
+    /*
+     * Things that went wrong without failing the request. The project's own
+     * columns are written first, so a later failure on the linked property or
+     * client cannot be reported as "the save failed" - but it must be reported.
+     */
+    const warnings: string[] = [];
+
     // 2. Update Property Table if property_id exists
     if (existingProject?.property_id) {
       const propertyUpdates: any = {};
@@ -527,27 +526,54 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (city !== undefined) propertyUpdates.city = city;
       if (pincode !== undefined) propertyUpdates.pincode = pincode;
 
-      // Extended fields
-      if (block_tower !== undefined) propertyUpdates.block_tower = block_tower;
-      if (built_up_area !== undefined) propertyUpdates.built_up_area = built_up_area;
-      if (super_built_up_area !== undefined) propertyUpdates.super_built_up_area = super_built_up_area;
-      if (bedrooms !== undefined) propertyUpdates.bedrooms = bedrooms;
-      if (bathrooms !== undefined) propertyUpdates.bathrooms = bathrooms;
-      if (balconies !== undefined) propertyUpdates.balconies = balconies;
-      if (floor_number !== undefined) propertyUpdates.floor_number = floor_number;
-      if (total_floors !== undefined) propertyUpdates.total_floors = total_floors;
-      if (facing !== undefined) propertyUpdates.facing = facing;
-      if (furnishing_status !== undefined) propertyUpdates.furnishing_status = furnishing_status;
+      /*
+       * The category and subtype the lead also edits.
+       *
+       * `properties.category` is what the lead calls property_category; the
+       * column names differ and the mapping belongs here rather than in the
+       * form.
+       */
+      if (property_category !== undefined)
+        propertyUpdates.category = property_category;
+      if (property_subtype !== undefined)
+        propertyUpdates.property_subtype = property_subtype;
 
+      /*
+       * There used to be ten more mappings here - block_tower, built_up_area,
+       * super_built_up_area, bedrooms, bathrooms, balconies, floor_number,
+       * total_floors, facing, furnishing_status - and **not one of those columns
+       * exists on `properties`**.
+       *
+       * PostgREST rejects the whole statement when any column in it is unknown,
+       * and `block_tower` was sent on every save because the form always
+       * included it. So every property edit made from a project - name, type,
+       * unit number, carpet area, address, city, pincode - was refused as a
+       * batch, and the error below was logged and swallowed. That is why project
+       * details drifted from the lead's: they could not be corrected here.
+       *
+       * Verified against the live schema: the update succeeds without
+       * block_tower and is rejected with it.
+       */
       if (Object.keys(propertyUpdates).length > 0) {
         const { error: propError } = await supabase
           .from("properties")
           .update(propertyUpdates)
           .eq("id", existingProject.property_id);
-        
+
         if (propError) {
-          log.error("Error updating linked property", propError, { projectId: id, propertyId: existingProject.property_id });
-          // We don't fail the whole request, but log it
+          log.error("Error updating linked property", propError, {
+            projectId: id,
+            propertyId: existingProject.property_id,
+          });
+          /*
+           * Reported, not swallowed. The project's own columns have already been
+           * written so failing the whole request would misdescribe what
+           * happened - but silence is how the bug above survived, so the caller
+           * is told and can show it.
+           */
+          warnings.push(
+            "The project was saved, but its property details could not be updated."
+          );
         }
       }
     }
@@ -578,13 +604,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           
           if (clientError) {
             log.error("Error updating linked client", clientError, { projectId: id, clientId: currentProject.client_id });
-            // We don't fail the whole request, but log it
+            warnings.push(
+              "The project was saved, but its client details could not be updated."
+            );
           }
         }
       }
     }
 
-    return NextResponse.json({ project });
+    // Warnings, so a half-applied save says so rather than looking clean.
+    return NextResponse.json(
+      warnings.length ? { project, warnings } : { project }
+    );
   } catch (error) {
     log.error("Unhandled error updating project", error);
     return NextResponse.json(
