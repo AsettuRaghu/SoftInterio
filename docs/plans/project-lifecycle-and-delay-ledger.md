@@ -58,6 +58,14 @@ it with a note**. Nothing changes by itself. Because the milestones live in
 the playbook, an interiors company and an architect firm get different
 lifecycles without any code change — they just write different playbooks.
 
+**Undo in order.**  ✅ decided — A milestone never changes the status by
+itself, and reopening a step never changes it back. If the project is already
+Completed, reopening the handover step is refused: reopen the *project* first
+(a status change with a note, on the timeline), then the step. If the PM never
+confirmed, reopening the step simply withdraws the suggestion. Kick-off is a
+recorded event, not derived from a step, so reopening a "Kick-off done" step
+changes nothing.
+
 ## 4. Changing the status has rules
 
 Like marking a lead as Won *(exists)*: the system checks first, tells you
@@ -97,6 +105,7 @@ says so — that is a sales finding, not a delivery one.
 |---|---|---|
 | **Promised at sale** | what Sales told the client | never, after kick-off |
 | **Agreed plan** | what the PM committed to at kick-off | only when a new plan is agreed — with a reason, a delay owner, and a note that the client was told |
+| **Current plan** | the step dates as they stand today | **automatically**, when a step finishes late or is put on hold — everything that waits on it moves by the same number of days |
 | **Actual** | what really happened *(exists)* | as work starts and finishes |
 
 "Agreeing a new plan" is a deliberate act, like revising a quotation. The
@@ -158,7 +167,9 @@ Each step is useful on its own.
 2. ✅ built — Kick-off checklist, the New → In Progress rule, the agreed
    plan (v1), the sales-promised dates kept, and the "waiting on" list
    raised automatically from client/vendor steps.
-3. Hold with owner + reason + expected date; the reason list.
+3. Hold with owner + reason + expected date; the reason list; the current
+   plan shifts automatically for everything that waits on a late or held
+   step (the agreed plan does not move).
 4. "Waiting on the client" panel.
 5. Agreeing a new plan.
 6. Delay summary on the project, delay band on Reports.
