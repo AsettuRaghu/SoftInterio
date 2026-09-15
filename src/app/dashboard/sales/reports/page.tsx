@@ -20,6 +20,8 @@ import {
   PERIOD_LABEL,
   rangeFor,
   rangeNote,
+  downloadCsv,
+  DownloadRow,
   type Preset,
 } from "@/components/reports";
 
@@ -152,74 +154,6 @@ function CoverageRow({
 }
 
 /**
- * Turns rows already on the page into a CSV.
- *
- * The aggregate tables are exported from what the browser is showing rather
- * than recomputed on the server: two implementations of "win rate by source"
- * would eventually disagree, and the number someone downloads has to be the
- * number they were looking at.
- */
-function downloadCsv(
-  filename: string,
-  headers: string[],
-  rows: Array<Array<string | number>>
-) {
-  const cell = (v: string | number) => {
-    const text = String(v ?? "");
-    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-  };
-  const csv =
-    "\uFEFF" +
-    [headers.map(cell).join(","), ...rows.map((r) => r.map(cell).join(","))].join("\n");
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${filename}-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function DownloadRow({
-  label,
-  hint,
-  onClick,
-  href,
-}: {
-  label: string;
-  hint: string;
-  onClick?: () => void;
-  href?: string;
-}) {
-  const inner = (
-    <>
-      <span className="min-w-0">
-        <span className="block text-sm text-slate-800">{label}</span>
-        <span className="block text-[11px] text-slate-400">{hint}</span>
-      </span>
-      <span className="shrink-0 text-slate-300 group-hover:text-blue-600">
-        <Icon d={ICONS.download} />
-      </span>
-    </>
-  );
-  // Full width of the panel, because the panel is flush. The old rule pulled
-  // itself out of the padding with -mx-2 and stopped six pixels short of the
-  // border, so a hovered row looked like it was leaking out of its panel.
-  const cls =
-    "group w-full flex items-center justify-between gap-3 py-2 px-4 hover:bg-blue-50 text-left transition-colors";
-  return href ? (
-    <a href={href} className={cls}>
-      {inner}
-    </a>
-  ) : (
-    <button onClick={onClick} className={cls}>
-      {inner}
-    </button>
-  );
-}
-
-/**
  * A panel.
  *
  * `flush` is for panels whose content is a list of rows: the rows carry their
@@ -313,7 +247,6 @@ function SegmentTable({
     </div>
   );
 }
-
 export default function SalesReportsPage() {
   const [data, setData] = useState<Analytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);

@@ -355,3 +355,78 @@ export function RangePresets({
 /** "16/06/2026 – 14/09/2026", for a range-scoped band's note. */
 export const rangeNote = (from: string, to: string) =>
   `${new Date(from).toLocaleDateString()} – ${new Date(to).toLocaleDateString()}`;
+
+/* ------------------------------------------------------------------ exports */
+
+/**
+ * Turn rows already on the page into a CSV.
+ *
+ * Aggregate tables are exported from what the browser is showing rather than
+ * recomputed on the server: two implementations of "win rate by source" would
+ * eventually disagree, and the number someone downloads has to be the number
+ * they were looking at.
+ *
+ * The leading BOM is not decoration - Excel reads a UTF-8 CSV as Latin-1 without
+ * it, which turns every rupee sign and accented name into mojibake.
+ */
+export function downloadCsv(
+  filename: string,
+  headers: string[],
+  rows: Array<Array<string | number>>
+) {
+  const cell = (v: string | number) => {
+    const text = String(v ?? "");
+    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  const csv =
+    "\uFEFF" +
+    [headers.map(cell).join(","), ...rows.map((r) => r.map(cell).join(","))].join(
+      "\n"
+    );
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${filename}-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/** One line in a Download panel: what it is, what is in it, and how to get it. */
+export function DownloadRow({
+  label,
+  hint,
+  onClick,
+  href,
+}: {
+  label: string;
+  hint: string;
+  onClick?: () => void;
+  href?: string;
+}) {
+  const inner = (
+    <>
+      <span className="min-w-0">
+        <span className="block text-sm text-slate-800">{label}</span>
+        <span className="block text-[11px] text-slate-400">{hint}</span>
+      </span>
+      <span className="shrink-0 text-slate-300 group-hover:text-blue-600">
+        <Icon d={ICONS.download} />
+      </span>
+    </>
+  );
+  // Full width of the panel, because the panel is flush - a hovered row should
+  // meet the border rather than stop a few pixels short of it.
+  const cls =
+    "group w-full flex items-center justify-between gap-3 py-2 px-4 hover:bg-blue-50 text-left transition-colors";
+  return href ? (
+    <a href={href} className={cls}>
+      {inner}
+    </a>
+  ) : (
+    <button type="button" onClick={onClick} className={cls}>
+      {inner}
+    </button>
+  );
+}

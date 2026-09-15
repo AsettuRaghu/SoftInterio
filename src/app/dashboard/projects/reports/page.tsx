@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { PageLayout, PageHeader } from "@/components/ui/PageLayout";
+import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
 import { uiLogger } from "@/lib/logger";
 import {
@@ -37,6 +38,8 @@ import {
   ICONS,
   ageTint,
   humanise,
+  downloadCsv,
+  DownloadRow,
   type Preset,
 } from "@/components/reports";
 
@@ -107,6 +110,14 @@ export default function ProjectReportsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [preset, setPreset] = useState<Preset>("90d");
+
+  /*
+   * Reading the report and taking it away are different permissions.
+   * projects.reports opens the page; projects.export is what downloads it, and
+   * Design Manager holds the first without the second - so the links are hidden
+   * from them here and refused by the route regardless.
+   */
+  const canExport = hasPermission("projects.export");
 
   const load = useCallback(async () => {
     try {
@@ -181,6 +192,17 @@ export default function ProjectReportsPage() {
         subtitle="Delivery, workload, and what needs attention"
         breadcrumbs={[{ label: "Reports" }]}
         basePath={{ label: "Projects", href: "/dashboard/projects" }}
+        actions={
+          canExport ? (
+            <a
+              href="/api/projects/export"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium"
+            >
+              <ArrowDownTrayIcon className="w-4 h-4" />
+              Export
+            </a>
+          ) : undefined
+        }
       />
 
       <div className="p-5 space-y-7">
@@ -605,6 +627,88 @@ export default function ProjectReportsPage() {
                       )}
                     </>
                   )}
+                </Panel>
+              </Section>
+            )}
+            {canExport && work && (
+              <Section title="Download" note="Opens in Excel or Sheets">
+                <Panel
+                  title="Spreadsheets"
+                  hint="No financial columns, by design"
+                  flush
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2">
+                    <div>
+                      <DownloadRow
+                        label="All projects"
+                        hint="Status, progress, dates, manager and client"
+                        href="/api/projects/export"
+                      />
+                      <DownloadRow
+                        label="Open projects"
+                        hint="Still in delivery"
+                        href="/api/projects/export?report=open"
+                      />
+                      <DownloadRow
+                        label="Overdue projects"
+                        hint="Past their expected end date, with how late"
+                        href="/api/projects/export?report=overdue"
+                      />
+                    </div>
+                    <div>
+                      <DownloadRow
+                        label="Open tasks"
+                        hint="Every open task with its project, owner and due date"
+                        href="/api/projects/export?report=tasks"
+                      />
+                      <DownloadRow
+                        label="Overdue tasks"
+                        hint="Just the late ones, worst first"
+                        href="/api/projects/export?report=overdue-tasks"
+                      />
+                      {/* These two come from what is on screen rather than being
+                          recomputed: the number someone downloads has to be the
+                          number they were looking at. */}
+                      <DownloadRow
+                        label="Workload by person"
+                        hint="The table above, as shown"
+                        onClick={() =>
+                          downloadCsv(
+                            "projects-workload",
+                            ["Person", "Open tasks", "Overdue"],
+                            work.byAssignee.map((r) => [
+                              r.userId === "unassigned" ? "Unassigned" : r.name,
+                              r.open,
+                              r.overdue,
+                            ])
+                          )
+                        }
+                      />
+                      <DownloadRow
+                        label="Late work by project"
+                        hint="The panel above, as shown"
+                        onClick={() =>
+                          downloadCsv(
+                            "projects-late-work",
+                            [
+                              "Project number",
+                              "Project",
+                              "Late tasks",
+                              "Worst delay (days)",
+                              "Worst task",
+                            ],
+                            work.overdueByProject.map((r) => [
+                              r.projectNumber ?? "",
+                              r.name,
+                              r.count,
+                              r.worstDays,
+                              r.worstTitle,
+                            ])
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
                 </Panel>
               </Section>
             )}

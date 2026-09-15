@@ -1533,6 +1533,27 @@ What belongs in that file is anything whose job is to make a figure legible.
 What does not is anything that knows what the figure means - a funnel step and an
 overdue project are both `StatBar`.
 
+**Exports go through `components/reports` too** - `downloadCsv` and
+`DownloadRow`. Both reports put an Export link in the `PageHeader` and a Download
+band last, offering server CSVs for the record sets and client-side CSVs for the
+aggregate tables. The aggregates come from what is on screen rather than being
+recomputed: the number someone downloads has to be the number they were looking
+at, and two implementations of the same figure eventually disagree.
+
+`GET /api/projects/export` takes `report=projects|open|overdue|tasks|overdue-tasks`
+and follows two rules harder than the page does, **because a spreadsheet leaves
+the building**: it selects no financial columns at all, and it applies the same
+`projectAccess` scope - the task reports are narrowed to the caller's own
+projects, not to the tenant.
+
+It is gated on **`projects.export`** (Admin, Owner, Project Manager) while the
+page needs only `projects.reports`. Design Manager holds the second and not the
+first, so they read the report and see no download links; the route refuses them
+regardless, because hiding a link is not a control.
+
+Both export routes write a leading `\uFEFF`. Excel reads a UTF-8 CSV as Latin-1
+without it and turns every rupee sign and accented name into mojibake.
+
 One piece of remaining drift, deliberately left: the sales report still draws its
 funnel, loss reasons, pipeline-by-stage and month-by-month with inline bar markup
 rather than `StatBar`. The track classes are identical so they look the same, and
