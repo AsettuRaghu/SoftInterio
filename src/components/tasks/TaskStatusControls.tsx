@@ -13,6 +13,8 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { useDelayReasons } from "@/lib/tasks/use-delay-reasons";
+import { DelayOwnerLabels, type DelayOwner } from "@/types/tasks";
 import { Tooltip } from "@/components/ui/Tooltip";
 import {
   canTransitionTask,
@@ -29,6 +31,12 @@ interface TaskStatusControlsProps {
     | "id"
     | "status"
     | "hold_reason"
+    | "hold_owner"
+    | "hold_reason_code"
+    | "hold_expected_until"
+    | "hold_counterpart"
+    | "procedure_run_id"
+    | "playbook_step"
     | "total_active_seconds"
     | "live_active_seconds"
     | "is_clock_running"
@@ -183,7 +191,15 @@ export function TaskStatusControls({
   const [error, setError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<ActionConfig | null>(null);
   const [reason, setReason] = useState("");
+  // Who we are waiting on, why, and until when. Asked whenever a plan step
+  // is held; optional on an ad-hoc task.
+  const [holdOwner, setHoldOwner] = useState<DelayOwner | "">("");
+  const [holdCode, setHoldCode] = useState("");
+  const [holdUntil, setHoldUntil] = useState("");
+  const [holdWho, setHoldWho] = useState("");
+  const reasons = useDelayReasons();
   const [tick, setTick] = useState(0);
+  const isPlanStep = !!task.procedure_run_id;
 
   const isRunning = task.is_clock_running ?? task.status === "in_progress";
 
@@ -217,7 +233,14 @@ export function TaskStatusControls({
         const response = await fetch(`/api/tasks/${task.id}/transition`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: to, reason: withReason }),
+          body: JSON.stringify({
+            status: to,
+            reason: withReason,
+            hold_owner: holdOwner || undefined,
+            hold_reason_code: holdCode || undefined,
+            hold_expected_until: holdUntil || undefined,
+            hold_counterpart: holdWho || undefined,
+          }),
         });
         const data = await response.json();
 
@@ -228,6 +251,10 @@ export function TaskStatusControls({
 
         setPendingAction(null);
         setReason("");
+        setHoldOwner("");
+        setHoldCode("");
+        setHoldUntil("");
+        setHoldWho("");
         if (data.task) {
           onTransitioned?.(
             data.task as TaskWithDetails,
@@ -240,15 +267,27 @@ export function TaskStatusControls({
         setIsSaving(false);
       }
     },
-    [task.id, onTransitioned]
+    [task.id, onTransitioned, holdOwner, holdCode, holdUntil, holdWho]
   );
 
   const handleAction = (action: ActionConfig) => {
-    // Full variant asks why before pausing or blocking. Compact does not -
-    // it is a one-click row action, and the reason is optional server-side.
-    if (variant === "full" && TRANSITIONS_REQUIRING_REASON.includes(action.to)) {
+    // Full variant asks why before pausing or blocking. Compact does not for
+    // an ad-hoc task - it is a one-click row action. A PLAN step is different:
+    // holding it is a delay on the project, and the delay log needs to know
+    // who it waits on. So a plan step asks in every variant.
+    if (
+      TRANSITIONS_REQUIRING_REASON.includes(action.to) &&
+      (variant === "full" || isPlanStep)
+    ) {
       setPendingAction(action);
       setReason("");
+      // A client/vendor step is, by definition, waiting on them; open the
+      // dialog already saying so, with the step's usual reason.
+      const stepOwner = task.playbook_step?.owner_type;
+      setHoldOwner(stepOwner && stepOwner !== "internal" ? stepOwner : "");
+      setHoldCode(stepOwner && stepOwner !== "internal" ? task.playbook_step?.default_delay_reason ?? "" : "");
+      setHoldUntil("");
+      setHoldWho("");
       setError(null);
       return;
     }
@@ -487,14 +526,27 @@ export function TaskStatusControls({
         </p>
       )}
 
-      {task.hold_reason && (task.status === "on_hold" || task.status === "blocked") && (
-        <p className="text-xs text-slate-500">
-          <span className="font-medium text-slate-600">
-            {task.status === "blocked" ? "Blocked" : "Paused"}:
-          </span>{" "}
-          {task.hold_reason}
-        </p>
-      )}
+      {(task.status === "on_hold" || task.status === "blocked") &&
+        (task.hold_reason || task.hold_owner) && (
+          <p className="text-xs text-slate-500">
+            <span className="font-medium text-amber-700">
+              {task.hold_owner
+                ? `Waiting on ${DelayOwnerLabels[task.hold_owner].toLowerCase()}`
+                : task.status === "blocked"
+                  ? "Blocked"
+                  : "Paused"}
+              {task.hold_expected_until
+                ? ` until ${new Date(task.hold_expected_until).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
+                : ""}
+              :
+            </span>{" "}
+            {task.hold_reason_code
+              ? (reasons.find((r) => r.code === task.hold_reason_code)?.label ?? task.hold_reason_code)
+              : null}
+            {task.hold_reason_code && task.hold_reason ? " — " : ""}
+            {task.hold_reason}
+          </p>
+        )}
 
       {error && !pendingAction && (
         <p className="text-xs text-red-600">{error}</p>
@@ -527,7 +579,7 @@ export function TaskStatusControls({
             </button>
             <button
               type="button"
-              disabled={isSaving || !reason.trim()}
+              disabled={isSaving || !reason.trim() || (isPlanStep && !holdOwner)}
               onClick={() =>
                 pendingAction && void transition(pendingAction.to, reason.trim())
               }
@@ -538,7 +590,74 @@ export function TaskStatusControls({
           </div>
         }
       >
-        <div className="space-y-2">
+        <div className="space-y-3">
+          {/* Who we are waiting on, why, and until when. This is what the
+              delay log is built from; the free text below is the detail. */}
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-xs text-slate-600">
+              Waiting on
+              <select
+                value={holdOwner}
+                onChange={(e) => {
+                  setHoldOwner(e.target.value as DelayOwner | "");
+                  setHoldCode("");
+                }}
+                className={`mt-1 w-full px-2 py-1.5 text-sm rounded-md border bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                  isPlanStep && !holdOwner ? "border-amber-300" : "border-slate-200"
+                }`}
+              >
+                <option value="">{isPlanStep ? "Choose…" : "Not recorded"}</option>
+                {(Object.keys(DelayOwnerLabels) as DelayOwner[]).map((o) => (
+                  <option key={o} value={o}>
+                    {DelayOwnerLabels[o]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-slate-600">
+              Reason
+              <select
+                value={holdCode}
+                disabled={!holdOwner}
+                onChange={(e) => setHoldCode(e.target.value)}
+                className="mt-1 w-full px-2 py-1.5 text-sm rounded-md border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
+              >
+                <option value="">{holdOwner ? "Choose…" : "Pick who first"}</option>
+                {reasons
+                  .filter((r) => r.owner === holdOwner)
+                  .map((r) => (
+                    <option key={r.code} value={r.code}>
+                      {r.label}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label className="text-xs text-slate-600">
+              Expected until
+              <input
+                type="date"
+                value={holdUntil}
+                onChange={(e) => setHoldUntil(e.target.value)}
+                className="mt-1 w-full px-2 py-1.5 text-sm rounded-md border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </label>
+            <label className="text-xs text-slate-600">
+              Who exactly
+              <input
+                type="text"
+                value={holdWho}
+                onChange={(e) => setHoldWho(e.target.value)}
+                placeholder="e.g. Mr Rao / Hettich"
+                className="mt-1 w-full px-2 py-1.5 text-sm rounded-md border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </label>
+          </div>
+          {isPlanStep && holdUntil && (
+            <p className="text-[11px] text-slate-500">
+              If this is later than the step's due date, every step that waits on it moves by the same
+              number of days. The agreed plan stays as it was.
+            </p>
+          )}
           <textarea
             autoFocus
             value={reason}

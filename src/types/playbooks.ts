@@ -118,6 +118,8 @@ export interface PlaybookStepDefinition {
   owner_type: StepOwnerType;
   /** What completing this step means for the project's status, if anything. */
   milestone_role?: StepMilestoneRole | null;
+  /** Code from delay_reasons; pre-fills the hold dialog for a client/vendor step. */
+  default_delay_reason?: string | null;
 }
 
 export type StepOwnerType = "internal" | "client" | "vendor";

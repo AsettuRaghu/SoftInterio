@@ -316,6 +316,8 @@ export async function replaceSteps(
     allow_parallel: step.allow_parallel === true,
     owner_type: step.owner_type || "internal",
     milestone_role: step.milestone_role || null,
+    default_delay_reason:
+      step.owner_type && step.owner_type !== "internal" ? step.default_delay_reason || null : null,
   });
 
   for (const pass of [0, 1]) {

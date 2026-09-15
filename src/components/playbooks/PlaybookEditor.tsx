@@ -9,6 +9,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from "react";
+import { useDelayReasons } from "@/lib/tasks/use-delay-reasons";
 import type { TaskRelatedType } from "@/types/tasks";
 import {
   PlaybookActionColors,
@@ -47,6 +48,8 @@ interface DraftStep {
   owner_type: StepOwnerType;
   /** What finishing this step means for the project's status, if anything. */
   milestone_role: StepMilestoneRole | null;
+  /** The reason a hold on this step usually has; pre-fills the hold dialog. */
+  default_delay_reason: string | null;
   priority: string;
   estimated_hours: number | null;
   /** How long the step takes. Dates are derived from this, not typed. */
@@ -169,6 +172,7 @@ const blankStep = (): DraftStep => ({
   assign_to_user: null,
   owner_type: "internal",
   milestone_role: null,
+  default_delay_reason: null,
   priority: "medium",
   estimated_hours: null,
   duration_days: null,
@@ -197,6 +201,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
   // and an architecture practice run different processes; leaving it blank
   // says the playbook suits either.
   const [tenantType, setTenantType] = useState<string>("");
+  const delayReasons = useDelayReasons();
   const [steps, setSteps] = useState<DraftStep[]>([blankStep()]);
   // Naming a person is the point of configuring a playbook once: adopt it,
   // start it, and the work is already on the right desks.
@@ -278,6 +283,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
             assign_to_user: t.assign_to_user ?? null,
             owner_type: t.owner_type ?? "internal",
             milestone_role: t.milestone_role ?? null,
+            default_delay_reason: t.default_delay_reason ?? null,
             priority: t.priority || "medium",
             estimated_hours: t.estimated_hours ?? null,
             // Legacy; hours drive the date now. Cleared on edit so the
@@ -307,6 +313,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
               assign_to_user: c.assign_to_user ?? null,
               owner_type: c.owner_type ?? "internal",
               milestone_role: c.milestone_role ?? null,
+              default_delay_reason: c.default_delay_reason ?? null,
               priority: c.priority || "medium",
               estimated_hours: c.estimated_hours ?? null,
               duration_days: null,
@@ -1222,6 +1229,34 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                             </option>
                           ))}
                         </select>
+
+                        {/* The reason a hold on this step usually has. "Client
+                            approves 3D" is nearly always approval_pending; the
+                            hold dialog opens pre-filled with it. Offered only
+                            for a client/vendor step - our own steps stall for
+                            too many reasons to guess. */}
+                        {step.owner_type !== "internal" && (
+                          <>
+                            <span className="text-slate-400">Usual delay</span>
+                            <select
+                              value={step.default_delay_reason ?? ""}
+                              onChange={(e) =>
+                                update(i, { default_delay_reason: e.target.value || null })
+                              }
+                              title="Pre-fills the reason when this step is put on hold"
+                              className="px-1.5 py-0.5 border border-slate-200 rounded bg-white max-w-[12rem]"
+                            >
+                              <option value="">—</option>
+                              {delayReasons
+                                .filter((r) => r.owner === step.owner_type)
+                                .map((r) => (
+                                  <option key={r.code} value={r.code}>
+                                    {r.label}
+                                  </option>
+                                ))}
+                            </select>
+                          </>
+                        )}
                       </div>
 
                       {/* What has to happen first, and which part of it. A

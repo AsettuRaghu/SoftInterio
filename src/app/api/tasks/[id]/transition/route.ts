@@ -11,6 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { readHold } from "@/lib/tasks/hold";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import type { TaskStatus, TaskTransitionResult } from "@/types/tasks";
@@ -44,6 +45,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const body = await request.json();
     const status = body.status as TaskStatus;
     const reason: string | undefined = body.reason?.trim() || undefined;
+    // Who we are waiting on, why and until when. Only meaningful for a hold;
+    // task_transition ignores them on any other status.
+    const hold = readHold(body);
 
     if (!status || !VALID_STATUSES.includes(status)) {
       return NextResponse.json(
@@ -74,6 +78,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       p_user_id: user.id,
       p_to: status,
       p_reason: reason ?? null,
+      ...hold,
     });
 
     if (error) {
@@ -137,3 +142,4 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
   }
 }
+

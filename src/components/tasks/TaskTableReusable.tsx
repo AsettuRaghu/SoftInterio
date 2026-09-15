@@ -43,6 +43,13 @@ import {
 } from "@heroicons/react/24/outline";
 
 // Types
+const HOLD_OWNER_WORD = {
+  client: "the client",
+  vendor: "a vendor",
+  internal: "us",
+  third_party: "someone else",
+} as const;
+
 interface Task {
   /** Plan fields. Present on every task; only the Plan tab renders them. */
   actual_hours?: number;
@@ -73,6 +80,10 @@ interface Task {
   // Lifecycle timing (see task_work_sessions / task_status_history)
   estimated_hours?: number;
   hold_reason?: string;
+  hold_owner?: "client" | "vendor" | "internal" | "third_party" | null;
+  hold_reason_code?: string | null;
+  hold_expected_until?: string | null;
+  hold_counterpart?: string | null;
   total_active_seconds?: number;
   live_active_seconds?: number;
   is_clock_running?: boolean;
@@ -856,6 +867,22 @@ export default function TaskTable({
     isSubtask: boolean = false,
     parentTaskId?: string
   ) => {
+    // A plan step is held through the pause button, which asks who we are
+    // waiting on and until when - the delay log needs that. The status badge
+    // has nowhere to ask, so it declines rather than record a hold with no
+    // owner. Ad-hoc tasks keep the quick badge change.
+    if (field === "status" && (value === "on_hold" || value === "blocked")) {
+      const row = isSubtask && parentTaskId
+        ? tasks.find((t) => t.id === parentTaskId)?.subtasks?.find((st) => st.id === taskId)
+        : tasks.find((t) => t.id === taskId);
+      if (row?.procedure_run_id) {
+        setActionError(
+          "Use the pause button to put a plan step on hold - it asks who you are waiting on and until when."
+        );
+        return;
+      }
+    }
+
     // Optimistic update - update UI immediately for instant feedback
     if (isSubtask && parentTaskId) {
       setTasks((prev) =>
@@ -1027,7 +1054,7 @@ export default function TaskTable({
       >
         {/* Task Name */}
         <td className={`px-2 py-1.5 ${isSubtask ? "pl-4" : ""}`}>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             {isSubtask && (
               <div className="flex items-center gap-1 pl-4">
                 <span className="w-4 h-4 flex items-center justify-center text-slate-300">
@@ -1098,6 +1125,20 @@ export default function TaskTable({
                     dense and tags are a scan aid, not a sortable field. */}
                 <TagChips tags={task.tags} max={3} size="xs" />
               </button>
+            )}
+
+            {/* A held step says who it waits on, on the row, so a plan reads
+                as "Procurement is waiting on the client until 20 Oct" rather
+                than a status badge and a tooltip. */}
+            {(task.status === "on_hold" || task.status === "blocked") && task.hold_owner && (
+              <span className="basis-full text-[10px] text-amber-700">
+                Waiting on {HOLD_OWNER_WORD[task.hold_owner]}
+                {task.hold_counterpart ? ` (${task.hold_counterpart})` : ""}
+                {task.hold_expected_until
+                  ? ` until ${new Date(task.hold_expected_until).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
+                  : ""}
+                {task.hold_reason ? ` — ${task.hold_reason}` : ""}
+              </span>
             )}
 
             {!isSubtask && !isEditingTitle && rowEditable && (

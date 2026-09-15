@@ -167,9 +167,11 @@ Each step is useful on its own.
 2. ✅ built — Kick-off checklist, the New → In Progress rule, the agreed
    plan (v1), the sales-promised dates kept, and the "waiting on" list
    raised automatically from client/vendor steps.
-3. Hold with owner + reason + expected date; the reason list; the current
-   plan shifts automatically for everything that waits on a late or held
-   step (the agreed plan does not move).
+3. ✅ built — Hold with owner + reason + expected date; the reason list
+   (shipped defaults; an editing screen is still to come); the current plan
+   shifts automatically for everything that waits on a late or held step
+   (the agreed plan does not move); "Usual delay" on client/vendor steps in
+   the playbook.
 4. "Waiting on the client" panel.
 5. Agreeing a new plan.
 6. Delay summary on the project, delay band on Reports.

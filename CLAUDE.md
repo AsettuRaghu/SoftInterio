@@ -578,6 +578,58 @@ plan.
 with "malformed array literal". Use `array_append`. This cost one repair of
 `20260915141000`.
 
+### A hold says who we are waiting on, and the current plan moves with it
+
+Step 3 of the lifecycle plan, 2026-09-15.
+
+**Putting a plan step on hold asks three things**: who we are waiting on
+(`hold_owner`: client / vendor / internal / third_party), why
+(`hold_reason_code`, from `delay_reasons`), and until when
+(`hold_expected_until`), plus who exactly (`hold_counterpart`) and the free
+text that was always there. `task_transition` takes them as parameters and
+writes them **in the same UPDATE as the status**, so the row
+`trg_tasks_status_change` writes to `task_status_history` carries them - that
+history row is the durable record of the hold, and a second UPDATE would have
+been too late for it. They are cleared from the task when the hold lifts; the
+history keeps them.
+
+**Every entry point that can hold a plan step asks.** `TaskStatusControls`
+asks in the full variant as before and now in the compact row variant too,
+*for plan steps only* (`procedure_run_id` set) - an ad-hoc task keeps its
+one-click pause. The inline status badge on the table and the status dropdown
+in `EditTaskModal` **decline** a hold on a plan step with a sentence pointing at
+the pause button, because neither has room to ask. Do not add a fourth way
+that skips it.
+
+The dialog opens pre-filled from the step: a client/vendor step is waiting on
+them by definition, and `default_delay_reason` ("Usual delay" in the editor,
+offered only on client/vendor steps) supplies the reason. Task responses embed
+`playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type,
+default_delay_reason)` for this.
+
+`delay_reasons` is seeded with sixteen shipped rows (`tenant_id NULL`) across
+the four owners; a tenant's own rows sit beside them and RLS returns both.
+`GET /api/delay-reasons` is the only route so far - **there is no editing
+screen yet**; add one under Settings when it is asked for.
+
+**The current plan shifts by itself.** `trg_plan_shifts_with_reality` (BEFORE
+UPDATE on `tasks`) fires on the two events that make a plan late: a step
+completing after its `due_date`, and a step held until a date past its
+`due_date` (which also becomes its new `due_date`). Both call
+`shift_dependent_steps(task, days)`, which pushes every **not-started** step
+that waits on it - transitively through `procedure_step_dependencies`, plus the
+steps inside any pushed stage - by the same number of days, and writes a
+`plan_shifted` timeline entry naming what moved and why. **`plan_baselines` is
+never touched**; the gap between agreed and current is the delay. Dry-run on
+PRJ_20251219_0001: "2D Designs" 3 days late moves 28 tasks, leaves the
+completed stage and the in-progress source alone.
+
+A dry run against live data without writing it: a throwaway migration whose
+`DO` block does the work and ends in `RAISE EXCEPTION` with the results in the
+message. `db push` prints the message, the transaction rolls back, nothing
+reaches the ledger. Delete the file afterwards. Cheaper than any harness and
+it uses the real rows.
+
 ### Playbooks are the workflow engine
 **The UI says Playbook; the database says procedure.** The tables, the enum
 and the RPC keep their original names — `procedure_definitions`,

@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
       `
         *,
         assigned_user:users!tasks_assigned_to_fkey(id, name, email, avatar_url),
+        playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type, default_delay_reason),
         created_by_user:users!tasks_created_by_fkey(id, name, email)
       `,
       { count: "exact" }
@@ -133,7 +134,8 @@ export async function GET(request: NextRequest) {
         .select(
           `
           *,
-          assigned_user:users!tasks_assigned_to_fkey(id, name, email, avatar_url)
+          assigned_user:users!tasks_assigned_to_fkey(id, name, email, avatar_url),
+          playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type, default_delay_reason)
         `
         )
         .in("parent_task_id", taskIds)
@@ -543,6 +545,7 @@ export async function POST(request: NextRequest) {
         `
         *,
         assigned_user:users!tasks_assigned_to_fkey(id, name, email, avatar_url),
+        playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type, default_delay_reason),
         created_by_user:users!tasks_created_by_fkey(id, name, email)
       `
       )

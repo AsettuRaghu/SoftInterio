@@ -44,6 +44,13 @@ interface Task {
   // Lifecycle timing
   estimated_hours?: number;
   hold_reason?: string;
+  hold_owner?: "client" | "vendor" | "internal" | "third_party" | null;
+  hold_reason_code?: string | null;
+  hold_expected_until?: string | null;
+  hold_counterpart?: string | null;
+  /** Set on a plan step; a hold on one must say who it waits on. */
+  procedure_run_id?: string | null;
+  playbook_step?: { owner_type: "internal" | "client" | "vendor"; default_delay_reason: string | null } | null;
   total_active_seconds?: number;
   total_held_seconds?: number;
   live_active_seconds?: number;
@@ -221,6 +228,17 @@ export function EditTaskModal({
 
     if (!title.trim()) {
       setError("Task name is required");
+      return;
+    }
+    // A plan step is held through the pause control above, which asks who we
+    // are waiting on. The status dropdown has nowhere to ask.
+    if (
+      task.procedure_run_id &&
+      (status === "on_hold" || status === "blocked") &&
+      status !== task.status &&
+      status !== timing?.status
+    ) {
+      setError("Use the pause control under Time Tracking to put a plan step on hold - it asks who you are waiting on and until when.");
       return;
     }
 
@@ -440,7 +458,16 @@ export function EditTaskModal({
                 </label>
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <TaskStatusControls
-                    task={{ id: task.id, ...timing }}
+                    task={{
+                      id: task.id,
+                      procedure_run_id: task.procedure_run_id,
+                      playbook_step: task.playbook_step,
+                      hold_owner: task.hold_owner,
+                      hold_reason_code: task.hold_reason_code,
+                      hold_expected_until: task.hold_expected_until,
+                      hold_counterpart: task.hold_counterpart,
+                      ...timing,
+                    }}
                     size="sm"
                     onTransitioned={(updated) => {
                       // Mirror the new status into the form so submitting

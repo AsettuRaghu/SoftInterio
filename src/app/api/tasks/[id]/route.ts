@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readHold } from "@/lib/tasks/hold";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import {
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         `
         *,
         assigned_user:users!tasks_assigned_to_fkey(id, name, email, avatar_url),
+        playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type, default_delay_reason),
         created_by_user:users!tasks_created_by_fkey(id, name, email),
         completed_by_user:users!tasks_completed_by_fkey(id, name),
         template:task_templates(id, name, category)
@@ -98,7 +100,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         .select(
           `
           *,
-          assigned_user:users!tasks_assigned_to_fkey(id, name, email, avatar_url)
+          assigned_user:users!tasks_assigned_to_fkey(id, name, email, avatar_url),
+          playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type, default_delay_reason)
         `
         )
         .eq("parent_task_id", id)
@@ -354,6 +357,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           p_user_id: user.id,
           p_to: body.status,
           p_reason: (body as { hold_reason?: string }).hold_reason ?? null,
+          ...readHold(body as Record<string, unknown>),
         }
       );
 
@@ -529,6 +533,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         `
         *,
         assigned_user:users!tasks_assigned_to_fkey(id, name, email, avatar_url),
+        playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type, default_delay_reason),
         created_by_user:users!tasks_created_by_fkey(id, name, email)
       `
       )

@@ -212,6 +212,16 @@ export interface Task {
   completion_count?: number;
   /** Why the task is currently on_hold or blocked. */
   hold_reason?: string;
+  /** Who a hold waits on. Set with the hold, cleared when it lifts. */
+  hold_owner?: DelayOwner | null;
+  hold_reason_code?: string | null;
+  hold_expected_until?: string | null;
+  hold_counterpart?: string | null;
+  /** The playbook run this task belongs to, when it is a plan step. */
+  procedure_run_id?: string | null;
+  procedure_step_id?: string | null;
+  /** From the step definition: who it waits on and its usual delay reason. */
+  playbook_step?: { owner_type: "internal" | "client" | "vendor"; default_delay_reason: string | null } | null;
   /** Settled worked seconds. Excludes any running session. */
   total_active_seconds: number;
   /** Accumulated seconds spent on_hold or blocked. */
@@ -496,6 +506,10 @@ export interface UpdateTaskInput {
   status?: TaskStatus;
   /** Required when status is on_hold or blocked. */
   hold_reason?: string | null;
+  hold_owner?: DelayOwner | null;
+  hold_reason_code?: string | null;
+  hold_expected_until?: string | null;
+  hold_counterpart?: string | null;
   start_date?: string;
   due_date?: string;
   estimated_hours?: number;
@@ -651,4 +665,23 @@ export function canUpdateTaskStatus(
 
   // Or if user has edit_all permission
   return hasPermission(TASK_PERMISSIONS.EDIT_ALL);
+}
+
+/** Who a delay is counted against. */
+export type DelayOwner = "client" | "vendor" | "internal" | "third_party";
+
+export const DelayOwnerLabels: Record<DelayOwner, string> = {
+  client: "Client",
+  vendor: "Vendor",
+  internal: "Us",
+  third_party: "Someone else",
+};
+
+export interface DelayReason {
+  id: string;
+  tenant_id: string | null;
+  owner: DelayOwner;
+  code: string;
+  label: string;
+  display_order: number;
 }
