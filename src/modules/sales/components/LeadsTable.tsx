@@ -2,10 +2,9 @@
 
 import React, { useMemo, useCallback } from "react";
 import {
-  ActivityGlyph,
-  iconForActivity,
-  iconForUpcoming,
-} from "@/components/leads/activity-icons";
+  LastActivityCell,
+  FollowUpCell,
+} from "@/components/leads/activity-cells";
 import { Lead, LeadStage } from "@/types/leads";
 import {
   LeadStageLabels as StageLabels,
@@ -64,20 +63,6 @@ export function LeadsTable({
    * today, so the year says nothing and dd-mm-yy costs three characters in a
    * narrow column for it.
    */
-  const dayMonth = useCallback((iso: string) => {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-  }, []);
-
-  /** Whole days between then and now. Null when there is no date at all. */
-  const daysSince = useCallback((dateString?: string | null) => {
-    if (!dateString) return null;
-    const then = new Date(dateString).getTime();
-    if (Number.isNaN(then)) return null;
-    return Math.max(0, Math.floor((Date.now() - then) / 86400000));
-  }, []);
-
   const formatDate = useCallback((dateString: string | null) => {
     if (!dateString) return "—";
     return new Date(dateString).toLocaleDateString("en-IN", {
@@ -288,108 +273,15 @@ export function LeadsTable({
         header: "Last Activity",
         width: "17%",
         sortable: true,
-        render: (lead) => {
-          const days = daysSince(lead.last_activity_at);
-
-          // Three bands only: green means acted on, orange means going cold,
-          // red means abandoned. More gradations than that stop reading as a
-          // signal and start reading as decoration.
-          const { label, tone } =
-            days === null
-              ? { label: "Never", tone: "text-red-600" }
-              : days === 0
-              ? { label: "Today", tone: "text-emerald-600" }
-              : days === 1
-              ? { label: "Yesterday", tone: "text-emerald-600" }
-              : days <= 15
-              ? { label: `${days}d ago`, tone: "text-orange-600" }
-              : { label: `${days}d ago`, tone: "text-red-600" };
-
-          // "Today", "Yesterday", "5d" - said the way someone would say it,
-          // and short enough to sit at the end of a line without wrapping it.
-          const whenShort = (iso: string) => {
-            const d = daysSince(iso);
-            if (d === null) return "";
-            if (d === 0) return "Today";
-            if (d === 1) return "Yesterday";
-            if (d < 7) return `${d}d`;
-            if (d < 30) return `${Math.floor(d / 7)}w`;
-            if (d < 365) return `${Math.floor(d / 30)}mo`;
-            return `${Math.floor(d / 365)}y`;
-          };
-
-          const earlier = (lead.recent_activities || []).slice(1);
-
-          return (
-            <div>
-              <p className={`text-sm font-medium ${tone}`}>{label}</p>
-              {/* The activity's own words where we have them - "Budget range:
-                  5L-10L → 10L-15L" tells a seller far more than "Lead
-                  Updated". The type label is the fallback.
-
-                  Wrapped and shown in full, never cropped: a seller reading
-                  this column needs the whole context, and half a sentence is
-                  worse than none. Long entries make the row taller rather than
-                  widening the column. */}
-              {(lead.last_activity_detail || lead.last_activity_type) && (
-                <p
-                  className="flex items-start gap-1.5 text-xs text-slate-500 break-words whitespace-normal leading-snug"
-                  title={
-                    lead.last_activity_detail
-                      ? `${
-                          lead.last_activity_type
-                            ? LeadActivityTypeLabels[lead.last_activity_type] ||
-                              lead.last_activity_type
-                            : "Activity"
-                        } — ${lead.last_activity_detail}`
-                      : undefined
-                  }
-                >
-                  {/* The icon says what kind of thing happened - a note, a
-                      call, a meeting - so the row can be read before the
-                      sentence is. */}
-                  <ActivityGlyph
-                    icon={iconForActivity(lead.last_activity_type)}
-                    className="mt-0.5"
-                  />
-                  <span className="min-w-0">
-                    {lead.last_activity_detail ||
-                      LeadActivityTypeLabels[lead.last_activity_type!] ||
-                      lead.last_activity_type}
-                  </span>
-                </p>
-              )}
-
-              {/* What came before it. Muted and single-line: this is texture
-                  for the eye, not something to read word for word - the point
-                  is whether anything has been happening. */}
-              {earlier.length > 0 && (
-                <div className="mt-1 space-y-0.5">
-                  {earlier.map((a, i) => (
-                    <p
-                      key={i}
-                      className="flex items-center gap-1.5 text-[11px] text-slate-400"
-                      title={a.detail || undefined}
-                    >
-                      <ActivityGlyph icon={iconForActivity(a.type)} className="opacity-70" />
-                      <span className="shrink-0 tabular-nums text-slate-400">
-                        {whenShort(a.at)}
-                      </span>
-                      <span className="truncate">
-                        {a.detail ||
-                          (a.type
-                            ? LeadActivityTypeLabels[
-                                a.type as keyof typeof LeadActivityTypeLabels
-                              ] || a.type
-                            : "")}
-                      </span>
-                    </p>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        },
+        render: (lead) => (
+          <LastActivityCell
+            at={lead.last_activity_at}
+            type={lead.last_activity_type}
+            detail={lead.last_activity_detail}
+            recent={lead.recent_activities}
+            labels={LeadActivityTypeLabels as Record<string, string>}
+          />
+        ),
       },
 
       {
@@ -398,94 +290,15 @@ export function LeadsTable({
         // Widened from 9%: it now carries what is due rather than only when.
         width: "14%",
         sortable: true,
-        render: (lead) => {
-          // Follow-ups and open tasks together, soonest first. A seller does
-          // not think of them as different things - both are "what do I owe
-          // this lead next" - and showing only the follow-up date hid every
-          // task that was actually the nearer commitment.
-          const items = lead.upcoming_items || [];
-
-          if (!items.length && !lead.next_follow_up_at) {
-            return <span className="text-sm text-slate-300">—</span>;
-          }
-
-          const today = new Date().toISOString().slice(0, 10);
-          // Same red / amber / slate coding as the follow-up filters on the
-          // notes table, so the two read the same way.
-          const toneFor = (iso: string) => {
-            const due = iso.slice(0, 10);
-            if (due < today) return "text-red-600";
-            if (due === today) return "text-amber-600";
-            return "text-slate-700";
-          };
-          const labelFor = (iso: string) => {
-            const due = iso.slice(0, 10);
-            if (due < today) return `${daysSince(iso) ?? 0}d late`;
-            if (due === today) return "Today";
-            return dayMonth(iso);
-          };
-
-          // Nothing itemised but the lead still carries a date - keep the old
-          // behaviour rather than showing a dash.
-          if (!items.length) {
-            return (
-              <p
-                className={`text-sm font-medium ${toneFor(
-                  lead.next_follow_up_at!
-                )}`}
-              >
-                {labelFor(lead.next_follow_up_at!)}
-              </p>
-            );
-          }
-
-          const [next, ...rest] = items;
-          return (
-            <div>
-              <p className={`text-sm font-medium ${toneFor(next.at)}`}>
-                {labelFor(next.at)}
-              </p>
-              <p
-                className="flex items-start gap-1.5 text-xs text-slate-500 break-words whitespace-normal leading-snug"
-                title={`${iconForUpcoming(next.kind).name}: ${next.label}`}
-              >
-                {/* Calendar, follow-up or task - the icon carries the kind so
-                    the date above can keep carrying the urgency. */}
-                <ActivityGlyph icon={iconForUpcoming(next.kind)} className="mt-0.5" />
-                <span className="min-w-0">{next.label}</span>
-              </p>
-
-              {/* What follows it, so a busy lead is distinguishable from one
-                  with a single reminder sitting on it. */}
-              {rest.length > 0 && (
-                <div className="mt-1 space-y-0.5">
-                  {rest.map((item, i) => (
-                    <p
-                      key={i}
-                      className="flex items-center gap-1.5 text-[11px] text-slate-400"
-                      title={`${iconForUpcoming(item.kind).name}: ${item.label}`}
-                    >
-                      <ActivityGlyph icon={iconForUpcoming(item.kind)} className="opacity-70" />
-                      <span
-                        className={`shrink-0 tabular-nums ${
-                          item.at.slice(0, 10) < today
-                            ? "text-red-400"
-                            : "text-slate-400"
-                        }`}
-                      >
-                        {labelFor(item.at)}
-                      </span>
-                      <span className="truncate">{item.label}</span>
-                    </p>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        },
+        render: (lead) => (
+          <FollowUpCell
+            items={lead.upcoming_items}
+            fallbackAt={lead.next_follow_up_at}
+          />
+        ),
       },
     ],
-    [formatDate, daysSince, dayMonth, getInitials]
+    [formatDate, getInitials]
   );
 
   return (

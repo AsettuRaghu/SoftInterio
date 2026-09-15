@@ -833,6 +833,25 @@ export interface ProjectSummary {
     completed: number;
     in_progress: number;
   };
+  /**
+   * Where the work has got to, derived by the list API from the playbook's
+   * top-level steps (or native phases). Distinct from `status`, which is where
+   * the record is.
+   */
+  current_stage?: {
+    name: string;
+    status: "not_started" | "in_progress" | "completed" | "skipped" | "cancelled";
+    index: number;
+    total: number;
+    source: "playbook" | "phases" | "none";
+  } | null;
+  /** The same enrichment the leads list carries, drawn by the same cells. */
+  last_activity_at?: string | null;
+  last_activity_type?: string | null;
+  last_activity_detail?: string | null;
+  recent_activities?: Array<{ type?: string | null; detail?: string | null; at: string }>;
+  next_follow_up_at?: string | null;
+  upcoming_items?: Array<{ kind: "follow_up" | "task" | "calendar" | string; label: string; at: string }>;
 }
 
 // =====================================================

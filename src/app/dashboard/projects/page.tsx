@@ -205,6 +205,12 @@ export default function ProjectsPage() {
               : 0;
           case "created_at":
             return item.created_at ? new Date(item.created_at).getTime() : 0;
+          // The same reading the leads list gives it: never-touched sorts as
+          // oldest, so "sort by last activity" surfaces the neglected ones.
+          case "last_activity_at":
+            return item.last_activity_at
+              ? new Date(item.last_activity_at).getTime()
+              : 0;
           default:
             return "";
         }

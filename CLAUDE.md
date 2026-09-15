@@ -1802,6 +1802,40 @@ happened and wants closing, or did not and wants rebooking.
 **Anything that asks "what meetings does this lead have" must read both tables**
 or it will answer for half of them.
 
+### The projects list mirrors the leads list, column for column
+
+Project (name, with client · service type · property · property type beneath),
+Stage, Status, Priority, Assigned To, Progress, Last Activity, Follow-up. A
+seller and a project manager walk past a list asking the same three things -
+what is it, where has it got to, what is owed next - and the two lists used to
+answer them differently.
+
+**Stage is derived, not read.** `GET /api/projects` runs the same derivation as
+`GET /api/projects/[id]/stages` - a stage is a top-level playbook step, falling
+back to native phases - but batched across the page: one query for every active
+run, one for their tasks, one for step order, one for the phases of whatever is
+left. The stored `current_phase_id` it used to read is a second copy of a fact
+the tasks already hold, and it was the copy that went stale. `current_phase` is
+still populated with the derived name for the phase filter that reads it.
+
+**Last Activity and Follow-up are the leads list's own cells.**
+`components/leads/activity-cells` holds `LastActivityCell` and `FollowUpCell`,
+extracted from `LeadsTable` where they had been refined three times, and both
+lists render them. They draw from `components/leads/activity-icons`. The label
+map is a parameter because lead and project activity types are different enums
+that happen to overlap.
+
+The list API enriches each project the way the leads list does: the last three
+`project_activities`, and the next three of project-note follow-ups, open tasks
+and booked meetings. Meetings are read from **both** `calendar_events` and
+`project_activities.meeting_scheduled_at`, for the reason the leads list reads
+both of its tables.
+
+**Assigned To comes from `tenant_directory`**, not the
+`project_manager:users!project_manager_id` embed - that embed resolves for the
+caller and returns null for every colleague, so the column would have read
+"Unassigned" on any project managed by someone else.
+
 ## Traps that have already cost time
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it

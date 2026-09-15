@@ -6,6 +6,11 @@ import { projectAccess } from "@/lib/projects/access";
 import { allowsDirectProjectCreate } from "@/lib/projects/settings";
 import { autoStartProjectPlaybook } from "@/lib/playbooks/auto-start";
 import { requestLogger } from "@/lib/logger/request";
+import {
+  deriveStagesFromPlaybook,
+  deriveStagesFromPhases,
+  EMPTY_STAGES,
+} from "@/lib/projects/stages";
 
 // GET /api/projects - List projects with phase summary
 export async function GET(request: NextRequest) {
@@ -147,23 +152,258 @@ export async function GET(request: NextRequest) {
       };
     }) || [];
 
-    // Fetch phase names for projects that have current_phase_id
-    const phaseIds = projectsWithClientName
-      .filter((p: any) => p.current_phase_id)
-      .map((p: any) => p.current_phase_id);
+    const projectIds = projectsWithClientName.map((p: any) => p.id);
 
-    if (phaseIds.length > 0) {
-      const { data: phases } = await supabase
-        .from("project_phases")
-        .select("id, name")
-        .in("id", phaseIds);
+    /*
+     * The project manager's name comes from tenant_directory, not the
+     * `project_manager:users!project_manager_id` embed above. That embed goes
+     * through `users`, whose policies are own-row-only, so it resolves for the
+     * caller and returns null for every colleague - the Assigned To column
+     * would have read "Unassigned" on a project managed by anyone else.
+     */
+    if (projectIds.length) {
+      const pmIds = [
+        ...new Set(
+          projectsWithClientName
+            .map((p: any) => p.project_manager_id)
+            .filter(Boolean)
+        ),
+      ];
+      if (pmIds.length) {
+        const { data: people } = await supabase
+          .from("tenant_directory")
+          .select("id, name, email, avatar_url")
+          .in("id", pmIds);
+        const byId = new Map((people ?? []).map((u: any) => [u.id, u]));
+        projectsWithClientName = projectsWithClientName.map((p: any) => ({
+          ...p,
+          project_manager: p.project_manager_id
+            ? byId.get(p.project_manager_id) ?? p.project_manager ?? null
+            : null,
+        }));
+      }
+    }
 
-      const phaseMap = new Map(phases?.map((phase: any) => [phase.id, phase.name]) || []);
+    /*
+     * Where each project has got to.
+     *
+     * Derived exactly as GET /api/projects/[id]/stages derives it - a stage is
+     * a top-level playbook step, falling back to native phases for a project
+     * with no run - but batched across the page: one query for every active
+     * run, one for their tasks, one for step order, one for the phases of
+     * whatever is left. The stored current_phase_id this used to read is a
+     * second copy of a fact the tasks already hold, and it was the copy that
+     * went stale.
+     */
+    if (projectIds.length) {
+      const { data: runs } = await supabase
+        .from("procedure_runs")
+        .select("id, related_id, definition_id, definition_name, definition_version, started_at")
+        .eq("related_type", "project")
+        .in("related_id", projectIds)
+        .eq("status", "active")
+        .order("started_at", { ascending: false });
 
-      projectsWithClientName = projectsWithClientName.map((p: any) => ({
-        ...p,
-        current_phase: p.current_phase_id ? phaseMap.get(p.current_phase_id) : null,
-      }));
+      // Most recently started run per project, as the single-project route.
+      const runByProject = new Map<string, any>();
+      for (const r of runs ?? []) {
+        if (!runByProject.has(r.related_id)) runByProject.set(r.related_id, r);
+      }
+      const runIds = [...runByProject.values()].map((r) => r.id);
+      const definitionIds = [
+        ...new Set([...runByProject.values()].map((r) => r.definition_id)),
+      ];
+      const withoutRun = projectIds.filter((id) => !runByProject.has(id));
+
+      const [{ data: runTasks }, { data: steps }, { data: phases }] =
+        await Promise.all([
+          runIds.length
+            ? supabase
+                .from("tasks")
+                .select("id, title, status, parent_task_id, procedure_step_id, procedure_run_id")
+                .in("procedure_run_id", runIds)
+            : Promise.resolve({ data: [] as any[] }),
+          definitionIds.length
+            ? supabase
+                .from("procedure_step_definitions")
+                .select("id, display_order")
+                .in("definition_id", definitionIds)
+            : Promise.resolve({ data: [] as any[] }),
+          withoutRun.length
+            ? supabase
+                .from("project_phases")
+                .select("id, project_id, name, status, display_order, progress_percentage")
+                .in("project_id", withoutRun)
+            : Promise.resolve({ data: [] as any[] }),
+        ]);
+
+      const stepOrder = new Map(
+        (steps ?? []).map((st: any) => [st.id, st.display_order ?? 0])
+      );
+      const tasksByRun = new Map<string, any[]>();
+      for (const t of runTasks ?? []) {
+        const list = tasksByRun.get(t.procedure_run_id) ?? [];
+        list.push(t);
+        tasksByRun.set(t.procedure_run_id, list);
+      }
+      const phasesByProject = new Map<string, any[]>();
+      for (const ph of phases ?? []) {
+        const list = phasesByProject.get(ph.project_id) ?? [];
+        list.push(ph);
+        phasesByProject.set(ph.project_id, list);
+      }
+
+      projectsWithClientName = projectsWithClientName.map((p: any) => {
+        const run = runByProject.get(p.id);
+        const derived = run
+          ? deriveStagesFromPlaybook({
+              tasks: tasksByRun.get(run.id) ?? [],
+              stepOrder,
+              playbook: {
+                name: run.definition_name,
+                version: run.definition_version,
+              },
+            })
+          : phasesByProject.get(p.id)?.length
+            ? deriveStagesFromPhases(phasesByProject.get(p.id) as any)
+            : EMPTY_STAGES;
+
+        const current =
+          derived.currentIndex >= 0 ? derived.stages[derived.currentIndex] : null;
+
+        return {
+          ...p,
+          // Kept for anything still reading it; the derived stage is the truth.
+          current_phase: current?.name ?? null,
+          current_stage: current
+            ? {
+                name: current.name,
+                status: current.status,
+                index: derived.currentIndex,
+                total: derived.stages.length,
+                source: derived.source,
+              }
+            : null,
+        };
+      });
+    }
+
+    /*
+     * The last three things that happened, and the next three things owed.
+     *
+     * The same enrichment the leads list does, for the same reason: a list
+     * that shows only a status and a percentage makes you open every row to
+     * learn whether anything is moving. Batched across the page - four queries
+     * rather than four per row.
+     *
+     * Meetings on a project live in calendar_events only; the lead-side split
+     * into lead_activities does not apply here. But project_activities does
+     * carry meeting_scheduled_at too, so both are read for the same reason the
+     * leads list reads both of its tables.
+     */
+    if (projectIds.length) {
+      const [
+        { data: recent },
+        { data: followUps },
+        { data: dueTasks },
+        { data: events },
+        { data: meetings },
+      ] = await Promise.all([
+        supabase
+          .from("project_activities")
+          .select("project_id, activity_type, title, description, created_at")
+          .in("project_id", projectIds)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("project_notes")
+          .select("project_id, content, follow_up_at")
+          .in("project_id", projectIds)
+          .not("follow_up_at", "is", null)
+          .is("follow_up_done_at", null),
+        supabase
+          .from("tasks")
+          .select("related_id, title, due_date, status")
+          .eq("related_type", "project")
+          .in("related_id", projectIds)
+          .in("status", ["todo", "in_progress", "on_hold"])
+          .not("due_date", "is", null),
+        supabase
+          .from("calendar_events")
+          .select("linked_id, title, event_type, scheduled_at")
+          .eq("linked_type", "project")
+          .in("linked_id", projectIds)
+          .eq("is_completed", false),
+        supabase
+          .from("project_activities")
+          .select("project_id, title, activity_type, meeting_scheduled_at")
+          .in("project_id", projectIds)
+          .not("meeting_scheduled_at", "is", null)
+          .eq("meeting_completed", false),
+      ]);
+
+      // Newest first, so the first three seen per project are the three most
+      // recent.
+      const recentByProject = new Map<string, any[]>();
+      for (const a of recent ?? []) {
+        const list = recentByProject.get(a.project_id) ?? [];
+        if (list.length < 3) {
+          list.push(a);
+          recentByProject.set(a.project_id, list);
+        }
+      }
+
+      const upcoming = new Map<string, Array<{ kind: string; label: string; at: string }>>();
+      const add = (id: string, entry: { kind: string; label: string; at: string }) => {
+        const list = upcoming.get(id) ?? [];
+        list.push(entry);
+        upcoming.set(id, list);
+      };
+      (followUps ?? []).forEach((n: any) =>
+        add(n.project_id, {
+          kind: "follow_up",
+          label: (n.content || "").split("\n")[0].slice(0, 80) || "Follow-up",
+          at: n.follow_up_at,
+        })
+      );
+      (dueTasks ?? []).forEach((t: any) =>
+        add(t.related_id, { kind: "task", label: t.title, at: t.due_date })
+      );
+      (events ?? []).forEach((e: any) =>
+        add(e.linked_id, {
+          kind: "calendar",
+          label: e.title || e.event_type || "Meeting",
+          at: e.scheduled_at,
+        })
+      );
+      (meetings ?? []).forEach((m: any) =>
+        add(m.project_id, {
+          kind: "calendar",
+          label: m.title || m.activity_type || "Meeting",
+          at: m.meeting_scheduled_at,
+        })
+      );
+
+      projectsWithClientName = projectsWithClientName.map((p: any) => {
+        const list = recentByProject.get(p.id) ?? [];
+        return {
+          ...p,
+          last_activity_at: list[0]?.created_at ?? null,
+          last_activity_type: list[0]?.activity_type ?? null,
+          last_activity_detail: list[0]
+            ? list[0].description || list[0].title || null
+            : null,
+          recent_activities: list.map((a: any) => ({
+            type: a.activity_type,
+            detail: a.description || a.title || null,
+            at: a.created_at,
+          })),
+          upcoming_items: (upcoming.get(p.id) ?? [])
+            // Soonest first; overdue sorts to the top because it is furthest
+            // in the past.
+            .sort((a, b) => (a.at < b.at ? -1 : 1))
+            .slice(0, 3),
+        };
+      });
     }
 
     return NextResponse.json({

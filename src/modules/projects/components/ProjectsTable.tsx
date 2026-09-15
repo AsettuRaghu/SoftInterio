@@ -10,9 +10,14 @@ import {
 import { BuildingOffice2Icon } from "@heroicons/react/24/outline";
 import type { ProjectSummary } from "@/types/projects";
 import {
+  LastActivityCell,
+  FollowUpCell,
+} from "@/components/leads/activity-cells";
+import {
   ProjectStatusLabels,
   ProjectCategoryLabels,
   ProjectPropertyTypeLabels,
+  ProjectActivityTypeLabels,
 } from "@/types/projects";
 import { ServiceTypeLabels } from "@/types/leads";
 import {
@@ -20,7 +25,6 @@ import {
   PROJECT_PRIORITY_COLORS,
   PROJECT_PHASE_COLORS,
 } from "@/modules/projects/constants";
-import { formatCurrency, formatDate } from "@/modules/projects/utils";
 
 interface ProjectsTableProps {
   data: ProjectSummary[];
@@ -58,53 +62,119 @@ export default function ProjectsTable({
       .join(" ");
   };
 
-  // Define columns
+  /*
+   * The same shape as the leads list, on purpose.
+   *
+   * A seller and a project manager both walk past a list asking the same three
+   * things - what is it, where has it got to, what is owed next - and the two
+   * lists answered them differently. This one now mirrors the lead columns
+   * one for one: the record and what it is about, its stage, its status and
+   * priority, who owns it, then Last Activity and Follow-up drawn by the very
+   * same cells the leads list draws.
+   */
   const columns: ColumnDef<ProjectSummary>[] = [
     {
-      key: "client_name",
-      header: "Client",
-      width: "16%",
+      key: "name",
+      header: "Project",
+      width: "22%",
       sortable: true,
-      render: (project) => (
-        <div>
-          <p className="text-sm font-semibold text-slate-900">
-            {project.client_name || "Unknown Client"}
-          </p>
-          {project.service_type && (
-            <p className="text-xs text-slate-500 mt-1">
-              {ServiceTypeLabels[
-                project.service_type as keyof typeof ServiceTypeLabels
-              ] || project.service_type}
+      render: (project) => {
+        const service = project.project_category
+          ? ProjectCategoryLabels[project.project_category] ||
+            project.project_category
+          : project.service_type
+            ? ServiceTypeLabels[project.service_type as keyof typeof ServiceTypeLabels] ||
+              project.service_type
+            : null;
+        const propertyType = project.property_type
+          ? getPropertyTypeLabel(project.property_type)
+          : null;
+        // Client, service, property and its type - the four facts that say
+        // what this project actually is, under the name that says which one.
+        const facts = [
+          project.client_name,
+          service,
+          project.property_name,
+          propertyType,
+        ].filter((f): f is string => !!f && f !== "Unknown Client" && f !== "Unknown Property");
+        return (
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-slate-900 truncate">
+              {project.name}
             </p>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "property_name",
-      header: "Property",
-      width: "20%",
-      sortable: true,
-      render: (project) => (
-        <div className="text-sm space-y-1">
-          <p className="font-semibold text-slate-900">
-            {project.property_name || "N/A"}
-          </p>
-          <div className="flex flex-col gap-0.5 text-xs text-slate-600">
-            {project.property_type && (
-              <span>Type: {getPropertyTypeLabel(project.property_type)}</span>
-            )}
-            {project.carpet_area && (
-              <span>Area: {project.carpet_area} sqft</span>
+            <p className="text-[11px] text-slate-400 font-mono">
+              {project.project_number}
+            </p>
+            {facts.length > 0 && (
+              <p
+                className="mt-0.5 text-xs text-slate-500 break-words whitespace-normal leading-snug"
+                title={facts.join(" · ")}
+              >
+                {facts.join(" · ")}
+              </p>
             )}
           </div>
-        </div>
-      ),
+        );
+      },
+    },
+    {
+      key: "current_stage",
+      header: "Stage",
+      width: "13%",
+      sortable: false,
+      render: (project) => {
+        /*
+         * Where the work has got to, as opposed to Status, which is where the
+         * record is. "In progress" covers everything between the first
+         * drawing and the last snag; the stage says which of those it is on.
+         * Derived by the API from the playbook's top-level steps, falling
+         * back to native phases - so the names are the tenant's own.
+         */
+        const stage = project.current_stage;
+        if (!stage) {
+          return <span className="text-sm text-slate-300">—</span>;
+        }
+        const tone =
+          stage.status === "in_progress"
+            ? "text-blue-700"
+            : stage.status === "completed"
+              ? "text-emerald-700"
+              : "text-slate-700";
+        return (
+          <div className="min-w-0">
+            <p className={`text-sm font-medium truncate ${tone}`} title={stage.name}>
+              {stage.name}
+            </p>
+            <p className="text-[11px] text-slate-400 tabular-nums">
+              {stage.index + 1} of {stage.total}
+              {stage.status === "not_started" && " · not started"}
+              {stage.source === "phases" && " · phases"}
+            </p>
+          </div>
+        );
+      },
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "9%",
+      sortable: true,
+      render: (project) => {
+        const colors = PROJECT_STATUS_COLORS[project.status];
+        return (
+          <span
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full ${colors?.bg} ${colors?.text}`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${colors?.dot}`}></span>
+            {ProjectStatusLabels[project.status]}
+          </span>
+        );
+      },
     },
     {
       key: "priority",
       header: "Priority",
-      width: "10%",
+      width: "8%",
       sortable: true,
       render: (project) => {
         const priority = project.priority || "Medium";
@@ -123,112 +193,43 @@ export default function ProjectsTable({
       },
     },
     {
-      key: "current_phase",
-      header: "Phase",
-      width: "12%",
-      sortable: true,
-      render: (project) => {
-        const phase = project.current_phase;
-        const colors = phase
-          ? PROJECT_PHASE_COLORS[phase as keyof typeof PROJECT_PHASE_COLORS]
-          : null;
-        return (
-          <div>
-            {phase ? (
-              <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full ${colors?.bg} ${colors?.text}`}
-              >
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${colors?.dot}`}
-                ></span>
-                {phase}
-              </span>
-            ) : (
-              <span className="text-xs text-slate-500">Not Started</span>
-            )}
-          </div>
-        );
-      },
-    },
-    {
       key: "project_manager",
       header: "Assigned To",
-      width: "12%",
-      sortable: false,
-      render: (project) => (
-        <div className="flex items-center gap-2">
-          {project.project_manager && (
-            <>
-              <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center shrink-0 text-xs font-semibold text-slate-600">
-                {project.project_manager.name?.charAt(0).toUpperCase() || "?"}
-              </div>
-              <span className="text-sm font-medium text-slate-900 truncate">
-                {project.project_manager.name}
-              </span>
-            </>
-          )}
-          {!project.project_manager && (
-            <span className="text-xs text-slate-500">Unassigned</span>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "timeline",
-      header: "Timeline",
-      width: "14%",
-      sortable: true,
-      render: (project) => (
-        <div className="text-xs text-slate-600 space-y-1">
-          <div>
-            <span
-              className={`font-semibold ${
-                project.expected_end_date &&
-                new Date(project.expected_end_date) < new Date() &&
-                project.status !== "completed"
-                  ? "text-red-600"
-                  : "text-slate-900"
-              }`}
-            >
-              {formatDate(project.expected_end_date) || "N/A"}
-            </span>
-          </div>
-          <div>
-            <span className="text-slate-500">Start: </span>
-            <span className="font-medium">
-              {formatDate(project.expected_start_date) || "N/A"}
-            </span>
-          </div>
-          <div>
-            <span className="text-slate-500">Created: </span>
-            <span className="font-medium">
-              {formatDate(project.created_at) || "N/A"}
-            </span>
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
       width: "10%",
-      sortable: true,
+      sortable: false,
       render: (project) => {
-        const colors = PROJECT_STATUS_COLORS[project.status];
+        const pm = project.project_manager;
+        if (!pm) {
+          // Amber, not grey: on a project this is a gap, not a neutral fact.
+          return <span className="text-xs text-amber-600">Unassigned</span>;
+        }
         return (
-          <span
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full ${colors?.bg} ${colors?.text}`}
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${colors?.dot}`}></span>
-            {ProjectStatusLabels[project.status]}
-          </span>
+          <div className="flex items-center gap-2 min-w-0">
+            {pm.avatar_url ? (
+              <img
+                src={pm.avatar_url}
+                alt=""
+                className="w-6 h-6 rounded-full shrink-0 object-cover"
+              />
+            ) : (
+              <span className="w-6 h-6 rounded-full shrink-0 bg-blue-100 text-blue-700 text-[10px] font-semibold flex items-center justify-center">
+                {pm.name
+                  .split(" ")
+                  .map((w) => w[0])
+                  .slice(0, 2)
+                  .join("")
+                  .toUpperCase()}
+              </span>
+            )}
+            <span className="text-sm text-slate-700 truncate">{pm.name}</span>
+          </div>
         );
       },
     },
     {
       key: "overall_progress",
       header: "Progress",
-      width: "10%",
+      width: "8%",
       sortable: true,
       render: (project) => (
         <div className="w-full">
@@ -246,6 +247,33 @@ export default function ProjectsTable({
             />
           </div>
         </div>
+      ),
+    },
+    {
+      key: "last_activity_at",
+      header: "Last Activity",
+      width: "15%",
+      sortable: true,
+      render: (project) => (
+        <LastActivityCell
+          at={project.last_activity_at}
+          type={project.last_activity_type}
+          detail={project.last_activity_detail}
+          recent={project.recent_activities}
+          labels={ProjectActivityTypeLabels}
+        />
+      ),
+    },
+    {
+      key: "next_follow_up_at",
+      header: "Follow-up",
+      width: "13%",
+      sortable: false,
+      render: (project) => (
+        <FollowUpCell
+          items={project.upcoming_items}
+          fallbackAt={project.next_follow_up_at}
+        />
       ),
     },
     {
