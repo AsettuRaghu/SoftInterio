@@ -130,6 +130,24 @@ const REQUIRED_FIELDS: Array<{ field: string; label: string }> = [
   { field: "carpet_area_sqft", label: "Carpet area" },
   { field: "expected_start_date", label: "Expected start date" },
   { field: "expected_end_date", label: "Expected end date" },
+  /*
+   * These four go beyond what the lead required.
+   *
+   * Status, Project Category and Priority are selects carrying a default, so in
+   * practice they are always satisfied - marking them required states the rule
+   * rather than changing behaviour, and stops a later change to those defaults
+   * quietly making them optional.
+   *
+   * Project Manager is the one that bites: it defaults to empty, so an existing
+   * project without one cannot be saved until somebody is chosen. That is the
+   * intent - both projects on this tenant have no manager, which is what the
+   * report flags as "nobody accountable" - but it does mean the first edit of
+   * such a project now has to name one.
+   */
+  { field: "status", label: "Status" },
+  { field: "project_category", label: "Project category" },
+  { field: "project_manager_id", label: "Project manager" },
+  { field: "priority", label: "Priority" },
 ];
 
 const REQUIRED_SET = new Set(REQUIRED_FIELDS.map((f) => f.field));
@@ -547,7 +565,7 @@ export function EditProjectDetailsModal({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Status
+                      Status<Star field="status" />
                     </label>
                     <select
                       value={editForm.status}
@@ -573,7 +591,7 @@ export function EditProjectDetailsModal({
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Project Category
+                      Project Category<Star field="project_category" />
                     </label>
                     <select
                       value={editForm.project_category}
@@ -594,7 +612,7 @@ export function EditProjectDetailsModal({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Project Manager
+                      Project Manager<Star field="project_manager_id" />
                     </label>
                     <select
                       value={editForm.project_manager_id}
@@ -603,7 +621,10 @@ export function EditProjectDetailsModal({
                       }
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
-                      <option value="">Nobody assigned</option>
+                      {/* Not "Nobody assigned", which reads as a choice
+                          somebody made. This is now required, so the empty
+                          option is a prompt. */}
+                      <option value="">Select a project manager</option>
                       {teamMembers.map((m) => (
                         <option key={m.id} value={m.id}>
                           {m.name}
@@ -618,7 +639,7 @@ export function EditProjectDetailsModal({
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Priority
+                      Priority<Star field="priority" />
                     </label>
                     <select
                       value={editForm.priority}
