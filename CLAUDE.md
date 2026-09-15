@@ -612,17 +612,37 @@ the four owners; a tenant's own rows sit beside them and RLS returns both.
 `GET /api/delay-reasons` is the only route so far - **there is no editing
 screen yet**; add one under Settings when it is asked for.
 
-**The current plan shifts by itself.** `trg_plan_shifts_with_reality` (BEFORE
-UPDATE on `tasks`) fires on the two events that make a plan late: a step
-completing after its `due_date`, and a step held until a date past its
-`due_date` (which also becomes its new `due_date`). Both call
-`shift_dependent_steps(task, days)`, which pushes every **not-started** step
-that waits on it - transitively through `procedure_step_dependencies`, plus the
-steps inside any pushed stage - by the same number of days, and writes a
-`plan_shifted` timeline entry naming what moved and why. **`plan_baselines` is
-never touched**; the gap between agreed and current is the delay. Dry-run on
-PRJ_20251219_0001: "2D Designs" 3 days late moves 28 tasks, leaves the
-completed stage and the in-progress source alone.
+**The plan schedules itself.** `reschedule_run(run)` lays out the
+not-yet-started part of a plan from three things, and the two statement-level
+triggers on `tasks` (`trg_reschedule_after_insert/_update`, transition tables,
+so a run start or a commit schedules once) call it after anything about the
+run changes:
+
+- **the playbook's rules** — hours (8h = 1 day, rounded up), "waits for X to
+  finish / to start", the previous sibling unless marked Parallel, the
+  previous stage unless marked Parallel;
+- **reality** — a completed step is its actual dates; a step in progress or
+  on hold ends no earlier than today or its "expected until"; a stage under
+  way ends when its last step does (its old due date is *not* a floor);
+- **the project manager** — `tasks.dates_pinned`, set by `PATCH
+  /api/tasks/[id]` when a person changes a plan step's date, is treated as
+  fixed.
+
+Finishing early pulls the plan forward; late or held pushes it back. The
+`start_date` of a step under way is never rewritten (it is the plan;
+`started_at` is what happened) — only its end moves. `plan_baselines` is never
+touched. Calendar days, not working days. The run's own dating in
+`start_procedure_run` is overwritten by the insert trigger immediately.
+
+Three things it got wrong on its first real plan, all fixed the same day:
+a step's floor is its **own stage's** start, not the project's planned start;
+the implicit previous-sibling rule **yields to an explicit link the other
+way** (Reworks "waits for Client Approval" typed above Approval chased its
+own tail for 80 passes — eight months); and the running-stage correction has
+to sit **inside** the fixed-point loop or the stages after it are computed
+from the stale end. It raises a WARNING if it ever fails to settle.
+
+It replaced step 3's one-way `shift_dependent_steps` trigger, which is gone.
 
 A dry run against live data without writing it: a throwaway migration whose
 `DO` block does the work and ends in `RAISE EXCEPTION` with the results in the

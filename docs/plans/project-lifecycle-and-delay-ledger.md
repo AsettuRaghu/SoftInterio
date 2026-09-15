@@ -105,7 +105,7 @@ says so — that is a sales finding, not a delivery one.
 |---|---|---|
 | **Promised at sale** | what Sales told the client | never, after kick-off |
 | **Agreed plan** | what the PM committed to at kick-off | only when a new plan is agreed — with a reason, a delay owner, and a note that the client was told |
-| **Current plan** | the step dates as they stand today | **automatically**, when a step finishes late or is put on hold — everything that waits on it moves by the same number of days |
+| **Current plan** | the step dates as they stand today | **automatically** — laid out from the playbook's rules (hours, "waits for", order), what has actually happened, and any date the PM pinned by hand. Finishing early pulls it forward; late or held pushes it back |
 | **Actual** | what really happened *(exists)* | as work starts and finishes |
 
 "Agreeing a new plan" is a deliberate act, like revising a quotation. The
@@ -168,10 +168,10 @@ Each step is useful on its own.
    plan (v1), the sales-promised dates kept, and the "waiting on" list
    raised automatically from client/vendor steps.
 3. ✅ built — Hold with owner + reason + expected date; the reason list
-   (shipped defaults; an editing screen is still to come); the current plan
-   shifts automatically for everything that waits on a late or held step
-   (the agreed plan does not move); "Usual delay" on client/vendor steps in
-   the playbook.
+   (shipped defaults; an editing screen is still to come); "Usual delay" on
+   client/vendor steps in the playbook; and **the plan schedules itself** from
+   the playbook's rules, reality and pinned dates (the agreed plan does not
+   move).
 4. ✅ built — "Waiting on others" panel on the Plan tab: open asks by owner, overdue in red, delivered list with days late, ad-hoc adds.
 5. Agreeing a new plan.
 6. Delay summary on the project, delay band on Reports.

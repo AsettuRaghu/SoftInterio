@@ -274,7 +274,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { data: existingTask, error: fetchError } = await supabase
       .from("tasks")
       .select(
-        "id, title, status, priority, due_date, description, is_from_template, template_id, assigned_to, created_by, related_type, related_id, procedure_step_id"
+        "id, title, status, priority, start_date, due_date, description, is_from_template, template_id, assigned_to, created_by, related_type, related_id, procedure_step_id, procedure_run_id"
       )
       .eq("id", id)
       .single();
@@ -404,6 +404,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (field in body) {
         updateData[field] = body[field as keyof UpdateTaskInput];
       }
+    }
+
+    // A date a person changes on a plan step is pinned: the scheduler lays
+    // the rest of the plan around it instead of overwriting it. Only a real
+    // change pins - the edit modal echoes unchanged dates back.
+    if (existingTask.procedure_run_id) {
+      const dateChanged =
+        ("start_date" in body && (body.start_date || null) !== (existingTask.start_date || null)) ||
+        ("due_date" in body && (body.due_date || null) !== (existingTask.due_date || null));
+      if (dateChanged) updateData.dates_pinned = true;
+      if ("dates_pinned" in body && body.dates_pinned === false) updateData.dates_pinned = false;
     }
 
     // Tags are a full replacement of the assignment set: whatever the client
