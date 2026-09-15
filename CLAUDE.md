@@ -1638,6 +1638,25 @@ obstacle.
 Eighteen fields are required in total: the twelve a won lead already had to
 carry, plus status, category, manager, priority, description and notes.
 
+**Saving has to look like saving.** `EditProjectDetailsModal` has always rendered
+"Saving..." and disabled its button off `isSaving` - and `OverviewTab` passed
+`isSaving={false}` as a **literal**, so the flag never moved. Pressing Save
+Changes looked exactly like pressing nothing for the second the PATCH and refetch
+took. The lead page had this right all along: `useLeadDetail` holds the flag and
+sets it around the save.
+
+The flag is cleared in a `finally` and the rejection is **not** caught in
+`OverviewTab` - the dialog is awaiting that promise and turns a rejection into its
+own error line, so swallowing it there would close the dialog on a failed save.
+
+Confirmation is raised on the page, not in the dialog: the dialog has closed by
+then, and a save nobody sees confirmed is a save nobody trusts. The page's
+`notice` carries its own variant so a success is not painted red.
+
+The Edit button in the page header switches to the Overview tab before opening
+the dialog, because the dialog is rendered inside that tab - so closing it always
+lands on the overview, looking at what was just changed.
+
 ### The Category control was blank because the GET never returned it
 
 `properties.category` was absent from both property selects in

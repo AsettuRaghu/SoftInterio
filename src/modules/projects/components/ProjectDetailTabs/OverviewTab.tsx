@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Project } from "@/types/projects";
 import {
@@ -18,6 +19,8 @@ interface OverviewTabProps {
   onUpdate?: (updates: Partial<Project>) => Promise<void>;
   /** Who may be named project manager. The page already loads these. */
   teamMembers?: { id: string; name: string; email?: string }[];
+  /** Confirm the save on the page behind, once the dialog has closed. */
+  onSaved?: (message: string) => void;
 }
 
 export default function OverviewTab({
@@ -26,7 +29,16 @@ export default function OverviewTab({
   onModalClose,
   onUpdate,
   teamMembers = [],
+  onSaved,
 }: OverviewTabProps) {
+  /*
+   * The dialog has always rendered "Saving..." and disabled its button off this
+   * flag - and this component passed `isSaving={false}` as a literal, so it never
+   * moved. Pressing Save Changes looked like pressing nothing for the second or
+   * so the PATCH and the refetch took, which is why it felt as though nothing
+   * had been saved.
+   */
+  const [isSaving, setIsSaving] = useState(false);
   const handleSaveModal = async (
     editForm: Parameters<typeof EditProjectDetailsModal>[0]["onSave"] extends (
       data: infer T,
@@ -91,22 +103,38 @@ export default function OverviewTab({
      * This used to do its own fetch and finish with window.location.reload() -
      * a full page load to show a changed field, which also threw away whichever
      * tab and scroll position the person was on.
+     *
+     * The flag is cleared in a `finally`, and the throw is deliberately not
+     * caught: the dialog is waiting on this promise and turns a rejection into
+     * its own error line. Swallowing it here would close the dialog on a failed
+     * save.
      */
-    if (onUpdate) {
-      await onUpdate(updateData as Partial<Project>);
-    } else {
-      const response = await fetch(`/api/projects/${project.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updateData),
-      });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to update project");
+    setIsSaving(true);
+    try {
+      if (onUpdate) {
+        await onUpdate(updateData as Partial<Project>);
+      } else {
+        const response = await fetch(`/api/projects/${project.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updateData),
+        });
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to update project");
+        }
       }
+    } finally {
+      setIsSaving(false);
     }
 
-    onModalClose?.();
+    /*
+     * The dialog closes itself once this resolves, which lands the person back on
+     * the Overview tab looking at what they just changed. The confirmation is
+     * raised there rather than in the dialog, because the dialog is gone by then
+     * and a save nobody sees confirmed is a save nobody trusts.
+     */
+    onSaved?.("Project updated.");
   };
 
   return (
@@ -118,7 +146,7 @@ export default function OverviewTab({
         teamMembers={teamMembers}
         onClose={onModalClose || (() => {})}
         onSave={handleSaveModal}
-        isSaving={false}
+        isSaving={isSaving}
       />
 
       {/* CLIENT DETAILS BLOCK */}

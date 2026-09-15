@@ -158,7 +158,10 @@ export default function ProjectDetailPage({ params }: PageProps) {
   // Same handler the lead page uses - see lib/quotations/use-revise-quotation.
   const { revise, revisingId } = useReviseQuotation();
   const { prompt, promptDialog } = usePrompt();
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{
+    message: string;
+    variant: "success" | "error";
+  } | null>(null);
 
   /**
    * Who sees where the plan came from, and who may stop it.
@@ -257,7 +260,10 @@ export default function ProjectDetailPage({ params }: PageProps) {
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      setNotice(data.error || "Could not stop the playbook");
+      setNotice({
+        message: data.error || "Could not stop the playbook",
+        variant: "error",
+      });
       return;
     }
     // Quietly: this changes the plan, not the page. fetchProject used to blank
@@ -573,7 +579,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
        * Silence here would put it straight back.
        */
       if (Array.isArray(data.warnings) && data.warnings.length) {
-        setNotice(data.warnings.join(" "));
+        setNotice({ message: data.warnings.join(" "), variant: "error" });
       }
       await fetchProject({ quiet: true });
     } catch (err) {
@@ -711,7 +717,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
       await fetchProject({ quiet: true });
     } catch (err) {
       console.error(err);
-      setNotice("Failed to initialise phases");
+      setNotice({ message: "Failed to initialise phases", variant: "error" });
     }
   };
 
@@ -1097,6 +1103,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
               // The page already loads these for the task assignee dropdown;
               // the edit dialog needs them to offer a project manager.
               teamMembers={teamMembers}
+              onSaved={(message) => setNotice({ message, variant: "success" })}
               isModalOpen={showEditDetailsModal}
               onModalClose={() => setShowEditDetailsModal(false)}
             />
@@ -1203,11 +1210,13 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 e.stopPropagation();
                 e.preventDefault();
                 void revise(quotationId).catch((err) =>
-                  setNotice(
-                    err instanceof Error
-                      ? err.message
-                      : "Failed to create revision"
-                  )
+                  setNotice({
+                    message:
+                      err instanceof Error
+                        ? err.message
+                        : "Failed to create revision",
+                    variant: "error",
+                  })
                 );
               }}
               revisingId={revisingId}
@@ -1288,8 +1297,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
         {promptDialog}
         <Toast
-          message={notice}
-          variant="error"
+          message={notice?.message ?? null}
+          variant={notice?.variant ?? "error"}
           onDismiss={() => setNotice(null)}
         />
       </PageContent>
