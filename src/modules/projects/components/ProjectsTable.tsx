@@ -74,9 +74,9 @@ export default function ProjectsTable({
    */
   const columns: ColumnDef<ProjectSummary>[] = [
     {
-      key: "name",
-      header: "Project",
-      width: "22%",
+      key: "client_name",
+      header: "Client",
+      width: "18%",
       sortable: true,
       render: (project) => {
         const service = project.project_category
@@ -89,23 +89,29 @@ export default function ProjectsTable({
         const propertyType = project.property_type
           ? getPropertyTypeLabel(project.property_type)
           : null;
-        // Client, service, property and its type - the four facts that say
-        // what this project actually is, under the name that says which one.
+        /*
+         * The client is the headline. A project is known by who it is for -
+         * "the Raju job" - and the generated name repeats the client anyway
+         * ("Dileepnath Raju - Modular Project"). So the client leads, and the
+         * project name sits beneath with the four facts that say what it is:
+         * service, property, property type and where.
+         */
         const facts = [
-          project.client_name,
+          project.name,
           service,
           project.property_name,
           propertyType,
-        ].filter((f): f is string => !!f && f !== "Unknown Client" && f !== "Unknown Property");
+          project.city,
+        ].filter(
+          (f): f is string =>
+            !!f && f !== "Unknown Client" && f !== "Unknown Property"
+        );
         return (
           <div className="min-w-0">
-            {/* The project number is deliberately not shown. It is a record
-                identifier nobody reads a list by, and it was the line that
-                pushed every row to four. The name and the four facts beneath it
-                are how people recognise a project; the number is on the detail
-                page for anyone who needs to quote it. */}
             <p className="text-sm font-medium text-slate-900 truncate">
-              {project.name}
+              {project.client_name && project.client_name !== "Unknown Client"
+                ? project.client_name
+                : project.name}
             </p>
             {facts.length > 0 && (
               <p
@@ -120,38 +126,74 @@ export default function ProjectsTable({
       },
     },
     {
-      key: "current_stage",
-      header: "Stage",
-      width: "13%",
-      sortable: false,
+      key: "overall_progress",
+      header: "Stage & Progress",
+      width: "16%",
+      sortable: true,
       render: (project) => {
         /*
-         * Where the work has got to, as opposed to Status, which is where the
-         * record is. "In progress" covers everything between the first
-         * drawing and the last snag; the stage says which of those it is on.
-         * Derived by the API from the playbook's top-level steps, falling
-         * back to native phases - so the names are the tenant's own.
+         * Where the work is and how far along, in one place, because they are
+         * one fact seen two ways. The stage names are the tenant's own - a
+         * playbook's top-level steps, or native phases for a project without a
+         * run - and there can be more than one under way at once when the
+         * playbook allows it. Hovering the bar lists every stage's progress;
+         * that is a plain title attribute, so it adds nothing to the page.
          */
-        const stage = project.current_stage;
-        if (!stage) {
-          return <span className="text-sm text-slate-300">—</span>;
-        }
-        const tone =
-          stage.status === "in_progress"
-            ? "text-blue-700"
-            : stage.status === "completed"
-              ? "text-emerald-700"
-              : "text-slate-700";
+        const summary = project.stage_summary;
+        const pct = project.overall_progress || 0;
+
+        const headline = !summary
+          ? null
+          : summary.active.length
+            ? summary.active.map((st) => st.name).join(" + ")
+            : summary.next
+              ? `Next: ${summary.next}`
+              : summary.done === summary.total
+                ? "All stages done"
+                : null;
+
+        const breakdown = summary
+          ? summary.breakdown
+              .map((st) => `${st.name}: ${st.progress}%`)
+              .join("\n")
+          : undefined;
+
         return (
           <div className="min-w-0">
-            <p className={`text-sm font-medium truncate ${tone}`} title={stage.name}>
-              {stage.name}
-            </p>
-            <p className="text-[11px] text-slate-400 tabular-nums">
-              {stage.index + 1} of {stage.total}
-              {stage.status === "not_started" && " · not started"}
-              {stage.source === "phases" && " · phases"}
-            </p>
+            {headline ? (
+              <p
+                className={`text-sm font-medium truncate ${
+                  summary!.active.length ? "text-blue-700" : "text-slate-600"
+                }`}
+                title={headline}
+              >
+                {headline}
+              </p>
+            ) : (
+              <p className="text-sm text-slate-300">—</p>
+            )}
+            <div
+              className="mt-1 flex items-center gap-2"
+              title={breakdown}
+            >
+              <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    pct >= 100 ? "bg-green-500" : "bg-blue-500"
+                  }`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <span className="text-xs font-medium text-slate-700 tabular-nums w-9 text-right">
+                {pct}%
+              </span>
+            </div>
+            {summary && (
+              <p className="text-[11px] text-slate-400 tabular-nums">
+                {summary.done} of {summary.total} stages done
+                {summary.source === "phases" && " · phases"}
+              </p>
+            )}
           </div>
         );
       },
@@ -227,29 +269,6 @@ export default function ProjectsTable({
           </div>
         );
       },
-    },
-    {
-      key: "overall_progress",
-      header: "Progress",
-      width: "8%",
-      sortable: true,
-      render: (project) => (
-        <div className="w-full">
-          <div className="flex items-center justify-between text-xs mb-1">
-            <span className="font-medium text-slate-700">
-              {project.overall_progress}%
-            </span>
-          </div>
-          <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${
-                project.overall_progress >= 100 ? "bg-green-500" : "bg-blue-500"
-              }`}
-              style={{ width: `${project.overall_progress}%` }}
-            />
-          </div>
-        </div>
-      ),
     },
     /*
      * Fixed widths on the two prose columns. The table is not table-fixed, so

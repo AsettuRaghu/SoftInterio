@@ -49,10 +49,6 @@ export default function ProjectsPage() {
     "in_progress",
     "on_hold",
   ]);
-  const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
-  const [selectedPropertyTypes, setSelectedPropertyTypes] = useState<string[]>(
-    []
-  );
   const [selectedPhases, setSelectedPhases] = useState<string[]>([]);
 
   // Use AppTable hooks
@@ -65,16 +61,34 @@ export default function ProjectsPage() {
       if (!searchTerm) return data;
       const term = searchTerm.toLowerCase();
       return data.filter((project) => {
+        /*
+         * Everything a column shows, as the leads list does. The two filters
+         * that came off the bar - priority, property type - are found here
+         * instead, and so is a stage name, a manager, a note, or the title of
+         * the meeting that is due. If it is on the row, typing it finds the
+         * row.
+         */
         const searchableText = [
           project.project_number,
           project.name,
           project.client_name,
           project.property_name,
+          project.property_type,
+          project.city,
           project.service_type,
+          project.project_category,
           project.status,
+          project.priority,
+          project.project_manager?.name,
+          project.current_phase,
+          ...(project.stage_summary?.active.map((st) => st.name) ?? []),
+          project.stage_summary?.next,
+          project.last_activity_detail,
+          project.last_activity_type,
+          ...(project.recent_activities?.map((a) => a.detail) ?? []),
+          ...(project.upcoming_items?.map((u) => u.label) ?? []),
           project.expected_start_date,
           project.expected_end_date,
-          project.created_at,
         ]
           .filter(Boolean)
           .join(" ")
@@ -95,30 +109,6 @@ export default function ProjectsPage() {
       );
     },
     [selectedStatuses]
-  );
-
-  // Custom filter function for priority
-  const filterByPriority = useCallback(
-    (data: ProjectSummary[]) => {
-      if (selectedPriorities.length === 0) return data;
-      return data.filter((project) =>
-        selectedPriorities.includes(project.priority || "Medium")
-      );
-    },
-    [selectedPriorities]
-  );
-
-  // Custom filter function for property type
-  const filterByPropertyType = useCallback(
-    (data: ProjectSummary[]) => {
-      if (selectedPropertyTypes.length === 0) return data;
-      return data.filter((project) =>
-        selectedPropertyTypes.some((type) =>
-          project.property_type?.toLowerCase().includes(type.toLowerCase())
-        )
-      );
-    },
-    [selectedPropertyTypes]
   );
 
   // Custom filter function for phase
@@ -164,12 +154,6 @@ export default function ProjectsPage() {
 
     // Apply status filter
     result = filterByStatus(result);
-
-    // Apply priority filter
-    result = filterByPriority(result);
-
-    // Apply property type filter
-    result = filterByPropertyType(result);
 
     // Apply phase filter
     result = filterByPhase(result);
@@ -222,13 +206,9 @@ export default function ProjectsPage() {
     allProjects,
     searchValue,
     selectedStatuses,
-    selectedPriorities,
-    selectedPropertyTypes,
     selectedPhases,
     filterData,
     filterByStatus,
-    filterByPriority,
-    filterByPropertyType,
     filterByPhase,
     sortData,
     sortState.column,
@@ -350,16 +330,6 @@ export default function ProjectsPage() {
               }}
               selectedStatuses={selectedStatuses}
               onStatusChange={setSelectedStatuses}
-              selectedPriorities={selectedPriorities}
-              onPriorityChange={(priorities) => {
-                setSelectedPriorities(priorities);
-                setPage(1);
-              }}
-              selectedPropertyTypes={selectedPropertyTypes}
-              onPropertyTypeChange={(types) => {
-                setSelectedPropertyTypes(types);
-                setPage(1);
-              }}
               selectedPhases={selectedPhases}
               onPhaseChange={(phases) => {
                 setSelectedPhases(phases);
@@ -370,13 +340,6 @@ export default function ProjectsPage() {
                   allProjects
                     .filter((p) => p.current_phase)
                     .map((p) => p.current_phase || "")
-                )
-              )}
-              availablePropertyTypes={Array.from(
-                new Set(
-                  allProjects
-                    .filter((p) => p.property_type)
-                    .map((p) => p.property_type || "")
                 )
               )}
             />

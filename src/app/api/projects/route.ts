@@ -268,20 +268,42 @@ export async function GET(request: NextRequest) {
             ? deriveStagesFromPhases(phasesByProject.get(p.id) as any)
             : EMPTY_STAGES;
 
+        /*
+         * Every stage that is under way, not just one. A playbook can run
+         * stages in parallel (`allow_parallel`), so "which stage is this on"
+         * can honestly have two answers - Procurement and 3D Design at once
+         * is the normal shape of a fit-out. `currentIndex` picks one of them
+         * and would have hidden the other.
+         *
+         * When nothing is under way the next not-started stage is named
+         * instead, so a project between stages still says where it is going
+         * rather than showing a dash.
+         */
+        const active = derived.stages.filter((st) => st.status === "in_progress");
+        const nextUp = derived.stages.find((st) => st.status === "not_started");
+        const done = derived.stages.filter(
+          (st) => st.status === "completed" || st.status === "skipped"
+        ).length;
         const current =
           derived.currentIndex >= 0 ? derived.stages[derived.currentIndex] : null;
 
         return {
           ...p,
-          // Kept for anything still reading it; the derived stage is the truth.
+          // Kept for the phase filter, which reads a single name.
           current_phase: current?.name ?? null,
-          current_stage: current
+          stage_summary: derived.stages.length
             ? {
-                name: current.name,
-                status: current.status,
-                index: derived.currentIndex,
+                active: active.map((st) => ({ name: st.name, progress: st.progress })),
+                next: active.length ? null : (nextUp?.name ?? null),
+                done,
                 total: derived.stages.length,
                 source: derived.source,
+                // Per-stage progress, for the hover on the bar.
+                breakdown: derived.stages.map((st) => ({
+                  name: st.name,
+                  status: st.status,
+                  progress: st.progress,
+                })),
               }
             : null,
         };

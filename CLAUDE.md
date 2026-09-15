@@ -1810,6 +1810,27 @@ seller and a project manager walk past a list asking the same three things -
 what is it, where has it got to, what is owed next - and the two lists used to
 answer them differently.
 
+**A project can be on more than one stage at once.** A playbook can run stages
+in parallel (`allow_parallel`), so "which stage is this on" honestly has two
+answers - Procurement and 3D Design together is the normal shape of a fit-out.
+`stage_summary.active` carries every in-progress stage; `currentIndex` picks one
+and would have hidden the other. When nothing is active, `next` names the first
+not-started stage so a project between stages says where it is going rather than
+showing a dash. `breakdown` carries every stage's progress for the hover on the
+bar - a plain `title` attribute, deliberately, so the feature costs the page
+nothing.
+
+Stage and Progress are **one column**, because they are one fact seen two ways.
+The **client is the headline** of the first column, with the project name and
+its facts beneath: a project is known by who it is for, and the generated name
+repeats the client anyway. The project number is not shown - it is searchable and
+on the detail page.
+
+The filter bar is one line: search, Status, Stage. Priority and Property Type
+came off as dropdowns because the search finds them, and four dropdowns under a
+search box made a second toolbar out of what should be one. Completed and
+cancelled projects are hidden by default, which the Status filter already did.
+
 **Stage is derived, not read.** `GET /api/projects` runs the same derivation as
 `GET /api/projects/[id]/stages` - a stage is a top-level playbook step, falling
 back to native phases - but batched across the page: one query for every active

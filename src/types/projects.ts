@@ -838,12 +838,20 @@ export interface ProjectSummary {
    * top-level steps (or native phases). Distinct from `status`, which is where
    * the record is.
    */
-  current_stage?: {
-    name: string;
-    status: "not_started" | "in_progress" | "completed" | "skipped" | "cancelled";
-    index: number;
+  stage_summary?: {
+    /** Every stage under way - a playbook can run several in parallel. */
+    active: Array<{ name: string; progress: number }>;
+    /** The next not-started stage, only when nothing is active. */
+    next: string | null;
+    done: number;
     total: number;
     source: "playbook" | "phases" | "none";
+    /** Per-stage progress, for the hover on the bar. */
+    breakdown: Array<{
+      name: string;
+      status: "not_started" | "in_progress" | "completed" | "skipped" | "cancelled";
+      progress: number;
+    }>;
   } | null;
   /** The same enrichment the leads list carries, drawn by the same cells. */
   last_activity_at?: string | null;
