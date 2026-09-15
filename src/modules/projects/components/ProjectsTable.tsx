@@ -23,7 +23,6 @@ import { ServiceTypeLabels } from "@/types/leads";
 import {
   PROJECT_STATUS_COLORS,
   PROJECT_PRIORITY_COLORS,
-  PROJECT_PHASE_COLORS,
 } from "@/modules/projects/constants";
 
 /**
@@ -284,8 +283,8 @@ export default function ProjectsTable({
         /*
          * Where the work is and how far along, in one place, because they are
          * one fact seen two ways. The stage names are the tenant's own - a
-         * playbook's top-level steps, or native phases for a project without a
-         * run - and there can be more than one under way at once when the
+         * playbook's top-level steps - and there can be more than one under
+         * way at once when the
          * playbook allows it. Hovering the bar lists every stage's progress;
          * that is a plain title attribute, so it adds nothing to the page.
          */
@@ -341,7 +340,6 @@ export default function ProjectsTable({
             {summary && (
               <p className="text-[11px] text-slate-400 tabular-nums">
                 {summary.done} of {summary.total} stages done
-                {summary.source === "phases" && " · phases"}
               </p>
             )}
           </div>

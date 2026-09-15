@@ -8,11 +8,10 @@ import { autoStartProjectPlaybook } from "@/lib/playbooks/auto-start";
 import { requestLogger } from "@/lib/logger/request";
 import {
   deriveStagesFromPlaybook,
-  deriveStagesFromPhases,
   EMPTY_STAGES,
 } from "@/lib/projects/stages";
 
-// GET /api/projects - List projects with phase summary
+// GET /api/projects - List projects with their derived stage summary
 export async function GET(request: NextRequest) {
   const log = requestLogger(request);
 
@@ -68,7 +67,6 @@ export async function GET(request: NextRequest) {
         updated_at,
         project_category,
         is_active,
-        current_phase_id,
         client:clients!client_id(name),
         project_manager:users!project_manager_id(id, name, email, avatar_url),
         property:properties!property_id(property_name, property_type, category, carpet_area, city),
@@ -150,7 +148,7 @@ export async function GET(request: NextRequest) {
         contract_value: p.contract_value ?? null,
         project_type: p.project_category, // Use project_category as project_type
         priority: p.priority || "Medium", // Default to Medium if not set
-        current_phase: null, // Will be populated if current_phase_id exists
+        current_phase: null, // Filled in below from the derived stages
       };
     }) || [];
 
@@ -190,12 +188,11 @@ export async function GET(request: NextRequest) {
      * Where each project has got to.
      *
      * Derived exactly as GET /api/projects/[id]/stages derives it - a stage is
-     * a top-level playbook step, falling back to native phases for a project
-     * with no run - but batched across the page: one query for every active
-     * run, one for their tasks, one for step order, one for the phases of
-     * whatever is left. The stored current_phase_id this used to read is a
-     * second copy of a fact the tasks already hold, and it was the copy that
-     * went stale.
+     * a top-level playbook step - but batched across the page: one query for
+     * every active run, one for their tasks, one for step order. A project
+     * with no run has no stages. Nothing is read from a stored column: the
+     * tasks already hold this fact, and a stored copy is the one that goes
+     * stale.
      */
     if (projectIds.length) {
       const { data: runs } = await supabase
@@ -215,9 +212,8 @@ export async function GET(request: NextRequest) {
       const definitionIds = [
         ...new Set([...runByProject.values()].map((r) => r.definition_id)),
       ];
-      const withoutRun = projectIds.filter((id) => !runByProject.has(id));
 
-      const [{ data: runTasks }, { data: steps }, { data: phases }] =
+      const [{ data: runTasks }, { data: steps }] =
         await Promise.all([
           runIds.length
             ? supabase
@@ -231,12 +227,6 @@ export async function GET(request: NextRequest) {
                 .select("id, display_order")
                 .in("definition_id", definitionIds)
             : Promise.resolve({ data: [] as any[] }),
-          withoutRun.length
-            ? supabase
-                .from("project_phases")
-                .select("id, project_id, name, status, display_order, progress_percentage")
-                .in("project_id", withoutRun)
-            : Promise.resolve({ data: [] as any[] }),
         ]);
 
       const stepOrder = new Map(
@@ -248,13 +238,6 @@ export async function GET(request: NextRequest) {
         list.push(t);
         tasksByRun.set(t.procedure_run_id, list);
       }
-      const phasesByProject = new Map<string, any[]>();
-      for (const ph of phases ?? []) {
-        const list = phasesByProject.get(ph.project_id) ?? [];
-        list.push(ph);
-        phasesByProject.set(ph.project_id, list);
-      }
-
       projectsWithClientName = projectsWithClientName.map((p: any) => {
         const run = runByProject.get(p.id);
         const derived = run
@@ -266,9 +249,7 @@ export async function GET(request: NextRequest) {
                 version: run.definition_version,
               },
             })
-          : phasesByProject.get(p.id)?.length
-            ? deriveStagesFromPhases(phasesByProject.get(p.id) as any)
-            : EMPTY_STAGES;
+          : EMPTY_STAGES;
 
         /*
          * Every stage that is under way, not just one. A playbook can run
@@ -291,7 +272,7 @@ export async function GET(request: NextRequest) {
 
         return {
           ...p,
-          // Kept for the phase filter, which reads a single name.
+          // Kept for the stage filter, which reads a single name.
           current_phase: current?.name ?? null,
           stage_summary: derived.stages.length
             ? {
@@ -445,7 +426,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/projects - Create a new project with phases
+// POST /api/projects - Create a new project directly (tenant opt-in)
 export async function POST(request: NextRequest) {
   const log = requestLogger(request);
 
@@ -516,7 +497,6 @@ export async function POST(request: NextRequest) {
       lead_id,
       quotation_id,
       notes,
-      initialize_phases = true, // Whether to initialize phases from templates
     } = body;
 
     if (!name?.trim()) {
@@ -664,20 +644,6 @@ export async function POST(request: NextRequest) {
       fromLead: !!lead_id,
     });
 
-    // Initialize phases from templates
-    if (initialize_phases && project) {
-      try {
-        await supabase.rpc("initialize_project_phases", {
-          p_project_id: project.id,
-          p_tenant_id: user.tenantId,
-          p_project_category: project_category || "turnkey",
-        });
-      } catch (phaseError) {
-        log.error("Error initializing phases", phaseError, { projectId: project.id });
-        // Don't fail the whole request, just log the error
-      }
-    }
-
     // The playbook for this kind of project starts itself, so adopting a
     // process does not mean remembering to apply it every time.
     await autoStartProjectPlaybook(supabase, {
@@ -703,23 +669,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Fetch the project with phases
-    const { data: projectWithPhases } = await supabase
+    const { data: created } = await supabase
       .from("projects")
       .select(
         `
         *,
-        project_manager:users!project_manager_id(id, name, email, avatar_url),
-        phases:project_phases(*)
+        project_manager:users!project_manager_id(id, name, email, avatar_url)
       `
       )
       .eq("id", project.id)
       .single();
 
-    return NextResponse.json(
-      { project: projectWithPhases || project },
-      { status: 201 }
-    );
+    return NextResponse.json({ project: created || project }, { status: 201 });
   } catch (error) {
     log.error("Unhandled error creating project", error);
     return NextResponse.json(

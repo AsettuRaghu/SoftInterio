@@ -326,13 +326,14 @@ shared defaults (`tenant_id IS NULL` / `is_system_role`), never a tenant's own.
 
 ### Every project sub-route must prove lineage
 `requireProjectAccess()` in `src/lib/projects/guard.ts` resolves the project in
-the caller's tenant and checks read/write. `requirePhaseLineage()` then proves
-the phase, sub-phase and checklist ids in the URL actually belong to it.
+the caller's tenant and checks read/write. Every route under
+`/api/projects/[id]/...` goes through it.
 
-Both are needed. The child tables carry no `tenant_id` — they are up to three
-joins from one — so pairing a project id you may open with a sub-phase id you
-may not would otherwise have read and written another business's data. The
-checklist route in particular never mentioned the project at all.
+The lesson that produced it still applies to any child id in a URL: a child
+table with no `tenant_id` of its own has to be proved to hang off the project,
+or pairing a project id you may open with a child id you may not reads and
+writes another business's data. The native phase routes did exactly that until
+`requirePhaseLineage()` was added; both went with the engine on 2026-09-15.
 
 ### Projects come from won leads unless a tenant opts out
 `tenant_settings.allow_direct_project_create` is false by default, so the New
@@ -378,12 +379,14 @@ Spaces are shared), the latest quotation, the target dates, the documents (a
 copy) and the lead's notes (re-pointed by `project_id`). The transition route
 writes the first project activity.
 
-It now also carries `won_amount` into **`projects.contract_value`** and calls
-`initialize_project_phases`. Before 2026-09-07 it did neither: `actual_cost`
-was hardcoded to 0 so every project read as worth nothing (the list aliased
-`actual_cost` to "quoted_amount"), and `p_initialize_phases` only ever *looked
-up* a phase, so a converted project had none and the Project Mgmt tab — the
-default tab — opened empty.
+It now also carries `won_amount` into **`projects.contract_value`**. Before
+2026-09-07 it did not: `actual_cost` was hardcoded to 0 so every project read
+as worth nothing (the list aliased `actual_cost` to "quoted_amount").
+
+**It creates no plan.** A project arrives with no stages; the playbook is
+chosen at kick-off, or auto-started by category by the application after the
+RPC returns (`autoStartProjectPlaybook`). It used to call
+`initialize_project_phases` here — see "The native phase engine is gone".
 
 `contract_value` is the agreed value, frozen at handover. `actual_cost` is
 money spent. They are different columns on purpose; showing one under both
@@ -480,7 +483,54 @@ When adding a card, copy a neighbour rather than inventing a radius.
 Note the border colour is still not uniform: 17 cards use `border-gray-200`
 where the rest use `border-slate-200`. Untouched here.
 
-### Playbooks are the workflow engine; phases are a view
+### The native phase engine is gone
+
+Retired on 2026-09-15 (migration `20260915120000`). SoftInterio had grown two
+engines for one idea: `project_phases` and sixteen satellite tables (sub-phases,
+checklists, approvals, comments, attachments, dependencies, status logs,
+templates, categories, groups), twenty-one functions, a view and six enum
+types — a phase tree copied from templates at handover, beside the playbook
+engine that versions, nests, gates, carries hours and executes as tasks. Every
+product idea from here on (baselines, delay attribution, milestones that drive
+status) was designed on tasks and would otherwise have been built twice.
+
+What went with it in the code: the thirteen `/api/projects/[id]/phases/**`
+routes and `/initialize-phases`, `ManagementTab`, `PhaseEditModal`,
+`SubPhaseEditModal`, `SubPhaseDetailPanel`, `phaseHelpers`,
+`playbook-adapter` (replaced by the much smaller `plan-tree.ts`),
+`requirePhaseLineage`, `deriveStagesFromPhases`, the phase fallbacks in
+`closing.ts`, `auto-start.ts`, the list and stages routes, the `phases`
+checkbox on the create form, and every phase type and constant. Nothing in
+`src/` selects a phase table now.
+
+What went in the database: the tables, functions, view, enums, the RLS
+policies on them, `projects.current_phase_id`,
+`project_payment_milestones.linked_phase_id` and
+`project_payment_milestone_templates.trigger_phase_template_id`.
+`create_project_from_lead` lost its `p_initialize_phases` parameter — a
+**signature change**, so it was dropped and recreated, and the transition
+route no longer passes it. `calculate_project_progress` lost its phase branch.
+
+**It was safe because nothing had been recorded on them**, verified before
+writing the migration and guarded inside it: the one project carrying native
+phases (PRJ-25-0002) had 6 phases and 18 sub-phases all `not_started`, and
+every record-keeping table was empty. The migration refuses if that is not
+true. That project now has no plan and shows the playbook picker, which is
+what the kick-off flow wants anyway.
+
+Two finance seams were kept deliberately, because payments are parked rather
+than abandoned: `project_payment_milestones_view` was recreated without its
+phase columns (dropped and created — `CREATE OR REPLACE VIEW` cannot remove a
+column), and the mapping the five global milestone templates carried
+("Booking Advance → Kickoff, on start" and so on) is written into the
+migration's header so a finance module can re-express it against playbook
+steps. `PaymentsTab` and the milestone routes are untouched.
+
+The word "phase" survives in a few variable names on the projects list
+(`current_phase`, `selectedPhases`) where it means the derived *stage*. Naming
+only; nothing reads a phase table.
+
+### Playbooks are the workflow engine
 **The UI says Playbook; the database says procedure.** The tables, the enum
 and the RPC keep their original names — `procedure_definitions`,
 `procedure_step_definitions`, `procedure_runs`, `procedure_run_id`,
@@ -497,45 +547,14 @@ Config's `settings.company.update` (Admin, Owner) on purpose — a design manage
 should be able to write down how their team works without being an
 administrator.
 
-SoftInterio grew two engines for one idea. `project_sub_phase_templates` and
-`procedure_step_definitions` share eleven columns and their `action_type` enums
-are identical. The procedure engine is the one to keep and the one already in
-use: it nests (`parent_step_id`), versions (`version`/`is_current`), targets a
-vertical (`tenant_type`, which already knows `architect`), attaches to anything
-(`related_type`/`related_id`), and executes as ordinary tasks rather than a
-second thing to assign and track.
-
-`src/lib/projects/playbook-adapter.ts` maps a run's parent tasks to phases and
-its child tasks to sub-phases, and the project Plan tab draws the 25-step
-"Modular Design Template" through it without one phase-template row. That is
-the evidence the tree is a view. The Plan tab prefers a playbook where one
-exists and falls back to native phases.
-
-**A Plan node is a phase row or a task, and the difference decides where an
-edit goes.** The page keeps a `playbookNodeIds` set; anything in it is a task,
-so its edits go to `PATCH /api/tasks/[id]` rather than the phase routes.
-`PhaseEditModal` and `SubPhaseEditModal` take an `onSaveOverride` for this.
-Sending a task id to a phase route answers **"Not found"** — that is what the
-404 means, not a missing project.
-
-Statuses and dates translate through `toTaskStatus` /
-`phaseEditToTaskUpdate` in the adapter: `not_started` is `todo`, planned start
-is `start_date`, planned end is `due_date`, and a status note becomes
-`hold_reason`, which `task_transition` records. Keep the mapping there rather
-than inline, **and keep it symmetric** — writing `start_date` without reading
-it back made a saved planned start look as though saving had erased it.
+**A playbook is the only way a project is planned.** A stage is a top-level
+step of the run; a step is a child task of that stage. `src/lib/projects/
+plan-tree.ts` nests a run's tasks in the playbook's order for the Plan tab,
+and that is all the shaping there is — every node is a task, every edit goes
+to `PATCH /api/tasks/[id]`, and clicking a step opens the task page.
 
 `start_date` is the plan and `started_at` is what happened; they are different
-columns and the tree shows them in different columns too.
-
-**Clicking a playbook step opens the task page**, not the sub-phase panel. The
-panel reads phase rows, and a step is a task; the task page already has the
-status gates, subtasks, comments and attachments, so there is nothing to
-reimplement.
-
-**Do not build new workflow features on phase templates.** Still to port before
-the phase engine can go: phase dependencies, progress rollup, planned-vs-actual
-at phase level, and the payment milestone's `linked_phase_id`.
+columns and the table shows them in different columns too.
 
 A protected playbook is one SoftInterio ships; it cannot be edited in place,
 because that would change the process under every business using it. `Copy`
@@ -566,13 +585,10 @@ satisfied:
 Do not describe these as gates in the UI until they are one.
 
 ### Progress and hours come from the playbook
-`calculate_project_progress` answers from the **active playbook run** first and
-falls back to phases. That order matters: a converted project can have both —
-`PRJ_20251219_0001` has four phase rows and a live run — and the Plan tab
-prefers the run, so reading phases first would have put two different numbers
-for the same project on one screen.
+`calculate_project_progress` answers from the **active playbook run** — settled
+steps over all steps — and is zero for a project without one. It used to fall
+back to native phases; that branch went with the engine.
 
-A phase trigger cannot fire for a project with no phase rows, so
 `trg_project_progress_from_task` recalculates from the tasks a run creates. It
 has no `WHEN` clause — one cannot reference `NEW` and `OLD` across insert and
 delete — and the function returns early for the tasks that belong to no run,
@@ -785,8 +801,8 @@ that from the ordered phase list the plan API already returns.
 All three props default to the old behaviour, so the project and lead Tasks tabs
 are untouched.
 
-`ManagementTab` survives **only** for projects still on the older native phase
-engine, whose rows really are not tasks. When that engine goes, so does it.
+`ManagementTab` survived for a while for projects still on the older native
+phase engine. That engine and the tab are gone (2026-09-15).
 
 Editing anything on the project page — a plan row or a task row — opens the one
 `EditTaskModal` the page owns. The Tasks tab's Edit button previously called an
@@ -803,9 +819,10 @@ phase action, replaced the whole project detail page with a skeleton and
 refetched every tab's data. Sub-step actions never called it, which is why only
 phases and that button behaved this way.
 
-It is now `refreshPlan`: the project row (native phases live on it) and the
-playbook with its gates, in parallel, touching no loading flag. The table simply
-changes. The refresh icon spins while it works rather than looking inert.
+It is now `refreshPlan`: the project row (progress and the header's stage
+strip come from it) and the playbook, in parallel, touching no loading flag.
+The table simply changes. The refresh icon spins while it works rather than
+looking inert.
 
 A disabled action is styled as a disabled **button** — `text-slate-300` on a
 white row read as nothing there. And the reason is now **printed on the row**,
@@ -846,23 +863,15 @@ read "Start". A blocked action is now **disabled with the reason as its
 tooltip** rather than hidden — hiding it answers "can I start this?" with
 silence.
 
-**A phase has actions too**, because a phase is a task. It previously had only
-Edit, which became untenable once steps could wait for their phase to start:
-nothing could ever be opened. `onPhaseQuickAction` routes a playbook phase to
-`PATCH /api/tasks/[id]` and a native phase to `PATCH
-/api/projects/[id]/phases/[phaseId]` — and that route wants
-**`status_change_notes`**, not `notes`, when the status moves.
+**A stage has actions too**, because a stage is a task. It previously had only
+Edit, which became untenable once steps could wait for their stage to start:
+nothing could ever be opened.
 
-**The page fetches the gates alongside the plan**, in one `Promise.all`, and
-passes them down. ManagementTab used to fetch them itself on mount — after the
-plan had already loaded and rendered — so the action column sat empty for about
-a second and then filled in. In series that was ~940ms; together it is ~540ms
-and the tab paints once with its buttons already correct.
-
-They refresh through `fetchPlaybook()`, which every action path already calls,
-so starting one step re-asks and unblocks the next. A project with no active run
-gets no gates and falls back to status-only behaviour, so the older phase engine
-still renders.
+The Plan tab (`TaskTableReusable`) draws its controls from task status and the
+transition's own refusals; the page no longer fetches `/plan-gates` for it.
+The route and `project_plan_gates()` stay — they are the one-round-trip answer
+to "what would the server accept on every row", which the kick-off gating will
+want.
 
 `can_start_task`'s reason names **which part** it waits for — "Waiting for 2D
 Designs to start" against "Waiting for Layout Drawings to finish". It used to
@@ -1458,17 +1467,15 @@ rules, and what they cost here:
 
 ### Which playbook drives a project is decided on the Plan tab
 
-`PlaybooksPanel` moved off the project's Tasks tab. Two projects looked like
-different products with nothing explaining why: one has an active run so its
-Plan tab is the task table with a Stop control, the other has six native phases
-and got `ManagementTab` with no playbook controls at all - and the panel that
-starts one was on a different tab.
+`PlaybooksPanel` moved off the project's Tasks tab. The panel that starts a
+playbook was on a different tab from the one where the plan appears, so a
+project with no plan showed nothing that said a playbook was even an option.
 
 It now sits on the Plan tab and only when there is no active run, so stopping a
 playbook makes it reappear and "stop this and use a different one" is one flow
-in one place. This does **not** unify the two engines; a native-phase project
-still renders `ManagementTab` and genuinely looks different. What changed is
-that the difference is legible and actionable.
+in one place. A project with no run shows this panel (to `tasks.edit` holders)
+or a "no plan has been set" note (to everyone else) — there is nothing else it
+could show, because a playbook is the only plan there is.
 
 ### Revising a quotation is not lead-specific
 
@@ -1845,27 +1852,28 @@ work is being logged against a project the record says has not begun, which is
 PRJ_20251219_0001 today. Nothing done yet has no pace, so it says how far past
 the planned end the project is - PRJ-25-0002 reads "167d past planned end".
 **Nothing wrote `projects.actual_start_date` until 2026-09-15.** Not the status
-change, not a task starting, not the edit dialog. `project_phases` has its own
-`actual_start_date` and a function that stamps it, which is where the assumption
-that "something sets this" came from. So every project carried planned dates and
-no actual ones, and the Timelines column had nothing to project from.
+change, not a task starting, not the edit dialog. The old phase engine had its
+own `actual_start_date` and a function that stamped it, which is where the
+assumption that "something sets this" came from. So every project carried
+planned dates and no actual ones, and the Timelines column had nothing to
+project from.
 
 Now (`20260915110000`): **a project starts when its first task does.**
 `trg_project_actual_start_from_task` carries `tasks.first_started_at` up to the
 project the first time it is set, and never overwrites a date already there.
 `PATCH /api/projects/[id]` stamps today when the status is moved to
-`in_progress` by hand, for a native-phase project with no tasks. The backfill
+`in_progress` by hand, for a project with no tasks yet. The backfill
 set `PRJ_20251219_0001` to 2026-09-03 - its first task's start, four weeks before
 the planned 1 Oct - and its Timelines went from "Starts 1 Oct · 9% done with no
 start recorded" to "Ends ~14 Jan · 17d ahead of plan".
 
 **Stage is derived, not read.** `GET /api/projects` runs the same derivation as
-`GET /api/projects/[id]/stages` - a stage is a top-level playbook step, falling
-back to native phases - but batched across the page: one query for every active
-run, one for their tasks, one for step order, one for the phases of whatever is
-left. The stored `current_phase_id` it used to read is a second copy of a fact
-the tasks already hold, and it was the copy that went stale. `current_phase` is
-still populated with the derived name for the phase filter that reads it.
+`GET /api/projects/[id]/stages` - a stage is a top-level playbook step - but
+batched across the page: one query for every active run, one for their tasks,
+one for step order. The `current_phase_id` column it used to read was a second
+copy of a fact the tasks already hold, and it was the copy that went stale; the
+column is gone. `current_phase` on the list response is still the derived
+stage name, for the Stage filter that reads it.
 
 **Last Activity and Follow-up are the leads list's own cells.**
 `components/leads/activity-cells` holds `LastActivityCell` and `FollowUpCell`,

@@ -3,21 +3,14 @@ import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { requireProjectAccess } from "@/lib/projects/guard";
 import { requestLogger } from "@/lib/logger/request";
-import {
-  playbookRunToPhases,
-  type PlaybookUser,
-} from "@/lib/projects/playbook-adapter";
+import { playbookRunToStages } from "@/lib/projects/plan-tree";
 
 /**
- * The playbook attached to this project, shaped as a phase tree.
+ * The playbook attached to this project: which run is active, whether the
+ * playbook has moved on since, and its stages in playbook order so the Plan
+ * tab can lay the tasks out the way the playbook wrote them.
  *
- * This is the evidence for collapsing the two workflow engines into one. The
- * project page can draw a playbook run using the tree it already has, which
- * means that tree is a view rather than an engine, and the second engine -
- * phase templates, sub-phases and their own statuses - is not carrying its
- * weight.
- *
- * Read-only. Nothing here writes, and the phase tables are untouched.
+ * Read-only.
  */
 export async function GET(
   request: NextRequest,
@@ -57,14 +50,12 @@ export async function GET(
       .maybeSingle();
 
     if (!run) {
-      return NextResponse.json({ playbook: null, phases: [] });
+      return NextResponse.json({ playbook: null, stages: [] });
     }
 
     const { data: tasks, error: tasksError } = await supabase
       .from("tasks")
-      .select(
-        "id, title, status, parent_task_id, procedure_step_id, start_date, due_date, assigned_to, started_at, completed_at, estimated_hours, actual_hours, created_at, updated_at"
-      )
+      .select("id, title, status, parent_task_id, procedure_step_id")
       .eq("procedure_run_id", run.id);
 
     if (tasksError) {
@@ -93,31 +84,7 @@ export async function GET(
       (steps ?? []).map((s) => [s.id as string, s.display_order as number])
     );
 
-    const assigneeIds = [
-      ...new Set((tasks ?? []).map((t) => t.assigned_to).filter(Boolean)),
-    ] as string[];
-    const users = new Map<string, PlaybookUser>();
-    if (assigneeIds.length > 0) {
-      const { data: people } = await supabase
-        .from("users")
-        .select("id, name, email, avatar_url")
-        .in("id", assigneeIds);
-      (people ?? []).forEach((p) =>
-        users.set(p.id, {
-          id: p.id,
-          name: p.name,
-          email: p.email,
-          avatar_url: p.avatar_url ?? undefined,
-        })
-      );
-    }
-
-    const phases = playbookRunToPhases({
-      projectId: id,
-      tasks: tasks ?? [],
-      stepOrder,
-      users,
-    });
+    const stages = playbookRunToStages(tasks ?? [], stepOrder);
 
     /**
      * Whether the playbook has moved on since this plan adopted it.
@@ -173,7 +140,7 @@ export async function GET(
         stepCount: tasks?.length ?? 0,
       },
       drift,
-      phases,
+      stages,
     });
   } catch (error) {
     log.error("Unhandled error loading the project playbook", error);

@@ -48,12 +48,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Fetch milestones
     const { data: milestones, error } = await supabase
       .from("project_payment_milestones")
-      .select(
-        `
-        *,
-        linked_phase:project_phases!linked_phase_id(id, name, status)
-      `
-      )
+      .select("*")
       .eq("project_id", id)
       .order("created_at", { ascending: true });
 
@@ -104,7 +99,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       description,
       percentage,
       amount,
-      linked_phase_id,
       trigger_condition = "on_completion",
       due_date,
     } = body;
@@ -140,16 +134,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         description,
         percentage,
         amount: calculatedAmount,
-        linked_phase_id,
         trigger_condition,
         due_date,
       })
-      .select(
-        `
-        *,
-        linked_phase:project_phases!linked_phase_id(id, name, status)
-      `
-      )
+      .select("*")
       .single();
 
     if (error) {

@@ -13,8 +13,6 @@ import {
 } from "@heroicons/react/24/outline";
 import {
   Project,
-  ProjectPhase,
-  ProjectSubPhase,
   ProjectNote,
   ProjectDetailTab,
   ProjectCategoryLabels,
@@ -27,8 +25,6 @@ import {
   StatusBadge,
 } from "@/components/ui/PageLayout";
 import {
-  SubPhaseDetailPanel,
-  ManagementTab,
   TasksTab,
   NotesTab,
   OverviewTab,
@@ -36,12 +32,9 @@ import {
   CalendarTab,
   TimelineTab,
   QuotationsTab,
-  PhaseEditModal,
-  SubPhaseEditModal,
 } from "@/modules/projects/components";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
-import { phaseEditToTaskUpdate } from "@/lib/projects/playbook-adapter";
 import { formatCurrency as formatCurrencyUtil } from "@/modules/projects/utils";
 import { SpacesTab } from "@/components/property/SpacesTab";
 import { buttonVariants } from "@/components/ui/Button";
@@ -69,24 +62,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
-  const [selectedSubPhase, setSelectedSubPhase] = useState<{
-    phaseId: string;
-    subPhaseId: string;
-  } | null>(null);
-  const [showSubPhasePanel, setShowSubPhasePanel] = useState(false);
   const [showEditDetailsModal, setShowEditDetailsModal] = useState(false);
-
-  // Phase/Sub-phase editing state
-  const [editingPhase, setEditingPhase] = useState<ProjectPhase | null>(null);
-  const [showPhaseEditModal, setShowPhaseEditModal] = useState(false);
-  const [editingSubPhase, setEditingSubPhase] = useState<{
-    subPhase: ProjectSubPhase;
-    phaseId: string;
-    phaseName: string;
-  } | null>(null);
-  const [showSubPhaseEditModal, setShowSubPhaseEditModal] = useState(false);
 
   // Project editing state
 
@@ -114,8 +91,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
   // The lead page loads these from the same endpoint and hands them to its
   // Tasks tab. The project page passed teamMembers={undefined}, so assigning a
   // project task had no one to choose from.
-  // A playbook run rendered as a phase tree. This is the convergence proof:
-  // if the tree can draw a playbook, it is a view rather than a second engine.
+  // The active playbook run, and its steps shaped as a stage tree for the
+  // Plan tab (a top-level step is a stage, its children are the steps).
   const [playbook, setPlaybook] = useState<{
     runId: string;
     name: string;
@@ -123,16 +100,14 @@ export default function ProjectDetailPage({ params }: PageProps) {
     stepCount: number;
     startedAt: string | null;
   } | null>(null);
-  const [playbookPhases, setPlaybookPhases] = useState<any[]>([]);
+  const [playbookStages, setPlaybookStages] = useState<
+    { id: string; steps?: { id: string }[] }[]
+  >([]);
   // Set when the playbook has moved on since this plan adopted it.
   const [playbookDrift, setPlaybookDrift] = useState<{
     currentVersion: number;
     newSteps: number;
   } | null>(null);
-  /** What the server will allow on each plan row, loaded with the plan. */
-  const [planGates, setPlanGates] = useState<Record<string, any>>({});
-  const [planMayEdit, setPlanMayEdit] = useState(true);
-  const [planGatesReady, setPlanGatesReady] = useState(false);
   /**
    * One task editor for the whole page.
    *
@@ -193,39 +168,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
     void fetchPlaybook();
   }, [id]);
 
-
-  /**
-   * Every id in the rendered playbook, phases and steps alike.
-   *
-   * The Plan tab draws phases and playbook steps with the same component, so
-   * before saving an edit it has to know which one it is looking at: a phase
-   * id belongs to the phase routes, a playbook id is a task.
-   */
-  const playbookNodeIds = React.useMemo(() => {
-    const ids = new Set<string>();
-    for (const phase of playbookPhases) {
-      ids.add(phase.id);
-      for (const step of phase.sub_phases ?? []) ids.add(step.id);
-    }
-    return ids;
-  }, [playbookPhases]);
-
-  const savePlaybookNode = async (
-    nodeId: string,
-    edit: Parameters<typeof phaseEditToTaskUpdate>[0],
-  ) => {
-    const res = await fetch(`/api/tasks/${nodeId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(phaseEditToTaskUpdate(edit)),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || "Could not update this step");
-    }
-    await fetchPlaybook();
-    return res.json();
-  };
 
   /**
    * Take in the steps the playbook has gained. Additive only - nothing already
@@ -289,14 +231,14 @@ export default function ProjectDetailPage({ params }: PageProps) {
   /**
    * Refresh the plan, and nothing else.
    *
-   * The Plan tab's refresh - the icon above the table, and a phase action -
+   * The Plan tab's refresh - the icon above the table, and a step action -
    * used to call fetchProject, which sets the PAGE-level loading state: the
    * whole project detail page was replaced by a skeleton and every tab's data
-   * was refetched. That is what "the page gets refreshed" was. Sub-step actions
-   * never called it, which is why only phases did it.
+   * was refetched. That is what "the page gets refreshed" was.
    *
-   * This updates the project row (native phases live on it) and the playbook
-   * with its gates, and touches no loading flag, so the table simply changes.
+   * This re-reads the project row (progress and the stage strip in the header
+   * come from it) and the playbook, and touches no loading flag, so the table
+   * simply changes.
    */
   const refreshPlan = useCallback(async () => {
     try {
@@ -320,7 +262,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
    * Everything above loads once, on mount, keyed on the project id - switching
    * tabs fetches nothing. So completing a step on the Tasks tab (or anywhere
    * else) left the Plan tab showing whatever it had when the page opened: a
-   * phase that was finished minutes ago still reading "In Progress".
+   * stage that was finished minutes ago still reading "In Progress".
    *
    * refreshPlan touches no loading flag, so this is silent - the table is
    * simply right when you look at it. Deliberately only the plan: the other
@@ -363,36 +305,14 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
   const fetchPlaybook = async () => {
     try {
-      /**
-       * The plan and what may be done to it, together.
-       *
-       * The gates used to be fetched by ManagementTab on mount - so after the
-       * plan had already loaded and rendered. That is a second round trip in
-       * series, and it showed: the action column sat empty for about a second
-       * and then filled in. Asking for both at once means the tab paints once,
-       * with its buttons already correct.
-       */
-      const [res, gateRes] = await Promise.all([
-        fetch(`/api/projects/${id}/playbook`),
-        fetch(`/api/projects/${id}/plan-gates`),
-      ]);
-
-      if (gateRes.ok) {
-        const gateData = await gateRes.json();
-        setPlanGates(gateData.data?.gates ?? {});
-        setPlanMayEdit(gateData.data?.mayEdit !== false);
-      }
-      // Ready either way: a failed gate fetch falls back to status-only
-      // behaviour, which is better than holding the buttons for ever.
-      setPlanGatesReady(true);
-
+      const res = await fetch(`/api/projects/${id}/playbook`);
       if (!res.ok) return;
       const data = await res.json();
       setPlaybook(data.playbook);
-      setPlaybookPhases(data.phases || []);
+      setPlaybookStages(data.stages || []);
       setPlaybookDrift(data.drift ?? null);
     } catch {
-      // The native phases still render; the playbook is additive.
+      // Leave the plan as it was rather than emptying the tab.
     }
   };
 
@@ -421,7 +341,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
    *
    * `quiet` skips the page-level loading flag. That flag replaces the whole
    * detail page with a skeleton, which is right on first load and wrong after an
-   * action - stopping a playbook or completing a phase blew the page away and
+   * action - stopping a playbook or completing a step blew the page away and
    * refetched every tab to show one change. Same fix as the lead page.
    */
   const fetchProject = async (options?: { quiet?: boolean }) => {
@@ -431,12 +351,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
       if (!response.ok) throw new Error("Failed to fetch project");
       const data = await response.json();
       setProject(data.project);
-
-      const inProgressPhases =
-        data.project.phases
-          ?.filter((p: ProjectPhase) => p.status === "in_progress")
-          .map((p: ProjectPhase) => p.id) || [];
-      setExpandedPhases(new Set(inProgressPhases));
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -586,220 +500,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
       console.error("Error updating project:", err);
       throw err;
     }
-  };
-
-  // Handle quick action (start/complete/etc.)
-  const handleQuickAction = async (
-    subPhaseId: string,
-    phaseId: string,
-    action: "start" | "hold" | "resume" | "complete" | "cancel",
-    notes: string,
-  ) => {
-    try {
-      const statusMap: Record<string, string> = {
-        start: "in_progress",
-        hold: "on_hold",
-        resume: "in_progress",
-        complete: "completed",
-        cancel: "skipped", // or cancelled
-      };
-
-      const newStatus = statusMap[action];
-      if (!newStatus) return null;
-
-      // A playbook step is a task. Sending it to the sub-phase route was the
-      // "Not found" - that route resolves phase rows, and a task id is not one.
-      if (playbookNodeIds.has(subPhaseId)) {
-        return await savePlaybookNode(subPhaseId, {
-          status: newStatus,
-          notes,
-        });
-      }
-
-      const response = await fetch(
-        `/api/projects/${id}/phases/${phaseId}/sub-phases/${subPhaseId}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: newStatus, notes }),
-        },
-      );
-
-      if (!response.ok) throw new Error("Failed to update status");
-
-      const updatedSubPhase = await response.json();
-      fetchProject({ quiet: true }); // Refresh full state to be sure
-      return updatedSubPhase;
-    } catch (err) {
-      console.error("Quick action failed:", err);
-      return null;
-    }
-  };
-
-  /**
-   * Starting, completing, holding or skipping a PHASE.
-   *
-   * A playbook phase is a task, so it goes to the task route like a step does;
-   * a native phase goes to the phase route. Without this the row that decides
-   * when a stage begins had no action at all, which mattered once steps could
-   * wait for their phase to start - nothing could ever be opened.
-   */
-  const handlePhaseQuickAction = async (
-    phaseId: string,
-    action: "start" | "hold" | "resume" | "complete" | "cancel",
-    notes: string,
-  ) => {
-    const statusMap: Record<string, string> = {
-      start: "in_progress",
-      hold: "on_hold",
-      resume: "in_progress",
-      complete: "completed",
-      cancel: "skipped",
-    };
-    const newStatus = statusMap[action];
-    if (!newStatus) return null;
-
-    try {
-      if (playbookNodeIds.has(phaseId)) {
-        return await savePlaybookNode(phaseId, { status: newStatus, notes });
-      }
-
-      // The phase route wants status_change_notes when the status moves, not
-      // notes - sending only the latter is accepted and then rejected for a
-      // missing reason.
-      const response = await fetch(`/api/projects/${id}/phases/${phaseId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status: newStatus,
-          status_change_notes: notes,
-          notes,
-        }),
-      });
-
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body.error || "Failed to update the phase");
-      }
-
-      const updated = await response.json();
-      fetchProject({ quiet: true });
-      return updated;
-    } catch (err) {
-      console.error("Phase action failed:", err);
-      return null;
-    }
-  };
-
-  // Handler for sub-phase click
-  const handleSubPhaseClick = (phaseId: string, subPhaseId: string) => {
-    // A playbook step is a task, so its detail view is the task page - which
-    // already has the status gates, subtasks, comments and attachments. The
-    // sub-phase panel reads phase rows and answered "Failed to fetch sub-phase
-    // details" when handed a task id.
-    if (playbookNodeIds.has(subPhaseId)) {
-      router.push(`/dashboard/tasks/${subPhaseId}`);
-      return;
-    }
-    setSelectedSubPhase({ phaseId, subPhaseId });
-    setShowSubPhasePanel(true);
-  };
-
-  // Handler to initialize phases (moved to Mgmt Tab or handled within)
-  const initializePhases = async (force: boolean = false) => {
-    try {
-      const response = await fetch(`/api/projects/${id}/initialize-phases`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ force }),
-      });
-      if (!response.ok) throw new Error("Failed");
-      await fetchProject({ quiet: true });
-    } catch (err) {
-      console.error(err);
-      setNotice({ message: "Failed to initialise phases", variant: "error" });
-    }
-  };
-
-  const togglePhaseExpanded = (phaseId: string) => {
-    setExpandedPhases((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(phaseId)) newSet.delete(phaseId);
-      else newSet.add(phaseId);
-      return newSet;
-    });
-  };
-
-  const updatePhaseStatus = async (phaseId: string, newStatus: string) => {
-    try {
-      const response = await fetch(`/api/projects/${id}/phases/${phaseId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (!response.ok) throw new Error("Failed");
-      fetchProject({ quiet: true });
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const updateSubPhaseStatus = async (
-    pId: string,
-    spId: string,
-    status: string,
-  ) => {
-    try {
-      const response = await fetch(
-        `/api/projects/${id}/phases/${pId}/sub-phases/${spId}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status }),
-        },
-      );
-      if (!response.ok) throw new Error("Failed");
-      fetchProject({ quiet: true });
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const toggleChecklistItem = async (
-    pId: string,
-    spId: string,
-    itemId: string,
-    val: boolean,
-  ) => {
-    try {
-      const response = await fetch(
-        `/api/projects/${id}/phases/${pId}/sub-phases/${spId}/checklist/${itemId}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ is_completed: !val }),
-        },
-      );
-      if (!response.ok) throw new Error("Failed");
-      fetchProject({ quiet: true });
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleEditPhase = (phase: ProjectPhase) => {
-    setEditingPhase(phase);
-    setShowPhaseEditModal(true);
-  };
-
-  const handleEditSubPhase = (subPhase: ProjectSubPhase, phaseId: string) => {
-    const parentPhase = project?.phases?.find((p) => p.id === phaseId);
-    setEditingSubPhase({
-      subPhase,
-      phaseId,
-      phaseName: parentPhase?.name || "",
-    });
-    setShowSubPhaseEditModal(true);
   };
 
   // handleEditProject and handleSaveProjectEdit lived here, driving a second
@@ -992,7 +692,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                     </span>
                     <span className="text-slate-400"> v{playbook.version}</span>
                     <span className="text-slate-300"> · </span>
-                    {playbookPhases.length} phases, {playbook.stepCount} steps
+                    {playbookStages.length} stages, {playbook.stepCount} steps
                     {playbook.startedAt && (
                       <>
                         <span className="text-slate-300"> · </span>
@@ -1014,24 +714,18 @@ export default function ProjectDetailPage({ params }: PageProps) {
               {/*
                 * No playbook: say so, and offer one here.
                 *
-                * Two projects looked like different products and there was no
-                * way to tell why. PRJ_20251219_0001 has an active run, so its
-                * Plan tab is the task table with a "Stop" beside the playbook
-                * name; PRJ-25-0002 has six native phases and no run, so it got
-                * ManagementTab and no playbook controls at all - with nothing
-                * on screen explaining that a playbook was even an option.
-                *
-                * The panel that starts one used to be on the Tasks tab, which
-                * is not where anybody deciding how a project should run would
-                * look. It sits here now, and only when there is no active run:
-                * stopping a playbook above makes it reappear, so "stop this and
-                * use a different one" is one flow in one place.
+                * A playbook is the only way a project is planned, so a project
+                * without a run has no plan at all - and the place to choose one
+                * is the tab where the plan will appear. The panel shows only
+                * when there is no active run: stopping a playbook above makes
+                * it reappear, so "stop this and use a different one" is one
+                * flow in one place.
                 */}
               {!playbook && canManagePlaybook && (
                 <div className="mb-3 rounded-lg border border-slate-200 bg-white p-4">
                   <p className="mb-3 text-xs text-slate-500">
-                    This project follows its own phases. Applying a playbook
-                    replaces them with its steps, as tasks.
+                    This project has no plan yet. Choose the playbook it
+                    should follow; its steps become the project's tasks.
                   </p>
                   <PlaybooksPanel
                     relatedType="project"
@@ -1045,15 +739,13 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 </div>
               )}
 
-              {/* A playbook-driven plan IS the tasks table, scoped to the
-                  run. ManagementTab remains only for projects still on the
-                  older native phase engine, whose rows are not tasks. */}
+              {/* A plan IS the tasks table, scoped to the run. */}
               {playbook ? (
                 <PlanTab
                   projectId={project.id}
                   tasks={tasks}
                   runId={playbook.runId ?? null}
-                  orderedPhases={playbookPhases}
+                  orderedStages={playbookStages}
                   projectClosed={project.status === "completed"}
                   teamMembers={teamMembers}
                   onRefresh={() => {
@@ -1062,26 +754,11 @@ export default function ProjectDetailPage({ params }: PageProps) {
                   }}
                   onTaskClick={(task) => setEditingTask(task)}
                 />
-              ) : (
-                              <ManagementTab
-                  projectId={project.id}
-                  phases={
-                    playbookPhases.length > 0
-                      ? playbookPhases
-                      : project.phases || []
-                  }
-                  onInitializePhases={initializePhases}
-                  onRefresh={refreshPlan}
-                  onEditPhase={handleEditPhase}
-                  onEditSubPhase={handleEditSubPhase}
-                  onSubPhaseClick={handleSubPhaseClick}
-                  onQuickAction={handleQuickAction}
-                  onPhaseQuickAction={handlePhaseQuickAction}
-                  gates={planGates}
-                  mayEdit={planMayEdit}
-                  gatesReady={planGatesReady}
-                />
-              )}
+              ) : !canManagePlaybook ? (
+                <div className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-sm text-slate-500">
+                  No plan has been set for this project yet.
+                </div>
+              ) : null}
             </>
           )}
 
@@ -1238,62 +915,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
             void refreshPlan();
           }}
         />
-
-        {/* Sub-phase Detail Panel */}
-        <SubPhaseDetailPanel
-          isOpen={showSubPhasePanel}
-          onClose={() => setShowSubPhasePanel(false)}
-          subPhaseId={selectedSubPhase?.subPhaseId || ""}
-          phaseId={selectedSubPhase?.phaseId || ""}
-          projectId={project.id}
-          onUpdate={fetchProject}
-        />
-
-        {/* Phase Edit Modal */}
-        {editingPhase && (
-          <PhaseEditModal
-            isOpen={showPhaseEditModal}
-            onClose={() => setShowPhaseEditModal(false)}
-            phase={editingPhase}
-            projectId={project.id}
-            onSaveOverride={
-              editingPhase && playbookNodeIds.has(editingPhase.id)
-                ? (updates) =>
-                    savePlaybookNode(editingPhase.id, updates).then(() => {})
-                : undefined
-            }
-            onSave={() => {
-              fetchProject({ quiet: true });
-              setShowPhaseEditModal(false);
-            }}
-          />
-        )}
-
-        {/* Sub-Phase Edit Modal */}
-        {editingSubPhase && (
-          <SubPhaseEditModal
-            isOpen={showSubPhaseEditModal}
-            onClose={() => setShowSubPhaseEditModal(false)}
-            subPhase={editingSubPhase.subPhase}
-            phaseId={editingSubPhase.phaseId}
-            phaseName={editingSubPhase.phaseName}
-            projectId={project.id}
-            onSaveOverride={
-              editingSubPhase.subPhase &&
-              playbookNodeIds.has(editingSubPhase.subPhase.id)
-                ? (updates) =>
-                    savePlaybookNode(
-                      editingSubPhase.subPhase!.id,
-                      updates,
-                    ).then(() => {})
-                : undefined
-            }
-            onSave={() => {
-              fetchProject({ quiet: true });
-              setShowSubPhaseEditModal(false);
-            }}
-          />
-        )}
 
         {promptDialog}
         <Toast

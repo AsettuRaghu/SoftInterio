@@ -14,13 +14,13 @@
  * Handover; an architect practice running theirs gets something else entirely,
  * with no code change.
  *
- * Native `project_phases` remain the fallback for a project with no playbook.
- * They are the older engine and on the way out, but a project created before a
- * playbook existed still has to render.
+ * A project with no active run has no stages. The older native phase engine
+ * used to answer here as a fallback; it was retired on 2026-09-15, so there is
+ * one engine and one derivation.
  *
  * Nothing here writes. Stage is derived on read, every time — a stored
- * `current_phase_id` is a second copy of a fact the tasks already know, and it
- * is always the copy that goes stale.
+ * "current stage" column would be a second copy of a fact the tasks already
+ * know, and it is always the copy that goes stale.
  */
 
 /** Task statuses that mean the step is finished with, one way or another. */
@@ -52,8 +52,8 @@ export interface DerivedStages {
   currentIndex: number;
   /** Overall completion across every stage, 0-100. */
   progress: number;
-  /** Which engine answered. Shown in the UI so a fallback never looks like a bug. */
-  source: "playbook" | "phases" | "none";
+  /** Whether a playbook answered, or there is nothing to derive from. */
+  source: "playbook" | "none";
   /** The playbook's name and version, when one is driving. */
   playbook?: { name: string; version: number };
 }
@@ -66,35 +66,12 @@ interface StageTask {
   procedure_step_id: string | null;
 }
 
-interface StagePhase {
-  id: string;
-  name: string;
-  status: string;
-  display_order: number | null;
-  progress_percentage: number | null;
-}
-
 function stageStatusOfTask(status: string): StageStatus {
   if (status === "cancelled") return "cancelled";
   if (status === "skipped") return "skipped";
   if (SETTLED.has(status)) return "completed";
   if (ACTIVE.has(status)) return "in_progress";
   return "not_started";
-}
-
-function stageStatusOfPhase(status: string): StageStatus {
-  switch (status) {
-    case "completed":
-      return "completed";
-    case "in_progress":
-      return "in_progress";
-    case "skipped":
-      return "skipped";
-    case "cancelled":
-      return "cancelled";
-    default:
-      return "not_started";
-  }
 }
 
 /**
@@ -189,35 +166,6 @@ export function deriveStagesFromPlaybook({
     progress: overallProgress(stages),
     source: stages.length ? "playbook" : "none",
     playbook,
-  };
-}
-
-/** Stages from the older phase engine, for a project with no playbook. */
-export function deriveStagesFromPhases(phases: StagePhase[]): DerivedStages {
-  const stages: ProjectStage[] = [...phases]
-    .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
-    .map((phase) => {
-      const status = stageStatusOfPhase(phase.status);
-      return {
-        id: phase.id,
-        name: phase.name,
-        status,
-        progress:
-          phase.progress_percentage != null
-            ? Number(phase.progress_percentage)
-            : status === "completed"
-              ? 100
-              : 0,
-        stepCount: 0,
-        stepsDone: 0,
-      };
-    });
-
-  return {
-    stages,
-    currentIndex: pickCurrent(stages),
-    progress: overallProgress(stages),
-    source: stages.length ? "phases" : "none",
   };
 }
 

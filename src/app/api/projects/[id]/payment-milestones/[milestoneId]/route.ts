@@ -82,7 +82,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if ("description" in body) update.description = body.description || null;
     if ("due_date" in body) update.due_date = body.due_date || null;
     if ("notes" in body) update.notes = body.notes || null;
-    if ("linked_phase_id" in body) update.linked_phase_id = body.linked_phase_id || null;
 
     if ("percentage" in body) {
       const pct = body.percentage === null ? null : Number(body.percentage);

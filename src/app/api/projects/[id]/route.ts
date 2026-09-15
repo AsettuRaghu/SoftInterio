@@ -11,7 +11,7 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-// GET /api/projects/[id] - Get single project with all phases
+// GET /api/projects/[id] - Get single project with its client, property, lead and milestones
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const log = requestLogger(request);
 
@@ -58,82 +58,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
-
-    // Fetch phases with sub-phases
-    const { data: phases } = await supabase
-      .from("project_phases")
-      .select(
-        `
-        *,
-        assigned_user:users!assigned_to(id, name, email, avatar_url),
-        sub_phases:project_sub_phases(
-          *,
-          assigned_user:users!assigned_to(id, name, email, avatar_url),
-          checklist_items:project_checklist_items(*)
-        )
-      `
-      )
-      .eq("project_id", id)
-      .order("display_order", { ascending: true });
-
-    // Fetch phase dependencies
-    const phaseIds = phases?.map((p) => p.id) || [];
-    let dependencies: Record<
-      string,
-      Array<{
-        id: string;
-        name: string;
-        status: string;
-        dependency_type: string;
-      }>
-    > = {};
-
-    if (phaseIds.length > 0) {
-      const { data: deps } = await supabase
-        .from("project_phase_dependencies")
-        .select(
-          `
-          project_phase_id,
-          depends_on_phase_id,
-          dependency_type
-        `
-        )
-        .in("project_phase_id", phaseIds);
-
-      if (deps && phases) {
-        for (const dep of deps) {
-          const dependsOnPhase = phases.find(
-            (p) => p.id === dep.depends_on_phase_id
-          );
-          if (dependsOnPhase) {
-            if (!dependencies[dep.project_phase_id]) {
-              dependencies[dep.project_phase_id] = [];
-            }
-            dependencies[dep.project_phase_id].push({
-              id: dependsOnPhase.id,
-              name: dependsOnPhase.name,
-              status: dependsOnPhase.status,
-              dependency_type: dep.dependency_type,
-            });
-          }
-        }
-      }
-    }
-
-    // Add dependencies and blocking info to phases
-    const phasesWithDeps = phases?.map((phase) => {
-      const phaseDeps = dependencies[phase.id] || [];
-      const blockingDeps = phaseDeps
-        .filter((d) => d.dependency_type === "hard" && d.status !== "completed")
-        .map((d) => d.name);
-
-      return {
-        ...phase,
-        dependencies: phaseDeps,
-        blocking_dependencies: blockingDeps,
-        is_blocked: blockingDeps.length > 0,
-      };
-    });
 
     // Fetch full project details with client and property relations for flattening
     // Note: We fetch all related data separately to avoid Supabase join syntax issues
@@ -257,12 +181,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Fetch payment milestones
     const { data: paymentMilestones } = await supabase
       .from("project_payment_milestones")
-      .select(
-        `
-        *,
-        linked_phase:project_phases!linked_phase_id(id, name, status)
-      `
-      )
+      .select("*")
       .eq("project_id", id)
       .order("created_at", { ascending: true });
 
@@ -299,13 +218,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         property_name: pProperty?.property_name || project.property?.property_name || flattenedProject.property_name || "Unknown Property",
         property: pProperty || project.property, // Use pProperty if available, fallback to initial query result
         priority: fullProject?.priority,
-        current_phase: fullProject?.current_phase,
-        current_phase_id: fullProject?.current_phase_id,
         contract_value: fullProject?.contract_value ?? null,
         actual_cost: fullProject?.actual_cost,
         lead_id: fullProject?.lead_id, // Include lead_id for navigation
         won_amount: pLead?.won_amount, // Include won amount from lead
-        phases: phasesWithDeps || [],
         payment_milestones: paymentMilestones || [],
         calendar_events: calendarEvents || [],
       },
@@ -367,10 +283,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         client_email,
         client_phone,
         // Project specific fields that shouldn't be forwarded
-        phases,
         payment_milestones,
         project_manager,
-        phase_summary,
         ...projectUpdateData
     } = body;
 
@@ -428,7 +342,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       "overall_progress",
       "notes",
       "project_manager_id",
-      "current_phase_id",
       "client_id",
       "property_id",
       "quotation_id",
@@ -447,8 +360,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     /*
      * A project moved to in_progress by hand has started, if nothing else has
      * said so. Tasks stamp this through a trigger when the first one starts;
-     * this covers a native-phase project with no tasks, and anyone who simply
-     * flips the status. Never overwrites a date already set or supplied.
+     * this covers a project with no plan yet, and anyone who simply flips the
+     * status. Never overwrites a date already set or supplied.
      */
     if (
       projectUpdates.status === "in_progress" &&

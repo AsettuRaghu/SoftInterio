@@ -12,9 +12,8 @@
  * remaining work, and "deal with" includes skipping it with a reason. A step
  * nobody can skip and nobody has done is genuinely not finished.
  *
- * Both engines are checked, because a project runs on one or the other: open
- * playbook steps where a run is active, open phases and sub-phases where it is
- * not.
+ * Open playbook steps are what blocks. A project with no active run has no
+ * plan and therefore nothing outstanding to close.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -26,7 +25,7 @@ export interface ClosingBlocker {
   id: string;
   title: string;
   /** Where it came from, so the message can name the right screen. */
-  kind: "playbook_step" | "phase" | "sub_phase";
+  kind: "playbook_step";
   status: string;
   /** False when the step must be completed rather than skipped. */
   canSkip: boolean;
@@ -101,43 +100,7 @@ export async function projectClosingBlockers(
     return { ok: blockers.length === 0, blockers, activeRunId: run.id };
   }
 
-  // No playbook: the older engine answers instead.
-  const { data: phases } = await supabase
-    .from("project_phases")
-    .select("id, name, status")
-    .eq("project_id", projectId);
-
-  const openPhases = (phases ?? []).filter((p: any) => !SETTLED.has(p.status));
-  for (const phase of openPhases) {
-    blockers.push({
-      id: phase.id,
-      title: phase.name,
-      kind: "phase",
-      status: phase.status,
-      canSkip: true,
-    });
-  }
-
-  if (phases?.length) {
-    const { data: subPhases } = await supabase
-      .from("project_sub_phases")
-      .select("id, name, status, project_phase_id")
-      .in(
-        "project_phase_id",
-        phases.map((p: any) => p.id)
-      );
-
-    for (const sub of (subPhases ?? []).filter((s: any) => !SETTLED.has(s.status))) {
-      blockers.push({
-        id: sub.id,
-        title: sub.name,
-        kind: "sub_phase",
-        status: sub.status,
-        canSkip: true,
-      });
-    }
-  }
-
+  // No playbook, no plan: nothing stands in the way of closing.
   return { ok: blockers.length === 0, blockers, activeRunId: null };
 }
 

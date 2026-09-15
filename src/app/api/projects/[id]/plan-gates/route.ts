@@ -1,13 +1,7 @@
 /**
- * What the Plan tab may offer on each row.
+ * What may be done to each row of the plan.
  *
  *   GET /api/projects/:id/plan-gates
- *
- * The quick actions used to be drawn unconditionally: Start was offered on a
- * step whose predecessor had not finished, the transition refused it, and the
- * tooltip had said only "Start". Phases had no actions at all, so the row that
- * decides when a stage begins could not be started from the screen that shows
- * it.
  *
  * This answers, for every task in the active run, which transitions the server
  * would actually accept and why not. It is a view of `can_start_task` and
@@ -69,8 +63,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
 
     if (error) {
-      // A project with no active run has no gates, which is not a failure -
-      // the phase engine has its own rules and the tab still renders.
+      // A project with no active run has no gates, which is not a failure.
       log.warn("Could not load plan gates", { projectId: id, error: error.message });
       return NextResponse.json({ success: true, data: { gates: {} } });
     }

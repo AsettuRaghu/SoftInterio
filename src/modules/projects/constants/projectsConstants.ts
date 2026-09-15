@@ -1,12 +1,9 @@
 import type {
   ProjectStatus,
   ProjectPriority,
-  ProjectPhaseName,
   ProjectPaymentStatus,
   ProjectCategory,
   ProjectType,
-  ProjectPhaseStatus,
-  ProjectSubPhaseStatus,
   ProjectPropertyType,
 } from "@/types/projects";
 import type { FilterOption } from "@/components/ui/AppTable";
@@ -68,49 +65,6 @@ export const PROJECT_PRIORITY_OPTIONS: FilterOption[] = [
   { value: "Medium", label: "Medium" },
   { value: "High", label: "High" },
   { value: "Urgent", label: "Urgent" },
-];
-
-// Project Phase Colors & Labels (Current Workflow Phase)
-export const PROJECT_PHASE_COLORS: Record<
-  ProjectPhaseName,
-  { bg: string; text: string; dot: string }
-> = {
-  "Project Kickoff": { bg: "bg-blue-100", text: "text-blue-700", dot: "bg-blue-500" },
-  "Design": {
-    bg: "bg-purple-100",
-    text: "text-purple-700",
-    dot: "bg-purple-500",
-  },
-  "Procurement": {
-    bg: "bg-amber-100",
-    text: "text-amber-700",
-    dot: "bg-amber-500",
-  },
-  "Site Work": {
-    bg: "bg-orange-100",
-    text: "text-orange-700",
-    dot: "bg-orange-500",
-  },
-  "Installation": {
-    bg: "bg-cyan-100",
-    text: "text-cyan-700",
-    dot: "bg-cyan-500",
-  },
-  "Handover": {
-    bg: "bg-green-100",
-    text: "text-green-700",
-    dot: "bg-green-500",
-  },
-};
-
-// Project Phase Options for filters/dropdowns (Current Workflow Phase)
-export const PROJECT_PHASE_OPTIONS: FilterOption[] = [
-  { value: "Project Kickoff", label: "Project Kickoff" },
-  { value: "Design", label: "Design" },
-  { value: "Procurement", label: "Procurement" },
-  { value: "Site Work", label: "Site Work" },
-  { value: "Installation", label: "Installation" },
-  { value: "Handover", label: "Handover" },
 ];
 
 // Payment Status Colors & Labels
@@ -186,72 +140,6 @@ export const PROPERTY_TYPE_OPTIONS = [
   { value: "commercial_restaurant", label: "Commercial - Restaurant/Cafe" },
   { value: "commercial_other", label: "Commercial - Other" },
   { value: "unknown", label: "Unknown" },
-];
-
-// Phase Status Colors
-export const PHASE_STATUS_COLORS: Record<ProjectPhaseStatus, string> = {
-  not_started: "bg-slate-100 text-slate-700",
-  in_progress: "bg-blue-100 text-blue-700",
-  on_hold: "bg-amber-100 text-amber-700",
-  completed: "bg-green-100 text-green-700",
-  cancelled: "bg-red-100 text-red-700",
-  blocked: "bg-orange-100 text-orange-700",
-};
-
-// Sub Phase Status Colors
-export const SUB_PHASE_STATUS_COLORS: Record<ProjectSubPhaseStatus, string> =
-  {
-    not_started: "bg-slate-100 text-slate-700",
-    in_progress: "bg-blue-100 text-blue-700",
-    on_hold: "bg-amber-100 text-amber-700",
-    completed: "bg-green-100 text-green-700",
-    skipped: "bg-slate-200 text-slate-600",
-  };
-
-// Standard 6 Project Phases Configuration
-export const STANDARD_PHASES = [
-  {
-    name: "Project Kickoff",
-    display_order: 1,
-    estimated_duration_days: 7,
-    description:
-      "Initial setup, team alignment, and site survey",
-  },
-  {
-    name: "Design",
-    display_order: 2,
-    estimated_duration_days: 23,
-    description:
-      "Design development, client reviews, and CAD drafts",
-  },
-  {
-    name: "Procurement",
-    display_order: 3,
-    estimated_duration_days: 30,
-    description:
-      "Material sourcing, approvals, and purchasing",
-  },
-  {
-    name: "Site Work",
-    display_order: 4,
-    estimated_duration_days: 30,
-    description:
-      "Construction, structural changes, and installations",
-  },
-  {
-    name: "Installation",
-    display_order: 5,
-    estimated_duration_days: 0, // Variable
-    description:
-      "Furnishings, finishes, and final installations",
-  },
-  {
-    name: "Handover",
-    display_order: 6,
-    estimated_duration_days: 5,
-    description:
-      "Final walkthrough, snag list, and client acceptance",
-  },
 ];
 
 // Team member interface for dropdowns

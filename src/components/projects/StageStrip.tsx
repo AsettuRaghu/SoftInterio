@@ -13,9 +13,8 @@
  * which is the point - an architect practice's stages come from their playbook
  * and need no code change.
  *
- * When a project has no playbook this falls back to native phases and says so,
- * because a silent fallback is what once read as "it shows a completely
- * different playbook I'm not aware of".
+ * A project with no playbook has no stages, and the strip says so rather than
+ * inventing any.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -71,7 +70,7 @@ export function StageStrip({
     return <div className="h-5 w-40 bg-slate-100 rounded animate-pulse" />;
   }
 
-  // No playbook and no phases: say nothing rather than render an empty rail.
+  // No playbook: say nothing rather than render an empty rail.
   if (!data || data.source === "none" || data.stages.length === 0) {
     return null;
   }
@@ -110,7 +109,6 @@ export function StageStrip({
           </p>
           <p className="text-[11px] text-slate-500">
             Stage {data.currentIndex + 1} of {data.stages.length}
-            {data.source === "phases" && " · no playbook"}
           </p>
         </div>
       )}

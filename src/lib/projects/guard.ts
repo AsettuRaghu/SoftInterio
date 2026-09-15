@@ -11,9 +11,9 @@ import {
 /**
  * The gate every project-scoped route goes through.
  *
- * Almost all of the project API hangs off /api/projects/[id]/... - phases,
- * sub-phases, checklists, comments, attachments, approvals, notes, activities,
- * payment milestones. Before this, those handlers proved only that a session
+ * Almost all of the project API hangs off /api/projects/[id]/... - the plan,
+ * playbook, stages, notes, activities, documents, payment milestones. Before
+ * this, those handlers proved only that a session
  * existed. Most never mentioned tenant_id at all, so they leaned entirely on
  * row level security to keep one business out of another's data, and none of
  * them consulted a permission.
@@ -106,83 +106,4 @@ export async function requireProjectAccess(
   }
 
   return { ok: true, project, access };
-}
-
-/**
- * Confirms a phase, sub-phase and checklist item really hang off the project
- * named in the URL.
- *
- * requireProjectAccess proves the caller may touch /api/projects/<id>. It says
- * nothing about the ids further along the path, and the handlers took those on
- * trust: the checklist route, for instance, read subPhaseId straight out of
- * the URL and never mentioned the project at all. Pairing an id you are
- * allowed to open with a sub-phase id you are not would have read and written
- * another business's checklist, because none of these tables carries a
- * tenant_id to fall back on - they are three joins from one.
- *
- * Anything that does not belong to the chain is reported as missing, for the
- * same reason as above: a distinct error would confirm the row exists.
- */
-export async function requirePhaseLineage(
-  supabase: SupabaseClient,
-  args: {
-    projectId: string;
-    phaseId?: string;
-    subPhaseId?: string;
-    checklistItemId?: string;
-  }
-): Promise<{ ok: true } | ProjectGuardFailed> {
-  const { projectId, phaseId, subPhaseId, checklistItemId } = args;
-
-  const notFound: ProjectGuardFailed = {
-    ok: false,
-    response: NextResponse.json({ error: "Not found" }, { status: 404 }),
-  };
-
-  let expectedPhaseId = phaseId;
-
-  if (phaseId) {
-    const { data: phase } = await supabase
-      .from("project_phases")
-      .select("id")
-      .eq("id", phaseId)
-      .eq("project_id", projectId)
-      .maybeSingle();
-    if (!phase) return notFound;
-  }
-
-  if (subPhaseId) {
-    const { data: subPhase } = await supabase
-      .from("project_sub_phases")
-      .select("id, project_phase_id")
-      .eq("id", subPhaseId)
-      .maybeSingle();
-    if (!subPhase) return notFound;
-
-    if (expectedPhaseId) {
-      if (subPhase.project_phase_id !== expectedPhaseId) return notFound;
-    } else {
-      // No phase in the path, so walk up one level to reach the project.
-      const { data: parent } = await supabase
-        .from("project_phases")
-        .select("id")
-        .eq("id", subPhase.project_phase_id)
-        .eq("project_id", projectId)
-        .maybeSingle();
-      if (!parent) return notFound;
-      expectedPhaseId = subPhase.project_phase_id;
-    }
-  }
-
-  if (checklistItemId) {
-    const { data: item } = await supabase
-      .from("project_checklist_items")
-      .select("id")
-      .eq("id", checklistItemId)
-      .eq("project_sub_phase_id", subPhaseId ?? "")
-      .maybeSingle();
-    if (!item) return notFound;
-  }
-
-  return { ok: true };
 }

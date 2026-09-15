@@ -87,7 +87,6 @@ function NewProjectForm() {
     expected_end_date: "",
     project_manager_id: "",
     notes: "",
-    initialize_phases: true,
     lead_id: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -731,25 +730,6 @@ function NewProjectForm() {
                   </option>
                 ))}
               </select>
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="initialize_phases"
-                  checked={formData.initialize_phases}
-                  onChange={handleChange}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm text-slate-700">
-                  Initialize project phases from templates
-                </span>
-              </label>
-              <p className="text-xs text-slate-500 mt-1 ml-6">
-                This will create all default phases and sub-phases based on the
-                project category ({formData.project_category})
-              </p>
             </div>
 
             <div className="md:col-span-2">

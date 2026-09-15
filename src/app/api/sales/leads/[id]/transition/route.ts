@@ -709,7 +709,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                 p_lead_id: id,
                 p_created_by: user.id,
                 p_project_category: projectCategory,
-                p_initialize_phases: true,
                 p_quotation_id: winningQuotationId,
                 p_project_manager_id: body.project_manager_id || null,
                 p_priority: body.project_priority || "Low",

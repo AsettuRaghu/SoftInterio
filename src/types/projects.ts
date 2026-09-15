@@ -35,31 +35,6 @@ export type ProjectPropertyType =
   | "co_working"
   | "other";
 
-export type ProjectPhaseName =
-  | "Project Kickoff"
-  | "Design"
-  | "Procurement"
-  | "Site Work"
-  | "Installation"
-  | "Handover";
-
-export type ProjectPhaseStatus =
-  | "not_started"
-  | "in_progress"
-  | "on_hold"
-  | "completed"
-  | "cancelled"
-  | "blocked";
-
-export type ProjectSubPhaseStatus =
-  | "not_started"
-  | "in_progress"
-  | "on_hold"
-  | "completed"
-  | "skipped";
-
-export type PhaseDependencyType = "hard" | "soft";
-
 export type PaymentMilestoneStatus =
   | "pending"
   | "due"
@@ -140,26 +115,6 @@ export const ProjectPriorityLabels: Record<ProjectPriority, string> = {
   Urgent: "Urgent",
 };
 
-export const ProjectPhaseStatusLabels: Record<ProjectPhaseStatus, string> = {
-  not_started: "Not Started",
-  in_progress: "In Progress",
-  on_hold: "On Hold",
-  completed: "Completed",
-  cancelled: "Cancelled",
-  blocked: "Blocked",
-};
-
-export const ProjectSubPhaseStatusLabels: Record<
-  ProjectSubPhaseStatus,
-  string
-> = {
-  not_started: "Not Started",
-  in_progress: "In Progress",
-  on_hold: "On Hold",
-  completed: "Completed",
-  skipped: "Skipped",
-};
-
 export const PaymentMilestoneStatusLabels: Record<
   PaymentMilestoneStatus,
   string
@@ -182,15 +137,6 @@ export const ProjectTypeLabels: Record<ProjectType, string> = {
   other: "Other",
 };
 
-export const ProjectPhaseLabels: Record<ProjectPhaseName, string> = {
-  "Project Kickoff": "Project Kickoff",
-  "Design": "Design",
-  "Procurement": "Procurement",
-  "Site Work": "Site Work",
-  "Installation": "Installation",
-  "Handover": "Handover",
-};
-
 export const ProjectStatusLabels: Record<ProjectStatus, string> = {
   new: "New",
   in_progress: "In Progress",
@@ -211,15 +157,6 @@ export const ProjectPaymentStatusLabels: Record<ProjectPaymentStatus, string> = 
 };
 
 // Status colors for UI
-export const PhaseStatusColors: Record<ProjectPhaseStatus, string> = {
-  not_started: "gray",
-  in_progress: "blue",
-  on_hold: "yellow",
-  completed: "green",
-  cancelled: "red",
-  blocked: "orange",
-};
-
 export const PaymentStatusColors: Record<PaymentMilestoneStatus, string> = {
   pending: "gray",
   due: "yellow",
@@ -232,61 +169,9 @@ export const PaymentStatusColors: Record<PaymentMilestoneStatus, string> = {
 // PHASE CATEGORY
 // =====================================================
 
-export interface ProjectPhaseCategory {
-  id: string;
-  name: string;
-  code: string;
-  description?: string;
-  display_order: number;
-  icon?: string;
-  color?: string;
-  is_active: boolean;
-  created_at: string;
-}
-
 // =====================================================
 // PHASE TEMPLATES
 // =====================================================
-
-export interface ProjectPhaseTemplate {
-  id: string;
-  tenant_id: string | null;
-  category_id: string;
-  name: string;
-  code: string;
-  description?: string;
-  applicable_to: string[];
-  default_enabled: boolean;
-  display_order: number;
-  estimated_duration_hours?: number; // Duration in hours (allows finer granularity)
-  is_system_template: boolean;
-  created_at: string;
-  updated_at: string;
-  // Relations
-  category?: ProjectPhaseCategory;
-  sub_phase_templates?: ProjectSubPhaseTemplate[];
-}
-
-export interface ProjectSubPhaseTemplate {
-  id: string;
-  tenant_id: string | null;
-  phase_template_id: string;
-  name: string;
-  description?: string;
-  display_order: number;
-  is_required: boolean;
-  estimated_duration_hours?: number; // Duration in hours (allows finer granularity)
-  created_at: string;
-}
-
-export interface ProjectPhaseDependencyTemplate {
-  id: string;
-  tenant_id: string | null;
-  phase_template_id: string;
-  depends_on_phase_template_id: string;
-  dependency_type: PhaseDependencyType;
-  created_at: string;
-}
 
 // =====================================================
 // PROJECT
@@ -337,8 +222,8 @@ export interface Project {
   project_category: ProjectCategory; // Service category (aligned with leads.service_type)
   status: ProjectStatus;
   priority?: ProjectPriority;
-  current_phase?: ProjectPhaseName;
-  current_phase_id?: string;
+  /** Name of the stage the project is on, derived from its playbook. */
+  current_phase?: string;
 
   // Dates
   expected_start_date?: string;
@@ -429,7 +314,6 @@ export interface Project {
     email: string;
     avatar_url?: string;
   };
-  phases?: ProjectPhase[];
   payment_milestones?: ProjectPaymentMilestone[];
 
   // Lead data (if converted from lead)
@@ -531,128 +415,6 @@ export const ProjectActivityTypeLabels: Record<string, string> = {
 // PROJECT PHASE
 // =====================================================
 
-export interface ProjectPhase {
-  id: string;
-  project_id: string;
-  phase_template_id?: string;
-  name: string;
-  category_code?: string;
-  status: ProjectPhaseStatus;
-  progress_percentage: number;
-  progress_mode: ProgressMode;
-  assigned_to?: string;
-  display_order: number;
-
-  // Planning & Scheduling
-  planned_start_date?: string;
-  planned_end_date?: string;
-  actual_start_date?: string;
-  actual_end_date?: string;
-  estimated_duration_hours?: number; // Estimated duration in hours (allows for quick phases)
-  /** What this was expected to take. */
-  estimated_hours?: number;
-  /** What it actually took, from logged work. Compared against the estimate. */
-  actual_hours?: number;
-
-  notes?: string;
-  created_at: string;
-  updated_at: string;
-
-  // Flexibility flags (PM control)
-  is_enabled: boolean;
-  can_remove: boolean;
-  is_custom: boolean;
-
-  // Relations
-  assigned_user?: {
-    id: string;
-    name: string;
-    email: string;
-    avatar_url?: string;
-  };
-  sub_phases?: ProjectSubPhase[];
-  dependencies?: ProjectPhaseDependency[];
-  blocking_dependencies?: string[]; // Names of blocking phases
-}
-
-export interface ProjectSubPhase {
-  id: string;
-  project_phase_id: string;
-  sub_phase_template_id?: string;
-  name: string;
-  status: ProjectSubPhaseStatus;
-  progress_percentage: number;
-  progress_mode: ProgressMode;
-  assigned_to?: string;
-  display_order: number;
-
-  // Planning & Scheduling (NEW: Full date support)
-  planned_start_date?: string;
-  planned_end_date?: string;
-  actual_start_date?: string;
-  actual_end_date?: string;
-  estimated_duration_hours?: number; // Duration in hours (allows for quick sub-phases)
-  /** What this was expected to take. */
-  estimated_hours?: number;
-  /** What it actually took, from logged work. */
-  actual_hours?: number;
-  due_date?: string;
-
-  completed_at?: string;
-  completed_by?: string;
-  notes?: string;
-  created_at: string;
-  updated_at: string;
-
-  // Flexibility flags (PM control)
-  is_enabled: boolean;
-  can_remove: boolean;
-  is_custom: boolean;
-  task_template_id?: string;
-
-  // Relations
-  assigned_user?: {
-    id: string;
-    name: string;
-    email: string;
-    avatar_url?: string;
-  };
-  checklist_items?: ProjectChecklistItem[];
-}
-
-export interface ProjectChecklistItem {
-  id: string;
-  project_sub_phase_id: string;
-  name: string;
-  is_completed: boolean;
-  display_order: number;
-  completed_at?: string;
-  completed_by?: string;
-  notes?: string;
-  created_at: string;
-
-  // Relations
-  completed_by_user?: {
-    id: string;
-    name: string;
-  };
-}
-
-export interface ProjectPhaseDependency {
-  id: string;
-  project_phase_id: string;
-  depends_on_phase_id: string;
-  dependency_type: PhaseDependencyType;
-  created_at: string;
-
-  // Relations
-  depends_on_phase?: {
-    id: string;
-    name: string;
-    status: ProjectPhaseStatus;
-  };
-}
-
 // =====================================================
 // PAYMENT MILESTONES
 // =====================================================
@@ -663,14 +425,10 @@ export interface ProjectPaymentMilestoneTemplate {
   name: string;
   description?: string;
   percentage?: number;
-  trigger_phase_template_id?: string;
   trigger_condition: "on_start" | "on_completion";
   display_order: number;
   is_active: boolean;
   created_at: string;
-
-  // Relations
-  trigger_phase_template?: ProjectPhaseTemplate;
 }
 
 export interface ProjectPaymentMilestone {
@@ -681,7 +439,6 @@ export interface ProjectPaymentMilestone {
   description?: string;
   percentage?: number;
   amount?: number;
-  linked_phase_id?: string;
   trigger_condition: "on_start" | "on_completion";
   status: PaymentMilestoneStatus;
   due_date?: string;
@@ -692,13 +449,6 @@ export interface ProjectPaymentMilestone {
   notes?: string;
   created_at: string;
   updated_at: string;
-
-  // Relations
-  linked_phase?: {
-    id: string;
-    name: string;
-    status: ProjectPhaseStatus;
-  };
 }
 
 // =====================================================
@@ -728,44 +478,11 @@ export interface UpdateProjectRequest extends Partial<CreateProjectRequest> {
   is_active?: boolean;
 }
 
-export interface UpdatePhaseRequest {
-  status?: ProjectPhaseStatus;
-  progress_percentage?: number;
-  progress_mode?: ProgressMode;
-  assigned_to?: string;
-  planned_start_date?: string;
-  planned_end_date?: string;
-  actual_start_date?: string;
-  actual_end_date?: string;
-  notes?: string;
-}
-
-export interface UpdateSubPhaseRequest {
-  status?: ProjectSubPhaseStatus;
-  progress_percentage?: number;
-  progress_mode?: ProgressMode;
-  assigned_to?: string;
-  due_date?: string;
-  notes?: string;
-}
-
-export interface AddChecklistItemRequest {
-  name: string;
-  display_order?: number;
-}
-
-export interface UpdateChecklistItemRequest {
-  name?: string;
-  is_completed?: boolean;
-  notes?: string;
-}
-
 export interface AddPaymentMilestoneRequest {
   name: string;
   description?: string;
   percentage?: number;
   amount?: number;
-  linked_phase_id?: string;
   trigger_condition?: "on_start" | "on_completion";
   due_date?: string;
 }
@@ -815,8 +532,8 @@ export interface ProjectSummary {
   project_category: ProjectCategory;
   status: ProjectStatus;
   priority?: ProjectPriority;
-  current_phase?: ProjectPhaseName;
-  current_phase_id?: string;
+  /** Name of the stage the project is on, derived from its playbook. */
+  current_phase?: string;
   payment_status?: ProjectPaymentStatus;
   overall_progress: number;
   expected_start_date?: string;
@@ -837,8 +554,7 @@ export interface ProjectSummary {
   };
   /**
    * Where the work has got to, derived by the list API from the playbook's
-   * top-level steps (or native phases). Distinct from `status`, which is where
-   * the record is.
+   * top-level steps. Distinct from `status`, which is where the record is.
    */
   stage_summary?: {
     /** Every stage under way - a playbook can run several in parallel. */
@@ -847,7 +563,7 @@ export interface ProjectSummary {
     next: string | null;
     done: number;
     total: number;
-    source: "playbook" | "phases" | "none";
+    source: "playbook" | "none";
     /** Per-stage progress, for the hover on the bar. */
     breakdown: Array<{
       name: string;
@@ -873,22 +589,9 @@ export interface ProjectDashboardStats {
   active_projects: number;
   projects_by_status: Record<ProjectStatus, number>;
   projects_by_category: Record<ProjectCategory, number>;
-  overdue_phases: number;
   pending_payments: number;
   total_contract_value: number;
   total_actual_cost: number;
-}
-
-export interface PhaseProgressSummary {
-  phase_id: string;
-  phase_name: string;
-  category_code: string;
-  status: ProjectPhaseStatus;
-  progress_percentage: number;
-  sub_phase_count: number;
-  completed_sub_phases: number;
-  blocking_dependencies?: string[];
-  assigned_to_name?: string;
 }
 
 // =====================================================
@@ -915,20 +618,6 @@ export const PROJECT_STATUS_OPTIONS = Object.entries(ProjectStatusLabels).map(
     label,
   })
 );
-
-export const PHASE_STATUS_OPTIONS = Object.entries(
-  ProjectPhaseStatusLabels
-).map(([value, label]) => ({
-  value: value as ProjectPhaseStatus,
-  label,
-}));
-
-export const SUB_PHASE_STATUS_OPTIONS = Object.entries(
-  ProjectSubPhaseStatusLabels
-).map(([value, label]) => ({
-  value: value as ProjectSubPhaseStatus,
-  label,
-}));
 
 // =====================================================
 // PROJECT ROOMS (FROM QUOTATION SPACES)
@@ -977,8 +666,6 @@ export interface ProjectNote {
   project_id: string;
   title?: string;
   content: string;
-  phase_id?: string;
-  sub_phase_id?: string;
   category: ProjectNoteCategory;
   is_pinned: boolean;
   created_by: string;
@@ -992,21 +679,11 @@ export interface ProjectNote {
     name: string;
     avatar_url?: string;
   };
-  phase?: {
-    id: string;
-    name: string;
-  };
-  sub_phase?: {
-    id: string;
-    name: string;
-  };
 }
 
 export interface CreateProjectNoteRequest {
   title?: string;
   content: string;
-  phase_id?: string;
-  sub_phase_id?: string;
   category?: ProjectNoteCategory;
   is_pinned?: boolean;
 }
@@ -1014,14 +691,12 @@ export interface CreateProjectNoteRequest {
 export interface UpdateProjectNoteRequest {
   title?: string;
   content?: string;
-  phase_id?: string;
-  sub_phase_id?: string;
   category?: ProjectNoteCategory;
   is_pinned?: boolean;
 }
 
 // =====================================================
-// PROJECT TASK (Enhanced with phase linking)
+// PROJECT TASK
 // =====================================================
 
 export interface ProjectTask {
@@ -1035,10 +710,6 @@ export interface ProjectTask {
   due_date?: string;
   assigned_to?: string;
   assigned_to_name?: string;
-  project_phase_id?: string;
-  phase_name?: string;
-  project_sub_phase_id?: string;
-  sub_phase_name?: string;
   parent_task_id?: string;
   subtask_count: number;
   completed_subtask_count: number;

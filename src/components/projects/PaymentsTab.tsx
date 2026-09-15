@@ -42,8 +42,6 @@ export interface PaymentMilestone {
   payment_reference: string | null;
   payment_method: string | null;
   notes: string | null;
-  linked_phase_id: string | null;
-  linked_phase?: { id: string; name: string; status: string } | null;
 }
 
 interface Props {
@@ -288,9 +286,7 @@ export function PaymentsTab({
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-slate-600">
-                        {m.linked_phase?.name ?? (
-                          <span className="text-slate-400">Manual</span>
-                        )}
+                        <span className="text-slate-400">Manual</span>
                       </td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-slate-800">
                         {formatCurrency(value)}

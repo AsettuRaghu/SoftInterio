@@ -13,13 +13,13 @@
  * begin a step, statuses going stale, a refresh that blanked the page. Each was
  * fixed once in the tasks module and stayed broken here, or the reverse.
  *
- * A phase IS a task and a step IS its subtask, so there was never a second
+ * A stage IS a task and a step IS its subtask, so there was never a second
  * thing to render. What the plan genuinely adds over the tasks list is two
  * columns — expected against logged hours, and progress — and those are now an
  * opt-in prop on the shared table rather than a reason to own a copy of it.
  *
- * Projects still on the older native phase engine keep ManagementTab; those
- * rows are genuinely not tasks.
+ * ManagementTab survived for a while for projects on the older native phase
+ * engine. That engine was retired on 2026-09-15; a playbook is the only plan.
  */
 
 import React from "react";
@@ -41,10 +41,10 @@ interface PlanTabProps {
   /** The active run, when a playbook is driving this project. */
   runId: string | null;
   /**
-   * The run's phases in playbook order, each carrying its steps. Comes from the
+   * The run's stages in playbook order, each carrying its steps. Comes from the
    * plan API, which sorts on the step definitions' display_order.
    */
-  orderedPhases: { id: string; sub_phases?: { id: string }[] }[];
+  orderedStages: { id: string; steps?: { id: string }[] }[];
   projectClosed?: boolean;
   teamMembers: TeamMember[];
   onRefresh: () => void;
@@ -55,7 +55,7 @@ export function PlanTab({
   projectId,
   tasks,
   runId,
-  orderedPhases,
+  orderedStages,
   projectClosed = false,
   teamMembers,
   onRefresh,
@@ -69,29 +69,29 @@ export function PlanTab({
    * Two things the table cannot work out for itself:
    *
    * 1. It renders whatever `externalTasks` holds as top-level rows. Handing it
-   *    every task in the run put the steps alongside their phases as siblings.
+   *    every task in the run put the steps alongside their stages as siblings.
    *    It wants PARENTS only, with their children on `subtasks`.
    *
    * 2. Its default order is by creation, and a playbook's tasks are created in
    *    whatever order the copy happened to insert them. The order that means
-   *    something is the one written in the playbook, which `orderedPhases`
+   *    something is the one written in the playbook, which `orderedStages`
    *    already carries - the plan API sorts by the step definitions'
    *    display_order.
    *
-   * So the phase list drives both: which rows exist, and in what sequence.
+   * So the stage list drives both: which rows exist, and in what sequence.
    */
   const planRows = React.useMemo(() => {
-    if (!runId || orderedPhases.length === 0) return [];
+    if (!runId || orderedStages.length === 0) return [];
 
     const byId = new Map(tasks.map((t) => [t.id, t]));
     const settled = ["completed", "skipped", "cancelled"];
 
-    return orderedPhases
-      .map((phase) => {
-        const parent = byId.get(phase.id);
+    return orderedStages
+      .map((stage) => {
+        const parent = byId.get(stage.id);
         if (!parent) return null;
 
-        const children = (phase.sub_phases ?? [])
+        const children = (stage.steps ?? [])
           .map((sub: { id: string }) => byId.get(sub.id))
           .filter(Boolean) as Task[];
 
@@ -105,7 +105,7 @@ export function PlanTab({
         };
       })
       .filter(Boolean) as Task[];
-  }, [tasks, runId, orderedPhases]);
+  }, [tasks, runId, orderedStages]);
 
   if (!user) {
     return <div className="h-32 bg-slate-100 rounded-lg animate-pulse" />;
@@ -130,7 +130,7 @@ export function PlanTab({
       showCreateButton={false}
       showPlanColumns
       preserveOrder
-      // A plan is read top to bottom; paging it into 25s would cut a phase off
+      // A plan is read top to bottom; paging it into 25s would cut a stage off
       // from its own steps.
       initialPageSize={200}
       allowEdit={!projectClosed}
