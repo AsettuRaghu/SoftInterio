@@ -1364,8 +1364,18 @@ export default function TaskTable({
         {showPlanColumns && (
           <td className="px-2 py-1.5 whitespace-nowrap text-xs tabular-nums">
             {(() => {
-              const est = Number(task.estimated_hours ?? 0);
-              const act = Number(task.actual_hours ?? 0);
+              // A stage's hours are its steps' hours. Its own estimate is
+              // ignored, the same way the scheduler ignores it: a stage lasts
+              // as long as its steps do. Logged time on the stage row itself
+              // still counts - it was worked.
+              const kids = task.subtasks ?? [];
+              const est = kids.length
+                ? kids.reduce((sum: number, k: any) => sum + Number(k.estimated_hours ?? 0), 0)
+                : Number(task.estimated_hours ?? 0);
+              const act = kids.reduce(
+                (sum: number, k: any) => sum + Number(k.actual_hours ?? 0),
+                Number(task.actual_hours ?? 0),
+              );
               if (!est && !act) return <span className="text-slate-300">—</span>;
               const over = est > 0 && act > est;
               return (

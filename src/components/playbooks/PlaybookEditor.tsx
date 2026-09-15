@@ -1411,36 +1411,64 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                           where the time really goes. The due date is derived
                           from it. */}
                       <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
-                        <span className="flex items-center gap-1">
-                          <span className="text-slate-400">Expected</span>
-                          <input
-                            type="number"
-                            min={0}
-                            step={0.5}
-                            value={step.estimated_hours ?? ""}
-                            onChange={(e) =>
-                              update(i, {
-                                estimated_hours: e.target.value
-                                  ? Number(e.target.value)
-                                  : null,
-                              })
-                            }
-                            placeholder="—"
-                            title="How long this should take. Compared against the hours actually logged, so overruns show up."
-                            className="w-14 px-1.5 py-0.5 border border-slate-200 rounded text-center"
-                          />
-                          <span>hours to complete</span>
-                        </span>
-                        {step.estimated_hours ? (
-                          <span className="text-slate-400">
-                            due about{" "}
-                            {Math.max(1, Math.ceil(step.estimated_hours / 8))} day
-                            {Math.max(1, Math.ceil(step.estimated_hours / 8)) === 1
-                              ? ""
-                              : "s"}{" "}
-                            after it starts
-                          </span>
-                        ) : null}
+                        {(() => {
+                          // A stage with steps gets its hours from them - the
+                          // plan lasts as long as the steps do and its Hours
+                          // column sums them - so the stage row shows the sum
+                          // rather than asking for a number it would ignore.
+                          const children = steps.filter(
+                            (c) => c.parent_index !== null && steps[c.parent_index]?.uid === step.uid,
+                          );
+                          if (step.parent_index === null && children.length > 0) {
+                            const total = children.reduce((sum, c) => sum + (c.estimated_hours ?? 0), 0);
+                            const days = Math.max(1, Math.ceil(total / 8));
+                            return (
+                              <span className="flex items-center gap-1">
+                                <span className="text-slate-400">Expected</span>
+                                <span className="font-medium text-slate-700 tabular-nums">{total}h</span>
+                                <span>
+                                  from its {children.length} step{children.length === 1 ? "" : "s"}
+                                  {total > 0 ? ` · about ${days} day${days === 1 ? "" : "s"} if they run one after another` : ""}
+                                </span>
+                              </span>
+                            );
+                          }
+                          return (
+                            <>
+                              <span className="flex items-center gap-1">
+                                <span className="text-slate-400">Expected</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={0.5}
+                                  value={step.estimated_hours ?? ""}
+                                  onChange={(e) =>
+                                    update(i, {
+                                      estimated_hours: e.target.value
+                                        ? Number(e.target.value)
+                                        : null,
+                                    })
+                                  }
+                                  placeholder="—"
+                                  title="How long this should take. Compared against the hours actually logged, so overruns show up. 8 hours = 1 day."
+                                  className={`w-14 px-1.5 py-0.5 border rounded text-center ${
+                                    step.estimated_hours ? "border-slate-200" : "border-amber-300 bg-amber-50"
+                                  }`}
+                                />
+                                <span>hours to complete</span>
+                              </span>
+                              {step.estimated_hours ? (
+                                <span className="text-slate-400">
+                                  about{" "}
+                                  {Math.max(1, Math.ceil(step.estimated_hours / 8))} day
+                                  {Math.max(1, Math.ceil(step.estimated_hours / 8)) === 1 ? "" : "s"}
+                                </span>
+                              ) : (
+                                <span className="text-amber-700">no hours - counts as 1 day</span>
+                              )}
+                            </>
+                          );
+                        })()}
 
                         <span className="text-slate-300">|</span>
                         <label className="flex items-center gap-1 cursor-pointer">
