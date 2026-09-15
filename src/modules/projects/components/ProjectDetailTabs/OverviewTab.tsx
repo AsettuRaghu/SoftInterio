@@ -16,6 +16,8 @@ interface OverviewTabProps {
   isModalOpen?: boolean;
   onModalClose?: () => void;
   onUpdate?: (updates: Partial<Project>) => Promise<void>;
+  /** Who may be named project manager. The page already loads these. */
+  teamMembers?: { id: string; name: string; email?: string }[];
 }
 
 export default function OverviewTab({
@@ -23,6 +25,7 @@ export default function OverviewTab({
   isModalOpen = false,
   onModalClose,
   onUpdate,
+  teamMembers = [],
 }: OverviewTabProps) {
   const handleSaveModal = async (
     editForm: Parameters<typeof EditProjectDetailsModal>[0]["onSave"] extends (
@@ -31,8 +34,24 @@ export default function OverviewTab({
       ? T
       : never,
   ) => {
-    const updateData: any = {
-      // Project Details
+    const updateData: Record<string, unknown> = {
+      /*
+       * Project details.
+       *
+       * `name` and `status` were collected by the modal and left out of this
+       * payload, so editing either did nothing at all - the dialog's own comment
+       * says they were moved here "so one dialog covers the whole record", and
+       * then they were dropped on the way to the server.
+       *
+       * `priority` and `project_manager_id` are new. Both were shown on this tab
+       * and editable nowhere, which is why a project converted from a lead kept
+       * "No project manager" forever. The PATCH route has accepted both all
+       * along.
+       */
+      name: editForm.name || null,
+      status: editForm.status || null,
+      priority: editForm.priority || null,
+      project_manager_id: editForm.project_manager_id || null,
       project_category: editForm.project_category || null,
       description: editForm.description || null,
       notes: editForm.notes || null,
@@ -42,7 +61,9 @@ export default function OverviewTab({
       client_name: editForm.client_name || null,
       client_email: editForm.client_email || null,
       client_phone: editForm.client_phone || null,
-      // Property Information
+      // Property Information. The ten "extended" fields - built-up area,
+      // bedrooms, facing, parking and the rest - were removed with the block
+      // that collected them; nothing on this page displayed them.
       property_name: editForm.property_name || null,
       property_type: editForm.property_type || null,
       flat_number: editForm.flat_number || null,
@@ -53,40 +74,29 @@ export default function OverviewTab({
       city: editForm.city || null,
       pincode: editForm.pincode || null,
       block_tower: editForm.block_tower || null,
-      built_up_area: editForm.built_up_area
-        ? parseInt(editForm.built_up_area)
-        : null,
-      super_built_up_area: editForm.super_built_up_area
-        ? parseInt(editForm.super_built_up_area)
-        : null,
-      bedrooms: editForm.bedrooms ? parseInt(editForm.bedrooms) : null,
-      bathrooms: editForm.bathrooms ? parseInt(editForm.bathrooms) : null,
-      balconies: editForm.balconies ? parseInt(editForm.balconies) : null,
-      floor_number: editForm.floor_number || null,
-      total_floors: editForm.total_floors
-        ? parseInt(editForm.total_floors)
-        : null,
-      facing: editForm.facing || null,
-      furnishing_status: editForm.furnishing_status || null,
-      parking_slots: editForm.parking_slots
-        ? parseInt(editForm.parking_slots)
-        : null,
     };
 
-    const response = await fetch(`/api/projects/${project.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updateData),
-    });
-
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.error || "Failed to update project");
+    /*
+     * Through the page's own updater, which PATCHes and then refetches quietly.
+     * This used to do its own fetch and finish with window.location.reload() -
+     * a full page load to show a changed field, which also threw away whichever
+     * tab and scroll position the person was on.
+     */
+    if (onUpdate) {
+      await onUpdate(updateData as Partial<Project>);
+    } else {
+      const response = await fetch(`/api/projects/${project.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updateData),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to update project");
+      }
     }
 
-    // Close modal and reload
     onModalClose?.();
-    window.location.reload();
   };
 
   return (
@@ -95,6 +105,7 @@ export default function OverviewTab({
       <EditProjectDetailsModal
         isOpen={isModalOpen}
         project={project}
+        teamMembers={teamMembers}
         onClose={onModalClose || (() => {})}
         onSave={handleSaveModal}
         isSaving={false}
@@ -259,6 +270,37 @@ export default function OverviewTab({
               {project.current_phase || "—"}
             </p>
           </div>
+          {/*
+            * What was sold, and where the client came from.
+            *
+            * Both live on the lead - `projects` has no service_type or
+            * lead_source column - and the project GET has been returning them on
+            * `lead` all along while this tab showed neither. It is the first
+            * thing anybody asks about a project they did not sell, and
+            * ServiceTypeLabels was imported here and never used, which is the
+            * tell that it was meant to be shown.
+            */}
+          <div>
+            <p className="text-sm font-medium text-slate-900">
+              <span className="text-slate-500">Service</span> :{" "}
+              {project.lead?.service_type
+                ? ServiceTypeLabels[
+                    project.lead.service_type as keyof typeof ServiceTypeLabels
+                  ] || project.lead.service_type
+                : "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-900">
+              <span className="text-slate-500">Source</span> :{" "}
+              {project.lead?.lead_source
+                ? project.lead.lead_source
+                    .split("_")
+                    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                    .join(" ")
+                : "—"}
+            </p>
+          </div>
           <div>
             <p className="text-sm font-medium text-slate-900">
               <span className="text-slate-500">Project Manager</span> :{" "}
@@ -278,6 +320,16 @@ export default function OverviewTab({
               <span className="text-slate-500">Expected End Date</span> :{" "}
               {project.expected_end_date
                 ? formatDate(project.expected_end_date)
+                : "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-900">
+              {/* The column has always existed and was displayed nowhere, so a
+                  project that had started looked as though it had not. */}
+              <span className="text-slate-500">Actual Start Date</span> :{" "}
+              {project.actual_start_date
+                ? formatDate(project.actual_start_date)
                 : "—"}
             </p>
           </div>

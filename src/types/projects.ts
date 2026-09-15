@@ -343,6 +343,9 @@ export interface Project {
   // Dates
   expected_start_date?: string;
   expected_end_date?: string;
+  /** On the table all along; this type never declared it, so nothing could
+   * read it and the project overview showed no actual start date. */
+  actual_start_date?: string;
   actual_end_date?: string;
 
   // Progress & Cost

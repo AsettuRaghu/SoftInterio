@@ -65,6 +65,13 @@ interface EditFormData {
   project_category: string;
   expected_start_date: string;
   expected_end_date: string;
+  /**
+   * Both were shown on the Overview tab and editable nowhere, so a project
+   * arriving from a lead with no manager stayed that way - which is why both
+   * projects on this tenant read "No project manager" on the report.
+   */
+  priority: string;
+  project_manager_id: string;
   // Client Information
   client_name: string;
   client_email: string;
@@ -78,21 +85,21 @@ interface EditFormData {
   city: string;
   pincode: string;
   block_tower: string;
-  built_up_area: string;
-  super_built_up_area: string;
-  bedrooms: string;
-  bathrooms: string;
-  balconies: string;
-  floor_number: string;
-  total_floors: string;
-  facing: string;
-  furnishing_status: string;
-  parking_slots: string;
 }
 
 interface EditProjectDetailsModalProps {
   isOpen: boolean;
   project: Project;
+  /**
+   * Who may be named project manager.
+   *
+   * Everyone on the team, not only holders of the Project Manager role. There
+   * is an endpoint that filters by that role, and on this tenant it returns one
+   * person of three - an Owner running their own projects could not be named,
+   * which is the wrong answer in a small practice and contradicts the flat
+   * permission model the rest of the app follows.
+   */
+  teamMembers?: { id: string; name: string; email?: string }[];
   onClose: () => void;
   onSave: (data: EditFormData) => Promise<void>;
   isSaving: boolean;
@@ -101,6 +108,7 @@ interface EditProjectDetailsModalProps {
 export function EditProjectDetailsModal({
   isOpen,
   project,
+  teamMembers = [],
   onClose,
   onSave,
   isSaving,
@@ -115,6 +123,8 @@ export function EditProjectDetailsModal({
     expected_start_date: "",
     expected_end_date: "",
     // Client Information
+    priority: "medium",
+    project_manager_id: "",
     client_name: "",
     client_email: "",
     client_phone: "",
@@ -127,16 +137,6 @@ export function EditProjectDetailsModal({
     city: "",
     pincode: "",
     block_tower: "",
-    built_up_area: "",
-    super_built_up_area: "",
-    bedrooms: "",
-    bathrooms: "",
-    balconies: "",
-    floor_number: "",
-    total_floors: "",
-    facing: "",
-    furnishing_status: "",
-    parking_slots: "",
   });
   const [error, setError] = React.useState<string | null>(null);
 
@@ -150,6 +150,8 @@ export function EditProjectDetailsModal({
         description: project.description || "",
         notes: project.notes || "",
         project_category: project.project_category || "turnkey",
+        priority: project.priority || "medium",
+        project_manager_id: project.project_manager_id || "",
         expected_start_date: project.expected_start_date
           ? project.expected_start_date.split("T")[0]
           : "",
@@ -177,22 +179,6 @@ export function EditProjectDetailsModal({
         city: project.property?.city || "",
         pincode: project.property?.pincode || "",
         block_tower: project.block_tower || "",
-        built_up_area: project.built_up_area
-          ? String(project.built_up_area)
-          : "",
-        super_built_up_area: project.super_built_up_area
-          ? String(project.super_built_up_area)
-          : "",
-        bedrooms: project.bedrooms ? String(project.bedrooms) : "",
-        bathrooms: project.bathrooms ? String(project.bathrooms) : "",
-        balconies: project.balconies ? String(project.balconies) : "",
-        floor_number: project.floor_number ? String(project.floor_number) : "",
-        total_floors: project.total_floors ? String(project.total_floors) : "",
-        facing: project.facing || "",
-        furnishing_status: project.furnishing_status || "",
-        parking_slots: project.parking_slots
-          ? String(project.parking_slots)
-          : "",
       });
       setError(null);
     }
@@ -462,167 +448,6 @@ export function EditProjectDetailsModal({
                   </div>
                 </div>
 
-                {/* Extended Property Details */}
-                <div className="pt-4 border-t border-slate-200">
-                  <p className="text-sm font-semibold text-slate-600 mb-4">
-                    Extended Details
-                  </p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-2">
-                        Built-up Area (sqft)
-                      </label>
-                      <input
-                        type="number"
-                        value={editForm.built_up_area}
-                        onChange={(e) =>
-                          handleInputChange("built_up_area", e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="0"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-2">
-                        Super Built-up (sqft)
-                      </label>
-                      <input
-                        type="number"
-                        value={editForm.super_built_up_area}
-                        onChange={(e) =>
-                          handleInputChange(
-                            "super_built_up_area",
-                            e.target.value
-                          )
-                        }
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="0"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-2">
-                        Bedrooms
-                      </label>
-                      <input
-                        type="number"
-                        value={editForm.bedrooms}
-                        onChange={(e) =>
-                          handleInputChange("bedrooms", e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="0"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-2">
-                        Bathrooms
-                      </label>
-                      <input
-                        type="number"
-                        value={editForm.bathrooms}
-                        onChange={(e) =>
-                          handleInputChange("bathrooms", e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="0"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-2">
-                        Balconies
-                      </label>
-                      <input
-                        type="number"
-                        value={editForm.balconies}
-                        onChange={(e) =>
-                          handleInputChange("balconies", e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="0"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-2">
-                        Floor Number
-                      </label>
-                      <input
-                        type="text"
-                        value={editForm.floor_number}
-                        onChange={(e) =>
-                          handleInputChange("floor_number", e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Floor"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-2">
-                        Total Floors
-                      </label>
-                      <input
-                        type="number"
-                        value={editForm.total_floors}
-                        onChange={(e) =>
-                          handleInputChange("total_floors", e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="0"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-2">
-                        Parking Slots
-                      </label>
-                      <input
-                        type="number"
-                        value={editForm.parking_slots}
-                        onChange={(e) =>
-                          handleInputChange("parking_slots", e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="0"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-2">
-                        Facing
-                      </label>
-                      <select
-                        value={editForm.facing}
-                        onChange={(e) =>
-                          handleInputChange("facing", e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="">Select...</option>
-                        {facingOptions.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-2">
-                        Furnishing
-                      </label>
-                      <select
-                        value={editForm.furnishing_status}
-                        onChange={(e) =>
-                          handleInputChange("furnishing_status", e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="">Select...</option>
-                        {furnishingOptions.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -688,6 +513,53 @@ export function EditProjectDetailsModal({
                           {opt.label}
                         </option>
                       ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Project Manager
+                    </label>
+                    <select
+                      value={editForm.project_manager_id}
+                      onChange={(e) =>
+                        handleInputChange("project_manager_id", e.target.value)
+                      }
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Nobody assigned</option>
+                      {teamMembers.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                    {teamMembers.length === 0 && (
+                      <p className="mt-1 text-xs text-slate-400">
+                        No team members loaded, so there is nobody to choose.
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Priority
+                    </label>
+                    <select
+                      value={editForm.priority}
+                      onChange={(e) =>
+                        handleInputChange("priority", e.target.value)
+                      }
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      {(["low", "medium", "high", "urgent"] as const).map(
+                        (value) => (
+                          <option key={value} value={value}>
+                            {value.charAt(0).toUpperCase() + value.slice(1)}
+                          </option>
+                        )
+                      )}
                     </select>
                   </div>
                 </div>

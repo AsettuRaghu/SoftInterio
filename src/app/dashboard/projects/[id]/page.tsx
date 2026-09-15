@@ -1085,6 +1085,9 @@ export default function ProjectDetailPage({ params }: PageProps) {
             <OverviewTab
               project={project}
               onUpdate={updateProject}
+              // The page already loads these for the task assignee dropdown;
+              // the edit dialog needs them to offer a project manager.
+              teamMembers={teamMembers}
               isModalOpen={showEditDetailsModal}
               onModalClose={() => setShowEditDetailsModal(false)}
             />

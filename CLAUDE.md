@@ -1565,6 +1565,50 @@ carry them.
 Lead conversion was dropped from the project report. Sales Reports answers it,
 and two pages disagreeing about a win rate is worse than one answering it.
 
+### The project edit dialog is the only way to change a project
+
+Four things were wrong with it at once, found on 2026-09-15 because the project
+manager could not be set.
+
+- **`project_manager_id` and `priority` were displayed on the Overview tab and
+  editable nowhere.** The PATCH route has accepted both all along -
+  `EDITABLE_PROJECT_FIELDS` lists them - so this was purely a missing control.
+  It is why both projects on this tenant read "No project manager".
+- **`name` and `status` were collected and then dropped.** The dialog's own
+  comment says they were moved into it "so one dialog covers the whole record",
+  and `handleSaveModal` left them out of the payload, so editing either did
+  nothing at all.
+- **It ended in `window.location.reload()`** - a full page load to show a changed
+  field, throwing away the tab and scroll position. It goes through the page's
+  `updateProject`, which PATCHes and refetches quietly.
+- **`actual_start_date` was on the table and absent from the `Project` type**, so
+  nothing could read it and a project that had started showed no start date.
+
+**Who may be project manager: anyone on the team.** Not only holders of the
+Project Manager role. `/api/settings/team/project-managers` filters by that role
+and returns one person of three here - an Owner running their own projects could
+not be named, which is wrong in a small practice and contradicts the flat
+permission model. The dialog uses the team list the page already loads.
+
+### Service and source belong to the lead, and the project shows them read-only
+
+`projects` has no `service_type` and no `lead_source`; they live on the lead, and
+`GET /api/projects/[id]` has been returning them on `lead` all along while the
+Overview tab showed neither - the first thing anybody asks about a project they
+did not sell. `ServiceTypeLabels` was imported into that tab and never used,
+which was the tell.
+
+They are read-only there on purpose: the lead owns them, and two editable copies
+of "what we sold" is how the two records start disagreeing.
+
+### Extended property details came off the project dialog
+
+Built-up area, super built-up area, bedrooms, bathrooms, balconies, floor,
+total floors, facing, furnishing status and parking - 161 lines of form that
+**nothing on the project page displayed**. Removed 2026-09-15 along with the ten
+form fields and their entries in the PATCH payload. The columns remain on
+`properties` for the property module.
+
 ## Traps that have already cost time
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it
