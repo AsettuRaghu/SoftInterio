@@ -14,7 +14,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from "react";
-import { CheckIcon } from "@heroicons/react/24/outline";
+import { CheckIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { cn } from "@/utils/cn";
 import { buttonVariants } from "@/components/ui/Button";
 
@@ -59,6 +59,9 @@ export function WaitingOnPanel({ projectId, canEdit, refreshKey = 0, onChanged, 
   const [items, setItems] = useState<Dependency[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
+  // One line by default - the count and the overdue count are what a PM
+  // scans; the list opens on demand so the plan beneath keeps the space.
+  const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({ owner_type: "client", description: "", expected_by: "", counterpart: "" });
 
@@ -127,25 +130,43 @@ export function WaitingOnPanel({ projectId, canEdit, refreshKey = 0, onChanged, 
 
   if (items === null) return null;
 
-  const open = items
+  const pending = items
     .filter((d) => !d.resolved_at)
     .sort((a, b) => (a.expected_by ?? "9999").localeCompare(b.expected_by ?? "9999"));
   const done = items.filter((d) => d.resolved_at);
-  const overdue = open.filter((d) => d.expected_by && daysFrom(d.expected_by) < 0);
+  const overdue = pending.filter((d) => d.expected_by && daysFrom(d.expected_by) < 0);
+  const next = pending.find((d) => d.expected_by) ?? pending[0];
 
-  if (open.length === 0 && done.length === 0 && !canEdit) return null;
+  if (pending.length === 0 && done.length === 0 && !canEdit) return null;
 
   return (
     <div className="mb-3 rounded-lg border border-slate-200 bg-white">
-      <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-3">
-        <h3 className="text-sm font-semibold text-slate-800">Waiting on others</h3>
-        <span className="text-xs text-slate-500">
-          {open.length === 0
-            ? "Nothing outstanding"
-            : `${open.length} open${overdue.length ? ` · ${overdue.length} overdue` : ""}`}
-        </span>
+      <div className="px-3 py-2 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex items-center gap-2 text-left min-w-0"
+        >
+          <ChevronRightIcon
+            className={cn("w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform", open && "rotate-90")}
+          />
+          <span className="text-sm font-semibold text-slate-800 whitespace-nowrap">Waiting on others</span>
+          <span className="text-xs text-slate-500 whitespace-nowrap">
+            {pending.length === 0 ? "nothing outstanding" : `${pending.length} open`}
+          </span>
+          {overdue.length > 0 && (
+            <span className="text-xs font-medium text-red-600 whitespace-nowrap">{overdue.length} overdue</span>
+          )}
+          {!open && next && (
+            <span className="text-xs text-slate-500 truncate">
+              · next: {next.description}
+              {next.expected_by ? ` (${fmt(next.expected_by)})` : ""}
+            </span>
+          )}
+        </button>
         <span className="flex-1" />
-        {done.length > 0 && (
+        {open && done.length > 0 && (
           <button
             type="button"
             onClick={() => setShowDone((v) => !v)}
@@ -154,7 +175,7 @@ export function WaitingOnPanel({ projectId, canEdit, refreshKey = 0, onChanged, 
             {showDone ? "Hide delivered" : `${done.length} delivered`}
           </button>
         )}
-        {canEdit && !adding && (
+        {open && canEdit && !adding && (
           <button
             type="button"
             onClick={() => setAdding(true)}
@@ -165,9 +186,9 @@ export function WaitingOnPanel({ projectId, canEdit, refreshKey = 0, onChanged, 
         )}
       </div>
 
-      {open.length > 0 && (
-        <ul className="divide-y divide-slate-100">
-          {open.map((d) => {
+      {open && pending.length > 0 && (
+        <ul className="divide-y divide-slate-100 border-t border-slate-100">
+          {pending.map((d) => {
             const days = d.expected_by ? daysFrom(d.expected_by) : null;
             const tone =
               days === null
@@ -227,7 +248,7 @@ export function WaitingOnPanel({ projectId, canEdit, refreshKey = 0, onChanged, 
         </ul>
       )}
 
-      {showDone && done.length > 0 && (
+      {open && showDone && done.length > 0 && (
         <ul className="divide-y divide-slate-100 border-t border-slate-100 bg-slate-50/60">
           {done.map((d) => (
             <li key={d.id} className="px-4 py-1.5 flex items-center gap-2 text-xs text-slate-500">
@@ -246,7 +267,7 @@ export function WaitingOnPanel({ projectId, canEdit, refreshKey = 0, onChanged, 
         </ul>
       )}
 
-      {adding && (
+      {open && adding && (
         <div className="px-4 py-2.5 border-t border-slate-100 flex flex-wrap items-center gap-2 text-xs">
           <select
             value={draft.owner_type}
