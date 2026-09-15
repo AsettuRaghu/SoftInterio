@@ -225,9 +225,6 @@ export async function GET(request: NextRequest) {
      * that says which it is.
      */
     if (leadIds.length) {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-
       const [{ data: followUps }, { data: dueTasks }, { data: events }] =
         await Promise.all([
           supabase
@@ -243,17 +240,23 @@ export async function GET(request: NextRequest) {
             .in("related_id", leadIds)
             .in("status", ["todo", "in_progress", "on_hold"])
             .not("due_date", "is", null),
+          /*
+           * Every open event, including ones whose date has passed - the same
+           * rule the follow-ups and tasks above already follow. This column
+           * means "everything still owed to this lead", and a meeting booked
+           * and never marked done is owed: either it happened and wants
+           * closing, or it did not and wants rebooking. A first version
+           * filtered to `scheduled_at >= today`, which made meetings the one
+           * kind that could quietly disappear from the list while overdue.
+           * "217d late" in red is the signal that it needs dealing with, not
+           * a reason to hide it.
+           */
           supabase
             .from("calendar_events")
             .select("linked_id, title, event_type, scheduled_at")
             .eq("linked_type", "lead")
             .in("linked_id", leadIds)
-            .eq("is_completed", false)
-            // Only what is still ahead. A meeting that was booked for last
-            // week and never marked done is a hygiene problem, not an
-            // upcoming commitment, and showing it as "5d late" beside a real
-            // follow-up would drown the real one.
-            .gte("scheduled_at", todayStart.toISOString()),
+            .eq("is_completed", false),
         ]);
 
       const upcoming = new Map<string, Array<{ kind: string; label: string; at: string }>>();
