@@ -231,7 +231,7 @@ export default function ProjectsTable({
     {
       key: "client_name",
       header: "Project Name",
-      width: "20%",
+      width: "15%",
       sortable: true,
       render: (project) => {
         const service = project.project_category
@@ -248,14 +248,13 @@ export default function ProjectsTable({
           v && v !== "Unknown Client" && v !== "Unknown Property" ? v : null;
 
         /*
-         * The customer in bold, then two lines that say what the job is and
-         * where: the service and the property on one, its category and city
-         * on the other. Two lines rather than one run of dots, because the
-         * pairs mean different things - the first is what we are building,
-         * the second is what kind of place and where it is.
+         * The customer in bold, then two lines: what kind of job it is - the
+         * service and the property's category - and then which property and
+         * where. Each line is one idea, and the pairs are short enough to
+         * hold in a narrow column without wrapping.
          */
-        const line1 = [service, known(project.property_name)].filter(Boolean).join(" · ");
-        const line2 = [category, project.city].filter(Boolean).join(" · ");
+        const line1 = [service, category].filter(Boolean).join(" · ");
+        const line2 = [known(project.property_name), project.city].filter(Boolean).join(" · ");
 
         return (
           <div className="min-w-0">
