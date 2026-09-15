@@ -1060,6 +1060,15 @@ remembering before reaching for one again: the request can be abandoned between
 statements — a navigation, a dev-server recompile, a dropped connection — and
 then no rollback code runs at all. Only a transaction is atomic.
 
+**It copies `wait_type`.** It did not from 2026-09-13 (when `wait_type` was
+added) to 2026-09-15: every "wait for X to start" link came back as "to
+finish" in the draft, a step waiting for its own stage to finish is exactly
+what `trg_reject_circular_step_dependency` refuses, and so no playbook with
+such a link could be revised at all - the route reported "Could not open a
+revision". When adding a column to `procedure_step_definitions` or
+`procedure_step_dependencies`, **add it to `revise_playbook`'s column lists**;
+the function enumerates them and silently drops anything it does not name.
+
 It is also **twelve times faster**: 32 sequential inserts at ~195ms each took
 6.6 seconds, against 550ms for the function. That mattered, because the
 lifecycle buttons had no pending state, so a six-second revise looked like a
