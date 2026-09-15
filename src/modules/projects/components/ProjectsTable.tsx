@@ -26,6 +26,161 @@ import {
   PROJECT_PHASE_COLORS,
 } from "@/modules/projects/constants";
 
+/**
+ * Where a project's dates are heading, from how far it has got.
+ *
+ * The planned dates are a promise made at handover. What a manager scanning the
+ * list needs is whether that promise still holds, and the honest way to answer
+ * from a list is to extrapolate: if 30% of the work took 60 days, the whole
+ * will take about 200, so it ends around start + 200. A straight line through
+ * the progress so far - crude, and stated as such in the hover, but it is the
+ * same arithmetic anyone does in their head and it is right far more often than
+ * the planned end date is once the work is under way.
+ *
+ * It refuses to guess where guessing would mislead:
+ *
+ *   - No start recorded and the planned start still ahead: there is no elapsed
+ *     time to extrapolate from, so it says when the project starts. If it
+ *     already shows progress, that is flagged - work is happening against a
+ *     record that says it has not begun.
+ *   - Nothing done yet: the pace is zero and a projection would be infinite,
+ *     so it says whether the planned end has already gone by.
+ *   - Finished: the actual end is the answer, against the planned one.
+ */
+type Timeline = {
+  headline: string;
+  tone: string;
+  /** A second line under the headline, when there is something to add. */
+  note?: string;
+  noteTone?: string;
+  /** For the hover - how the headline was arrived at. */
+  explain?: string;
+};
+
+const DAY = 86_400_000;
+const dayMonth = (iso: string) =>
+  new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+const dayMonthYear = (iso: string) =>
+  new Date(iso).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "2-digit",
+  });
+const daysBetween = (a: string | Date, b: string | Date) =>
+  Math.round((new Date(b).getTime() - new Date(a).getTime()) / DAY);
+
+export function projectTimeline(p: {
+  status: string;
+  overall_progress?: number;
+  expected_start_date?: string | null;
+  expected_end_date?: string | null;
+  actual_start_date?: string | null;
+  actual_end_date?: string | null;
+}): Timeline | null {
+  const today = new Date();
+  const todayIso = today.toISOString().slice(0, 10);
+  const progress = Math.max(0, Math.min(100, p.overall_progress ?? 0));
+  const plannedEnd = p.expected_end_date ?? null;
+
+  // Finished: the fact, against the promise.
+  if (p.status === "completed" && p.actual_end_date) {
+    const delta = plannedEnd ? daysBetween(plannedEnd, p.actual_end_date) : null;
+    return {
+      headline: `Done ${dayMonth(p.actual_end_date)}`,
+      tone: "text-emerald-700",
+      note:
+        delta === null
+          ? undefined
+          : delta <= 0
+            ? delta === 0
+              ? "on the planned day"
+              : `${-delta}d early`
+            : `${delta}d after plan`,
+      noteTone:
+        delta === null ? undefined : delta <= 0 ? "text-emerald-600" : "text-red-600",
+    };
+  }
+  if (p.status === "cancelled") {
+    return { headline: "Cancelled", tone: "text-slate-400" };
+  }
+
+  const start =
+    p.actual_start_date ??
+    (p.expected_start_date && p.expected_start_date <= todayIso
+      ? p.expected_start_date
+      : null);
+
+  // Not begun, by the record.
+  if (!start) {
+    if (p.expected_start_date) {
+      const inDays = daysBetween(todayIso, p.expected_start_date);
+      return {
+        headline: `Starts ${dayMonth(p.expected_start_date)}`,
+        tone: "text-slate-600",
+        note:
+          progress > 0
+            ? `${progress}% done with no start recorded`
+            : `in ${inDays}d`,
+        noteTone: progress > 0 ? "text-amber-600" : "text-slate-400",
+        explain:
+          progress > 0
+            ? "Work is being logged against a project whose start date is still ahead. Set the actual start date on the project to get a projection."
+            : undefined,
+      };
+    }
+    return { headline: "No dates set", tone: "text-slate-400" };
+  }
+
+  // Started but nothing done: no pace to extrapolate from.
+  if (progress <= 0) {
+    if (plannedEnd && plannedEnd < todayIso) {
+      return {
+        headline: `${daysBetween(plannedEnd, todayIso)}d past planned end`,
+        tone: "text-red-600",
+        note: "nothing completed yet",
+        noteTone: "text-red-500",
+      };
+    }
+    return {
+      headline: plannedEnd ? `Ends ${dayMonth(plannedEnd)} (plan)` : "Not started",
+      tone: "text-slate-600",
+      note: "nothing completed yet",
+      noteTone: "text-slate-400",
+    };
+  }
+
+  // Under way: a straight line through progress to date.
+  const elapsed = Math.max(1, daysBetween(start, todayIso));
+  const projectedTotal = Math.round(elapsed / (progress / 100));
+  const projectedEnd = new Date(new Date(start).getTime() + projectedTotal * DAY);
+  const projectedIso = projectedEnd.toISOString().slice(0, 10);
+  const delta = plannedEnd ? daysBetween(plannedEnd, projectedIso) : null;
+
+  const tone =
+    delta === null
+      ? "text-slate-700"
+      : delta <= 0
+        ? "text-emerald-700"
+        : delta <= 14
+          ? "text-amber-600"
+          : "text-red-600";
+
+  return {
+    headline: `Ends ~${dayMonth(projectedIso)}`,
+    tone,
+    note:
+      delta === null
+        ? `at the current pace`
+        : delta <= 0
+          ? delta === 0
+            ? "on plan"
+            : `${-delta}d ahead of plan`
+          : `${delta}d behind plan`,
+    noteTone: tone,
+    explain: `Projected from ${progress}% done in ${elapsed} days since ${dayMonthYear(start)}, assuming the same pace continues. Planned end ${plannedEnd ? dayMonthYear(plannedEnd) : "not set"}.`,
+  };
+}
+
 interface ProjectsTableProps {
   data: ProjectSummary[];
   sortState: SortState;
@@ -266,6 +421,50 @@ export default function ProjectsTable({
               </span>
             )}
             <span className="text-sm text-slate-700 truncate">{pm.name}</span>
+          </div>
+        );
+      },
+    },
+    {
+      key: "timeline",
+      header: "Timelines",
+      width: "150px",
+      minWidth: "150px",
+      sortable: true,
+      render: (project) => {
+        const t = projectTimeline(project);
+        const planned =
+          project.expected_start_date || project.expected_end_date
+            ? `${
+                project.expected_start_date
+                  ? dayMonth(project.expected_start_date)
+                  : "?"
+              } → ${
+                project.expected_end_date
+                  ? dayMonth(project.expected_end_date)
+                  : "?"
+              }`
+            : null;
+        return (
+          <div className="min-w-0" title={t?.explain}>
+            {/* The projection leads: it is the answer to "will this land on
+                time", which is what the column is for. The plan sits beneath
+                as the reference it is measured against. */}
+            {t ? (
+              <p className={`text-sm font-medium ${t.tone}`}>{t.headline}</p>
+            ) : (
+              <p className="text-sm text-slate-300">—</p>
+            )}
+            {t?.note && (
+              <p className={`text-[11px] ${t.noteTone ?? "text-slate-400"}`}>
+                {t.note}
+              </p>
+            )}
+            {planned && (
+              <p className="mt-0.5 text-[11px] text-slate-400 tabular-nums">
+                Planned {planned}
+              </p>
+            )}
           </div>
         );
       },

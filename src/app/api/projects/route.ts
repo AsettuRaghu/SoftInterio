@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
         priority,
         expected_start_date,
         expected_end_date,
+        actual_start_date,
         actual_end_date,
         actual_cost,
         contract_value,

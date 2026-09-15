@@ -1831,6 +1831,22 @@ came off as dropdowns because the search finds them, and four dropdowns under a
 search box made a second toolbar out of what should be one. Completed and
 cancelled projects are hidden by default, which the Status filter already did.
 
+**Timelines projects the end date from progress to date.** `projectTimeline()`
+in `ProjectsTable` extrapolates a straight line: 30% done in 60 days means ~200
+in all, so it ends around start + 200. Crude, and the hover says so, but it is
+the arithmetic anyone does in their head and it is right far more often than the
+planned end once the work is under way. Green within plan, amber up to 14 days
+over, red beyond; the planned dates sit beneath as the reference.
+
+It refuses to guess where guessing would mislead, and each refusal is a finding
+in its own right: no recorded start with the planned start still ahead says
+"Starts 1 Oct" - and flags **"9% done with no start recorded"** in amber when
+work is being logged against a project the record says has not begun, which is
+PRJ_20251219_0001 today. Nothing done yet has no pace, so it says how far past
+the planned end the project is - PRJ-25-0002 reads "167d past planned end".
+`actual_start_date` was absent from the list select and is the one thing that
+turns the first case into a projection.
+
 **Stage is derived, not read.** `GET /api/projects` runs the same derivation as
 `GET /api/projects/[id]/stages` - a stage is a top-level playbook step, falling
 back to native phases - but batched across the page: one query for every active
