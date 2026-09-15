@@ -1722,23 +1722,51 @@ so a lead qualified without one produces a project that cannot be saved.
 Deliberately not in `newFields`: a lead arriving from a form or a phone call
 legitimately has a name and a number and nothing else.
 
-### Three quotations on one converted lead is correct
+### Handover attaches the quotation; it does not copy it
 
-`LD-202512-001` / `PRJ_20251219_0001` carries `QT-2025-0004 v1` (cancelled),
-`QT-2025-0004 v2` (approved - the agreed price) and `PRJ_20251219_2158 v1`. The
-third is the **frozen baseline copy** taken at handover; it uses the project's
-number prefix because it belongs to the project rather than the pipeline, and it
-is approved because it records what was agreed.
+Changed 2026-09-15 (migration `20260915090000`). Marking a lead won used to run
+`copy_quotation_to_project()`, duplicating the quotation and its whole tree -
+header, spaces, components, every line item - under a fresh
+`PRJ_<date>_<random>` number, then pointing the project at the duplicate. Two
+facts made that pointless:
 
-Two known oddities, neither harmful:
+1. **An approved quotation cannot be edited.** `PATCH /api/quotations/[id]`
+   refuses `sent`, `approved`, `rejected` and `superseded` and tells you to
+   revise; a revision inserts a new row. The copy froze what status already
+   froze.
+2. **The original was already attached.** `lock_quotation_for_project()` sets
+   `linked_to_project_id`, and the approved quotation carried `project_id` too.
+   The association the copy existed to create was already there.
 
-- **That copy's `baseline_quotation_id` points at itself**, not at
-  `QT-2025-0004 v2`. It still marks the row as a baseline, which is what excludes
-  it from the one-approved-quotation-per-lead index, but the copy cannot be traced
-  to its source.
-- **Quotation numbering has four formats in use** - `QT-####-####`,
-  `QT-######-####`, `QT-########-###` and the `PRJ_########_####` baseline. The
-  scheme has changed more than once and old rows kept their original numbers.
+The transition now sets `project_id` on the approved quotation (the project's
+Quotations tab queries `?project_id=`, so `linked_to_project_id` alone is not
+enough) and points `projects.quotation_id` at it.
+
+`copy_quotation_to_project()` is **kept and commented as no longer called**, not
+dropped - removing it in the same change that stops calling it would remove the
+way back. Do not call it from new code.
+
+`quotations_one_approved_per_lead` lost its `AND baseline_quotation_id IS NULL`
+exemption, which existed only so a handover copy could sit approved beside its
+source. Verified after the change: approving a second quotation on one lead is
+refused by the index.
+
+`baseline_quotation_id` stays on the schema. It is a **chain-root pointer** -
+"references the first version (V1/baseline) of this quotation" - which is why a
+baseline points at **itself**; that was never a defect. It is the right shape for
+delivery variations when those exist, and costs nothing left null.
+
+The one historical copy, `PRJ_20251219_2158 v1`, is **superseded rather than
+deleted**: nobody withdrew it, it records that a snapshot was taken, and deleting
+it would take its 5 spaces and 17 line items with it irreversibly. Its
+`baseline_quotation_id` still self-references, so the two filters in
+`quotations/[id]/status` that skip baselines are kept - correct for that row, and
+no-ops for everything else.
+
+**Quotation numbering has four historical formats** - `QT-####-####`,
+`QT-######-####`, `QT-########-###` and the one `PRJ_########_####` baseline. The
+scheme changed twice and old rows keep their numbers; renumbering history would
+break every reference in somebody's inbox. New quotations are `QT-` only.
 
 ## Traps that have already cost time
 

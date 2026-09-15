@@ -691,7 +691,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
           // Use selected quotation (already validated above for "won" stage)
           let winningQuotationId = body.selected_quotation_id || null;
-          let projectQuotationId: string | null = null;
 
           log.info("Creating project from won lead", {
             leadId: id,
@@ -799,10 +798,37 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               created_by: user.id,
             });
 
-            // STEP: Copy and lock quotation for the project
+            /*
+             * STEP: attach the approved quotation to the project.
+             *
+             * It used to be copied - `copy_quotation_to_project` duplicated the
+             * header, the spaces, the components and every line item under a
+             * fresh `PRJ_<date>_<random>` number, then pointed the project at the
+             * duplicate. Two things made that pointless:
+             *
+             *   1. An approved quotation cannot be edited. `PATCH
+             *      /api/quotations/[id]` refuses it and tells you to revise, and
+             *      a revision inserts a new row. So the copy froze something
+             *      already frozen by its status.
+             *   2. The original was already attached. `lock_quotation_for_project`
+             *      below sets `linked_to_project_id`, and the approved quotation
+             *      already carried `project_id` too - so the association the copy
+             *      existed to create was in place before it ran.
+             *
+             * What the copy did cost: a duplicated tree per conversion, a fourth
+             * quotation-numbering format with a random suffix that can collide,
+             * an exemption in `quotations_one_approved_per_lead` to stop the copy
+             * breaching a rule it had no business being in, and a project whose
+             * `quotation_id` named a number nobody in the sales conversation had
+             * ever seen.
+             *
+             * `baseline_quotation_id` stays on the schema. It is a chain-root
+             * pointer and the right shape for delivery variations when those
+             * exist; it is simply left null now.
+             */
             if (to_stage === "won" && winningQuotationId) {
               try {
-                // 1. Lock the original quotation (sales side)
+                // Lock it: is_locked, plus linked_to_project_id.
                 log.debug("Locking the sales quotation for the project", {
                   quotationId: winningQuotationId,
                   projectId,
@@ -819,42 +845,43 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                 if (lockError) {
                   log.warn("Warning: Failed to lock original quotation", { detail: lockError });
                   // Don't fail project creation if locking fails
-                } else {
-                  log.debug("Original quotation locked successfully");
                 }
 
-                // 2. Copy quotation to project (create V1 baseline)
-                log.debug("Copying quotation to project", { detail: winningQuotationId });
+                /*
+                 * `project_id` as well as `linked_to_project_id`, because the
+                 * project's Quotations tab queries `?project_id=`. Without it the
+                 * agreed quotation would not appear on the project at all.
+                 */
+                const { error: attachError } = await supabase
+                  .from("quotations")
+                  .update({
+                    project_id: projectId,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq("id", winningQuotationId);
 
-                const { data: copiedQuotationId, error: copyError } =
-                  await supabase.rpc("copy_quotation_to_project", {
-                    p_source_quotation_id: winningQuotationId,
-                    p_project_id: projectId,
-                    p_created_by: user.id,
-                  });
-
-                if (copyError) {
-                  log.error("Error copying quotation", copyError);
-                  projectCreationError = copyError;
-                } else if (copiedQuotationId) {
-                  projectQuotationId = copiedQuotationId;
-                  log.debug("Quotation copied successfully", { detail: projectQuotationId });
-
-                  // 3. Update project with baseline quotation reference
+                if (attachError) {
+                  log.error("Error attaching quotation to project", attachError);
+                  projectCreationError = attachError;
+                } else {
                   const { error: updateProjectError } = await supabase
                     .from("projects")
                     .update({
-                      baseline_quotation_id: projectQuotationId,
-                      quotation_id: projectQuotationId,
+                      quotation_id: winningQuotationId,
                       updated_at: new Date().toISOString(),
                     })
                     .eq("id", projectId);
 
                   if (updateProjectError) {
-                    log.error("Error updating project quotation reference", updateProjectError);
-                    // Don't fail - quotation is copied even if link fails
+                    log.error(
+                      "Error pointing the project at its quotation",
+                      updateProjectError
+                    );
+                    // Not fatal: the quotation is attached either way.
                   } else {
-                    log.debug("Project linked to quotation successfully");
+                    log.debug("Project linked to its agreed quotation", {
+                      quotationId: winningQuotationId,
+                    });
                   }
                 }
               } catch (quotationErr) {

@@ -131,6 +131,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
      *
      * Baseline copies are left alone: they record what a project was sold on,
      * not a competing offer.
+     *
+     * The two baseline_quotation_id filters below are kept deliberately, though
+     * handover stopped copying on 2026-09-15 and no new baselines are created.
+     * One historical copy still carries the marker, and skipping it is still
+     * right - it is superseded and not a competing offer. For everything else
+     * they are no-ops.
      */
     let supersededNumber: string | null = null;
     if (
