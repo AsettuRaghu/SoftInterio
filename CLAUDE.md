@@ -634,7 +634,11 @@ Finishing early pulls the plan forward; late or held pushes it back. The
 touched. Calendar days, not working days. The run's own dating in
 `start_procedure_run` is overwritten by the insert trigger immediately.
 
-Three things it got wrong on its first real plan, all fixed the same day:
+Five things it got wrong on its first real plans, all fixed the same day:
+the project's planned start anchors **only the first stage** (as a floor for
+every stage it held 3D back to the sales date after 2D had finished);
+**skipped and cancelled steps take no time** (NULL dates, ignored by every
+MAX);
 a step's floor is its **own stage's** start, not the project's planned start;
 the implicit previous-sibling rule **yields to an explicit link the other
 way** (Reworks "waits for Client Approval" typed above Approval chased its
