@@ -1079,7 +1079,7 @@ export default function TaskTable({
       >
         {/* Task Name */}
         <td className={`px-2 py-1.5 ${isSubtask ? "pl-4" : ""}`}>
-          <div className="flex flex-wrap items-center gap-1">
+          <div className="flex items-center gap-1 min-w-0">
             {isSubtask && (
               <div className="flex items-center gap-1 pl-4">
                 <span className="w-4 h-4 flex items-center justify-center text-slate-300">
@@ -1152,30 +1152,37 @@ export default function TaskTable({
               </button>
             )}
 
-            {/* A step whose turn has not come says what it is waiting for,
-                on the row, and its Start is disabled - not red after a
-                refused click. */}
+            {/* A step whose turn has not come, or one on hold, says so in a
+                chip on the same line - the full sentence is the tooltip. A
+                second line per row made a 36-step plan twice as tall. */}
             {task.status === "todo" && gates?.[task.id] && !gates[task.id].canStart && gates[task.id].startReason && (
-              <span className="basis-full text-[10px] text-slate-500">
-                {gates[task.id].startReason}
+              <span
+                title={gates[task.id].startReason ?? undefined}
+                className="shrink-0 max-w-[11rem] truncate text-[10px] text-slate-500 bg-slate-100 rounded px-1 py-0.5"
+              >
+                {gates[task.id].startReason?.replace(/^Waiting for /, "after ")}
               </span>
             )}
-
-            {/* A held step says who it waits on, on the row, so a plan reads
-                as "Procurement is waiting on the client until 20 Oct" rather
-                than a status badge and a tooltip. */}
             {(task.status === "on_hold" || task.status === "blocked") && task.hold_owner && (
-              <span className="basis-full text-[10px] text-amber-700">
-                Waiting on {HOLD_OWNER_WORD[task.hold_owner]}
-                {task.hold_counterpart ? ` (${task.hold_counterpart})` : ""}
+              <span
+                title={`Waiting on ${HOLD_OWNER_WORD[task.hold_owner]}${task.hold_counterpart ? ` (${task.hold_counterpart})` : ""}${
+                  task.hold_expected_until
+                    ? ` until ${new Date(task.hold_expected_until).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
+                    : ""
+                }${task.hold_reason ? ` — ${task.hold_reason}` : ""}`}
+                className="shrink-0 max-w-[11rem] truncate text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-1 py-0.5"
+              >
+                {HOLD_OWNER_WORD[task.hold_owner]}
                 {task.hold_expected_until
-                  ? ` until ${new Date(task.hold_expected_until).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
+                  ? ` · ${new Date(task.hold_expected_until).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
                   : ""}
-                {task.hold_reason ? ` — ${task.hold_reason}` : ""}
               </span>
             )}
 
-            {!isSubtask && !isEditingTitle && rowEditable && (
+            {/* Not on a plan: a step comes from the playbook with its owner,
+                hours, gates and "waits for"; a task typed here would have
+                none of that. One-off work belongs on the Tasks tab. */}
+            {!isSubtask && !isEditingTitle && rowEditable && !showPlanColumns && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
