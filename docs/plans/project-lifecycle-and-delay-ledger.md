@@ -1,295 +1,230 @@
-# Project lifecycle, kick-off, baselines and the delay ledger
+# How a project runs, and where the time goes
 
-Status: **draft for review** · 2026-09-15 · builds on the retirement of the
-native phase engine (migration `20260915120000`)
+Status: **draft for review** · 2026-09-15 · v2, rewritten in plain language
 
-This is the design behind "connect the stages of a project to its status, and
-know where the delay came from and at what juncture." It is a plan, not a
-build; nothing here exists yet unless marked *(exists)*.
+This is the plan for how a project moves from "just won" to "handed over",
+how the playbook drives that, and how we always know **who caused a delay,
+at which stage, and why** — so the project manager can show it to the client
+instead of absorbing it.
+
+Nothing here is built yet. The parts that already exist are marked *(exists)*.
 
 ---
 
-## 1. The model in one paragraph
+## 1. Six words we will use, and what they mean
 
-A **playbook** defines a project's stages, the gates between them, and which
-steps are **milestones** that move the project's **status**. Marking a lead
-won creates a `new` project with no plan. **Kick-off** is where the project
-manager reviews the handover, chooses the playbook, sets the plan, declares
-the client's dependencies and confirms — that starts the run, records
-**baseline v1**, and moves the project to `in_progress`. From then on every
-task carries three timelines (baseline, current plan, actual); waiting and
-overrun accrue to an **attribution** at a **juncture** for a **cause**, in one
-**ledger**; and the ledger is what a status report and, later, the client
-portal are generated from.
+| Word | Plain meaning |
+|---|---|
+| **Stage** | A big chunk of the work — Design, Procurement, Installation. The playbook decides what the stages are. |
+| **Status** | Whether the project is alive: New, In Progress, On Hold, Completed, Cancelled. |
+| **Kick-off** | The moment the project manager takes the project from Sales, plans it, and starts it. |
+| **Agreed plan** | The dates everyone signed up to at kick-off. Kept forever, even after the dates move. |
+| **Delay owner** | Who a delay is counted against: the **client**, a **vendor**, **us**, or **someone else** (society, weather, government). |
+| **Delay log** | The list of every delay — how many days, who owns it, at which stage, and why. |
 
-## 2. Status and stage are different questions
+That's the whole vocabulary. Everything below uses only these.
 
-| | Status *(exists)* | Stage *(exists)* |
+## 2. The idea in one paragraph
+
+A lead is won → a **New** project appears with no plan. The project manager
+does the **kick-off**: reviews what Sales handed over, picks the playbook,
+sets the dates, lists what the client must do (hand over the site, approve
+the design), and confirms. That creates the **agreed plan** and the project
+becomes **In Progress**. From then on, every time something waits on
+someone or takes longer than planned, the days go into the **delay log**
+against a **delay owner**. At the end — or any time in between — the log
+says: *"We are 41 days behind the agreed plan: 26 are the client's (site
+handover 18, design changes 8), 9 are the vendor's, 6 are ours."* That is
+the sentence the project manager sends to the client.
+
+## 3. Status and stage are two different things
+
+- **Stage** answers *where is the work?* — it comes from the playbook, and a
+  project can be on two stages at once (Procurement and 3D Design together
+  is normal).
+- **Status** answers *is the project alive?* — five values, never more.
+
+They connect through **milestones**. In the playbook, a step can be marked
+as a milestone that means something for status:
+
+| Milestone | What it does |
+|---|---|
+| "Kick-off done" | project becomes In Progress |
+| "Handover signed" | project becomes Completed |
+| "Show to client" | no status change; it appears on the client's timeline |
+
+The system **suggests** the status change; the project manager **confirms
+it with a note**. Nothing changes by itself. Because the milestones live in
+the playbook, an interiors company and an architect firm get different
+lifecycles without any code change — they just write different playbooks.
+
+## 4. Changing the status has rules
+
+Like marking a lead as Won *(exists)*: the system checks first, tells you
+what is missing, and only then changes anything.
+
+| From → To | Allowed only when |
+|---|---|
+| New → In Progress | the kick-off checklist is complete |
+| In Progress → On Hold | you say why, who owns the wait, and when you expect to resume |
+| On Hold → In Progress | (the days on hold are logged against that owner) |
+| In Progress → Completed | no open steps *(exists)*, the handover milestone is done, nothing still owed by the client |
+| → Cancelled | you say why; open work is cancelled *(exists)* |
+
+## 5. Kick-off is a checklist, not a wizard  ✅ decided
+
+One screen on the Plan tab, five sections, one Confirm button. It stays
+re-openable so it also reads as "the state of the hand-off".
+
+1. **Handover from Sales** — client, property, approved quotation, spaces,
+   sales notes, and the dates Sales promised. Tick *reviewed*.
+2. **Playbook** — suggested from the service type, chosen by the PM.
+3. **Dates and owners** — start date; stage dates worked out from the
+   playbook's hours (editable); who owns each stage.
+4. **What the client must do** — site handover, design approval, and so on,
+   each with an expected date. These come from the playbook (steps marked
+   "the client does this") plus anything extra.
+5. **Confirm** — the plan starts, the agreed plan is saved, status becomes
+   In Progress, and the timeline records "Kicked off" with the PM's note.
+
+The dates Sales promised are kept and shown next to the agreed plan. If the
+PM's plan is already three weeks later than what Sales promised, the page
+says so — that is a sales finding, not a delivery one.
+
+## 6. Three sets of dates
+
+| | What it is | When it moves |
 |---|---|---|
-| Answers | Is the project alive? | Where is the work? |
-| Values | `new` `in_progress` `on_hold` `completed` `cancelled` | Whatever the playbook's top-level steps are |
-| Owner | The project manager, through a gated transition | Derived from tasks, never stored |
-| Can be plural | No | Yes (`allow_parallel`) |
+| **Promised at sale** | what Sales told the client | never, after kick-off |
+| **Agreed plan** | what the PM committed to at kick-off | only when a new plan is agreed — with a reason, a delay owner, and a note that the client was told |
+| **Actual** | what really happened *(exists)* | as work starts and finishes |
 
-They connect through **milestones**, not through a shared list. A playbook
-step can be flagged as a milestone with a status meaning:
+"Agreeing a new plan" is a deliberate act, like revising a quotation. The
+old plan is kept, and the difference between old and new goes into the delay
+log against its owner. **PM, Admin or Owner** can agree a new plan  ✅ decided.
 
-| Milestone role | Effect when the step completes |
+## 7. How a delay gets logged — the simple rules
+
+There are only two ways a delay happens:
+
+1. **Waiting on someone.** A step is put on hold because we are waiting —
+   for the client to hand over the site, for a vendor to deliver. The PM
+   picks **who** we are waiting on, **why** (from a short list), and **until
+   when**. Every day on hold is counted against that owner until it's
+   released.
+2. **Took longer than planned.** Nobody was blocking it; the work simply
+   overran. Those days are counted against **us**, at the stage it happened
+   in. We don't blame a person — "Design ran 4 days over" is enough to
+   improve the process.  ✅ decided (stage-level, not person-level)
+
+Two things make this nearly automatic:
+
+- **Steps the client must do** are marked as such in the playbook ("Client
+  approves 3D", "Site handed over"). If the client is late on one, the days
+  count against the client automatically from the expected date — the PM
+  doesn't have to do anything.  ✅ decided
+- **The "why" list** is short and editable per business — for the client:
+  site not ready · design change · approval pending · payment pending; for a
+  vendor: lead time · quality rejection; and so on.
+
+A design change after sign-off is a quotation revision *(exists)* **plus** a
+delay-log entry for the days it adds, owned by the client.
+
+For now the PM ticks off what the client has done. When the client portal
+exists, the client does it themselves — and sees the same "what we are
+waiting on you for" list.
+
+## 8. What the project manager sees
+
+- **Plan tab** *(exists)*: agreed dates next to actual dates; a step on hold
+  says *who* and *until when*, right on the row.
+- **"Waiting on the client" panel**: everything the client still owes, with
+  dates. This becomes the client's own list when the portal exists.
+- **Delay summary** on the Overview tab: *"41 days behind — client 26,
+  vendor 9, us 6"*, with the breakdown by stage and reason.
+- **Status report**: one click generates it from the delay log — milestones,
+  what's on track, what's slipped and whose fault, what we're waiting on,
+  new dates. Saved to the timeline, downloadable as PDF.
+- **Reports page** *(exists)*: across all projects — which vendors, which
+  client behaviours, which stages cost the most time.
+
+## 9. Order of work
+
+Each step is useful on its own.
+
+1. Playbook gains three settings per step: *the client/vendor does this*,
+   *milestone*, and *default reason for delay*.
+2. Kick-off checklist and the New → In Progress rule.
+3. Hold with owner + reason + expected date; the reason list.
+4. "Waiting on the client" panel.
+5. Agreeing a new plan.
+6. Delay summary on the project, delay band on Reports.
+7. Status report + PDF.
+8. Client portal (separate plan; it reads the delay log and the waiting list).
+
+## 10. Still to decide
+
+**a. Who can press Kick-off?**  In plain terms: kick-off is "edit the
+project" plus "create tasks" (because starting the playbook creates the
+project's tasks). Recommendation: **anyone who may edit the project** —
+today that is Owner, Admin, Manager and Project Manager — and we make sure
+those same roles may create tasks. No new permission.
+
+**b. Payment gates.**  Parked, by your decision. The design leaves the hook:
+a step the client must do can later be completed automatically "when the
+payment is received" instead of by the PM ticking it.
+
+---
+
+## Appendix — for the developers
+
+Plain-language terms above map to these names in code. New objects in
+**bold**; changed ones in *italics*.
+
+| Plain term | In code |
 |---|---|
-| `kickoff` | proposes `new → in_progress` (in practice the kick-off wizard does this) |
-| `handover` | proposes `in_progress → completed` |
-| `client_facing` | no status effect; appears on the client's timeline |
+| Stage | top-level task of the playbook run *(exists)* |
+| Delay owner | `delay_owner` enum: `client` · `vendor` · `internal` · `third_party` |
+| Reason | `delay_reason_code` → **`delay_reasons`** (tenant-editable list) |
+| Agreed plan | **`plan_baselines`** + **`plan_baseline_tasks`** |
+| What the client must do | **`project_dependencies`** |
+| Delay log | **`project_delay_log`** — a *view* derived from the rows below, never a stored copy |
 
-The system **proposes**; the PM **confirms with a note**. Nothing flips
-silently. This is how an interiors execution company and an architect
-practice get different lifecycles from the same code: their playbooks declare
-different stages and different milestones.
+*`procedure_step_definitions`* — add `owner_type` (`internal` default ·
+`client` · `vendor`), `milestone_role` (`kickoff` · `handover` ·
+`client_facing`, nullable), `satisfied_by` (`manual` default;
+`payment_received` · `document_signed` · `portal_action` reserved),
+`default_delay_reason`. All carried across versions by `step_key` *(exists)*.
 
-## 3. Gated transitions
+**`plan_baselines`**: `project_id`, `run_id`, `version`, `reason`,
+`delay_owner`, `delay_reason_code`, `client_informed_at`, `approved_by`
+(must hold project write and be PM / Admin / Owner), `set_by`, `set_at`.
+**`plan_baseline_tasks`**: `baseline_id`, `task_id`, `start_date`,
+`due_date`, `estimated_hours`.
 
-Same shape as the lead's `won` transition *(exists)*: pre-conditions first, a
-409 with the list of what is missing, and only then the write.
+**`project_dependencies`**: `project_id`, `task_id` (nullable for an ad-hoc
+ask), `owner_type`, `counterpart`, `description`, `expected_by`,
+`raised_at`, `resolved_at`, `delay_reason_code`.
 
-| Transition | Refused unless |
-|---|---|
-| `new → in_progress` (Kick-off) | handover reviewed · playbook chosen and run started · every stage has an owner · baseline v1 recorded · client dependencies listed with expected dates |
-| `in_progress → on_hold` | reason · attribution · expected resume date |
-| `on_hold → in_progress` | (records days held against the attribution) |
-| `in_progress → completed` | no open steps *(exists: `closing.ts`)* · handover milestone complete · no open asks |
-| `→ cancelled` | reason; open steps cancelled *(exists: run cancel)* |
+*`tasks`* — add `hold_owner`, `hold_reason_code`, `hold_expected_until`,
+`hold_counterpart`. `hold_reason` *(exists)* stays as free text.
+`task_status_history` *(exists)* already records every transition, so
+waiting days are **derived** from history, not stored.
 
-`project_plan_gates()` *(exists)* already answers "what would the server
-accept on every row" in one round trip; the kick-off check is the same idea
-at project level.
+*`projects`* — add `committed_start_date`, `committed_end_date` (copied
+from `expected_*` at kick-off), `kicked_off_at`, `kicked_off_by`,
+`hold_owner`, `hold_expected_until`.
 
-## 4. Kick-off
+**`project_delay_log`** (view): `project_id`, `kind` (`waiting` · `overrun`
+· `replanned` · `change_request` · `project_hold`), `delay_owner`,
+`delay_reason_code`, `stage_task_id`, `step_task_id`, `days`, `from_at`,
+`to_at`, `reference_id`.
 
-A wizard on a `new` project, opened from the Plan tab where the playbook
-picker already sits:
+`project_activity_type_enum` gains `project_kicked_off`, `plan_agreed`,
+`plan_replanned`, `dependency_raised`, `dependency_resolved`,
+`status_report_issued`.
 
-1. **Handover pack** — client, property, approved quotation, Spaces, sales
-   notes, the dates sales committed to. PM ticks *reviewed*. This is the
-   sales→delivery hand-off as a recorded event.
-2. **Playbook** — suggested by service type (`auto_start_project_category`
-   *(exists)*), chosen by the PM. Auto-start stops being automatic for
-   projects: it becomes the default selection.
-3. **Plan** — start date; stage dates derived from playbook hours, editable;
-   owner per stage (`assign_to_user` / `assign_to_role` *(exist)* as
-   defaults).
-4. **Dependencies** — the client-owned and vendor-owned steps the playbook
-   declares, each given an expected date; plus any ad-hoc ones.
-5. **Confirm** — run starts, baseline v1 snapshot, status `in_progress`,
-   timeline entry `project_kicked_off` with the note.
-
-Sales' dates are kept as *committed at sale* on the project and shown beside
-the baseline. A gap between the two is the first finding the page surfaces.
-
-## 5. Three timelines
-
-| Timeline | Where | Moves when |
-|---|---|---|
-| **Committed at sale** | `projects.expected_start_date/expected_end_date` *(exist)* | never after kick-off |
-| **Baseline vN** | new `plan_baselines` + `plan_baseline_tasks` | only by re-baselining, with reason + attribution |
-| **Current plan** | `tasks.start_date/due_date` *(exist)* | freely, by the PM |
-| **Actual** | `tasks.first_started_at/started_at/completed_at` *(exist)* | by `task_transition` |
-
-"Frozen" means recorded and versioned, not immovable. Re-baselining is a
-governed act like revising a quotation: the old baseline is kept, the delta
-is a ledger entry, and the PM records that the client was informed. The
-Timelines column *(exists)* projects against the baseline instead of the
-moving plan.
-
-## 6. Delay: who, where, why
-
-**Two ways delay arrives:**
-
-- **Waiting** — a task is blocked on someone. Days accrue to that someone
-  until released.
-- **Overrun** — a task took longer than its baseline with nobody blocking it.
-  Days accrue to the assignee's team.
-
-**Every ledger entry carries three coordinates:**
-
-| Coordinate | Values |
-|---|---|
-| **who** (attribution) | `client` · `vendor` · `internal_design` · `internal_production_site` · `third_party` |
-| **where** (juncture) | the stage and step it landed on, and the date |
-| **why** (cause) | tenant-configurable list under each bucket (client → site not ready · design change · approval pending · payment pending; vendor → lead time · quality rejection; …) plus free text |
-
-**Client-owned steps.** A playbook step gets an `owner_type`
-(`internal` default · `client` · `vendor`). A client-owned step ("Site handed
-over", "Client approves 3D") is a gate on what follows *(exists: dependencies)*,
-its lateness accrues to the client automatically, and the set of them is the
-"What we need from you" list. For now the PM confirms them; when the portal
-exists the client does.
-
-**How a client-owned step is satisfied** is a field, not a rule:
-`satisfied_by` = `manual` (PM ticks) today, with `payment_received`,
-`document_signed`, `portal_action` reserved. `task_completion_requirements`
-*(exists)* already works this way — an upload requirement is satisfied by a
-trigger, not a tick — so a payment gate later is the same shape and finance
-plugs in without touching the plan.
-
-**Change requests** during delivery: a quotation revision *(exists)* plus a
-ledger entry for the days it adds, attributed to the client. Recorded at the
-moment of revision.
-
-## 7. Data model sketch
-
-New objects in **bold**; changed objects in *italics*; everything else exists.
-
-### Playbook side
-
-*`procedure_step_definitions`* — add:
-
-| column | type | meaning |
-|---|---|---|
-| `owner_type` | enum `internal` `client` `vendor` (default `internal`) | who this step waits on |
-| `milestone_role` | enum `kickoff` `handover` `client_facing`, nullable | status meaning, if any |
-| `satisfied_by` | enum `manual` `payment_received` `document_signed` `portal_action` (default `manual`) | how a non-internal step closes |
-| `default_cause_code` | text, nullable | preset cause for delay on this step |
-
-Carried across versions by `step_key` *(exists)* like everything else.
-
-### Project side
-
-**`plan_baselines`**
-
-| column | type |
-|---|---|
-| `id` | uuid |
-| `project_id` | uuid → projects |
-| `run_id` | uuid → procedure_runs |
-| `version` | int (1 at kick-off) |
-| `reason` | text (required from v2) |
-| `attribution` | enum (required from v2) |
-| `cause_code` | text |
-| `client_informed_at` | timestamptz, nullable |
-| `set_by`, `set_at` | uuid, timestamptz |
-
-**`plan_baseline_tasks`** — one row per task per baseline: `baseline_id`,
-`task_id`, `start_date`, `due_date`, `estimated_hours`.
-
-**`project_dependencies`** — the "waiting on" register. One row per
-client/vendor/third-party ask, whether it came from a playbook step or was
-added by hand:
-
-| column | type |
-|---|---|
-| `id`, `project_id` | |
-| `task_id` | uuid → tasks, nullable (null for an ad-hoc ask) |
-| `owner_type` | enum |
-| `counterpart` | text (which client contact / which vendor) |
-| `description` | text |
-| `expected_by` | date |
-| `raised_at`, `resolved_at` | timestamptz |
-| `cause_code` | text |
-
-*`tasks`* — extend the hold that already exists:
-
-| column | type | note |
-|---|---|---|
-| `hold_attribution` | enum, nullable | who we are waiting on |
-| `hold_cause_code` | text, nullable | |
-| `hold_expected_until` | date, nullable | |
-| `hold_counterpart` | text, nullable | |
-
-`hold_reason` *(exists)* stays as the free text. `task_status_history`
-*(exists)* already records every transition, so **waiting days are derived**
-from history + these columns rather than stored.
-
-**`delay_causes`** — tenant-configurable list: `tenant_id` (null = shipped
-default), `attribution`, `code`, `label`, `is_active`. Same bargain as
-playbooks: we propose, they edit.
-
-*`projects`* — add `committed_start_date`, `committed_end_date` (copied from
-`expected_*` at kick-off so the sales promise survives edits), `kicked_off_at`,
-`kicked_off_by`, `hold_attribution`, `hold_expected_until`.
-
-### The ledger
-
-**`project_delay_ledger`** is a **view**, not a table, derived from the
-above — a second copy of these facts is exactly the kind of thing that went
-stale before:
-
-| column | source |
-|---|---|
-| `project_id`, `run_id` | |
-| `kind` | `baseline_set` · `rebaselined` · `waiting` · `overrun` · `change_request` · `project_hold` |
-| `attribution`, `cause_code` | from the row that produced it |
-| `stage_task_id`, `step_task_id` | the juncture |
-| `days` | computed: held span, or actual end − baseline due |
-| `from_at`, `to_at` | |
-| `reference` | the baseline / dependency / history row |
-
-Materialise it later if it gets slow; it will not on this data for a long
-time.
-
-### Timeline events
-
-`project_activity_type_enum` *(exists)* gains: `project_kicked_off`,
-`baseline_set`, `rebaselined`, `dependency_raised`, `dependency_resolved`,
-`status_report_issued`. Each is written where the act happens, the way
-`project_updated` and `note_added` are.
-
-## 8. What the PM sees
-
-- **Plan tab** *(exists)*: baseline columns beside planned/actual; a blocked
-  row says who and until when, in amber, on the row.
-- **Header stage strip** *(exists)*: the "Waiting on client: site possession,
-  expected 20 Oct" line when the project is held.
-- **Asks panel** (new, on the Plan tab): the open `project_dependencies`,
-  grouped by owner, with expected dates.
-- **Delay panel** (new, Overview tab): "41 days behind baseline v1 — client 26
-  (site possession 18, design changes 8) · vendor 9 · internal 6", from the
-  ledger view.
-- **Status report** (new): generated from the ledger — milestones, on
-  track/slipped/waiting-on, revised dates, open asks. Saved to the timeline,
-  exportable through the existing PDF pipeline. This is what the client
-  portal renders live when it exists.
-- **Project reports** *(exists)*: a Delay band — attribution × stage across
-  the portfolio; which vendors, which client behaviours, which internal
-  teams.
-
-## 9. Sequencing
-
-1. **Playbook fields** — `owner_type`, `milestone_role`, `satisfied_by`,
-   `default_cause_code`; editor controls; carried by `step_key`.
-2. **Kick-off** — wizard, gated transition, `committed_*` copy, baseline v1,
-   timeline entry. Auto-start becomes the default selection rather than an
-   automatic run.
-3. **Holds with attribution** — the four `tasks.hold_*` columns, the prompt on
-   Hold *(exists: `usePrompt`)* extended with attribution/cause/expected date;
-   `delay_causes` seeded and editable.
-4. **Dependencies register + Asks panel.**
-5. **Re-baselining** and the baseline columns on the Plan tab.
-6. **Ledger view, Delay panel, Delay band on reports.**
-7. **Status report** generation and PDF.
-8. Client portal (out of scope here; the ledger and asks are what it reads).
-
-Each step is shippable on its own and useful on its own.
-
-## 10. Open questions for review
-
-1. **Kick-off wizard vs. a checklist on the Plan tab.** A wizard is five
-   screens; a checklist is one screen with five sections and a Confirm at the
-   bottom. Recommendation: the checklist — it is re-openable and reads as
-   the state of the hand-off rather than a ceremony.
-2. **Who may kick off.** `projects.edit`/`update` (the project's write
-   permission) or `tasks.edit` (the playbook permission)? Kick-off starts a
-   run, which today needs `tasks.create`. Recommendation: project write +
-   `tasks.create`, checked together.
-3. **Attribution of a client-owned step that is late but never formally
-   blocked** — accrue automatically from `expected_by`, or only when the PM
-   marks it? Recommendation: automatically; that is the point of declaring
-   it client-owned.
-4. **Overrun attribution** — to the assignee's *role* or to a fixed
-   `internal_*` bucket per stage? Recommendation: bucket per stage, chosen
-   in the playbook (`default_cause_code` on the stage), because a designer
-   installing on site is still a site-stage overrun.
-5. **Re-baseline approval** — PM alone, or PM + a second person? Start with
-   PM alone and `client_informed_at`; add approval when there is a portal to
-   collect it.
-6. **The stored `projects.hold_*`** — or derive the project hold from "every
-   active task is held on the same attribution"? Recommendation: stored,
-   because a project hold is a decision, not an inference.
+Kick-off permission: `projects.edit` OR `projects.update` (the existing
+permissive reading in `src/lib/projects/access.ts`) **and** `tasks.create`,
+checked together in the transition route before any write, exactly as
+`missingFields` works on the lead transition.
