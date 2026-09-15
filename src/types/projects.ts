@@ -807,6 +807,8 @@ export interface ProjectSummary {
   service_type?: string;
   property_name?: string;
   property_type?: string;
+  /** residential / commercial - the property's category, from properties.category. */
+  property_category?: string;
   carpet_area?: number;
   city?: string;
   project_type: ProjectType;

@@ -74,6 +74,7 @@ export default function ProjectsPage() {
           project.client_name,
           project.property_name,
           project.property_type,
+          project.property_category,
           project.city,
           project.service_type,
           project.project_category,

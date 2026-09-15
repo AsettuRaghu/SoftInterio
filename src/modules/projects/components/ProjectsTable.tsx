@@ -230,8 +230,8 @@ export default function ProjectsTable({
   const columns: ColumnDef<ProjectSummary>[] = [
     {
       key: "client_name",
-      header: "Client",
-      width: "18%",
+      header: "Project Name",
+      width: "20%",
       sortable: true,
       render: (project) => {
         const service = project.project_category
@@ -241,39 +241,35 @@ export default function ProjectsTable({
             ? ServiceTypeLabels[project.service_type as keyof typeof ServiceTypeLabels] ||
               project.service_type
             : null;
-        const propertyType = project.property_type
-          ? getPropertyTypeLabel(project.property_type)
+        const category = project.property_category
+          ? getPropertyTypeLabel(project.property_category)
           : null;
+        const known = (v?: string | null) =>
+          v && v !== "Unknown Client" && v !== "Unknown Property" ? v : null;
+
         /*
-         * The client is the headline. A project is known by who it is for -
-         * "the Raju job" - and the generated name repeats the client anyway
-         * ("Dileepnath Raju - Modular Project"). So the client leads, and the
-         * project name sits beneath with the four facts that say what it is:
-         * service, property, property type and where.
+         * The customer in bold, then two lines that say what the job is and
+         * where: the service and the property on one, its category and city
+         * on the other. Two lines rather than one run of dots, because the
+         * pairs mean different things - the first is what we are building,
+         * the second is what kind of place and where it is.
          */
-        const facts = [
-          project.name,
-          service,
-          project.property_name,
-          propertyType,
-          project.city,
-        ].filter(
-          (f): f is string =>
-            !!f && f !== "Unknown Client" && f !== "Unknown Property"
-        );
+        const line1 = [service, known(project.property_name)].filter(Boolean).join(" · ");
+        const line2 = [category, project.city].filter(Boolean).join(" · ");
+
         return (
           <div className="min-w-0">
-            <p className="text-sm font-medium text-slate-900 truncate">
-              {project.client_name && project.client_name !== "Unknown Client"
-                ? project.client_name
-                : project.name}
+            <p className="text-sm font-semibold text-slate-900 truncate">
+              {known(project.client_name) ?? project.name}
             </p>
-            {facts.length > 0 && (
-              <p
-                className="mt-0.5 text-xs text-slate-500 break-words whitespace-normal leading-snug"
-                title={facts.join(" · ")}
-              >
-                {facts.join(" · ")}
+            {line1 && (
+              <p className="text-xs text-slate-600 truncate" title={line1}>
+                {line1}
+              </p>
+            )}
+            {line2 && (
+              <p className="text-xs text-slate-400 truncate" title={line2}>
+                {line2}
               </p>
             )}
           </div>
@@ -283,7 +279,7 @@ export default function ProjectsTable({
     {
       key: "overall_progress",
       header: "Stage & Progress",
-      width: "16%",
+      width: "12%",
       sortable: true,
       render: (project) => {
         /*

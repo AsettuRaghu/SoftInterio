@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
         current_phase_id,
         client:clients!client_id(name),
         project_manager:users!project_manager_id(id, name, email, avatar_url),
-        property:properties!property_id(property_name, property_type, carpet_area, city),
+        property:properties!property_id(property_name, property_type, category, carpet_area, city),
         lead:leads!lead_id(service_type)
       `,
         { count: "exact" }
@@ -141,6 +141,7 @@ export async function GET(request: NextRequest) {
         service_type: pLead?.service_type,
         property_name: pProperty?.property_name || "Unknown Property",
         property_type: pProperty?.property_type,
+        property_category: pProperty?.category,
         carpet_area: pProperty?.carpet_area,
         city: pProperty?.city,
         // contract_value is the agreed value; actual_cost is money spent.

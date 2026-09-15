@@ -1844,8 +1844,20 @@ in its own right: no recorded start with the planned start still ahead says
 work is being logged against a project the record says has not begun, which is
 PRJ_20251219_0001 today. Nothing done yet has no pace, so it says how far past
 the planned end the project is - PRJ-25-0002 reads "167d past planned end".
-`actual_start_date` was absent from the list select and is the one thing that
-turns the first case into a projection.
+**Nothing wrote `projects.actual_start_date` until 2026-09-15.** Not the status
+change, not a task starting, not the edit dialog. `project_phases` has its own
+`actual_start_date` and a function that stamps it, which is where the assumption
+that "something sets this" came from. So every project carried planned dates and
+no actual ones, and the Timelines column had nothing to project from.
+
+Now (`20260915110000`): **a project starts when its first task does.**
+`trg_project_actual_start_from_task` carries `tasks.first_started_at` up to the
+project the first time it is set, and never overwrites a date already there.
+`PATCH /api/projects/[id]` stamps today when the status is moved to
+`in_progress` by hand, for a native-phase project with no tasks. The backfill
+set `PRJ_20251219_0001` to 2026-09-03 - its first task's start, four weeks before
+the planned 1 Oct - and its Timelines went from "Starts 1 Oct · 9% done with no
+start recorded" to "Ends ~14 Jan · 17d ahead of plan".
 
 **Stage is derived, not read.** `GET /api/projects` runs the same derivation as
 `GET /api/projects/[id]/stages` - a stage is a top-level playbook step, falling

@@ -383,7 +383,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
          * timeline entry can say what actually changed rather than "edited".
          */
         .select(
-          "property_id, status, name, notes, description, priority, project_category, project_manager_id, expected_start_date, expected_end_date"
+          "property_id, status, name, notes, description, priority, project_category, project_manager_id, expected_start_date, expected_end_date, actual_start_date"
         )
         .eq("id", id)
         .eq("tenant_id", user.tenantId)
@@ -442,6 +442,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (field in projectUpdateData) {
         projectUpdates[field] = (projectUpdateData as Record<string, unknown>)[field];
       }
+    }
+
+    /*
+     * A project moved to in_progress by hand has started, if nothing else has
+     * said so. Tasks stamp this through a trigger when the first one starts;
+     * this covers a native-phase project with no tasks, and anyone who simply
+     * flips the status. Never overwrites a date already set or supplied.
+     */
+    if (
+      projectUpdates.status === "in_progress" &&
+      existingProject?.status !== "in_progress" &&
+      !existingProject?.actual_start_date &&
+      projectUpdates.actual_start_date === undefined
+    ) {
+      projectUpdates.actual_start_date = new Date().toISOString().slice(0, 10);
     }
 
     const rejected = Object.keys(projectUpdateData).filter(
