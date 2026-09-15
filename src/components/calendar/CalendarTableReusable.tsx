@@ -144,7 +144,11 @@ export default function CalendarTableReusable({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [sortField, setSortField] = useState<string>("meeting_scheduled_at");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  // Newest first. A calendar tab is read to find what is coming up and what
+  // just happened, and both of those sit at the top under descending; under
+  // ascending the first rows were the oldest meetings on the record. The
+  // column header still flips it.
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   // =====================================================
   // CACHING LOGIC
