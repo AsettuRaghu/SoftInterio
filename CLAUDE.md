@@ -1756,12 +1756,27 @@ refused by the index.
 baseline points at **itself**; that was never a defect. It is the right shape for
 delivery variations when those exist, and costs nothing left null.
 
-The one historical copy, `PRJ_20251219_2158 v1`, is **superseded rather than
-deleted**: nobody withdrew it, it records that a snapshot was taken, and deleting
-it would take its 5 spaces and 17 line items with it irreversibly. Its
-`baseline_quotation_id` still self-references, so the two filters in
-`quotations/[id]/status` that skip baselines are kept - correct for that row, and
-no-ops for everything else.
+The one historical copy, `PRJ_20251219_2158 v1`, was first superseded and then
+**deleted** (`20260915100000`). Keeping it was the wrong call for a reason that is
+not about correctness: a third quotation on the project, numbered from another
+module, is a question every reader has to answer before they can trust the screen.
+
+It was safe to delete because it carried nothing unique - verified first, not
+assumed: same `grand_total`, `subtotal` and `tax_amount` as `QT-2025-0004 v2`, the
+same 5 spaces / 6 components / 17 line items, and every line's
+quantity/rate/amount identical.
+
+**That migration guards rather than guesses.** It refuses with an exception if
+anything still references the copy, if no approved quotation remains on the lead,
+or if the copy and the original are not equivalent - so a database in a different
+state gets an error instead of a silent deletion. Children are deleted explicitly
+rather than trusting `ON DELETE CASCADE`, because whether each table carries one
+is not a thing to discover by deleting a parent.
+
+**No quotation in the database has `baseline_quotation_id` set any more.** The two
+filters in `quotations/[id]/status` that skip baselines are therefore pure no-ops
+now; they are kept because the column stays and the day variations arrive they are
+correct again.
 
 **Quotation numbering has four historical formats** - `QT-####-####`,
 `QT-######-####`, `QT-########-###` and the one `PRJ_########_####` baseline. The
