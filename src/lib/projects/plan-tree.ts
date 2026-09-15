@@ -50,15 +50,22 @@ export function playbookRunToStages(
   const orderOf = (t: PlanTask): number =>
     t.procedure_step_id ? (stepOrder?.get(t.procedure_step_id) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
 
+  // A step the playbook no longer has, cancelled by the commit that removed
+  // it, is history rather than plan: it has no date, gates nothing and would
+  // only sit in its old stage as a struck-through line.
+  const live = tasks.filter(
+    (t) => !(t.status === "cancelled" && t.procedure_step_id && stepOrder && !stepOrder.has(t.procedure_step_id))
+  );
+
   const byParent = new Map<string, PlanTask[]>();
-  for (const task of tasks) {
+  for (const task of live) {
     if (!task.parent_task_id) continue;
     const siblings = byParent.get(task.parent_task_id) ?? [];
     siblings.push(task);
     byParent.set(task.parent_task_id, siblings);
   }
 
-  return tasks
+  return live
     .filter((t) => !t.parent_task_id)
     .sort((a, b) => orderOf(a) - orderOf(b))
     .map((root) => {
