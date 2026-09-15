@@ -46,6 +46,7 @@ import { useReviseQuotation } from "@/lib/quotations/use-revise-quotation";
 import { Toast } from "@/components/ui/Toast";
 import { usePrompt } from "@/components/ui/PromptDialog";
 import { PlaybooksPanel } from "@/components/playbooks";
+import { KickoffChecklist } from "@/components/projects/KickoffChecklist";
 import { EditTaskModal } from "@/components/tasks";
 
 interface PageProps {
@@ -149,6 +150,10 @@ export default function ProjectDetailPage({ params }: PageProps) {
    * that may author a playbook at all: Owner, Admin, Manager, Designer.
    */
   const canManagePlaybook = hasAnyPermission(["tasks.edit"]);
+  // Kick-off is "edit the project" - the server also checks tasks.create,
+  // because confirming makes the plan's tasks real work.
+  const canEditProject = hasAnyPermission(["projects.edit", "projects.update"]);
+  const awaitingKickoff = project?.status === "new" && !project?.kicked_off_at;
 
   /*
    * Payments has been taken off the project page deliberately.
@@ -648,6 +653,32 @@ export default function ProjectDetailPage({ params }: PageProps) {
         <div>
           {activeTab === "project-mgmt" && (
             <>
+              {/* A new project has no plan until its project manager makes
+                  one. The checklist is the whole Plan tab until Confirm;
+                  the stages appear beneath it as soon as a playbook is
+                  chosen, so the dates being set are the ones on screen. */}
+              {awaitingKickoff && (
+                <div className="mb-4">
+                  <KickoffChecklist
+                    projectId={project.id}
+                    teamMembers={teamMembers}
+                    canEdit={canEditProject}
+                    onChanged={() => {
+                      void refreshPlan();
+                      void refreshTasks();
+                    }}
+                    onKickedOff={(message) => {
+                      setNotice({ message, variant: "success" });
+                      // Status, dates and the timeline all changed; the
+                      // page refetches quietly rather than blanking.
+                      void fetchProject({ quiet: true });
+                      void fetchCounts();
+                    }}
+                    onError={(message) => setNotice({ message, variant: "error" })}
+                  />
+                </div>
+              )}
+
               {playbookDrift && canManagePlaybook && (
                 <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex items-start justify-between gap-4">
                   <div>
@@ -721,7 +752,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 * it reappear, so "stop this and use a different one" is one
                 * flow in one place.
                 */}
-              {!playbook && canManagePlaybook && (
+              {!playbook && canManagePlaybook && !awaitingKickoff && (
                 <div className="mb-3 rounded-lg border border-slate-200 bg-white p-4">
                   <p className="mb-3 text-xs text-slate-500">
                     This project has no plan yet. Choose the playbook it
@@ -754,7 +785,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                   }}
                   onTaskClick={(task) => setEditingTask(task)}
                 />
-              ) : !canManagePlaybook ? (
+              ) : !canManagePlaybook && !awaitingKickoff ? (
                 <div className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-sm text-slate-500">
                   No plan has been set for this project yet.
                 </div>

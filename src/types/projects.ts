@@ -232,6 +232,13 @@ export interface Project {
    * read it and the project overview showed no actual start date. */
   actual_start_date?: string;
   actual_end_date?: string;
+  /** What Sales promised the client; copied from expected_* at kick-off and never moved. */
+  committed_start_date?: string | null;
+  committed_end_date?: string | null;
+  handover_reviewed_at?: string | null;
+  /** Set by kick_off_project(). A project with this set is past `new`. */
+  kicked_off_at?: string | null;
+  kicked_off_by?: string | null;
 
   // Progress & Cost
   overall_progress: number;

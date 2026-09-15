@@ -17,7 +17,6 @@ import {
   getPendingLeadWork,
   cancelPendingLeadWork,
 } from "@/lib/leads/pending-work";
-import { autoStartProjectPlaybook } from "@/lib/playbooks/auto-start";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -765,16 +764,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               .maybeSingle();
             const projectLabel = newProject?.project_number || "Project";
 
-            // The delivery process for this kind of project starts itself, so
-            // a won lead arrives as work already laid out and owned rather
-            // than an empty project waiting for someone to apply a template.
-            await autoStartProjectPlaybook(supabase, {
-              tenantId: lead.tenant_id,
-              projectId: createdProjectId,
-              projectCategory: newProject?.project_category,
-              userId: user.id,
-              log,
-            });
+            // No playbook is started here. The project arrives as `new` with
+            // no plan; its project manager chooses the playbook at kick-off,
+            // where the auto-start playbook for this category is the default.
 
             await logLeadActivity(supabase, {
               leadId: id,

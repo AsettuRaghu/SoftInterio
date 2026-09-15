@@ -14,6 +14,8 @@ import {
   ClockIcon,
   BellAlertIcon,
   PencilSquareIcon,
+  FlagIcon,
+  HandRaisedIcon,
 } from "@heroicons/react/24/outline";
 
 // =====================================================
@@ -115,6 +117,10 @@ const DEFAULT_ACTIVITY_LABELS: Record<string, string> = {
   lead_created: "Lead Created",
   lead_updated: "Lead Updated",
   project_updated: "Project Updated",
+  project_kicked_off: "Kicked Off",
+  plan_agreed: "Plan Agreed",
+  dependency_raised: "Waiting On",
+  dependency_resolved: "Delivered",
   note_updated: "Note Updated",
   note_deleted: "Note Deleted",
   document_deleted: "Document Deleted",
@@ -211,6 +217,12 @@ export default function TimelineTableReusable({
     if (activityType.startsWith("follow_up")) {
       return <BellAlertIcon className="w-4 h-4" />;
     }
+    if (activityType === "project_kicked_off" || activityType === "plan_agreed") {
+      return <FlagIcon className="w-4 h-4" />;
+    }
+    if (activityType.startsWith("dependency_")) {
+      return <HandRaisedIcon className="w-4 h-4" />;
+    }
     if (
       activityType === "lead_updated" ||
       activityType === "project_updated" ||
@@ -255,6 +267,15 @@ export default function TimelineTableReusable({
     }
     if (activityType.startsWith("follow_up")) {
       return "bg-amber-100 text-amber-600";
+    }
+    if (activityType === "project_kicked_off" || activityType === "plan_agreed") {
+      return "bg-emerald-100 text-emerald-600";
+    }
+    if (activityType === "dependency_raised") {
+      return "bg-amber-100 text-amber-600";
+    }
+    if (activityType === "dependency_resolved") {
+      return "bg-emerald-100 text-emerald-600";
     }
     if (
       activityType === "lead_updated" ||

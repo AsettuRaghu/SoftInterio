@@ -35,6 +35,8 @@ export interface ProjectGuardOk {
     is_active: boolean | null;
     name: string | null;
     project_number: string | null;
+    status: string | null;
+    kicked_off_at: string | null;
   };
   access: ProjectAccess;
 }
@@ -75,7 +77,7 @@ export async function requireProjectAccess(
   const { data: project } = await supabase
     .from("projects")
     .select(
-      "id, tenant_id, project_manager_id, created_by, is_active, name, project_number"
+      "id, tenant_id, project_manager_id, created_by, is_active, name, project_number, status, kicked_off_at"
     )
     .eq("id", projectId)
     .eq("tenant_id", user.tenantId)

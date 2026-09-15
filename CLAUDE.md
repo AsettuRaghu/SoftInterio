@@ -530,6 +530,54 @@ The word "phase" survives in a few variable names on the projects list
 (`current_phase`, `selectedPhases`) where it means the derived *stage*. Naming
 only; nothing reads a phase table.
 
+### A project starts with kick-off, and only kick-off
+
+Built 2026-09-15, steps 1-2 of `docs/plans/project-lifecycle-and-delay-ledger.md`
+(the plain-language plan; read it before touching any of this).
+
+**No playbook starts itself any more.** A won lead - or a direct create -
+produces a `new` project with no plan. `suggestProjectPlaybook()`
+(`lib/playbooks/auto-start.ts`) still reads `auto_start` /
+`auto_start_project_category`, but only to pre-select a playbook on the
+checklist; the project manager chooses. Auto-starting at conversion meant a
+plan nobody had looked at, which is the opposite of what a kick-off is for.
+
+**The Plan tab of a `new` project is the kick-off checklist**
+(`components/projects/KickoffChecklist`): handover reviewed → playbook chosen
+→ every stage has an owner and dates → every open "waiting on" entry has an
+expected date → a note → Confirm. `GET /api/projects/[id]/kickoff` assembles
+that state and says what is `missing`; `POST` hands it to
+**`kick_off_project()`**, which checks everything again and, in one
+transaction, records **baseline v1** (`plan_baselines` +
+`plan_baseline_tasks`), copies the dates Sales promised into
+`committed_start_date/end_date`, sets `expected_*` to the agreed plan's span,
+moves the status to `in_progress`, stamps `kicked_off_at/by`, and writes
+`project_kicked_off` and `plan_agreed` to the timeline. It refuses with a
+`missing[]` list otherwise and writes nothing.
+
+**`new → in_progress` by hand is refused** (409 `kickoff_required`) in `PATCH
+/api/projects/[id]`. The edit dialog's status dropdown will show that
+sentence; that is intended.
+
+Who may confirm: project write **and** `tasks.create`, because a plan is
+tasks. No new permission.
+
+**A step marked client/vendor is a "waiting on" entry the moment its task
+exists.** `procedure_step_definitions.owner_type` (`internal` default,
+`client`, `vendor`) and `milestone_role` (`kickoff`, `handover`,
+`client_facing`) are set per step in the playbook editor. A trigger on
+`tasks` insert raises a `project_dependencies` row for every client/vendor
+step, and another settles it when the step settles - so `start_procedure_run`,
+sync and commit all get it for free. Ad-hoc asks ("society NOC") go through
+`/api/projects/[id]/dependencies`. An entry tied to a step cannot be deleted
+here; skip or cancel the step. `milestone_role` is stored and edited but
+**not yet read** - status proposals from milestones are a later step of the
+plan.
+
+`text[] || 'literal'` in plpgsql parses the literal as an array and fails
+with "malformed array literal". Use `array_append`. This cost one repair of
+`20260915141000`.
+
 ### Playbooks are the workflow engine
 **The UI says Playbook; the database says procedure.** The tables, the enum
 and the RPC keep their original names — `procedure_definitions`,

@@ -152,9 +152,12 @@ waiting on you for" list.
 
 Each step is useful on its own.
 
-1. Playbook gains three settings per step: *the client/vendor does this*,
-   *milestone*, and *default reason for delay*.
-2. Kick-off checklist and the New → In Progress rule.
+1. ✅ built — Playbook gains two settings per step: *who does this* (us /
+   client / vendor) and *milestone*. The *default reason for delay* joins
+   with step 3, when the reason list exists.
+2. ✅ built — Kick-off checklist, the New → In Progress rule, the agreed
+   plan (v1), the sales-promised dates kept, and the "waiting on" list
+   raised automatically from client/vendor steps.
 3. Hold with owner + reason + expected date; the reason list.
 4. "Waiting on the client" panel.
 5. Agreeing a new plan.

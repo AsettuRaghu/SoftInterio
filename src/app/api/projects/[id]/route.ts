@@ -297,7 +297,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
          * timeline entry can say what actually changed rather than "edited".
          */
         .select(
-          "property_id, status, name, notes, description, priority, project_category, project_manager_id, expected_start_date, expected_end_date, actual_start_date"
+          "property_id, status, name, notes, description, priority, project_category, project_manager_id, expected_start_date, expected_end_date, actual_start_date, kicked_off_at"
         )
         .eq("id", id)
         .eq("tenant_id", user.tenantId)
@@ -358,10 +358,28 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     /*
-     * A project moved to in_progress by hand has started, if nothing else has
-     * said so. Tasks stamp this through a trigger when the first one starts;
-     * this covers a project with no plan yet, and anyone who simply flips the
-     * status. Never overwrites a date already set or supplied.
+     * new -> in_progress is kick-off, and only kick-off. Setting the status by
+     * hand would skip the plan, the agreed dates and the timeline entry that
+     * make a project's start a recorded thing. The Plan tab has the checklist.
+     */
+    if (
+      projectUpdates.status === "in_progress" &&
+      existingProject?.status === "new" &&
+      !existingProject?.kicked_off_at
+    ) {
+      return NextResponse.json(
+        {
+          error: "Kick off the project from its Plan tab to move it to In Progress.",
+          reason: "kickoff_required",
+        },
+        { status: 409 }
+      );
+    }
+
+    /*
+     * A project moved back to in_progress by hand (from on_hold) has started,
+     * if nothing else has said so. Tasks stamp this through a trigger when the
+     * first one starts. Never overwrites a date already set or supplied.
      */
     if (
       projectUpdates.status === "in_progress" &&
