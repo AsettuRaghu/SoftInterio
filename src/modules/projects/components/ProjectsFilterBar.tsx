@@ -5,7 +5,6 @@ import {
   ChevronDownIcon,
   CheckIcon,
   MagnifyingGlassIcon,
-  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import type { ProjectStatus } from "@/types/projects";
 import {
@@ -192,21 +191,6 @@ export default function ProjectsFilterBar({
           phaseOptions,
         )}
 
-      {(selectedStatuses.length < PROJECT_STATUS_OPTIONS.length ||
-        selectedPhases.length > 0) && (
-        <button
-          onClick={() => {
-            onStatusChange(
-              PROJECT_STATUS_OPTIONS.map((opt) => opt.value as ProjectStatus),
-            );
-            onPhaseChange([]);
-          }}
-          className="px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg flex items-center gap-1 whitespace-nowrap"
-        >
-          <XMarkIcon className="w-4 h-4" />
-          Clear
-        </button>
-      )}
     </div>
   );
 }
