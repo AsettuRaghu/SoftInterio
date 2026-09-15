@@ -69,6 +69,15 @@ const getRequiredFieldsForStage = (stage: LeadStage): string[] => {
     "property_type",
     "property_subtype",
     "property_name",
+    /*
+     * City joins the qualified set, because the project made from this lead
+     * requires it - and the conversion has nowhere else to get it from. A lead
+     * qualified without a city produces a project that cannot be saved.
+     *
+     * Deliberately not in `newFields`: a lead arriving from a form or a phone
+     * call legitimately has a name and a number and nothing else.
+     */
+    "property_city",
     "service_type",
     "target_start_date",
     "target_end_date",
@@ -542,10 +551,11 @@ export function EditLeadModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  City
+                  City <RequiredStar field="property_city" />
                 </label>
                 <input
                   type="text"
+                  required={isRequired("property_city")}
                   value={editForm.property_city}
                   onChange={(e) =>
                     setEditForm({

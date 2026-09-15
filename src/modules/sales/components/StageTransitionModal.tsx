@@ -120,14 +120,30 @@ export function StageTransitionModal({
     const fetchProjectManagers = async () => {
       setLoadingManagers(true);
       try {
-        const response = await fetch("/api/settings/team/project-managers");
+        /*
+         * The whole team, not the Project Manager role only.
+         *
+         * /api/settings/team/project-managers filters by that role and returns
+         * one person of three on this tenant - so an Owner running their own
+         * projects could not be named, on a field that is now required. The
+         * project's own edit dialog made the same choice.
+         */
+        const response = await fetch("/api/team/members");
         if (response.ok) {
-          const data = await response.json();
+          const body = await response.json();
+          // /api/team/members answers { success, data }, not a bare array.
+          const data = Array.isArray(body) ? body : body.data || [];
           // The full list was logged on every open - names and emails of every
           // project manager into the browser console each time the modal
           // appeared. The count is what a debugger needs.
           uiLogger.debug("Project managers loaded", { count: data.length });
-          setProjectManagers(data);
+          setProjectManagers(
+            data.map((m: { id: string; name?: string; full_name?: string; email?: string }) => ({
+              id: m.id,
+              full_name: m.full_name || m.name,
+              email: m.email,
+            }))
+          );
         } else {
           const errorData = await response.json().catch(() => ({}));
           uiLogger.error("Failed to load project managers", errorData, {
@@ -213,6 +229,20 @@ export function StageTransitionModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStage) return;
+
+    /*
+     * A won lead becomes a project, and a project must have a manager - the
+     * project's own edit dialog requires one, so letting the conversion create a
+     * project without one only defers the problem to whoever opens it next.
+     * The server refuses this too; this is so the person is told before the
+     * request rather than by it.
+     */
+    if (selectedStage === "won" && !formData.project_manager_id) {
+      setError(
+        "Choose a project manager. The project created from this lead needs somebody accountable for it."
+      );
+      return;
+    }
 
     setIsSubmitting(true);
     setError(null);
@@ -1056,7 +1086,12 @@ export function StageTransitionModal({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
+                    {/* Required from here, because it is the last moment anybody
+                        is thinking about this project before it exists. Leaving
+                        it optional is why both projects on this tenant have no
+                        manager and the report calls them unaccountable. */}
                     Assign Project Manager
+                    <span className="text-red-500"> *</span>
                   </label>
                   <select
                     value={formData.project_manager_id}
@@ -1070,7 +1105,9 @@ export function StageTransitionModal({
                     disabled={loadingManagers}
                   >
                     <option value="">
-                      {loadingManagers ? "Loading..." : "Select (optional)"}
+                      {loadingManagers
+                        ? "Loading..."
+                        : "Select a project manager"}
                     </option>
                     {projectManagers.map((pm) => (
                       <option key={pm.id} value={pm.id}>

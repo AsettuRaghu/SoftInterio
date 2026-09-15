@@ -140,6 +140,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (!body.property_name && !lead.property?.property_name) {
         missingFields.push("Property Name");
       }
+      /*
+       * City, because the project made from this lead requires it and the
+       * conversion has nowhere else to get it from. The edit modal marks it
+       * required from qualified onwards; this is the same rule where it cannot be
+       * bypassed.
+       */
+      if (!body.property_city && !lead.property?.city) {
+        missingFields.push("City");
+      }
       if (!body.target_start_date && !lead.target_start_date) {
         missingFields.push("Target Start Date");
       }
@@ -211,6 +220,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       
       if (!body.won_amount) {
         missingFields.push("Won Amount");
+      }
+      /*
+       * A won lead becomes a project, and a project must have a manager - its own
+       * edit dialog requires one, so allowing the conversion to create a project
+       * without one only defers the problem to whoever opens it next.
+       *
+       * It belongs **here**, with the other pre-conditions, and not beside the
+       * project creation further down: by that point the lead has already been
+       * updated to won, so refusing there would leave a won lead with no project
+       * and no way to notice. `missingFields` is collected and reported together,
+       * before anything is written.
+       *
+       * Skipped when no project is being created - a tenant with
+       * auto_create_project_on_won off, or an explicit skip_project_creation -
+       * because then there is nothing for a manager to manage.
+       */
+      if (!body.project_manager_id && !body.skip_project_creation) {
+        missingFields.push("Project Manager");
       }
       if (!body.contract_signed_date) {
         missingFields.push("Contract Signed Date");

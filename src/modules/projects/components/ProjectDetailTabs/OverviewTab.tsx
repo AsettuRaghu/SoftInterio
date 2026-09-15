@@ -8,7 +8,6 @@ import {
   ProjectPropertyTypeLabels,
   ProjectStatusLabels,
 } from "@/types/projects";
-import { ServiceTypeLabels } from "@/types/leads";
 import { formatCurrency, formatDate } from "@/modules/projects/utils";
 import { EditProjectDetailsModal } from "@/components/projects/EditProjectDetailsModal";
 
@@ -278,7 +277,7 @@ export default function OverviewTab({
           </div>
           <div>
             <p className="text-sm font-medium text-slate-900">
-              <span className="text-slate-500">Category</span> :{" "}
+              <span className="text-slate-500">Service Type</span> :{" "}
               {project.project_category
                 ? ProjectCategoryLabels[
                     project.project_category as keyof typeof ProjectCategoryLabels
@@ -309,25 +308,14 @@ export default function OverviewTab({
             </p>
           </div>
           {/*
-            * What was sold, and where the client came from.
+            * Where the client came from. `lead_source` has no column on
+            * `projects`, so it is read from the lead and read-only.
             *
-            * Both live on the lead - `projects` has no service_type or
-            * lead_source column - and the project GET has been returning them on
-            * `lead` all along while this tab showed neither. It is the first
-            * thing anybody asks about a project they did not sell, and
-            * ServiceTypeLabels was imported here and never used, which is the
-            * tell that it was meant to be shown.
+            * The Service row that used to sit here has gone: `project_category`
+            * above IS the service type, carried from the lead at conversion, and
+            * showing both meant one screen displaying the same fact twice under
+            * two names.
             */}
-          <div>
-            <p className="text-sm font-medium text-slate-900">
-              <span className="text-slate-500">Service</span> :{" "}
-              {project.lead?.service_type
-                ? ServiceTypeLabels[
-                    project.lead.service_type as keyof typeof ServiceTypeLabels
-                  ] || project.lead.service_type
-                : "—"}
-            </p>
-          </div>
           <div>
             <p className="text-sm font-medium text-slate-900">
               <span className="text-slate-500">Source</span> :{" "}

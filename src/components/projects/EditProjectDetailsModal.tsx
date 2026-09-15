@@ -128,6 +128,7 @@ const REQUIRED_FIELDS: Array<{ field: string; label: string }> = [
   { field: "property_name", label: "Property name" },
   { field: "flat_number", label: "Unit number" },
   { field: "carpet_area_sqft", label: "Carpet area" },
+  { field: "city", label: "City" },
   { field: "expected_start_date", label: "Expected start date" },
   { field: "expected_end_date", label: "Expected end date" },
   /*
@@ -145,7 +146,7 @@ const REQUIRED_FIELDS: Array<{ field: string; label: string }> = [
    * such a project now has to name one.
    */
   { field: "status", label: "Status" },
-  { field: "project_category", label: "Project category" },
+  { field: "project_category", label: "Service type" },
   { field: "project_manager_id", label: "Project manager" },
   { field: "priority", label: "Priority" },
   /*
@@ -472,7 +473,7 @@ export function EditProjectDetailsModal({
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      City
+                      City<Star field="city" />
                     </label>
                     <input
                       type="text"
@@ -606,7 +607,17 @@ export function EditProjectDetailsModal({
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Project Category<Star field="project_category" />
+                      {/*
+                        * Called Service Type, because that is what it is.
+                        *
+                        * `project_category` is set at conversion from the lead's
+                        * `service_type` - the transition maps modular to modular
+                        * and everything else to turnkey - and the two enums are
+                        * the same list, project_category_enum merely adding
+                        * `hybrid`. Two names for one thing is why nobody could
+                        * tell whether the lead's Service Type had carried over.
+                        */}
+                      Service Type<Star field="project_category" />
                     </label>
                     <select
                       value={editForm.project_category}

@@ -1676,6 +1676,70 @@ Warnings from the route are shown, not swallowed: a save can succeed on the
 project and fail on its linked property, and silence there is how "property edits
 never save" survived.
 
+### Service Type is one field with two names, now called Service Type
+
+`projects.project_category` **is** the lead's `service_type`. The won transition
+maps it - `modular` stays modular, everything else becomes `turnkey` - and the
+enums are the same list, `project_category_enum` merely adding `hybrid`. The
+labels were already identical for all six shared values.
+
+Two names for one thing meant nobody could tell whether the lead's Service Type
+had carried over, so the project now calls it **Service Type** everywhere. The
+read-only "Service" row that had been added to the Overview tab from the lead is
+gone with it: that was the same fact displayed twice under two names on one
+screen.
+
+`lead_source` stays read-only from the lead, because there genuinely is no column
+for it on `projects`.
+
+### A won lead must name a project manager
+
+Required in `StageTransitionModal` and refused by the transition route, because
+the project created from that lead requires one - allowing the conversion to skip
+it only defers the problem to whoever opens the project next, and it is why both
+projects on this tenant had none.
+
+**Where the check sits matters.** It belongs with the other `missingFields`
+pre-conditions, which run before anything is written. The first attempt put it
+beside the project creation further down, and by that point the lead has already
+been updated to `won` - so refusing there would have left a won lead with no
+project and no way to notice.
+
+Skipped when no project is being created: a tenant with
+`auto_create_project_on_won` off, or an explicit `skip_project_creation`, has
+nothing for a manager to manage.
+
+The picker offers the whole team rather than holders of the Project Manager role,
+for the same reason the project's own dialog does - the role-filtered endpoint
+returns one person of three here.
+
+### City is required from `qualified` onwards
+
+On the lead modal, in the transition route, and on the project dialog. The project
+made from a lead requires a city and the conversion has nowhere else to get one,
+so a lead qualified without one produces a project that cannot be saved.
+
+Deliberately not in `newFields`: a lead arriving from a form or a phone call
+legitimately has a name and a number and nothing else.
+
+### Three quotations on one converted lead is correct
+
+`LD-202512-001` / `PRJ_20251219_0001` carries `QT-2025-0004 v1` (cancelled),
+`QT-2025-0004 v2` (approved - the agreed price) and `PRJ_20251219_2158 v1`. The
+third is the **frozen baseline copy** taken at handover; it uses the project's
+number prefix because it belongs to the project rather than the pipeline, and it
+is approved because it records what was agreed.
+
+Two known oddities, neither harmful:
+
+- **That copy's `baseline_quotation_id` points at itself**, not at
+  `QT-2025-0004 v2`. It still marks the row as a baseline, which is what excludes
+  it from the one-approved-quotation-per-lead index, but the copy cannot be traced
+  to its source.
+- **Quotation numbering has four formats in use** - `QT-####-####`,
+  `QT-######-####`, `QT-########-###` and the `PRJ_########_####` baseline. The
+  scheme has changed more than once and old rows kept their original numbers.
+
 ## Traps that have already cost time
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it
