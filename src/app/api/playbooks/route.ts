@@ -378,6 +378,12 @@ export async function replaceSteps(
         typeof raw === "object" && raw !== null && (raw as any).waitType === "after_start"
           ? "after_start"
           : "after_finish";
+      // "should" is a soft link: the plan is laid out as if it waits, but the
+      // Start button is not refused - the PM may overlap to save time.
+      const strength =
+        typeof raw === "object" && raw !== null && (raw as any).strength === "should"
+          ? "soft"
+          : "hard";
 
       const to = allIdByIndex.get(Number(rawIndex));
       // Self-reference would never start, and the constraint would reject it
@@ -399,7 +405,7 @@ export async function replaceSteps(
       links.push({
         step_id: from,
         depends_on_step_id: to,
-        dependency_type: "hard",
+        dependency_type: strength,
         wait_type: waitsOnOwnPhase ? "after_start" : waitType,
       });
     }

@@ -77,7 +77,12 @@ interface DraftStep {
    * start-to-start, and reading every link as the first kind is what made a
    * playbook unstartable.
    */
-  depends_on: { uid: string; waitType: "after_finish" | "after_start" }[];
+  depends_on: {
+    uid: string;
+    waitType: "after_finish" | "after_start";
+    /** must: Start is refused until met. should: planned after, but may start early. */
+    strength: "must" | "should";
+  }[];
   /**
    * Carried through untouched.
    *
@@ -341,19 +346,20 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
           const at = indexOfRawId.get(r.id);
           if (at === undefined) return;
           flat[at].depends_on = (r.depends_on_links || [])
-            .map((link: { id: string; waitType: string }) => {
+            .map((link: { id: string; waitType: string; strength?: string }) => {
               const n = indexOfRawId.get(link.id);
               if (n === undefined) return undefined;
               return {
                 uid: flat[n].uid,
                 waitType:
                   link.waitType === "after_start" ? "after_start" : "after_finish",
+                strength: link.strength === "should" ? "should" : "must",
               };
             })
             .filter(
               (
-                l: { uid: string; waitType: string } | undefined
-              ): l is { uid: string; waitType: "after_finish" | "after_start" } =>
+                l: { uid: string; waitType: string; strength: string } | undefined
+              ): l is { uid: string; waitType: "after_finish" | "after_start"; strength: "must" | "should" } =>
                 l !== undefined
             );
         });
@@ -649,6 +655,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
           .map((link) => ({
             index: keptIndexes.findIndex((old) => steps[old].uid === link.uid),
             waitType: link.waitType,
+            strength: link.strength,
           }))
           .filter((l) => l.index >= 0),
       };
@@ -1328,6 +1335,14 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                                             uid === parentUid
                                               ? "after_start"
                                               : "after_finish",
+                                          // Stages default to "should": the
+                                          // plan runs them in order, and a PM
+                                          // may still start one early to save
+                                          // time. Steps default to "must".
+                                          strength:
+                                            step.parent_index === null && uid !== parentUid
+                                              ? "should"
+                                              : "must",
                                         },
                                         ],
                                       });
@@ -1385,6 +1400,31 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                                       )}
                                       <option value="after_start">to start</option>
                                     </select>
+                                    {/* must: Start is refused until it is met.
+                                        should: the plan is laid out as if it
+                                        waits, but the PM may start early to
+                                        overlap work and save time. */}
+                                    {link.uid !== parentUid && (
+                                      <select
+                                        value={link.strength}
+                                        onChange={(e) =>
+                                          update(i, {
+                                            depends_on: step.depends_on.map((l) =>
+                                              l.uid === link.uid
+                                                ? { ...l, strength: e.target.value === "should" ? "should" : "must" }
+                                                : l,
+                                            ),
+                                          })
+                                        }
+                                        className={`bg-transparent border-0 text-[11px] focus:outline-none cursor-pointer ${
+                                          link.strength === "should" ? "text-amber-600" : "text-amber-900 font-medium"
+                                        }`}
+                                        title="must: cannot start until this is met. should: planned after it, but may be started early."
+                                      >
+                                        <option value="must">· must</option>
+                                        <option value="should">· should</option>
+                                      </select>
+                                    )}
                                     <button
                                       type="button"
                                       onClick={() =>

@@ -52,16 +52,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const stepIds = (steps || []).map((s) => s.id as string);
     // Each link carries which part of the predecessor it waits for, so the
     // editor can show and change it rather than assuming finish-to-start.
-    let depsByStep: Record<string, { id: string; waitType: string }[]> = {};
+    let depsByStep: Record<string, { id: string; waitType: string; strength: string }[]> = {};
     if (stepIds.length > 0) {
       const { data: deps } = await supabase
         .from("procedure_step_dependencies")
-        .select("step_id, depends_on_step_id, wait_type")
+        .select("step_id, depends_on_step_id, wait_type, dependency_type")
         .in("step_id", stepIds);
       for (const d of deps || []) {
         (depsByStep[d.step_id as string] ||= []).push({
           id: d.depends_on_step_id as string,
           waitType: (d as any).wait_type ?? "after_finish",
+          // hard = must wait (Start refused); soft = should wait (planned
+          // after, but the PM may start it early).
+          strength: (d as any).dependency_type === "soft" ? "should" : "must",
         });
       }
     }

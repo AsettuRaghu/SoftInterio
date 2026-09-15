@@ -1273,6 +1273,22 @@ are refused the same way. Deeper cycles are **not** detected.
 `task_blocking_predecessors` checks named links **before** `enforce_order`, so
 a named dependency holds whether or not the playbook enforces order.
 
+**A link is `must` (hard) or `should` (soft)**, exposed in the editor since
+2026-09-16 as a second dropdown on the chip. Both place the step in the
+schedule; only `must` makes the gate refuse Start. `should` is how "one stage
+after another, but we often overlap to save time" is said: the plan is laid
+out in order, the PM may start the next stage early, and the scheduler
+re-lays around what actually happened. New stage-level links default to
+`should`, step-level to `must`. Modular Design Template v9 has its stage
+chain as `should` except Handover.
+
+**The scheduler follows a step's own links and nothing else** when it has
+any (a link to its own stage does not count). The built-in
+previous-sibling / previous-stage order only fills in for steps with no
+links. "3D Design waits for 2D Designs *to start*" therefore overlaps them,
+as written; the v8 stage links said that in several places and were not
+what was meant.
+
 The editor works in **indexes**, because a step being written has no id yet;
 the API resolves them after every step exists. Dropping an untitled row shifts
 those indexes, so `cleaned` remaps both `parent_index` and `depends_on` — it
