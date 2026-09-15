@@ -13,6 +13,10 @@ import type { TaskRelatedType } from "@/types/tasks";
 import {
   PlaybookActionColors,
   PlaybookActionLabels,
+  StepOwnerLabels,
+  StepMilestoneLabels,
+  type StepOwnerType,
+  type StepMilestoneRole,
   type PlaybookActionType,
   type PlaybookDefinition,
 } from "@/types/playbooks";
@@ -36,6 +40,13 @@ interface DraftStep {
   assign_to_role: string | null;
   /** The person who does this step, chosen when the playbook is written. */
   assign_to_user: string | null;
+  /**
+   * Who the step waits on. "Us" is the default; a client or vendor step is
+   * something we cannot do ourselves, and its lateness is theirs.
+   */
+  owner_type: StepOwnerType;
+  /** What finishing this step means for the project's status, if anything. */
+  milestone_role: StepMilestoneRole | null;
   priority: string;
   estimated_hours: number | null;
   /** How long the step takes. Dates are derived from this, not typed. */
@@ -156,6 +167,8 @@ const blankStep = (): DraftStep => ({
   can_skip: true,
   assign_to_role: null,
   assign_to_user: null,
+  owner_type: "internal",
+  milestone_role: null,
   priority: "medium",
   estimated_hours: null,
   duration_days: null,
@@ -263,6 +276,8 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
             can_skip: t.can_skip,
             assign_to_role: t.assign_to_role,
             assign_to_user: t.assign_to_user ?? null,
+            owner_type: t.owner_type ?? "internal",
+            milestone_role: t.milestone_role ?? null,
             priority: t.priority || "medium",
             estimated_hours: t.estimated_hours ?? null,
             // Legacy; hours drive the date now. Cleared on edit so the
@@ -290,6 +305,8 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
               can_skip: c.can_skip,
               assign_to_role: c.assign_to_role,
               assign_to_user: c.assign_to_user ?? null,
+              owner_type: c.owner_type ?? "internal",
+              milestone_role: c.milestone_role ?? null,
               priority: c.priority || "medium",
               estimated_hours: c.estimated_hours ?? null,
               duration_days: null,
@@ -636,6 +653,19 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
     if (cleaned.length === 0) {
       setError("Add at least one step");
       return;
+    }
+    // One step can mean "kicked off" and one can mean "handed over". The
+    // database refuses a second; say it here, next to the form, instead.
+    for (const role of ["kickoff", "handover"] as const) {
+      const marked = cleaned.filter((s) => s.milestone_role === role);
+      if (marked.length > 1) {
+        setError(
+          `Only one step can be marked "${
+            role === "kickoff" ? "Kick-off done" : "Handover signed"
+          }" - it is on ${marked.map((s) => `"${s.title.trim()}"`).join(" and ")}.`
+        );
+        return;
+      }
     }
 
     setIsSaving(true);
@@ -1135,6 +1165,60 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                           {["low", "medium", "high", "urgent"].map((v) => (
                             <option key={v} value={v}>
                               {v}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* Who the step waits on. Marking a step as the
+                            client's or a vendor's puts it on the project's
+                            "waiting on" list at kick-off and counts its
+                            lateness against them - so it is decided here,
+                            once, not per project. */}
+                        <span className="text-slate-300">|</span>
+                        <span className="text-slate-400">Done by</span>
+                        <select
+                          value={step.owner_type}
+                          onChange={(e) =>
+                            update(i, {
+                              owner_type: e.target.value as StepOwnerType,
+                            })
+                          }
+                          title="Us, the client, or a vendor. A client or vendor step is something we wait for."
+                          className={`px-1.5 py-0.5 border rounded ${
+                            step.owner_type === "internal"
+                              ? "border-slate-200 bg-white"
+                              : "border-amber-300 bg-amber-50 text-amber-800"
+                          }`}
+                        >
+                          {(Object.keys(StepOwnerLabels) as StepOwnerType[]).map((v) => (
+                            <option key={v} value={v}>
+                              {StepOwnerLabels[v]}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* What finishing it means for the project. Status is
+                            driven from these marks, not from a fixed list. */}
+                        <span className="text-slate-400">Milestone</span>
+                        <select
+                          value={step.milestone_role ?? ""}
+                          onChange={(e) =>
+                            update(i, {
+                              milestone_role:
+                                (e.target.value as StepMilestoneRole) || null,
+                            })
+                          }
+                          title="Kick-off done moves the project to In Progress; Handover signed proposes Completed; Show to client only marks it for the client's timeline."
+                          className={`px-1.5 py-0.5 border rounded ${
+                            step.milestone_role
+                              ? "border-blue-300 bg-blue-50 text-blue-800"
+                              : "border-slate-200 bg-white"
+                          }`}
+                        >
+                          <option value="">—</option>
+                          {(Object.keys(StepMilestoneLabels) as StepMilestoneRole[]).map((v) => (
+                            <option key={v} value={v}>
+                              {StepMilestoneLabels[v]}
                             </option>
                           ))}
                         </select>

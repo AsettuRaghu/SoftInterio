@@ -164,11 +164,10 @@ Each step is useful on its own.
 
 ## 10. Still to decide
 
-**a. Who can press Kick-off?**  In plain terms: kick-off is "edit the
-project" plus "create tasks" (because starting the playbook creates the
-project's tasks). Recommendation: **anyone who may edit the project** —
-today that is Owner, Admin, Manager and Project Manager — and we make sure
-those same roles may create tasks. No new permission.
+**a. Who can press Kick-off?**  ✅ decided — **anyone who may edit the
+project** (today Owner, Admin, Manager and Project Manager). Kick-off also
+creates the plan's tasks, so those roles must be allowed to create tasks;
+checked together. No new permission.
 
 **b. Payment gates.**  Parked, by your decision. The design leaves the hook:
 a step the client must do can later be completed automatically "when the

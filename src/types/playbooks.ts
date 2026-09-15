@@ -111,7 +111,29 @@ export interface PlaybookStepDefinition {
   can_skip: boolean;
   skip_requires_reason: boolean;
   allow_parallel: boolean;
+  /**
+   * Who this step waits on. A client- or vendor-owned step is an entry on the
+   * project's "waiting on" list, and its lateness counts against that owner.
+   */
+  owner_type: StepOwnerType;
+  /** What completing this step means for the project's status, if anything. */
+  milestone_role?: StepMilestoneRole | null;
 }
+
+export type StepOwnerType = "internal" | "client" | "vendor";
+export type StepMilestoneRole = "kickoff" | "handover" | "client_facing";
+
+export const StepOwnerLabels: Record<StepOwnerType, string> = {
+  internal: "Us",
+  client: "Client",
+  vendor: "Vendor",
+};
+
+export const StepMilestoneLabels: Record<StepMilestoneRole, string> = {
+  kickoff: "Kick-off done",
+  handover: "Handover signed",
+  client_facing: "Show to client",
+};
 
 export interface PlaybookRun {
   id: string;

@@ -314,6 +314,8 @@ export async function replaceSteps(
     can_skip: step.can_skip === true,
     skip_requires_reason: step.skip_requires_reason !== false,
     allow_parallel: step.allow_parallel === true,
+    owner_type: step.owner_type || "internal",
+    milestone_role: step.milestone_role || null,
   });
 
   for (const pass of [0, 1]) {
