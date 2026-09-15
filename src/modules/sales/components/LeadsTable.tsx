@@ -1,6 +1,11 @@
 "use client";
 
 import React, { useMemo, useCallback } from "react";
+import {
+  ActivityGlyph,
+  iconForActivity,
+  iconForUpcoming,
+} from "@/components/leads/activity-icons";
 import { Lead, LeadStage } from "@/types/leads";
 import {
   LeadStageLabels as StageLabels,
@@ -328,7 +333,7 @@ export function LeadsTable({
                   widening the column. */}
               {(lead.last_activity_detail || lead.last_activity_type) && (
                 <p
-                  className="text-xs text-slate-500 break-words whitespace-normal leading-snug"
+                  className="flex items-start gap-1.5 text-xs text-slate-500 break-words whitespace-normal leading-snug"
                   title={
                     lead.last_activity_detail
                       ? `${
@@ -340,9 +345,18 @@ export function LeadsTable({
                       : undefined
                   }
                 >
-                  {lead.last_activity_detail ||
-                    LeadActivityTypeLabels[lead.last_activity_type!] ||
-                    lead.last_activity_type}
+                  {/* The icon says what kind of thing happened - a note, a
+                      call, a meeting - so the row can be read before the
+                      sentence is. */}
+                  <ActivityGlyph
+                    icon={iconForActivity(lead.last_activity_type)}
+                    className="mt-0.5"
+                  />
+                  <span className="min-w-0">
+                    {lead.last_activity_detail ||
+                      LeadActivityTypeLabels[lead.last_activity_type!] ||
+                      lead.last_activity_type}
+                  </span>
                 </p>
               )}
 
@@ -354,9 +368,10 @@ export function LeadsTable({
                   {earlier.map((a, i) => (
                     <p
                       key={i}
-                      className="flex items-baseline gap-1.5 text-[11px] text-slate-400"
+                      className="flex items-center gap-1.5 text-[11px] text-slate-400"
                       title={a.detail || undefined}
                     >
+                      <ActivityGlyph icon={iconForActivity(a.type)} className="opacity-70" />
                       <span className="shrink-0 tabular-nums text-slate-400">
                         {whenShort(a.at)}
                       </span>
@@ -431,10 +446,13 @@ export function LeadsTable({
                 {labelFor(next.at)}
               </p>
               <p
-                className="text-xs text-slate-500 break-words whitespace-normal leading-snug"
-                title={next.label}
+                className="flex items-start gap-1.5 text-xs text-slate-500 break-words whitespace-normal leading-snug"
+                title={`${iconForUpcoming(next.kind).name}: ${next.label}`}
               >
-                {next.label}
+                {/* Calendar, follow-up or task - the icon carries the kind so
+                    the date above can keep carrying the urgency. */}
+                <ActivityGlyph icon={iconForUpcoming(next.kind)} className="mt-0.5" />
+                <span className="min-w-0">{next.label}</span>
               </p>
 
               {/* What follows it, so a busy lead is distinguishable from one
@@ -444,9 +462,10 @@ export function LeadsTable({
                   {rest.map((item, i) => (
                     <p
                       key={i}
-                      className="flex items-baseline gap-1.5 text-[11px] text-slate-400"
-                      title={item.label}
+                      className="flex items-center gap-1.5 text-[11px] text-slate-400"
+                      title={`${iconForUpcoming(item.kind).name}: ${item.label}`}
                     >
+                      <ActivityGlyph icon={iconForUpcoming(item.kind)} className="opacity-70" />
                       <span
                         className={`shrink-0 tabular-nums ${
                           item.at.slice(0, 10) < today

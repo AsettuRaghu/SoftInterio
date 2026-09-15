@@ -470,7 +470,8 @@ export interface Lead {
    * Overdue items sort to the top, being furthest in the past.
    */
   upcoming_items?: Array<{
-    kind: "follow_up" | "task" | string;
+    /** Note follow-up, open task, or booked calendar event. */
+    kind: "follow_up" | "task" | "calendar" | string;
     label: string;
     at: string;
   }>;

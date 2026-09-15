@@ -212,25 +212,49 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // What is coming up on each lead: outstanding follow-ups and open tasks,
-    // merged and sorted by date. Two batched queries for the page, matching
-    // the activity enrichment above - the alternative is one pair per row.
+    /*
+     * What is coming up on each lead: outstanding follow-ups, open tasks and
+     * booked calendar events, merged and sorted by date. Three batched queries
+     * for the page, matching the activity enrichment above - the alternative is
+     * one set per row.
+     *
+     * Calendar events were missing from this until 2026-09-15. A site visit
+     * booked for Thursday is the single most important thing owed to a lead
+     * that week, and the column showed a note follow-up from next month
+     * instead. Each item now carries a `kind` so the table can draw the icon
+     * that says which it is.
+     */
     if (leadIds.length) {
-      const [{ data: followUps }, { data: dueTasks }] = await Promise.all([
-        supabase
-          .from("lead_notes")
-          .select("lead_id, content, follow_up_at")
-          .in("lead_id", leadIds)
-          .not("follow_up_at", "is", null)
-          .is("follow_up_done_at", null),
-        supabase
-          .from("tasks")
-          .select("related_id, title, due_date, status")
-          .eq("related_type", "lead")
-          .in("related_id", leadIds)
-          .in("status", ["todo", "in_progress", "on_hold"])
-          .not("due_date", "is", null),
-      ]);
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const [{ data: followUps }, { data: dueTasks }, { data: events }] =
+        await Promise.all([
+          supabase
+            .from("lead_notes")
+            .select("lead_id, content, follow_up_at")
+            .in("lead_id", leadIds)
+            .not("follow_up_at", "is", null)
+            .is("follow_up_done_at", null),
+          supabase
+            .from("tasks")
+            .select("related_id, title, due_date, status")
+            .eq("related_type", "lead")
+            .in("related_id", leadIds)
+            .in("status", ["todo", "in_progress", "on_hold"])
+            .not("due_date", "is", null),
+          supabase
+            .from("calendar_events")
+            .select("linked_id, title, event_type, scheduled_at")
+            .eq("linked_type", "lead")
+            .in("linked_id", leadIds)
+            .eq("is_completed", false)
+            // Only what is still ahead. A meeting that was booked for last
+            // week and never marked done is a hygiene problem, not an
+            // upcoming commitment, and showing it as "5d late" beside a real
+            // follow-up would drown the real one.
+            .gte("scheduled_at", todayStart.toISOString()),
+        ]);
 
       const upcoming = new Map<string, Array<{ kind: string; label: string; at: string }>>();
       const add = (leadId: string, entry: { kind: string; label: string; at: string }) => {
@@ -248,6 +272,13 @@ export async function GET(request: NextRequest) {
       );
       (dueTasks || []).forEach((t) =>
         add(t.related_id, { kind: "task", label: t.title, at: t.due_date })
+      );
+      (events || []).forEach((e) =>
+        add(e.linked_id, {
+          kind: "calendar",
+          label: e.title || e.event_type || "Meeting",
+          at: e.scheduled_at,
+        })
       );
 
       for (const lead of leads || []) {
