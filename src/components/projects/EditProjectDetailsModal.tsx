@@ -92,6 +92,48 @@ interface EditFormData {
   property_subtype: string;
 }
 
+/**
+ * What a project must carry.
+ *
+ * A project comes from a **won** lead, and by that stage the lead modal already
+ * required all of these - client name and phone, the property's category,
+ * subtype, type, name, unit and carpet area, and both target dates. The data
+ * therefore exists by the time a project is created, so a project asking for less
+ * than the lead it came from is a gap rather than a kindness: it is how a record
+ * that was complete at handover quietly loses fields afterwards.
+ *
+ * One list drives the asterisks and the validation, so a field cannot be marked
+ * required and then not checked, or checked and not marked.
+ *
+ * Two of the lead's eleven are deliberately absent:
+ *
+ *   - **service_type** and **lead_source** have no column on `projects`. They
+ *     live on the lead and are shown read-only on the Overview tab, so there is
+ *     nothing here to require.
+ *   - **budget_range** is money, which the project module does not carry.
+ *
+ * `client_email` goes further than the lead, which asks only for a name and
+ * phone. Kept, because a project that has to be invoiced needs somewhere to send
+ * it. Description and Notes stay optional: neither was ever required of a lead,
+ * and demanding prose to save a date change is how people learn to type "n/a".
+ */
+const REQUIRED_FIELDS: Array<{ field: string; label: string }> = [
+  { field: "name", label: "Project name" },
+  { field: "client_name", label: "Client name" },
+  { field: "client_phone", label: "Client phone" },
+  { field: "client_email", label: "Client email" },
+  { field: "property_category", label: "Property category" },
+  { field: "property_subtype", label: "Property subtype" },
+  { field: "property_type", label: "Property type" },
+  { field: "property_name", label: "Property name" },
+  { field: "flat_number", label: "Unit number" },
+  { field: "carpet_area_sqft", label: "Carpet area" },
+  { field: "expected_start_date", label: "Expected start date" },
+  { field: "expected_end_date", label: "Expected end date" },
+];
+
+const REQUIRED_SET = new Set(REQUIRED_FIELDS.map((f) => f.field));
+
 interface EditProjectDetailsModalProps {
   isOpen: boolean;
   project: Project;
@@ -191,6 +233,10 @@ export function EditProjectDetailsModal({
     }
   }, [isOpen, project]);
 
+  /** A red asterisk on anything REQUIRED_FIELDS names. */
+  const Star = ({ field }: { field: string }) =>
+    REQUIRED_SET.has(field) ? <span className="text-red-500"> *</span> : null;
+
   const handleInputChange = (field: keyof EditFormData, value: string) => {
     setEditForm((prev) => ({
       ...prev,
@@ -202,24 +248,22 @@ export function EditProjectDetailsModal({
     try {
       setError(null);
 
-      // Validate mandatory fields
-      const validationErrors: string[] = [];
+      /*
+       * Everything the won lead already had to carry. Named, and all at once -
+       * reporting the first missing field makes somebody press Save four times
+       * to discover four problems.
+       */
+      const missing = REQUIRED_FIELDS.filter(({ field }) => {
+        const value = editForm[field as keyof EditFormData];
+        return !String(value ?? "").trim();
+      }).map(({ label }) => label);
 
-      if (!editForm.client_name?.trim()) {
-        validationErrors.push("Client name is required");
-      }
-      if (!editForm.client_phone?.trim()) {
-        validationErrors.push("Client phone is required");
-      }
-      if (!editForm.client_email?.trim()) {
-        validationErrors.push("Client email is required");
-      }
-      if (!editForm.property_name?.trim()) {
-        validationErrors.push("Property name is required");
-      }
-
-      if (validationErrors.length > 0) {
-        setError(validationErrors.join("\n"));
+      if (missing.length > 0) {
+        setError(
+          missing.length === 1
+            ? `${missing[0]} is required.`
+            : `These are required: ${missing.join(", ")}.`
+        );
         return;
       }
 
@@ -320,7 +364,7 @@ export function EditProjectDetailsModal({
               </div>
             </div>
 
-            {/* PROPERTY INFORMATION */}
+                        {/* PROPERTY INFORMATION */}
             <div>
               <h3 className="text-lg font-semibold text-slate-900 mb-4 pb-3 border-b border-slate-200">
                 Property Information
@@ -330,7 +374,118 @@ export function EditProjectDetailsModal({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Category
+                      Property Type<Star field="property_type" />
+                    </label>
+                    <select
+                      value={editForm.property_type}
+                      onChange={(e) =>
+                        handleInputChange("property_type", e.target.value)
+                      }
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      {propertyTypeOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Property Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.property_name}
+                      onChange={(e) =>
+                        handleInputChange("property_name", e.target.value)
+                      }
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="e.g., NCC Urban Mayfair"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Flat/Unit Number<Star field="flat_number" />
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.flat_number}
+                      onChange={(e) =>
+                        handleInputChange("flat_number", e.target.value)
+                      }
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="e.g., E1302"
+                    />
+                  </div>
+                </div>
+
+                {/* Address Details */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Address
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.site_address}
+                      onChange={(e) =>
+                        handleInputChange("site_address", e.target.value)
+                      }
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Street address"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      City
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.city}
+                      onChange={(e) =>
+                        handleInputChange("city", e.target.value)
+                      }
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="City"
+                    />
+                  </div>
+                </div>
+
+                {/* Area and Pincode */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Carpet Area (sqft)<Star field="carpet_area_sqft" />
+                    </label>
+                    <input
+                      type="number"
+                      value={editForm.carpet_area_sqft}
+                      onChange={(e) =>
+                        handleInputChange("carpet_area_sqft", e.target.value)
+                      }
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Pincode
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.pincode}
+                      onChange={(e) =>
+                        handleInputChange("pincode", e.target.value)
+                      }
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Pincode"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Category<Star field="property_category" />
                     </label>
                     <select
                       value={editForm.property_category}
@@ -349,7 +504,7 @@ export function EditProjectDetailsModal({
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Subtype
+                      Subtype<Star field="property_subtype" />
                     </label>
                     <select
                       value={editForm.property_subtype}
@@ -370,8 +525,7 @@ export function EditProjectDetailsModal({
 
               </div>
             </div>
-
-            {/* PROJECT DETAILS */}
+{/* PROJECT DETAILS */}
             <div>
               <h3 className="text-lg font-semibold text-slate-900 mb-4 pb-3 border-b border-slate-200">
                 Project Details
@@ -379,7 +533,7 @@ export function EditProjectDetailsModal({
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Project Name
+                    Project Name<Star field="name" />
                   </label>
                   <input
                     type="text"
@@ -487,7 +641,7 @@ export function EditProjectDetailsModal({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Expected Start Date
+                      Expected Start Date<Star field="expected_start_date" />
                     </label>
                     <input
                       type="date"
@@ -500,7 +654,7 @@ export function EditProjectDetailsModal({
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Expected End Date
+                      Expected End Date<Star field="expected_end_date" />
                     </label>
                     <input
                       type="date"
