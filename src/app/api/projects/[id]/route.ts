@@ -5,6 +5,7 @@ import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { requireProjectAccess } from "@/lib/projects/guard";
 import { projectClosingBlockers, describeBlockers } from "@/lib/projects/closing";
 import { requestLogger } from "@/lib/logger/request";
+import { logProjectActivity } from "@/lib/activity/log";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         *,
         project_manager:users!project_manager_id(id, name, email, avatar_url),
         client:clients!client_id(id, name, email, phone),
-        property:properties!property_id(id, property_name, property_type, unit_number, address_line1, city, pincode, carpet_area),
+        property:properties!property_id(id, property_name, property_type, property_subtype, category, unit_number, address_line1, city, pincode, carpet_area),
         lead:leads!lead_id(id, lead_number, service_type, lead_source, budget_range, won_amount)
       `
       )
@@ -178,6 +179,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Fetch property data separately if property_id exists
     let pProperty = null;
     if (fullProject?.property_id) {
+      /*
+       * `category` was absent from this select while the edit dialog read
+       * `property.category` to populate its Category control. So the value saved
+       * correctly, came back undefined, and reopening the dialog showed nothing
+       * selected - and saving again submitted "" and cleared what had just been
+       * set.
+       */
       const { data: propertyData } = await supabase
         .from("properties")
         .select(`
@@ -185,6 +193,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           property_name,
           property_type,
           property_subtype,
+          category,
           unit_number,
           address_line1,
           city,
@@ -368,9 +377,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // 1. Update Project Table
     const { data: existingProject, error: fetchError } = await supabase
         .from("projects")
-        // status is read so a close can be told from an edit that merely
-        // echoes the current status back.
-        .select("property_id, status")
+        /*
+         * status is read so a close can be told from an edit that merely echoes
+         * the current status back. The rest are read to diff against, so the
+         * timeline entry can say what actually changed rather than "edited".
+         */
+        .select(
+          "property_id, status, name, notes, description, priority, project_category, project_manager_id, expected_start_date, expected_end_date"
+        )
         .eq("id", id)
         .eq("tenant_id", user.tenantId)
         .single();
@@ -610,6 +624,69 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           }
         }
       }
+    }
+
+    /*
+     * The timeline gets told.
+     *
+     * An edit to a project left no trace at all: the Timeline tab showed tasks,
+     * documents and meetings while a change of manager, dates or status passed
+     * silently. `logProjectActivity` swallows its own failures, so this cannot
+     * break the save it describes.
+     *
+     * Two entries rather than one, because they are read differently. The
+     * `project_updated` line says which fields moved and is scanned; the
+     * `note_added` line carries the note itself and is read. Folding a note into
+     * a field list would bury the only part with something to say.
+     *
+     * `project_updated` and `note_added` are both real members of
+     * project_activity_type_enum - verified against the live enum, because an
+     * invalid value here fails the insert and the logger swallows it.
+     */
+    const changed: string[] = [];
+    const diff = (label: string, before: unknown, after: unknown) => {
+      if (after === undefined) return;
+      const a = before ?? "";
+      const b = after ?? "";
+      if (String(a) !== String(b)) changed.push(label);
+    };
+    /*
+     * From `body`, not from destructured names: these reach the update through
+     * the EDITABLE_PROJECT_FIELDS allowlist rather than being pulled out
+     * individually, so there are no locals to compare.
+     */
+    const b = body as Record<string, unknown>;
+    diff("name", existingProject?.name, b.name);
+    diff("status", existingProject?.status, b.status);
+    diff("priority", existingProject?.priority, b.priority);
+    diff("category", existingProject?.project_category, b.project_category);
+    diff("project manager", existingProject?.project_manager_id, b.project_manager_id);
+    diff("expected start", existingProject?.expected_start_date, b.expected_start_date);
+    diff("expected end", existingProject?.expected_end_date, b.expected_end_date);
+    diff("description", existingProject?.description, b.description);
+
+    const notesChanged =
+      b.notes !== undefined &&
+      String(existingProject?.notes ?? "") !== String(b.notes ?? "");
+
+    if (changed.length > 0) {
+      await logProjectActivity(supabase, {
+        projectId: id,
+        type: "project_updated",
+        title: "Project details updated",
+        description: `Changed: ${changed.join(", ")}.`,
+        userId: user.id,
+      });
+    }
+
+    if (notesChanged && String(b.notes ?? "").trim()) {
+      await logProjectActivity(supabase, {
+        projectId: id,
+        type: "note_added",
+        title: "Note updated on the project",
+        description: String(b.notes).trim(),
+        userId: user.id,
+      });
     }
 
     // Warnings, so a half-applied save says so rather than looking clean.

@@ -1609,6 +1609,54 @@ total floors, facing, furnishing status and parking - 161 lines of form that
 form fields and their entries in the PATCH payload. The columns remain on
 `properties` for the property module.
 
+### A project edit writes to the timeline
+
+Editing a project left no trace at all - the Timeline tab showed tasks,
+documents and meetings while a change of manager, dates or status passed in
+silence. `PATCH /api/projects/[id]` now logs two entries through
+`logProjectActivity`:
+
+- **`project_updated`** — "Changed: status, project manager, expected end." It is
+  scanned, so it lists fields rather than values. The previous values come from
+  the pre-update select, which reads the diffable columns for this reason.
+- **`note_added`** — carries the note text itself, when the note changed. Two
+  entries rather than one because they are read differently: folding a note into
+  a field list buries the only part with something to say.
+
+`project_updated` and `note_added` are both real members of
+`project_activity_type_enum`, **verified against the live enum**. An invalid value
+fails the insert and `logProjectActivity` swallows it, which is exactly how
+quotation revisions never reached a lead timeline.
+
+**Notes and Description are required on the edit dialog** because of this: the
+note is the line somebody reads later to find out why the dates moved. The cost
+is real - a one-field correction needs a sentence with it - and the answer to
+that is the timeline being visibly useful, not dropping the rule. The field says
+where it ends up, since a required field with no stated purpose reads as an
+obstacle.
+
+Eighteen fields are required in total: the twelve a won lead already had to
+carry, plus status, category, manager, priority, description and notes.
+
+### The Category control was blank because the GET never returned it
+
+`properties.category` was absent from both property selects in
+`GET /api/projects/[id]` while the edit dialog read `property.category` to
+populate its Category control. So the value saved correctly, came back
+`undefined`, showed nothing selected on reopen - and the next save submitted `""`
+and cleared what had just been set. A round-trip bug, invisible from either end
+alone.
+
+**When adding a field to that dialog, check all three legs**: the payload in
+`OverviewTab`, the route's allowlist or column mapping, and the GET's select.
+Missing any one of them fails quietly. Verified after this change that all 21
+fields the dialog sends are handled - nine on `projects` through
+`EDITABLE_PROJECT_FIELDS`, three on `clients`, nine on `properties`.
+
+Warnings from the route are shown, not swallowed: a save can succeed on the
+project and fail on its linked property, and silence there is how "property edits
+never save" survived.
+
 ## Traps that have already cost time
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it

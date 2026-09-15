@@ -148,6 +148,21 @@ const REQUIRED_FIELDS: Array<{ field: string; label: string }> = [
   { field: "project_category", label: "Project category" },
   { field: "project_manager_id", label: "Project manager" },
   { field: "priority", label: "Priority" },
+  /*
+   * Notes and Description are required too.
+   *
+   * The note is not paperwork here: every save writes it to the project's
+   * timeline as a `note_added` entry, so it is the line somebody reads later to
+   * find out why the dates moved. An edit with no explanation is what makes a
+   * timeline useless.
+   *
+   * The cost is real and worth stating: a one-field correction now needs a
+   * sentence with it, and people who are made to write something will sometimes
+   * write nothing of value. The answer to that is the timeline being visibly
+   * useful, not dropping the requirement.
+   */
+  { field: "description", label: "Description" },
+  { field: "notes", label: "Notes" },
 ];
 
 const REQUIRED_SET = new Set(REQUIRED_FIELDS.map((f) => f.field));
@@ -690,7 +705,7 @@ export function EditProjectDetailsModal({
 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Description
+                    Description<Star field="description" />
                   </label>
                   <textarea
                     value={editForm.description}
@@ -705,15 +720,21 @@ export function EditProjectDetailsModal({
 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Notes
+                    Notes<Star field="notes" />
                   </label>
                   <textarea
                     value={editForm.notes}
                     onChange={(e) => handleInputChange("notes", e.target.value)}
                     rows={3}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                    placeholder="Additional notes"
+                    placeholder="Why is this being changed? This goes on the project timeline."
                   />
+                  {/* Say where it ends up. A required field with no stated
+                      purpose reads as an obstacle. */}
+                  <p className="mt-1 text-xs text-slate-400">
+                    Saved to the project&apos;s timeline, so the reason for this
+                    change is on the record.
+                  </p>
                 </div>
               </div>
             </div>

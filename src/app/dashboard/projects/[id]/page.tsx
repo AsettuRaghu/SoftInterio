@@ -562,9 +562,18 @@ export default function ProjectDetailPage({ params }: PageProps) {
         body: JSON.stringify(updates),
       });
 
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const data = await response.json();
         throw new Error(data.error || "Failed to update project");
+      }
+      /*
+       * A save can succeed on the project and still fail on its linked property
+       * or client - the route says so in `warnings` rather than swallowing it,
+       * which is how "property edits never save" went unnoticed for so long.
+       * Silence here would put it straight back.
+       */
+      if (Array.isArray(data.warnings) && data.warnings.length) {
+        setNotice(data.warnings.join(" "));
       }
       await fetchProject({ quiet: true });
     } catch (err) {
