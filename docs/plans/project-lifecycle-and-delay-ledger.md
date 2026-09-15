@@ -172,7 +172,7 @@ Each step is useful on its own.
    shifts automatically for everything that waits on a late or held step
    (the agreed plan does not move); "Usual delay" on client/vendor steps in
    the playbook.
-4. "Waiting on the client" panel.
+4. ✅ built — "Waiting on others" panel on the Plan tab: open asks by owner, overdue in red, delivered list with days late, ad-hoc adds.
 5. Agreeing a new plan.
 6. Delay summary on the project, delay band on Reports.
 7. Status report + PDF.

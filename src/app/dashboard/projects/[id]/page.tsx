@@ -47,6 +47,7 @@ import { Toast } from "@/components/ui/Toast";
 import { usePrompt } from "@/components/ui/PromptDialog";
 import { PlaybooksPanel } from "@/components/playbooks";
 import { KickoffChecklist } from "@/components/projects/KickoffChecklist";
+import { WaitingOnPanel } from "@/components/projects/WaitingOnPanel";
 import { EditTaskModal } from "@/components/tasks";
 
 interface PageProps {
@@ -245,7 +246,9 @@ export default function ProjectDetailPage({ params }: PageProps) {
    * come from it) and the playbook, and touches no loading flag, so the table
    * simply changes.
    */
+  const [planVersion, setPlanVersion] = useState(0);
   const refreshPlan = useCallback(async () => {
+    setPlanVersion((v) => v + 1);
     try {
       const [projectRes] = await Promise.all([
         fetch(`/api/projects/${id}`),
@@ -768,6 +771,18 @@ export default function ProjectDetailPage({ params }: PageProps) {
                     }}
                   />
                 </div>
+              )}
+
+              {/* What the project waits on someone else for. After kick-off
+                  this is the working list; the checklist showed it before. */}
+              {playbook && !awaitingKickoff && (
+                <WaitingOnPanel
+                  projectId={project.id}
+                  canEdit={canEditProject && project.status !== "completed"}
+                  refreshKey={planVersion}
+                  onChanged={() => void fetchCounts()}
+                  onError={(message) => setNotice({ message, variant: "error" })}
+                />
               )}
 
               {/* A plan IS the tasks table, scoped to the run. */}
