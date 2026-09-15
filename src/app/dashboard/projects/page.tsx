@@ -8,7 +8,6 @@ import {
   PageLayout,
   PageHeader,
   PageContent,
-  StatBadge,
 } from "@/components/ui/PageLayout";
 import {
   useAppTableSort,
@@ -26,7 +25,6 @@ import {
   PROJECT_STATUS_OPTIONS,
   ACTIVE_STATUSES,
 } from "@/modules/projects/constants";
-import { formatCurrency } from "@/modules/projects/utils";
 import { useTenantSettings } from "@/hooks/useTenantSettings";
 import { buttonVariants } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
@@ -232,23 +230,6 @@ export default function ProjectsPage() {
     }));
   }, [allProjects]);
 
-  // Calculate Stats
-  const stats = useMemo(() => {
-    const total = allProjects.length;
-    const active = allProjects.filter((p) =>
-      ACTIVE_STATUSES.includes(p.status as ProjectStatus)
-    ).length;
-    const completed = allProjects.filter(
-      (p) => p.status === "completed"
-    ).length;
-    const totalValue = allProjects.reduce(
-      (sum, p) => sum + (p.contract_value || 0),
-      0
-    );
-
-    return { total, active, completed, totalValue };
-  }, [allProjects]);
-
   return (
     <PageLayout isLoading={isLoading} loadingText="Loading projects...">
       <PageHeader
@@ -270,26 +251,6 @@ export default function ProjectsPage() {
               New Project
             </Link>
           ) : undefined
-        }
-        stats={
-          <>
-            <StatBadge
-              label="Total Projects"
-              value={stats.total}
-              color="slate"
-            />
-            <StatBadge label="Active" value={stats.active} color="blue" />
-            <StatBadge
-              label="Completed"
-              value={stats.completed}
-              color="green"
-            />
-            <StatBadge
-              label="Total Value"
-              value={formatCurrency(stats.totalValue)}
-              color="green"
-            />
-          </>
         }
       />
 
