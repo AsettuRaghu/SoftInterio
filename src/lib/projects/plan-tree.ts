@@ -45,8 +45,10 @@ export function playbookRunToStages(
   /** procedure_step_id -> display_order, so the playbook's own order wins. */
   stepOrder?: Map<string, number>
 ): PlanStage[] {
+  // A task whose step is no longer in the playbook (cancelled by a commit)
+  // sorts last, not first: 0 put such rows at the top of every stage.
   const orderOf = (t: PlanTask): number =>
-    t.procedure_step_id ? (stepOrder?.get(t.procedure_step_id) ?? 0) : 0;
+    t.procedure_step_id ? (stepOrder?.get(t.procedure_step_id) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
 
   const byParent = new Map<string, PlanTask[]>();
   for (const task of tasks) {

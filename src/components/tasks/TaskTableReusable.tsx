@@ -43,6 +43,13 @@ import {
 } from "@heroicons/react/24/outline";
 
 // Types
+export interface PlanGate {
+  canStart: boolean;
+  startReason: string | null;
+  canComplete: boolean;
+  completeReason: string | null;
+}
+
 const HOLD_OWNER_WORD = {
   client: "the client",
   vendor: "a vendor",
@@ -84,6 +91,8 @@ interface Task {
   hold_reason_code?: string | null;
   hold_expected_until?: string | null;
   hold_counterpart?: string | null;
+  /** Dates set by a person; the scheduler lays the plan around them. */
+  dates_pinned?: boolean;
   total_active_seconds?: number;
   live_active_seconds?: number;
   is_clock_running?: boolean;
@@ -124,6 +133,13 @@ export interface TaskTableProps {
    * (the default) scattered the phases among their own steps.
    */
   preserveOrder?: boolean;
+  /**
+   * What the server would accept on each plan row, keyed by task id - from
+   * /api/projects/[id]/plan-gates. A Start the server would refuse is drawn
+   * disabled with the reason printed on the row, rather than turning red
+   * after the round trip.
+   */
+  gates?: Record<string, PlanGate>;
   /** Starting page size. A plan is read whole, not 25 rows at a time. */
   initialPageSize?: number;
   // Optional: Filter by linked entity (lead, project, etc.)
@@ -160,6 +176,7 @@ export interface TaskTableProps {
 export default function TaskTable({
   showPlanColumns = false,
   preserveOrder = false,
+  gates,
   initialPageSize,
   relatedType,
   relatedId,
@@ -928,6 +945,14 @@ export default function TaskTable({
         if (field === "status" && value === "completed") {
           handleRefresh();
         }
+        // A date changed on a plan step pins it and re-lays everything after
+        // it; the other rows have moved, so read them back.
+        if (field === "start_date" || field === "due_date") {
+          const row = isSubtask && parentTaskId
+            ? tasks.find((t) => t.id === parentTaskId)?.subtasks?.find((st) => st.id === taskId)
+            : tasks.find((t) => t.id === taskId);
+          if (row?.procedure_run_id) handleRefresh();
+        }
       }
     } catch (err) {
       console.error("Error updating task:", err);
@@ -1127,6 +1152,15 @@ export default function TaskTable({
               </button>
             )}
 
+            {/* A step whose turn has not come says what it is waiting for,
+                on the row, and its Start is disabled - not red after a
+                refused click. */}
+            {task.status === "todo" && gates?.[task.id] && !gates[task.id].canStart && gates[task.id].startReason && (
+              <span className="basis-full text-[10px] text-slate-500">
+                {gates[task.id].startReason}
+              </span>
+            )}
+
             {/* A held step says who it waits on, on the row, so a plan reads
                 as "Procurement is waiting on the client until 20 Oct" rather
                 than a status badge and a tooltip. */}
@@ -1162,6 +1196,15 @@ export default function TaskTable({
           <TaskStatusControls
             task={{ ...task, total_active_seconds: task.total_active_seconds ?? 0 }}
             variant="compact"
+            startBlockedReason={
+              task.status === "todo" && gates?.[task.id] && !gates[task.id].canStart
+                ? gates[task.id].startReason || "Cannot start yet"
+                : null
+            }
+            completeBlockedReason={
+              gates?.[task.id] && !gates[task.id].canComplete ? gates[task.id].completeReason : null
+            }
+            onError={(message) => setActionError(message)}
             // Table-level, NOT rowEditable: on a settled row this control is
             // the Reopen button, and gating it on the row being editable would
             // lock a completed task shut with no way back.
@@ -1343,6 +1386,20 @@ export default function TaskTable({
               // completed after its due date still showed red.
               overdue={isOverdue(task)}
             />
+            {task.dates_pinned && task.procedure_run_id && (
+              <button
+                type="button"
+                title={rowEditable ? "Dates set by hand. Click to let the plan set them again." : "Dates set by hand"}
+                disabled={!rowEditable}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void updateTaskInline(task.id, "dates_pinned", false, isSubtask, parentTaskId).then(() => handleRefresh());
+                }}
+                className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1 leading-4 hover:bg-amber-100 disabled:opacity-60"
+              >
+                pinned
+              </button>
+            )}
             {isOverdue(task) && (
               <span
                 className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700"

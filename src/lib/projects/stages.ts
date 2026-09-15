@@ -122,7 +122,9 @@ export function deriveStagesFromPlaybook({
   playbook,
 }: DeriveFromPlaybookArgs): DerivedStages {
   const orderOf = (t: StageTask): number =>
-    t.procedure_step_id ? (stepOrder?.get(t.procedure_step_id) ?? 0) : 0;
+    t.procedure_step_id
+      ? (stepOrder?.get(t.procedure_step_id) ?? Number.MAX_SAFE_INTEGER)
+      : Number.MAX_SAFE_INTEGER;
 
   const children = new Map<string, StageTask[]>();
   for (const task of tasks) {

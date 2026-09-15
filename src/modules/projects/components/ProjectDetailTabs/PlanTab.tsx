@@ -24,7 +24,7 @@
 
 import React from "react";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import TaskTableReusable from "@/components/tasks/TaskTableReusable";
+import TaskTableReusable, { type PlanGate } from "@/components/tasks/TaskTableReusable";
 import type { Task } from "@/types/tasks";
 
 interface TeamMember {
@@ -62,6 +62,25 @@ export function PlanTab({
   onTaskClick,
 }: PlanTabProps) {
   const { user } = useCurrentUser();
+
+  /**
+   * What the server would accept on each row, re-read whenever the tasks do.
+   * A Start the transition would refuse is drawn disabled with its reason on
+   * the row - "Waiting for Layout Drawings to finish" - rather than turning
+   * red after a click. One round trip for the whole plan.
+   */
+  const [gates, setGates] = React.useState<Record<string, PlanGate>>({});
+  React.useEffect(() => {
+    if (!runId) return;
+    let alive = true;
+    fetch(`/api/projects/${projectId}/plan-gates`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => alive && j?.data?.gates && setGates(j.data.gates))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [projectId, runId, tasks]);
 
   /**
    * The plan, in the playbook's own order, nested.
@@ -136,6 +155,7 @@ export function PlanTab({
       allowEdit={!projectClosed}
       readOnly={projectClosed}
       externalTasks={planRows as never[]}
+      gates={gates}
       onTaskClick={(task) => onTaskClick?.(task as unknown as Task)}
       onRefresh={onRefresh}
     />

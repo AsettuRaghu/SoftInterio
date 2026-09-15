@@ -55,6 +55,12 @@ interface TaskStatusControlsProps {
     result?: TaskTransitionResult
   ) => void;
   size?: "sm" | "md";
+  /** Why Start would be refused right now (from plan gates). Disables it. */
+  startBlockedReason?: string | null;
+  /** Why Complete would be refused right now. Disables it. */
+  completeBlockedReason?: string | null;
+  /** Surface a refusal here (a toast) instead of turning the button red. */
+  onError?: (message: string) => void;
   /** Hide the elapsed-time readout (e.g. in dense table rows). */
   hideTimer?: boolean;
   /**
@@ -186,6 +192,9 @@ export function TaskStatusControls({
   hideTimer = false,
   variant = "full",
   disabled = false,
+  startBlockedReason = null,
+  completeBlockedReason = null,
+  onError,
 }: TaskStatusControlsProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -245,7 +254,9 @@ export function TaskStatusControls({
         const data = await response.json();
 
         if (!response.ok) {
-          setError(data.error || "Could not update the task");
+          const message = data.error || "Could not update the task";
+          if (onError && !pendingAction) onError(message);
+          else setError(message);
           return;
         }
 
@@ -267,7 +278,7 @@ export function TaskStatusControls({
         setIsSaving(false);
       }
     },
-    [task.id, onTransitioned, holdOwner, holdCode, holdUntil, holdWho]
+    [task.id, onTransitioned, holdOwner, holdCode, holdUntil, holdWho, onError, pendingAction]
   );
 
   const handleAction = (action: ActionConfig) => {
@@ -393,10 +404,21 @@ export function TaskStatusControls({
     return (
       <div className="flex items-center gap-1">
         {primary ? (
-          <Tooltip label={error || primaryLabel}>
+          <Tooltip
+            label={
+              error ||
+              (primary.to === "in_progress" && task.status === "todo" && startBlockedReason
+                ? startBlockedReason
+                : primaryLabel)
+            }
+          >
             <button
               type="button"
-              disabled={isSaving || disabled}
+              disabled={
+                isSaving ||
+                disabled ||
+                (primary.to === "in_progress" && task.status === "todo" && !!startBlockedReason)
+              }
               aria-label={primaryLabel}
               onClick={(e) => {
                 e.stopPropagation();

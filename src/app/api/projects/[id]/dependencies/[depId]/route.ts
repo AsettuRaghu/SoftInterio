@@ -46,7 +46,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const body = await request.json().catch(() => ({}));
     const update: Record<string, unknown> = {};
-    if ("expected_by" in body) update.expected_by = body.expected_by || null;
+    if ("expected_by" in body) {
+      update.expected_by = body.expected_by || null;
+      // A date a person sets stops following the step's planned date.
+      update.expected_by_set_by_hand = !!body.expected_by;
+    }
     if ("counterpart" in body) update.counterpart = body.counterpart?.trim() || null;
     if ("description" in body && !existing.task_id) {
       const d = String(body.description ?? "").trim();

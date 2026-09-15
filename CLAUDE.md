@@ -991,11 +991,17 @@ silence.
 Edit, which became untenable once steps could wait for their stage to start:
 nothing could ever be opened.
 
-The Plan tab (`TaskTableReusable`) draws its controls from task status and the
-transition's own refusals; the page no longer fetches `/plan-gates` for it.
-The route and `project_plan_gates()` stay — they are the one-round-trip answer
-to "what would the server accept on every row", which the kick-off gating will
-want.
+`PlanTab` fetches `/plan-gates` whenever its tasks change and hands the map to
+`TaskTableReusable` as `gates`. A Start the server would refuse is **disabled**
+with the reason as its tooltip *and printed on the row* under the title
+("Waiting for Layout Drawings to finish"); a refusal that still reaches the
+server comes back as a toast (`onError`), not a red button.
+
+**A date the PM changes on a plan row is pinned** (`tasks.dates_pinned`, set by
+the task PATCH on a real change) and everything after it re-lays around it; a
+small "pinned" chip on the row unpins it. A "waiting on" entry backed by a step
+follows the step's planned due date until somebody sets its date by hand
+(`project_dependencies.expected_by_set_by_hand`).
 
 `can_start_task`'s reason names **which part** it waits for — "Waiting for 2D
 Designs to start" against "Waiting for Layout Drawings to finish". It used to
