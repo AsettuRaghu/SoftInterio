@@ -1515,9 +1515,31 @@ Colour means the same thing on each: **blue** is work in play, **emerald**
 finished or won, **amber** slipping, **red** wrong, **violet**/**slate** neutral
 counts. Keep that, or the shared components stop being worth sharing.
 
+It also owns the **page shell and the date filter**: both reports are
+`PageLayout` + `PageHeader` with breadcrumbs and a basePath, and both put
+`RangePresets` in the first `Section`'s `action` slot. `Preset`, `PRESETS`,
+`PERIOD_LABEL`, `rangeFor` and `rangeNote` are shared too, so "30 days / 90 days
+/ Year to date / All time" means the same window on both.
+
+**The range covers the summary band and nothing else**, on both reports. What
+started, finished and got done is a question about a period; what is late or
+unowned is a question about today. Each band's heading says which it is, and if
+that ever changes the headings have to change with it. Both default to 90 days -
+an all-time default flatters a young portfolio and hides whether anything is
+moving now - and both say so plainly when the period is empty rather than showing
+a row of zeroes.
+
 What belongs in that file is anything whose job is to make a figure legible.
 What does not is anything that knows what the figure means - a funnel step and an
 overdue project are both `StatBar`.
+
+One piece of remaining drift, deliberately left: the sales report still draws its
+funnel, loss reasons, pipeline-by-stage and month-by-month with inline bar markup
+rather than `StatBar`. The track classes are identical so they look the same, and
+two of the four have shapes `StatBar` does not express (a conversion percentage
+inline, two right-hand columns). Migrating half of them would be worse than
+either, so if this is done it should be all four plus whatever `StatBar` needs to
+carry them.
 
 Lead conversion was dropped from the project report. Sales Reports answers it,
 and two pages disagreeing about a win rate is worse than one answering it.

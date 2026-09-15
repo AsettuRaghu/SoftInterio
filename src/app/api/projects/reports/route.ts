@@ -15,6 +15,12 @@
  * `projectAccess` decides *which* projects are in the report, so a
  * `projects.view_own` holder gets a report about their own projects rather than
  * a summary of the business.
+ *
+ * **The date range covers the summary band and nothing else**, exactly as it
+ * does on the sales report: what started, finished and got done in a period is
+ * a question about that period, while what is late or unowned is a question
+ * about today and a status mix is a question about now. The page's headings say
+ * which is which, and if that ever changes the headings have to change with it.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -55,6 +61,7 @@ interface ProjectRow {
   overall_progress: number | null;
   expected_start_date: string | null;
   expected_end_date: string | null;
+  actual_start_date: string | null;
   actual_end_date: string | null;
   project_manager_id: string | null;
   created_by: string | null;
@@ -69,6 +76,7 @@ interface TaskRow {
   assigned_to: string | null;
   estimated_hours: number | null;
   actual_hours: number | null;
+  completed_at: string | null;
   related_id: string | null;
   parent_task_id: string | null;
 }
@@ -100,7 +108,7 @@ export async function GET(request: NextRequest) {
           // Deliberately no contract_value or actual_cost: this report shows
           // no money, and the cheapest way to keep it that way is not to ask
           // for it.
-          "id, project_number, name, status, overall_progress, expected_start_date, expected_end_date, actual_end_date, project_manager_id, created_by, created_at"
+          "id, project_number, name, status, overall_progress, expected_start_date, expected_end_date, actual_start_date, actual_end_date, project_manager_id, created_by, created_at"
         )
         .eq("tenant_id", user.tenantId)
         .order("created_at", { ascending: true })
@@ -111,6 +119,19 @@ export async function GET(request: NextRequest) {
       }
       return q;
     });
+
+    /*
+     * Range for the summary band. Defaults to ninety days, like the sales
+     * report - an all-time default flatters a young portfolio and hides whether
+     * anything is moving now.
+     */
+    const params = request.nextUrl.searchParams;
+    const rangeTo = params.get("to") ?? new Date().toISOString().slice(0, 10);
+    const rangeFrom =
+      params.get("from") ??
+      new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10);
+    const inRange = (date?: string | null) =>
+      !!date && date >= rangeFrom && date <= rangeTo;
 
     const today = new Date().toISOString().slice(0, 10);
     const ids = projects.map((p) => p.id);
@@ -146,7 +167,7 @@ export async function GET(request: NextRequest) {
           supabase
             .from("tasks")
             .select(
-              "id, title, status, due_date, assigned_to, estimated_hours, actual_hours, related_id, parent_task_id"
+              "id, title, status, due_date, assigned_to, estimated_hours, actual_hours, completed_at, related_id, parent_task_id"
             )
             .eq("tenant_id", user.tenantId)
             .eq("related_type", "project")
@@ -246,8 +267,33 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.logged - a.logged - (b.expected - a.expected))
       .slice(0, 8);
 
+    /*
+     * What moved in the period. Tasks are counted on `completed_at` where the
+     * transition stamped one - a task completed last March is not this month's
+     * output, and reading `updated_at` instead would make any edit look like
+     * progress.
+     */
+    const startedInRange = projects.filter(
+      (p) => inRange(p.actual_start_date) || inRange(p.created_at.slice(0, 10))
+    ).length;
+    const finishedInRange = projects.filter((p) =>
+      inRange(p.actual_end_date)
+    ).length;
+    const tasksDoneInRange = tasks.filter(
+      (t) => t.status === "completed" && inRange(t.completed_at?.slice(0, 10))
+    ).length;
+
     const response: Record<string, unknown> = {
       scope: access.readAll ? "tenant" : "own",
+      range: { from: rangeFrom, to: rangeTo },
+      period: {
+        projectsStarted: startedInRange,
+        projectsFinished: finishedInRange,
+        tasksCompleted: tasksDoneInRange,
+        // Said plainly so an empty period reads as an empty period rather than
+        // as a broken report.
+        totalProjects: projects.length,
+      },
       portfolio: {
         total: projects.length,
         open: open.length,

@@ -16,6 +16,11 @@ import {
   ageTint,
   money,
   humanise,
+  RangePresets,
+  PERIOD_LABEL,
+  rangeFor,
+  rangeNote,
+  type Preset,
 } from "@/components/reports";
 
 /**
@@ -28,8 +33,6 @@ import {
  * Everything is computed by /api/sales/leads/analytics so the figures on this
  * page cannot disagree with each other.
  */
-
-type Preset = "30d" | "90d" | "ytd" | "all";
 
 interface Analytics {
   range: { from: string; to: string };
@@ -122,25 +125,6 @@ const STAGE_TINT: Record<string, { bar: string; text: string }> = {
   requirement_discussion: { bar: "bg-indigo-400", text: "text-indigo-700" },
   proposal_discussion: { bar: "bg-amber-400", text: "text-amber-700" },
   won: { bar: "bg-emerald-500", text: "text-emerald-700" },
-};
-
-const PRESETS: Array<{ key: Preset; label: string }> = [
-  { key: "30d", label: "30 days" },
-  { key: "90d", label: "90 days" },
-  { key: "ytd", label: "Year to date" },
-  { key: "all", label: "All time" },
-];
-
-const rangeFor = (preset: Preset) => {
-  const to = new Date();
-  if (preset === "all") return { from: "2000-01-01", to: to.toISOString().slice(0, 10) };
-  if (preset === "ytd")
-    return { from: `${to.getFullYear()}-01-01`, to: to.toISOString().slice(0, 10) };
-  const days = preset === "30d" ? 30 : 90;
-  return {
-    from: new Date(to.getTime() - days * 86400000).toISOString().slice(0, 10),
-    to: to.toISOString().slice(0, 10),
-  };
 };
 
 function CoverageRow({
@@ -374,12 +358,7 @@ export default function SalesReportsPage() {
    * was true before and the page did not say so, which left a reader assuming
    * the whole report moved when they changed the range.
    */
-  const periodLabel = {
-    "30d": "The last 30 days",
-    "90d": "The last 90 days",
-    ytd: "Year to date",
-    all: "All time",
-  }[preset];
+  const periodLabel = PERIOD_LABEL[preset];
 
   // Someone limited to their own leads gets a report about their own leads, and
   // the page has to say so - otherwise a one-person funnel reads as the whole
@@ -435,35 +414,13 @@ export default function SalesReportsPage() {
           <div className="space-y-7">
             <Section
               title={periodLabel}
-              note={
-                data
-                  ? `${new Date(data.range.from).toLocaleDateString()} – ${new Date(
-                      data.range.to
-                    ).toLocaleDateString()}`
-                  : undefined
-              }
+              note={data ? rangeNote(data.range.from, data.range.to) : undefined}
               action={
-                /* One segmented control rather than four loose buttons: they
-                   are four values of one setting, and joining them says so.
-                   Only the selected one carries a fill, so the group reads as
-                   a single control with a current position. */
-                <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
-                  {PRESETS.map((p) => (
-                    <button
-                      key={p.key}
-                      onClick={() => setPreset(p.key)}
-                      disabled={isLoading}
-                      aria-pressed={preset === p.key}
-                      className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors disabled:opacity-60 ${
-                        preset === p.key
-                          ? "bg-blue-600 text-white"
-                          : "text-slate-600 hover:bg-slate-50"
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
+                <RangePresets
+                  preset={preset}
+                  onChange={setPreset}
+                  disabled={isLoading}
+                />
               }
             >
               {emptyPeriod && (

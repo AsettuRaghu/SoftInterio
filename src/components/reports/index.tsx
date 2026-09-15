@@ -280,3 +280,78 @@ export const ICONS = {
   building:
     "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
 };
+
+/* --------------------------------------------------------------- date range */
+
+export type Preset = "30d" | "90d" | "ytd" | "all";
+
+export const PRESETS: Array<{ key: Preset; label: string }> = [
+  { key: "30d", label: "30 days" },
+  { key: "90d", label: "90 days" },
+  { key: "ytd", label: "Year to date" },
+  { key: "all", label: "All time" },
+];
+
+/** What the heading of a range-scoped band says. */
+export const PERIOD_LABEL: Record<Preset, string> = {
+  "30d": "The last 30 days",
+  "90d": "The last 90 days",
+  ytd: "Year to date",
+  all: "All time",
+};
+
+export const rangeFor = (preset: Preset) => {
+  const to = new Date();
+  const today = to.toISOString().slice(0, 10);
+  if (preset === "all") return { from: "2000-01-01", to: today };
+  if (preset === "ytd") return { from: `${to.getFullYear()}-01-01`, to: today };
+  const days = preset === "30d" ? 30 : 90;
+  return {
+    from: new Date(to.getTime() - days * 86400000).toISOString().slice(0, 10),
+    to: today,
+  };
+};
+
+/**
+ * The range control, for a `Section`'s `action` slot.
+ *
+ * One segmented control rather than four loose buttons: they are four values of
+ * one setting, and joining them says so. Only the selected one carries a fill,
+ * so the group reads as a single control with a current position rather than
+ * four things to press. On the trailing edge of the heading it sits level with
+ * the period it sets, and lands in the same place on every report.
+ */
+export function RangePresets({
+  preset,
+  onChange,
+  disabled = false,
+}: {
+  preset: Preset;
+  onChange: (preset: Preset) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+      {PRESETS.map((p) => (
+        <button
+          key={p.key}
+          type="button"
+          onClick={() => onChange(p.key)}
+          disabled={disabled}
+          aria-pressed={preset === p.key}
+          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors disabled:opacity-60 ${
+            preset === p.key
+              ? "bg-blue-600 text-white"
+              : "text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          {p.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** "16/06/2026 – 14/09/2026", for a range-scoped band's note. */
+export const rangeNote = (from: string, to: string) =>
+  `${new Date(from).toLocaleDateString()} – ${new Date(to).toLocaleDateString()}`;
