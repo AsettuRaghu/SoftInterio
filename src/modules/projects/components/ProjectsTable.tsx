@@ -99,11 +99,13 @@ export default function ProjectsTable({
         ].filter((f): f is string => !!f && f !== "Unknown Client" && f !== "Unknown Property");
         return (
           <div className="min-w-0">
+            {/* The project number is deliberately not shown. It is a record
+                identifier nobody reads a list by, and it was the line that
+                pushed every row to four. The name and the four facts beneath it
+                are how people recognise a project; the number is on the detail
+                page for anyone who needs to quote it. */}
             <p className="text-sm font-medium text-slate-900 truncate">
               {project.name}
-            </p>
-            <p className="text-[11px] text-slate-400 font-mono">
-              {project.project_number}
             </p>
             {facts.length > 0 && (
               <p
@@ -249,51 +251,49 @@ export default function ProjectsTable({
         </div>
       ),
     },
+    /*
+     * Fixed widths on the two prose columns. The table is not table-fixed, so
+     * a percentage is only a suggestion and a long note would widen its column
+     * at the expense of the others. A pixel width plus a matching max-width on
+     * the cell means long text wraps inside the column and makes the row
+     * taller, never the column wider - which is what "shown in full, never
+     * cropped" needs to hold without the rest of the row moving.
+     */
     {
       key: "last_activity_at",
       header: "Last Activity",
-      width: "15%",
+      width: "220px",
+      minWidth: "220px",
       sortable: true,
       render: (project) => (
-        <LastActivityCell
-          at={project.last_activity_at}
-          type={project.last_activity_type}
-          detail={project.last_activity_detail}
-          recent={project.recent_activities}
-          labels={ProjectActivityTypeLabels}
-        />
+        <div className="max-w-[220px]">
+          <LastActivityCell
+            at={project.last_activity_at}
+            type={project.last_activity_type}
+            detail={project.last_activity_detail}
+            recent={project.recent_activities}
+            labels={ProjectActivityTypeLabels}
+          />
+        </div>
       ),
     },
     {
       key: "next_follow_up_at",
       header: "Follow-up",
-      width: "13%",
+      width: "200px",
+      minWidth: "200px",
       sortable: false,
       render: (project) => (
-        <FollowUpCell
-          items={project.upcoming_items}
-          fallbackAt={project.next_follow_up_at}
-        />
-      ),
-    },
-    {
-      key: "actions",
-      header: "",
-      width: "2%",
-      render: (project) => (
-        <div className="flex items-center justify-end">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onRowClick(project);
-            }}
-            className="px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
-          >
-            View
-          </button>
+        <div className="max-w-[200px]">
+          <FollowUpCell
+            items={project.upcoming_items}
+            fallbackAt={project.next_follow_up_at}
+          />
         </div>
       ),
     },
+    // No trailing View column: the row itself opens the project, so a button
+    // saying so was a second way of doing the one thing the row does.
   ];
 
   return (
