@@ -1783,6 +1783,25 @@ correct again.
 scheme changed twice and old rows keep their numbers; renumbering history would
 break every reference in somebody's inbox. New quotations are `QT-` only.
 
+### A lead's meetings live in two tables
+
+"Add event" on a lead's Calendar tab writes a **`lead_activities`** row with
+`meeting_scheduled_at` set - not a `calendar_events` row. `calendar_events` holds
+standalone entries and anything created from the global calendar. The calendar
+itself merges both sources when it draws, which is why the split was invisible
+from the screen.
+
+It was not invisible from the leads list. `upcoming_items` first read
+`calendar_events` alone, so a stale test event from February showed as "216d
+late" while the meeting booked that morning from the lead's own tab did not
+appear at all. The list now reads both, each as `kind: "calendar"`, and shows
+open meetings **whatever their date** - the same rule follow-ups and tasks
+already followed. A meeting booked and never marked done is owed: it either
+happened and wants closing, or did not and wants rebooking.
+
+**Anything that asks "what meetings does this lead have" must read both tables**
+or it will answer for half of them.
+
 ## Traps that have already cost time
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it

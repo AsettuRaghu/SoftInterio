@@ -225,8 +225,12 @@ export async function GET(request: NextRequest) {
      * that says which it is.
      */
     if (leadIds.length) {
-      const [{ data: followUps }, { data: dueTasks }, { data: events }] =
-        await Promise.all([
+      const [
+        { data: followUps },
+        { data: dueTasks },
+        { data: events },
+        { data: meetings },
+      ] = await Promise.all([
           supabase
             .from("lead_notes")
             .select("lead_id, content, follow_up_at")
@@ -257,6 +261,21 @@ export async function GET(request: NextRequest) {
             .eq("linked_type", "lead")
             .in("linked_id", leadIds)
             .eq("is_completed", false),
+          /*
+           * Meetings live in two tables. "Add event" on a lead's Calendar tab
+           * writes a lead_activities row with meeting_scheduled_at set - not a
+           * calendar_events row - and the calendar itself merges both sources
+           * when it draws. So reading calendar_events alone showed a stale test
+           * event from February while the meeting booked this morning from the
+           * lead was invisible. Both are read here for the same reason the
+           * calendar reads both.
+           */
+          supabase
+            .from("lead_activities")
+            .select("lead_id, title, activity_type, meeting_scheduled_at")
+            .in("lead_id", leadIds)
+            .not("meeting_scheduled_at", "is", null)
+            .eq("meeting_completed", false),
         ]);
 
       const upcoming = new Map<string, Array<{ kind: string; label: string; at: string }>>();
@@ -281,6 +300,13 @@ export async function GET(request: NextRequest) {
           kind: "calendar",
           label: e.title || e.event_type || "Meeting",
           at: e.scheduled_at,
+        })
+      );
+      (meetings || []).forEach((m) =>
+        add(m.lead_id, {
+          kind: "calendar",
+          label: m.title || m.activity_type || "Meeting",
+          at: m.meeting_scheduled_at,
         })
       );
 
