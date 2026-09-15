@@ -3,18 +3,18 @@
  *
  *   GET /api/projects/reports
  *
- * Two audiences read this and they are not entitled to the same thing.
+ * This answers delivery questions only: what is late, what nobody owns, where
+ * the hours are going and which projects have slipped.
  *
- * A delivery team needs to know what is late, what nobody owns and where the
- * hours are going. Management needs that too, plus what the portfolio is worth
- * and what has been invoiced. So the report is built in bands, and the money
- * band is **omitted from the response entirely** for anyone without
- * `finance.payments.view` - not sent and hidden in the browser, which is not a
- * control. Owner and Admin hold everything and so see everything.
+ * **It carries no financial figures at all.** Not gated, not omitted per role -
+ * simply not gathered. Contract values, milestones, invoiced and received belong
+ * to a finance module that does not exist yet, and a report is a different shape
+ * of the same data, so it must not become the way to read figures the product
+ * has decided not to show here. The payment milestones are not even queried.
  *
- * Scope is separate from that: `projectAccess` decides *which* projects are in
- * the report at all, so a `projects.view_own` holder gets a report about their
- * own projects rather than a summary of the business.
+ * `projectAccess` decides *which* projects are in the report, so a
+ * `projects.view_own` holder gets a report about their own projects rather than
+ * a summary of the business.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -24,18 +24,6 @@ import { requestLogger } from "@/lib/logger/request";
 import { projectAccess } from "@/lib/projects/access";
 
 const SETTLED = ["completed", "cancelled", "skipped"];
-
-/** Milestone value: an explicit amount wins, else a percentage of the contract. */
-function milestoneValue(
-  m: { amount: number | null; percentage: number | null },
-  contractValue: number
-): number {
-  if (m.amount != null) return Number(m.amount);
-  if (m.percentage != null && contractValue) {
-    return (Number(m.percentage) / 100) * contractValue;
-  }
-  return 0;
-}
 
 /**
  * Every row, not the first thousand. A plain PostgREST select stops at 1000 and
@@ -64,8 +52,6 @@ interface ProjectRow {
   project_number: string | null;
   name: string | null;
   status: string | null;
-  contract_value: number | null;
-  actual_cost: number | null;
   overall_progress: number | null;
   expected_start_date: string | null;
   expected_end_date: string | null;
@@ -107,21 +93,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    /*
-     * Who may see money. Deliberately the same key that gates the payments
-     * screen, so one answer governs both - a report is a different shape of the
-     * same figures and must not become the way around a control.
-     */
-    const canSeeMoney =
-      user.isSuperAdmin ||
-      !!guard.permissions?.has("finance.payments.view") ||
-      !!guard.permissions?.has("finance.reports");
-
     const projects = await pageAll<ProjectRow>((a, b) => {
       let q = supabase
         .from("projects")
         .select(
-          "id, project_number, name, status, contract_value, actual_cost, overall_progress, expected_start_date, expected_end_date, actual_end_date, project_manager_id, created_by, created_at"
+          // Deliberately no contract_value or actual_cost: this report shows
+          // no money, and the cheapest way to keep it that way is not to ask
+          // for it.
+          "id, project_number, name, status, overall_progress, expected_start_date, expected_end_date, actual_end_date, project_manager_id, created_by, created_at"
         )
         .eq("tenant_id", user.tenantId)
         .order("created_at", { ascending: true })
@@ -153,11 +132,6 @@ export async function GET(request: NextRequest) {
     // completed project that ran late is history, not something to chase.
     const overdue = open.filter(
       (p) => p.expected_end_date && p.expected_end_date < today
-    );
-
-    const contractTotal = projects.reduce(
-      (n, p) => n + Number(p.contract_value ?? 0),
-      0
     );
 
     // --- The work itself ----------------------------------------------------
@@ -274,7 +248,6 @@ export async function GET(request: NextRequest) {
 
     const response: Record<string, unknown> = {
       scope: access.readAll ? "tenant" : "own",
-      canSeeMoney,
       portfolio: {
         total: projects.length,
         open: open.length,
@@ -317,52 +290,6 @@ export async function GET(request: NextRequest) {
         },
       },
     };
-
-    // --- Money, only for those entitled to it -------------------------------
-    if (canSeeMoney) {
-      const milestones = ids.length
-        ? await pageAll<{
-            project_id: string;
-            amount: number | null;
-            percentage: number | null;
-            status: string | null;
-            paid_amount: number | null;
-          }>((a, b) =>
-            supabase
-              .from("project_payment_milestones")
-              .select("project_id, amount, percentage, status, paid_amount")
-              .in("project_id", ids)
-              .order("project_id", { ascending: true })
-              .range(a, b)
-          )
-        : [];
-
-      const contractById = new Map(
-        projects.map((p) => [p.id, Number(p.contract_value ?? 0)])
-      );
-
-      let scheduled = 0;
-      let received = 0;
-      for (const m of milestones) {
-        if (m.status === "waived") continue;
-        const value = milestoneValue(m, contractById.get(m.project_id) ?? 0);
-        scheduled += value;
-        if (m.status === "paid") received += Number(m.paid_amount ?? value);
-      }
-
-      response.money = {
-        contractTotal,
-        costRecorded: projects.reduce(
-          (n, p) => n + Number(p.actual_cost ?? 0),
-          0
-        ),
-        scheduled,
-        received,
-        outstanding: scheduled - received,
-        unscheduled: contractTotal - scheduled,
-        milestoneCount: milestones.length,
-      };
-    }
 
     return NextResponse.json({ success: true, data: response });
   } catch (error) {

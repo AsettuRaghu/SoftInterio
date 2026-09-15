@@ -1489,22 +1489,38 @@ Still visible and deliberately not part of that change: `contract_value` on the
 Overview tab, and prices on the Quotations tab. Both are commercial rather than
 payment records.
 
-### Project reports are banded by entitlement, and money is omitted not hidden
+### Project reports carry no money at all, and share the sales report's furniture
 
-`GET /api/projects/reports` builds the money band **only** when the caller holds
-`finance.payments.view` or `finance.reports` - the milestones are not even
-fetched otherwise, so there is nothing in the payload to find. On the current
-grants: Owner and Admin see money; Project Manager and Design Manager get the
-whole delivery report without it. `projectAccess` still decides scope
-separately, so a `view_own` holder gets a report about their own projects.
+`GET /api/projects/reports` answers delivery questions only. It does not gather
+financial figures and **does not even select `contract_value` or `actual_cost`** -
+a figure never fetched cannot be leaked by a later change to the response shape.
+This replaced a per-role gate on 2026-09-15: money on a project report is a
+finance-module question, and a report must not become the way to read figures the
+product has decided not to show. `projectAccess` still decides scope, so a
+`view_own` holder gets a report about their own projects.
 
-The delivery band is first and largest because that is who opens the page: open,
+The delivery band is first and widest because that is who opens the page: open,
 overdue, unowned and undated tasks, late work gathered by project with the worst
 delay named, and who is carrying what. Assignee names come from
 `tenant_directory` - `users` would have named one person.
 
-Lead conversion was dropped. Sales Reports answers it, and two pages disagreeing
-about a win rate is worse than one answering it.
+**`components/reports` is the shared furniture of both report pages** -
+`Section`, `Panel`, `Metric`, `StatBar`, `Pill`, `rankTint`, `ageTint`, `money`,
+`humanise`, `Icon`/`ICONS`. The two pages were built weeks apart and had drifted
+into looking like different products: one with coloured metric chips and bar
+rows, the other with plain boxes of numbers. Both import from here now, so
+styling one restyles both.
+
+Colour means the same thing on each: **blue** is work in play, **emerald**
+finished or won, **amber** slipping, **red** wrong, **violet**/**slate** neutral
+counts. Keep that, or the shared components stop being worth sharing.
+
+What belongs in that file is anything whose job is to make a figure legible.
+What does not is anything that knows what the figure means - a funnel step and an
+overdue project are both `StatBar`.
+
+Lead conversion was dropped from the project report. Sales Reports answers it,
+and two pages disagreeing about a win rate is worse than one answering it.
 
 ## Traps that have already cost time
 

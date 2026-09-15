@@ -3,31 +3,40 @@
 /**
  * Project reports.
  *
- * Built for two audiences with different entitlements.
+ * Deliberately the same furniture as Sales Reports - `Section`, `Panel`,
+ * `Metric`, `StatBar` and the tints all come from `components/reports`, so the
+ * two pages cannot drift into looking like different products again. Colour
+ * means the same thing on both: blue is work in play, emerald is finished, amber
+ * is slipping, red is wrong.
  *
- * A delivery team opens this to find what is late, what nobody owns and where
- * the hours are going - so that band comes first and is the largest. Management
- * gets the portfolio and the money. The **money band is absent from the API
- * response** for anyone without `finance.payments.view`, so there is nothing to
- * hide in the browser; `canSeeMoney` only decides whether to draw a heading for
- * data that arrived. Owner and Admin hold everything.
+ * **No financial figures.** Not gated per role - the API does not gather them,
+ * and does not even select `contract_value`. Contracted value, milestones and
+ * what has been received belong to a finance module; a report must not become
+ * the way to read figures the product has decided not to show here.
  *
- * This replaced a page of four tile rows that answered portfolio questions -
- * value, progress, lead conversion - and said nothing about the work, so there
- * was nothing on it a project manager could act on that morning. Conversion is
- * deliberately gone: Sales Reports answers it properly and two pages disagreeing
- * about a win rate is worse than one page answering it.
+ * What this answers is delivery: what is late, what nobody owns, who is carrying
+ * it and where the hours went. On real data it opens on the things worth acting
+ * on - twenty overdue tasks, twenty with no owner, and neither project having a
+ * manager.
  */
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
 import { uiLogger } from "@/lib/logger";
-import { formatCurrency } from "@/modules/projects/utils";
+import {
+  Section,
+  Panel,
+  Metric,
+  StatBar,
+  Icon,
+  ICONS,
+  ageTint,
+  humanise,
+} from "@/components/reports";
 
 interface Report {
   scope: "tenant" | "own";
-  canSeeMoney: boolean;
   portfolio: {
     total: number;
     open: number;
@@ -61,15 +70,6 @@ interface Report {
       }[];
     };
   };
-  money?: {
-    contractTotal: number;
-    costRecorded: number;
-    scheduled: number;
-    received: number;
-    outstanding: number;
-    unscheduled: number;
-    milestoneCount: number;
-  };
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -80,89 +80,14 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-/** How worried to look about something that has slipped. */
-const lateTint = (days: number) =>
-  days >= 30 ? "text-red-600" : days >= 7 ? "text-amber-600" : "text-slate-500";
-
-function Section({
-  title,
-  note,
-  children,
-}: {
-  title: string;
-  note?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="space-y-3">
-      <div className="flex items-baseline gap-2.5 flex-wrap">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-          {title}
-        </h2>
-        {note && <span className="text-[11px] text-slate-400">{note}</span>}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Panel({
-  title,
-  hint,
-  flush = false,
-  children,
-}: {
-  title: string;
-  hint?: string;
-  flush?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="bg-white rounded-lg border border-slate-200">
-      <div
-        className={`flex items-baseline justify-between gap-3 px-4 pt-3.5 ${
-          flush ? "pb-2" : "pb-3"
-        }`}
-      >
-        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
-        {hint && (
-          <span className="text-[11px] text-slate-400 text-right shrink-0">
-            {hint}
-          </span>
-        )}
-      </div>
-      <div className={flush ? "pb-2" : "px-4 pb-4"}>{children}</div>
-    </div>
-  );
-}
-
-function Tile({
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: "good" | "warn" | "bad";
-}) {
-  const colour =
-    tone === "good"
-      ? "text-emerald-700"
-      : tone === "warn"
-        ? "text-amber-700"
-        : tone === "bad"
-          ? "text-red-700"
-          : "text-slate-900";
-  return (
-    <div className="bg-white p-4 rounded-lg border border-slate-200">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className={`text-xl font-bold tabular-nums mt-1 ${colour}`}>{value}</p>
-      {hint && <p className="text-[11px] text-slate-400 mt-0.5">{hint}</p>}
-    </div>
-  );
-}
+/** One colour per project status, used wherever the mix is drawn. */
+const STATUS_TINT: Record<string, string> = {
+  new: "bg-slate-400",
+  in_progress: "bg-blue-400",
+  on_hold: "bg-amber-400",
+  completed: "bg-emerald-500",
+  cancelled: "bg-red-400",
+};
 
 export default function ProjectReportsPage() {
   const { hasPermission, isLoading: permsLoading } = useUserPermissions();
@@ -193,11 +118,16 @@ export default function ProjectReportsPage() {
 
   if (permsLoading || loading) {
     return (
-      <div className="p-5 space-y-4">
+      <div className="p-5 space-y-7">
         <div className="h-6 w-56 bg-slate-100 rounded animate-pulse" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          {[...Array(5)].map((_, i) => (
             <div key={i} className="h-20 bg-slate-100 rounded-lg animate-pulse" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-48 bg-slate-100 rounded-lg animate-pulse" />
           ))}
         </div>
       </div>
@@ -232,9 +162,14 @@ export default function ProjectReportsPage() {
     );
   }
 
-  const { portfolio, delivery, work, money } = report;
+  const { portfolio, delivery, work } = report;
   const own = report.scope === "own";
   const h = work.hours;
+
+  const statusRows = Object.entries(portfolio.byStatus);
+  const maxStatus = Math.max(1, ...statusRows.map(([, n]) => n));
+  const maxLate = Math.max(1, ...work.overdueByProject.map((r) => r.count));
+  const maxLoad = Math.max(1, ...work.byAssignee.map((r) => r.open));
 
   return (
     <div className="p-5 space-y-7">
@@ -244,132 +179,146 @@ export default function ProjectReportsPage() {
         </h1>
         <p className="text-sm text-slate-500">
           {portfolio.total} project{portfolio.total === 1 ? "" : "s"}
-          {own && " you manage"} · {portfolio.open} still open
-          {!report.canSeeMoney && (
-            <span className="text-slate-400">
-              {" "}
-              · financial figures are not shown for your role
-            </span>
-          )}
+          {own && " you manage"} · {portfolio.open} still open · delivery only,
+          no financial figures
         </p>
       </div>
 
-      {/* The band a delivery team came for. First, and the biggest. */}
+      {/* The band a delivery team came for. First, and the widest. */}
       <Section
         title="What needs attention"
         note={own ? "Your projects" : "Every project on record"}
       >
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Tile
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <Metric
             label="Open tasks"
             value={String(work.openTasks)}
             hint={`across ${portfolio.open} open project${
               portfolio.open === 1 ? "" : "s"
             }`}
+            tone="blue"
+            icon={<Icon d={ICONS.list} />}
           />
-          <Tile
-            label="Overdue tasks"
+          <Metric
+            label="Overdue"
             value={String(work.overdueTasks)}
-            tone={work.overdueTasks ? "bad" : "good"}
             hint={work.overdueTasks ? "past their due date" : "nothing late"}
+            hintTone={work.overdueTasks ? "bad" : "good"}
+            tone={work.overdueTasks ? "red" : "emerald"}
+            icon={<Icon d={ICONS.warning} />}
           />
-          <Tile
+          <Metric
             label="Nobody assigned"
             value={String(work.unassignedTasks)}
-            tone={work.unassignedTasks ? "warn" : undefined}
             hint="open work with no owner"
+            hintTone={work.unassignedTasks ? "warn" : "muted"}
+            tone="amber"
+            icon={<Icon d={ICONS.people} />}
           />
-          <Tile
+          <Metric
             label="No due date"
             value={String(work.undatedTasks)}
-            tone={work.undatedTasks ? "warn" : undefined}
             hint="cannot be late, or planned"
+            hintTone={work.undatedTasks ? "warn" : "muted"}
+            tone="amber"
+            icon={<Icon d={ICONS.calendar} />}
+          />
+          <Metric
+            label="Average progress"
+            value={`${portfolio.averageProgress}%`}
+            hint="across every project"
+            tone="violet"
+            icon={<Icon d={ICONS.target} />}
           />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Panel
-            title="Late work, by project"
-            hint="Worst delay first"
-            flush
-          >
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Panel title="Where work is late" hint="Worst delay first">
             {work.overdueByProject.length ? (
-              <div className="divide-y divide-slate-100">
+              <div className="space-y-3.5">
                 {work.overdueByProject.map((row) => (
-                  <Link
+                  <StatBar
                     key={row.projectId}
-                    href={`/dashboard/projects/${row.projectId}`}
-                    className="block px-4 py-2 hover:bg-slate-50"
-                  >
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="truncate text-sm text-slate-800">
+                    label={
+                      <Link
+                        href={`/dashboard/projects/${row.projectId}`}
+                        className="hover:text-blue-600"
+                      >
                         {row.name}
+                      </Link>
+                    }
+                    value={row.count}
+                    max={maxLate}
+                    bar="bg-red-400"
+                    right={`${row.count} late`}
+                    aside={
+                      <span className="block truncate text-slate-400">
+                        Worst: {row.worstTitle}{" "}
+                        <span className={ageTint(row.worstDays)}>
+                          · {row.worstDays}d
+                        </span>
                       </span>
-                      <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">
-                        {row.count} late
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 truncate">
-                      Worst: {row.worstTitle}{" "}
-                      <span className={lateTint(row.worstDays)}>
-                        · {row.worstDays}d
-                      </span>
-                    </p>
-                  </Link>
+                    }
+                  />
                 ))}
               </div>
             ) : (
-              <p className="px-4 pb-2 text-sm text-slate-400">
+              <p className="text-sm text-slate-400">
                 Nothing is past its due date.
               </p>
             )}
           </Panel>
 
-          <Panel title="Who is carrying what" hint="Open tasks per person" flush>
+          <Panel title="Who is carrying what" hint="Open tasks per person">
             {work.byAssignee.length ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
-                      <th className="py-2 pl-4 font-medium">Person</th>
-                      <th className="py-2 px-2 font-medium text-right">Open</th>
-                      <th className="py-2 pr-4 pl-2 font-medium text-right">
-                        Overdue
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {work.byAssignee.map((row) => (
-                      <tr key={row.userId} className="hover:bg-slate-50/70">
-                        <td className="py-2 pl-4 text-slate-800 truncate max-w-[200px]">
-                          {row.name}
-                          {row.userId === "unassigned" && (
-                            <span className="ml-2 text-[11px] text-amber-600">
-                              needs an owner
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2 px-2 text-right tabular-nums text-slate-700">
-                          {row.open}
-                        </td>
-                        <td className="py-2 pr-4 pl-2 text-right tabular-nums">
-                          {row.overdue ? (
-                            <span className="font-medium text-red-600">
-                              {row.overdue}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="space-y-3.5">
+                {work.byAssignee.map((row) => (
+                  <StatBar
+                    key={row.userId}
+                    label={
+                      row.userId === "unassigned" ? (
+                        <span className="text-amber-700">Unassigned</span>
+                      ) : (
+                        row.name
+                      )
+                    }
+                    value={row.open}
+                    max={maxLoad}
+                    bar={
+                      row.userId === "unassigned" ? "bg-amber-400" : "bg-blue-400"
+                    }
+                    aside={
+                      row.overdue ? (
+                        <span className="text-red-600">
+                          {row.overdue} already overdue
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">nothing late</span>
+                      )
+                    }
+                  />
+                ))}
               </div>
             ) : (
-              <p className="px-4 pb-2 text-sm text-slate-400">
-                No open tasks to carry.
-              </p>
+              <p className="text-sm text-slate-400">No open tasks to carry.</p>
+            )}
+          </Panel>
+
+          <Panel title="Projects by status" hint="Every project in scope">
+            {statusRows.length ? (
+              <div className="space-y-3.5">
+                {statusRows.map(([status, count]) => (
+                  <StatBar
+                    key={status}
+                    label={STATUS_LABEL[status] ?? humanise(status)}
+                    value={count}
+                    max={maxStatus}
+                    bar={STATUS_TINT[status] ?? "bg-slate-400"}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">No projects yet.</p>
             )}
           </Panel>
         </div>
@@ -377,22 +326,30 @@ export default function ProjectReportsPage() {
 
       {/* Delivery against the plan. */}
       <Section title="Delivery" note="Against each project's expected end date">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Tile label="On track" value={String(delivery.onTrack)} tone="good" />
-          <Tile
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <Metric
+            label="On track"
+            value={String(delivery.onTrack)}
+            hint="still inside their dates"
+            hintTone="good"
+            tone="emerald"
+            icon={<Icon d={ICONS.check} />}
+          />
+          <Metric
             label="Past their end date"
             value={String(delivery.overdue)}
-            tone={delivery.overdue ? "bad" : undefined}
+            hint={delivery.overdue ? "need a new date, or a push" : "none"}
+            hintTone={delivery.overdue ? "bad" : "good"}
+            tone={delivery.overdue ? "red" : "slate"}
+            icon={<Icon d={ICONS.clock} />}
           />
-          <Tile
+          <Metric
             label="No project manager"
             value={String(delivery.unassigned)}
-            tone={delivery.unassigned ? "warn" : undefined}
             hint="nobody accountable"
-          />
-          <Tile
-            label="Average progress"
-            value={`${portfolio.averageProgress}%`}
+            hintTone={delivery.unassigned ? "warn" : "muted"}
+            tone="amber"
+            icon={<Icon d={ICONS.building} />}
           />
         </div>
 
@@ -428,14 +385,33 @@ export default function ProjectReportsPage() {
                         {new Date(p.expectedEnd).toLocaleDateString()}
                       </td>
                       <td
-                        className={`py-2 px-2 text-right tabular-nums font-medium ${lateTint(
+                        className={`py-2 px-2 text-right tabular-nums font-medium ${ageTint(
                           p.daysLate
                         )}`}
                       >
                         {p.daysLate} days
                       </td>
-                      <td className="py-2 pr-4 pl-2 text-right tabular-nums text-slate-600">
-                        {p.progress}%
+                      <td className="py-2 pr-4 pl-2 text-right">
+                        {/* Progress beside the delay is the pair that matters:
+                            late and nearly done is a different problem from late
+                            and barely started. */}
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="w-16 h-1.5 bg-slate-100 rounded overflow-hidden">
+                            <div
+                              className={`h-1.5 rounded ${
+                                p.progress >= 75
+                                  ? "bg-emerald-500"
+                                  : p.progress >= 25
+                                    ? "bg-amber-400"
+                                    : "bg-red-400"
+                              }`}
+                              style={{ width: `${Math.max(p.progress, 2)}%` }}
+                            />
+                          </div>
+                          <span className="tabular-nums text-slate-600 w-9 text-right">
+                            {p.progress}%
+                          </span>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -444,28 +420,10 @@ export default function ProjectReportsPage() {
             </div>
           </Panel>
         )}
-
-        <Panel title="By status" hint="Every project in scope">
-          <div className="flex flex-wrap gap-x-6 gap-y-2">
-            {Object.entries(portfolio.byStatus).map(([status, count]) => (
-              <div key={status} className="flex items-baseline gap-2">
-                <span className="text-lg font-semibold text-slate-800 tabular-nums">
-                  {count}
-                </span>
-                <span className="text-sm text-slate-500">
-                  {STATUS_LABEL[status] ?? status}
-                </span>
-              </div>
-            ))}
-          </div>
-        </Panel>
       </Section>
 
       {/* Where the time goes. */}
-      <Section
-        title="Time"
-        note="Hours a playbook expected, against hours logged"
-      >
+      <Section title="Time" note="Hours a playbook expected, against hours logged">
         <Panel
           title="Hours"
           hint={`${h.tracked} of ${h.estimated} estimated tasks have time logged`}
@@ -495,8 +453,8 @@ export default function ProjectReportsPage() {
                 </div>
               </div>
 
-              {/* The honest reading: an estimate nobody logs against cannot
-                  tell you whether the work is costing more than planned. */}
+              {/* The honest reading: an estimate nobody logs against cannot say
+                  whether the work is costing more than planned. */}
               {h.tracked < h.estimated / 2 && (
                 <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                   Only {h.tracked} of {h.estimated} estimated tasks have any time
@@ -506,23 +464,27 @@ export default function ProjectReportsPage() {
               )}
 
               {h.overBudget.length > 0 && (
-                <div className="mt-3 border-t border-slate-100 pt-3 space-y-1.5">
+                <div className="mt-3.5 border-t border-slate-100 pt-3.5 space-y-3">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                     Over their estimate
                   </p>
                   {h.overBudget.map((t) => (
-                    <div
+                    <StatBar
                       key={t.id}
-                      className="flex items-baseline justify-between gap-3 text-sm"
-                    >
-                      <span className="truncate text-slate-700">
-                        {t.title}
-                        <span className="text-slate-400"> · {t.project}</span>
-                      </span>
-                      <span className="shrink-0 tabular-nums text-amber-700">
-                        {t.logged}h / {t.expected}h
-                      </span>
-                    </div>
+                      label={
+                        <>
+                          {t.title}
+                          <span className="text-slate-400"> · {t.project}</span>
+                        </>
+                      }
+                      value={t.logged}
+                      max={Math.max(
+                        ...h.overBudget.map((x) => Math.max(x.logged, x.expected))
+                      )}
+                      bar="bg-amber-400"
+                      right={`${t.logged}h / ${t.expected}h`}
+                      thin
+                    />
                   ))}
                 </div>
               )}
@@ -530,60 +492,6 @@ export default function ProjectReportsPage() {
           )}
         </Panel>
       </Section>
-
-      {/*
-       * Money arrives only for those entitled to it - the API omits the whole
-       * band otherwise, so this is not a hidden section but an absent one.
-       */}
-      {money && (
-        <Section
-          title="Money"
-          note="Contracted value, and what has been scheduled and received"
-        >
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Tile
-              label="Contracted"
-              value={formatCurrency(money.contractTotal)}
-            />
-            <Tile label="Scheduled" value={formatCurrency(money.scheduled)} />
-            <Tile
-              label="Received"
-              value={formatCurrency(money.received)}
-              tone="good"
-            />
-            <Tile
-              label="Outstanding"
-              value={formatCurrency(money.outstanding)}
-              tone={money.outstanding > 0 ? "warn" : undefined}
-            />
-          </div>
-
-          {money.milestoneCount === 0 ? (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              <strong>{formatCurrency(money.contractTotal)}</strong> of contracted
-              work has no payment milestone against it — not one has been set up.
-              Until there is a schedule, there is nothing to invoice from.
-            </p>
-          ) : (
-            money.unscheduled > 1 && (
-              <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                <strong>{formatCurrency(money.unscheduled)}</strong> of contracted
-                work has no payment milestone against it.
-              </p>
-            )
-          )}
-
-          <Panel title="Cost recorded" hint="Money spent, not money owed">
-            <p className="text-xl font-bold tabular-nums text-slate-900">
-              {formatCurrency(money.costRecorded)}
-            </p>
-            <p className="mt-0.5 text-[11px] text-slate-400">
-              This is <code>actual_cost</code>, which is spend. A project&apos;s
-              value is its contract, shown above.
-            </p>
-          </Panel>
-        </Section>
-      )}
     </div>
   );
 }

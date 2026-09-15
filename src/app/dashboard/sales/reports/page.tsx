@@ -6,6 +6,17 @@ import { LeadStageLabels } from "@/types/leads";
 import { PageLayout, PageHeader } from "@/components/ui/PageLayout";
 import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 import { uiLogger } from "@/lib/logger";
+import {
+  Section,
+  Panel,
+  Metric,
+  Icon,
+  ICONS,
+  rankTint,
+  ageTint,
+  money,
+  humanise,
+} from "@/components/reports";
 
 /**
  * Sales reporting.
@@ -113,16 +124,6 @@ const STAGE_TINT: Record<string, { bar: string; text: string }> = {
   won: { bar: "bg-emerald-500", text: "text-emerald-700" },
 };
 
-/** Ranked colour for a table: strongest performer reads strongest. */
-const rankTint = (rate: number) =>
-  rate >= 60
-    ? "text-emerald-700 bg-emerald-50"
-    : rate >= 30
-    ? "text-amber-700 bg-amber-50"
-    : rate > 0
-    ? "text-orange-700 bg-orange-50"
-    : "text-slate-400 bg-slate-50";
-
 const PRESETS: Array<{ key: Preset; label: string }> = [
   { key: "30d", label: "30 days" },
   { key: "90d", label: "90 days" },
@@ -141,64 +142,6 @@ const rangeFor = (preset: Preset) => {
     to: to.toISOString().slice(0, 10),
   };
 };
-
-/** Lakhs and crores - a rupee figure in millions reads as a foreign currency. */
-const money = (amount: number) => {
-  if (!amount) return "₹0";
-  if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
-  if (amount >= 100000) return `₹${(amount / 100000).toFixed(1)} L`;
-  return `₹${Math.round(amount).toLocaleString("en-IN")}`;
-};
-
-const humanise = (value: string) =>
-  value
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-
-function Metric({
-  label,
-  value,
-  hint,
-  hintTone = "muted",
-  tone,
-  icon,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  hintTone?: "muted" | "good" | "warn";
-  tone: "blue" | "emerald" | "violet" | "amber" | "slate";
-  icon: React.ReactNode;
-}) {
-  const tones = {
-    blue: { chip: "bg-blue-100 text-blue-600", value: "text-slate-900" },
-    emerald: { chip: "bg-emerald-100 text-emerald-600", value: "text-emerald-700" },
-    violet: { chip: "bg-violet-100 text-violet-600", value: "text-slate-900" },
-    amber: { chip: "bg-amber-100 text-amber-600", value: "text-slate-900" },
-    slate: { chip: "bg-slate-100 text-slate-600", value: "text-slate-900" },
-  }[tone];
-  const hints = {
-    muted: "text-slate-400",
-    good: "text-emerald-600",
-    warn: "text-amber-600",
-  }[hintTone];
-
-  return (
-    <div className="bg-white rounded-lg border border-slate-200 p-3.5">
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-xs text-slate-500">{label}</span>
-        <div
-          className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${tones.chip}`}
-        >
-          {icon}
-        </div>
-      </div>
-      <p className={`text-xl font-bold tabular-nums ${tones.value}`}>{value}</p>
-      {hint && <p className={`text-[11px] ${hints}`}>{hint}</p>}
-    </div>
-  );
-}
 
 function CoverageRow({
   label,
@@ -223,21 +166,6 @@ function CoverageRow({
     </div>
   );
 }
-
-const Icon = ({ d }: { d: string }) => (
-  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={d} />
-  </svg>
-);
-
-const ICONS = {
-  pipeline: "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6",
-  money: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
-  target: "M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z",
-  deal: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
-  people: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z",
-  download: "M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4",
-};
 
 /**
  * Turns rows already on the page into a CSV.
@@ -314,99 +242,6 @@ function DownloadRow({
  * own `px-4` and run the full width, so a hover highlight meets the border
  * instead of stopping just short of it. Padded panels are for everything that
  * is a block rather than a list.
- */
-function Panel({
-  title,
-  hint,
-  flush = false,
-  children,
-}: {
-  title: string;
-  hint?: string;
-  flush?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="bg-white rounded-lg border border-slate-200">
-      <div
-        className={`flex items-baseline justify-between gap-3 px-4 pt-3.5 ${
-          flush ? "pb-2" : "pb-3"
-        }`}
-      >
-        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
-        {hint && (
-          <span className="text-[11px] text-slate-400 text-right shrink-0">
-            {hint}
-          </span>
-        )}
-      </div>
-      <div className={flush ? "pb-2" : "px-4 pb-4"}>{children}</div>
-    </div>
-  );
-}
-
-/**
- * A band of the report, with a heading that says what its figures cover.
- *
- * The page was one flat stack of eleven panels twelve pixels apart under a
- * single date filter, which made two different claims impossible to tell
- * apart: the filter drives the summary figures only, and everything below is
- * computed over every lead on record. The headings now say which is which, and
- * the extra room between bands is what makes them read as separate questions
- * rather than adjacent borders.
- */
-function Section({
-  title,
-  note,
-  action,
-  children,
-}: {
-  title: string;
-  note?: string;
-  /**
-   * A control belonging to this band, on the trailing edge of its heading row.
-   *
-   * The range presets were a row of their own directly beneath this heading,
-   * which spent a line restating what the heading already said. On the right
-   * they sit level with the period they set, and because every section heading
-   * is the same height the control lands in the same place each time rather
-   * than at whatever x the note happens to end on.
-   */
-  action?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        {/* Title and note stay one group on a shared baseline; the action is
-            pushed away from them rather than spaced off the note. */}
-        <div className="flex items-baseline gap-2.5 flex-wrap min-w-0">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-            {title}
-          </h2>
-          {note && <span className="text-[11px] text-slate-400">{note}</span>}
-        </div>
-        {action && <div className="shrink-0">{action}</div>}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-/** How worried to look about a lead that has not moved. */
-const ageTint = (days: number) =>
-  days >= 60
-    ? "text-red-600"
-    : days >= 30
-    ? "text-amber-600"
-    : "text-slate-400";
-
-/**
- * A segment table - by source, by owner, by service.
- *
- * One component rather than three copies of the same thead/tbody, for the same
- * reason the API computes all three through one reducer: the win rate column
- * has to mean the same thing in each.
  */
 function SegmentTable({
   nameHeader,
