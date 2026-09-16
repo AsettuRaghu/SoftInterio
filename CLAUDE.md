@@ -992,14 +992,35 @@ Edit, which became untenable once steps could wait for their stage to start:
 nothing could ever be opened.
 
 `PlanTab` fetches `/plan-gates` whenever its tasks change and hands the map to
-`TaskTableReusable` as `gates`. A Start the server would refuse is **disabled**
-with the reason as its tooltip *and printed on the row* under the title
-("Waiting for Layout Drawings to finish"); a refusal that still reaches the
-server comes back as a toast (`onError`), not a red button.
+`TaskTableReusable` as `gates`. A Start or Complete the server would refuse is
+**disabled with the reason as its tooltip** - nothing is printed on the row. A
+refusal that still reaches the server comes back as a toast (`onError`).
+
+**Plan rows carry no inline messages.** Decided 2026-09-16 after gate reasons,
+hold owners, "needs: …" and a "pinned" chip had all been tried on the row:
+"clean and simple, like the tasks list". Anything a row needs to say lives in
+a tooltip or in the ⋯ menu (Open task page · Waiting on… · Let the plan set
+the dates · Skip · Reopen).
+
+**The Timer cell is one labelled button plus the clock**: blue Start, amber
+Pause while running, amber Resume while paused - the colour is the state.
+Complete and the ⋯ menu are in the Actions cell beside Edit. **Pause is
+instant on a plan row**, like the tasks page; a client/vendor step already
+carries who it waits on and its usual reason, and an internal step can be
+given them afterwards from ⋯ → "Who are we waiting on?", saved by the task
+PATCH onto the hold in effect and its history row. The full-size controls on
+the task page still ask first.
+
+`Modal` portals to `<body>` and stops clicks propagating. It used to render in
+place, so a dialog opened from a table cell did not show and its clicks fell
+through to the row. And `task_transition` has **one signature** - adding
+parameters with CREATE OR REPLACE created a second overload and made every
+four-argument call ambiguous; that is why stopping a playbook would have
+failed to cancel its steps.
 
 **A date the PM changes on a plan row is pinned** (`tasks.dates_pinned`, set by
-the task PATCH on a real change) and everything after it re-lays around it; a
-small "pinned" chip on the row unpins it. A "waiting on" entry backed by a step
+the task PATCH on a real change) and everything after it re-lays around it;
+⋯ → "Let the plan set the dates" unpins. A "waiting on" entry backed by a step
 follows the step's planned due date until somebody sets its date by hand
 (`project_dependencies.expected_by_set_by_hand`).
 

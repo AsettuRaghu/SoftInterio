@@ -71,13 +71,6 @@ function hoursTone(used: number, est: number): string {
   return "text-slate-600";
 }
 
-const HOLD_OWNER_WORD = {
-  client: "the client",
-  vendor: "a vendor",
-  internal: "us",
-  third_party: "someone else",
-} as const;
-
 interface Task {
   /** Plan fields. Present on every task; only the Plan tab renders them. */
   actual_hours?: number;
@@ -1098,6 +1091,9 @@ export default function TaskTable({
                   }
                 : null,
       taskHref: task.procedure_run_id ? `/dashboard/tasks/${task.id}` : undefined,
+      datesPinned: !!task.dates_pinned && !!task.procedure_run_id,
+      onUnpinDates: () =>
+        void updateTaskInline(task.id, "dates_pinned", false, isSubtask, parentTaskId).then(() => handleRefresh()),
       onError: (message: string) => setActionError(message),
       disabled: !isEditable,
       onTransitioned: (updated: TaskWithDetails, result?: TaskTransitionResult) => {
@@ -1248,45 +1244,6 @@ export default function TaskTable({
               </button>
             )}
 
-            {/* A step whose turn has not come, or one on hold, says so in a
-                chip on the same line - the full sentence is the tooltip. A
-                second line per row made a 36-step plan twice as tall. */}
-            {task.status === "todo" && gates?.[task.id] && !gates[task.id].canStart && gates[task.id].startReason && (
-              <span
-                title={gates[task.id].startReason ?? undefined}
-                className="shrink-0 max-w-[11rem] truncate text-[10px] text-slate-500 bg-slate-100 rounded px-1 py-0.5"
-              >
-                {gates[task.id].startReason?.replace(/^Waiting for /, "after ")}
-              </span>
-            )}
-            {/* A step under way that cannot be completed yet says why, in the
-                same chip style, and takes you to where it can be dealt with -
-                a file is attached and a gate signed off on the task page. */}
-            {task.status === "in_progress" && gates?.[task.id] && !gates[task.id].canComplete && gates[task.id].completeReason && (
-              <a
-                href={`/dashboard/tasks/${task.id}`}
-                onClick={(e) => e.stopPropagation()}
-                title={`${gates[task.id].completeReason} — open the task to deal with it`}
-                className="shrink-0 max-w-[12rem] truncate text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-1 py-0.5 hover:bg-amber-100"
-              >
-                needs: {gates[task.id].completeReason}
-              </a>
-            )}
-            {(task.status === "on_hold" || task.status === "blocked") && task.hold_owner && (
-              <span
-                title={`Waiting on ${HOLD_OWNER_WORD[task.hold_owner]}${task.hold_counterpart ? ` (${task.hold_counterpart})` : ""}${
-                  task.hold_expected_until
-                    ? ` until ${new Date(task.hold_expected_until).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
-                    : ""
-                }${task.hold_reason ? ` — ${task.hold_reason}` : ""}`}
-                className="shrink-0 max-w-[11rem] truncate text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-1 py-0.5"
-              >
-                {HOLD_OWNER_WORD[task.hold_owner]}
-                {task.hold_expected_until
-                  ? ` · ${new Date(task.hold_expected_until).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
-                  : ""}
-              </span>
-            )}
 
             {/* Not on a plan: a step comes from the playbook with its owner,
                 hours, gates and "waits for"; a task typed here would have
@@ -1449,20 +1406,7 @@ export default function TaskTable({
               // completed after its due date still showed red.
               overdue={isOverdue(task)}
             />
-            {task.dates_pinned && task.procedure_run_id && (
-              <button
-                type="button"
-                title={rowEditable ? "Dates set by hand. Click to let the plan set them again." : "Dates set by hand"}
-                disabled={!rowEditable}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void updateTaskInline(task.id, "dates_pinned", false, isSubtask, parentTaskId).then(() => handleRefresh());
-                }}
-                className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1 leading-4 hover:bg-amber-100 disabled:opacity-60"
-              >
-                pinned
-              </button>
-            )}
+
             {isOverdue(task) && (
               <span
                 className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700"

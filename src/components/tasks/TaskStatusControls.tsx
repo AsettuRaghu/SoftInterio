@@ -72,6 +72,9 @@ interface TaskStatusControlsProps {
    * as a media player.
    */
   layout?: "timer" | "actions";
+  /** The plan step's dates were set by hand; the menu offers to hand them back. */
+  datesPinned?: boolean;
+  onUnpinDates?: () => void;
   /** Hide the elapsed-time readout (e.g. in dense table rows). */
   hideTimer?: boolean;
   /**
@@ -209,6 +212,8 @@ export function TaskStatusControls({
   skip = null,
   taskHref,
   layout = "timer",
+  datesPinned = false,
+  onUnpinDates,
 }: TaskStatusControlsProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   // The dialog can also open AFTER a pause, to add who/why to a hold that is
@@ -354,7 +359,7 @@ export function TaskStatusControls({
       setHoldCode(code);
       setHoldUntil("");
       setHoldWho("");
-      void transition("on_hold", undefined, known ? undefined : () => setDetailsOpen(true), { owner, code });
+      void transition("on_hold", undefined, undefined, { owner, code });
       return;
     }
 
@@ -615,11 +620,7 @@ export function TaskStatusControls({
           {!hideTimer && (elapsed > 0 || isRunning || isPaused) && (
             <span
               className={`text-[11px] tabular-nums whitespace-nowrap ${
-                isPaused
-                  ? "text-amber-700"
-                  : overBudget
-                    ? "text-red-600 font-medium"
-                    : "text-slate-500"
+                overBudget ? "text-red-600 font-medium" : "text-slate-500"
               }`}
               title={
                 isPaused
@@ -629,27 +630,8 @@ export function TaskStatusControls({
                     : `Worked ${formatDuration(elapsed)}`
               }
             >
-              {isPaused ? `paused · ${formatDuration(elapsed)}` : formatDuration(elapsed)}
+              {formatDuration(elapsed)}
             </span>
-          )}
-          {isPaused && isPlanStep && !task.hold_owner && !disabled && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setHoldOwner("");
-                setHoldCode("");
-                setHoldUntil("");
-                setHoldWho("");
-                setReason("");
-                setError(null);
-                setDetailsOpen(true);
-              }}
-              className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-1.5 h-6 hover:bg-amber-100 whitespace-nowrap"
-              title="Say who we are waiting on, so the delay is counted against them"
-            >
-              who are we waiting on?
-            </button>
           )}
         </div>
         {dialog}
@@ -689,7 +671,7 @@ export function TaskStatusControls({
           </Tooltip>
         )}
 
-        {(skip?.allowed || taskHref || reopen) && (
+        {(skip?.allowed || taskHref || reopen || (isPaused && isPlanStep) || (datesPinned && onUnpinDates)) && (
           <span className="relative">
             <button
               type="button"
@@ -721,6 +703,36 @@ export function TaskStatusControls({
                     <a href={taskHref} className="block px-3 py-1.5 text-slate-700 hover:bg-slate-50">
                       Open task page
                     </a>
+                  )}
+                  {isPaused && isPlanStep && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setHoldOwner(task.hold_owner ?? "");
+                        setHoldCode(task.hold_reason_code ?? "");
+                        setHoldUntil(task.hold_expected_until ?? "");
+                        setHoldWho(task.hold_counterpart ?? "");
+                        setReason("");
+                        setError(null);
+                        setDetailsOpen(true);
+                      }}
+                      className="block w-full text-left px-3 py-1.5 text-slate-700 hover:bg-slate-50"
+                    >
+                      {task.hold_owner ? "Waiting on…" : "Who are we waiting on?…"}
+                    </button>
+                  )}
+                  {datesPinned && onUnpinDates && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onUnpinDates();
+                      }}
+                      className="block w-full text-left px-3 py-1.5 text-slate-700 hover:bg-slate-50"
+                    >
+                      Let the plan set the dates
+                    </button>
                   )}
                   {reopen && (
                     <button
