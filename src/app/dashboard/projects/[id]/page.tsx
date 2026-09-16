@@ -505,7 +505,9 @@ export default function ProjectDetailPage({ params }: PageProps) {
       }
       await fetchProject({ quiet: true });
     } catch (err) {
-      console.error("Error updating project:", err);
+      // The dialog awaiting this turns the rejection into its own error line;
+      // logging it here as well put an intended refusal ("kick off from the
+      // Plan tab") into the dev overlay as a Console Error.
       throw err;
     }
   };

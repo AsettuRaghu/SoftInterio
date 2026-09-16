@@ -599,8 +599,22 @@ export function EditProjectDetailsModal({
                           "cancelled",
                         ] as const
                       ).map((value) => (
-                        <option key={value} value={value}>
+                        <option
+                          key={value}
+                          value={value}
+                          // New -> In Progress is kick-off, done from the Plan
+                          // tab; the server refuses it here. Say so in the
+                          // list rather than after Save.
+                          disabled={
+                            value === "in_progress" &&
+                            project.status === "new" &&
+                            !project.kicked_off_at
+                          }
+                        >
                           {ProjectStatusLabels[value]}
+                          {value === "in_progress" && project.status === "new" && !project.kicked_off_at
+                            ? " — use Kick-off on the Plan tab"
+                            : ""}
                         </option>
                       ))}
                     </select>
