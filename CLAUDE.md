@@ -1002,14 +1002,19 @@ hold owners, "needs: …" and a "pinned" chip had all been tried on the row:
 a tooltip or in the ⋯ menu (Open task page · Waiting on… · Let the plan set
 the dates · Skip · Reopen).
 
-**The Timer cell is one labelled button plus the clock**: blue Start, amber
-Pause while running, amber Resume while paused - the colour is the state.
-Complete and the ⋯ menu are in the Actions cell beside Edit. **Pause is
-instant on a plan row**, like the tasks page; a client/vendor step already
-carries who it waits on and its usual reason, and an internal step can be
-given them afterwards from ⋯ → "Who are we waiting on?", saved by the task
-PATCH onto the hold in effect and its history row. The full-size controls on
-the task page still ask first.
+**The Timer cell is two small round buttons and a clock**, on the plan and
+the tasks list alike (2026-09-16, the user's spec): the one that moves the
+clock - Start, Pause or Resume, whichever applies, blue when starting and
+amber when running or paused - and Complete. They react the instant they are
+pressed: `TaskStatusControls` shows the target state and tells the table
+(`onOptimistic`) so the status badge moves with it; the server's answer
+confirms it or the previous status comes back with a toast. The clock is
+`h:mm:ss` by the second. The Actions cell is **Edit only**. Plan step names
+are the playbook's and are not renamed inline. The status dropdown always
+takes effect; a plan step held from it carries the owner and usual reason
+the playbook knows, like Pause does. Skip, "who are we waiting on" for an
+internal step, and unpinning dates are not on the row - the task page and the
+edit modal have the full-size controls.
 
 `Modal` portals to `<body>` and stops clicks propagating. It used to render in
 place, so a dialog opened from a table cell did not show and its clicks fell

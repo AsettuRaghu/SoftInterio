@@ -909,19 +909,16 @@ export default function TaskTable({
     isSubtask: boolean = false,
     parentTaskId?: string
   ) => {
-    // A plan step is held through the pause button, which asks who we are
-    // waiting on and until when - the delay log needs that. The status badge
-    // has nowhere to ask, so it declines rather than record a hold with no
-    // owner. Ad-hoc tasks keep the quick badge change.
+    // A plan step held from the status dropdown carries what the playbook
+    // knows about who it waits on, the same as the pause button does.
+    let extra: Record<string, unknown> = {};
     if (field === "status" && (value === "on_hold" || value === "blocked")) {
       const row = isSubtask && parentTaskId
         ? tasks.find((t) => t.id === parentTaskId)?.subtasks?.find((st) => st.id === taskId)
         : tasks.find((t) => t.id === taskId);
-      if (row?.procedure_run_id) {
-        setActionError(
-          "Use the pause button to put a plan step on hold - it asks who you are waiting on and until when."
-        );
-        return;
+      const step = (row as any)?.playbook_step;
+      if (row?.procedure_run_id && step?.owner_type && step.owner_type !== "internal") {
+        extra = { hold_owner: step.owner_type, hold_reason_code: step.default_delay_reason ?? undefined };
       }
     }
 
@@ -952,7 +949,7 @@ export default function TaskTable({
       const response = await fetch(`/api/tasks/${taskId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: value }),
+        body: JSON.stringify({ [field]: value, ...extra }),
       });
 
       if (!response.ok) {
@@ -1083,18 +1080,19 @@ export default function TaskTable({
                 ? gates[task.id].startReason || "Cannot start yet"
                 : null,
       completeBlockedReason: gates?.[task.id] && !gates[task.id].canComplete ? gates[task.id].completeReason : null,
-      skip: gates?.[task.id] && task.procedure_run_id
-                ? {
-                    allowed: !!gates[task.id].canSkip,
-                    reason: gates[task.id].skipReason ?? null,
-                    needsReason: gates[task.id].skipNeedsReason !== false,
-                  }
-                : null,
-      taskHref: task.procedure_run_id ? `/dashboard/tasks/${task.id}` : undefined,
-      datesPinned: !!task.dates_pinned && !!task.procedure_run_id,
-      onUnpinDates: () =>
-        void updateTaskInline(task.id, "dates_pinned", false, isSubtask, parentTaskId).then(() => handleRefresh()),
       onError: (message: string) => setActionError(message),
+      // The badge moves with the buttons, before the server answers.
+      onOptimistic: (status: TaskStatus) => {
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (isSubtask && parentTaskId) {
+              if (t.id !== parentTaskId) return t;
+              return { ...t, subtasks: t.subtasks?.map((st) => (st.id === task.id ? { ...st, status } : st)) };
+            }
+            return t.id === task.id ? { ...t, status } : t;
+          }),
+        );
+      },
       disabled: !isEditable,
       onTransitioned: (updated: TaskWithDetails, result?: TaskTransitionResult) => {
               // A subtask transition changes its PARENT's gating state too:
@@ -1225,9 +1223,10 @@ export default function TaskTable({
               />
             ) : (
               <button
-                onClick={() => rowEditable && startEditingTitle(task)}
+                // A plan step's name is the playbook's; it is not renamed here.
+                onClick={() => rowEditable && !showPlanColumns && startEditingTitle(task)}
                 className="text-left flex items-center gap-1.5 group/title"
-                disabled={!rowEditable}
+                disabled={!rowEditable || showPlanColumns}
               >
                 <span className="text-xs font-medium text-slate-800 hover:text-blue-600 transition-colors">
                   {task.title}
@@ -1266,7 +1265,7 @@ export default function TaskTable({
 
         {/* Timer - start/pause + complete, with live elapsed time */}
         <td className="px-2 py-1.5 whitespace-nowrap">
-          <TaskStatusControls {...controlProps} layout="timer" />
+          <TaskStatusControls {...controlProps} />
         </td>
 
         {/* Notes */}
@@ -1631,7 +1630,6 @@ export default function TaskTable({
             to miss entirely. */}
         <td className="px-2 py-1.5 whitespace-nowrap text-right">
           <span className="inline-flex items-center gap-1.5">
-            <TaskStatusControls {...controlProps} layout="actions" />
             <button
               type="button"
               onClick={(e) => {

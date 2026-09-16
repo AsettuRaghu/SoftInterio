@@ -61,20 +61,13 @@ interface TaskStatusControlsProps {
   completeBlockedReason?: string | null;
   /** Surface a refusal here (a toast) instead of turning the button red. */
   onError?: (message: string) => void;
-  /** Whether the playbook lets this step be skipped, and whether it needs a reason. */
-  skip?: { allowed: boolean; reason: string | null; needsReason: boolean } | null;
-  /** Where the task's own page is; the "more" menu offers it. */
-  taskHref?: string;
   /**
-   * compact only. "timer": the one button that moves the clock, plus the
-   * clock - for the Timer column. "actions": Complete and the more-menu - for
-   * the Actions column. Splitting them is what stopped the Timer cell reading
-   * as a media player.
+   * Called the moment a button is pressed with the status the row is about to
+   * take, and again with the previous status if the server refuses. Lets the
+   * table move its status badge in step with the buttons instead of waiting
+   * for the round trip.
    */
-  layout?: "timer" | "actions";
-  /** The plan step's dates were set by hand; the menu offers to hand them back. */
-  datesPinned?: boolean;
-  onUnpinDates?: () => void;
+  onOptimistic?: (status: TaskStatus) => void;
   /** Hide the elapsed-time readout (e.g. in dense table rows). */
   hideTimer?: boolean;
   /**
@@ -87,6 +80,15 @@ interface TaskStatusControlsProps {
   variant?: "full" | "compact";
   /** Disable all actions (e.g. closed project, read-only table). */
   disabled?: boolean;
+}
+
+/** h:mm:ss, hours unbounded - a step can run for days. */
+function formatClock(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 }
 
 interface ActionConfig {
@@ -209,13 +211,13 @@ export function TaskStatusControls({
   startBlockedReason = null,
   completeBlockedReason = null,
   onError,
-  skip = null,
-  taskHref,
-  layout = "timer",
-  datesPinned = false,
-  onUnpinDates,
+  onOptimistic,
 }: TaskStatusControlsProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
+  // What the row is showing while a transition is in flight.
+  const [optimistic, setOptimistic] = useState<TaskStatus | null>(null);
+  useEffect(() => {
+    setOptimistic(null);
+  }, [task.status]);
   // The dialog can also open AFTER a pause, to add who/why to a hold that is
   // already in effect. Same fields, saved with a PATCH instead of a transition.
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -266,8 +268,11 @@ export function TaskStatusControls({
       // pause passes the owner and reason it just chose.
       hold?: { owner: DelayOwner | ""; code: string },
     ) => {
+      const previous = task.status;
       setIsSaving(true);
       setError(null);
+      setOptimistic(to);
+      onOptimistic?.(to);
       try {
         const response = await fetch(`/api/tasks/${task.id}/transition`, {
           method: "POST",
@@ -285,6 +290,8 @@ export function TaskStatusControls({
 
         if (!response.ok) {
           const message = data.error || "Could not update the task";
+          setOptimistic(null);
+          onOptimistic?.(previous);
           if (onError && !pendingAction) onError(message);
           else setError(message);
           return;
@@ -304,12 +311,14 @@ export function TaskStatusControls({
         }
         afterwards?.();
       } catch {
+        setOptimistic(null);
+        onOptimistic?.(previous);
         setError("Could not reach the server");
       } finally {
         setIsSaving(false);
       }
     },
-    [task.id, onTransitioned, holdOwner, holdCode, holdUntil, holdWho, onError, pendingAction]
+    [task.id, task.status, onTransitioned, onOptimistic, holdOwner, holdCode, holdUntil, holdWho, onError, pendingAction]
   );
 
   /** Add who/why/until to a hold already in effect (no status change). */
@@ -564,217 +573,90 @@ export function TaskStatusControls({
   );
 
   if (variant === "compact") {
-    const settled = task.status === "completed" || task.status === "cancelled";
-    const isPaused = task.status === "on_hold" || task.status === "blocked";
+    // Two small round buttons, always: the one that moves the clock (Start,
+    // Pause or Resume - whichever applies) and Complete. They react the
+    // moment they are pressed: the row takes the new state optimistically,
+    // the buttons swap, and the server's answer either confirms it or puts it
+    // back with a toast saying why. The clock beside them runs by the second.
+    const shown = optimistic ?? task.status;
+    const settled = shown === "completed" || shown === "cancelled";
+    const running = optimistic ? optimistic === "in_progress" : isRunning;
+    const paused = shown === "on_hold" || shown === "blocked";
     const completeGate = blockedReason ?? completeBlockedReason;
+    const startBlocked = shown === "todo" && !!startBlockedReason;
 
-    // One labelled button says what pressing it does, and its colour says
-    // what state the task is in: blue Start, amber Pause while running,
-    // amber Resume while paused. Icons alone read as a media player.
-    const primary = settled
-      ? undefined
-      : isRunning
-        ? actions.find((a) => a.to === "on_hold")
-        : actions.find((a) => a.to === "in_progress");
-    const primaryLabel = isRunning ? "Pause" : task.status === "todo" ? "Start" : "Resume";
-    const startBlocked =
-      !!primary && primary.to === "in_progress" && task.status === "todo" && !!startBlockedReason;
-    const primaryClass = isRunning
-      ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
-      : isPaused
+    const round =
+      "w-7 h-7 rounded-full flex items-center justify-center border transition-all disabled:cursor-not-allowed disabled:opacity-40";
+
+    const primaryTo: TaskStatus = running ? "on_hold" : "in_progress";
+    const primaryLabel = running ? "Pause" : shown === "todo" ? "Start" : "Resume";
+    const primaryIcon = running ? PAUSE : PLAY;
+    const primaryClass = running
+      ? "bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100"
+      : paused
         ? "bg-amber-500 text-white border-amber-500 hover:bg-amber-600"
         : "bg-blue-600 text-white border-blue-600 hover:bg-blue-700";
 
-    const pill =
-      "inline-flex items-center gap-1 h-7 px-2 rounded-md border text-[11px] font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap";
-
-    // ------------------------------------------------------------------
-    // Timer cell: the one button that moves the clock, and the clock.
-    // ------------------------------------------------------------------
-    if (layout === "timer") {
-      return (
-        <>
-        <div className="flex items-center gap-2">
-          {primary ? (
-            <Tooltip label={error || (startBlocked ? startBlockedReason! : primaryLabel)}>
-              <button
-                type="button"
-                disabled={isSaving || disabled || startBlocked}
-                aria-label={primaryLabel}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleAction(primary);
-                }}
-                className={`${pill} ${error ? "bg-red-50 text-red-600 border-red-200" : primaryClass}`}
-              >
-                {primary.icon}
-                <span>{primaryLabel}</span>
-              </button>
-            </Tooltip>
-          ) : (
-            <span className="inline-flex items-center h-7 text-[11px] text-slate-400">
-              {task.status === "completed" ? "Done" : "Cancelled"}
+    return (
+      <>
+        <div className="flex items-center gap-1.5">
+          {settled ? (
+            <span className="text-[11px] text-slate-400 whitespace-nowrap">
+              {shown === "completed" ? "Done" : "Cancelled"}
             </span>
+          ) : (
+            <>
+              <Tooltip label={startBlocked ? startBlockedReason! : primaryLabel}>
+                <button
+                  type="button"
+                  disabled={isSaving || disabled || startBlocked}
+                  aria-label={primaryLabel}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleAction({ to: primaryTo, label: primaryLabel, icon: primaryIcon });
+                  }}
+                  className={`${round} ${primaryClass}`}
+                >
+                  {primaryIcon}
+                </button>
+              </Tooltip>
+              <Tooltip label={completeGate ? `Cannot complete yet - ${completeGate}` : "Complete"}>
+                <button
+                  type="button"
+                  disabled={isSaving || disabled || !!completeGate}
+                  aria-label="Complete"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleAction({ to: "completed", label: "Complete", icon: CHECK });
+                  }}
+                  className={`${round} ${
+                    completeGate
+                      ? "bg-slate-100 text-slate-400 border-slate-200"
+                      : "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100"
+                  }`}
+                >
+                  {CHECK}
+                </button>
+              </Tooltip>
+            </>
           )}
 
-          {!hideTimer && (elapsed > 0 || isRunning || isPaused) && (
+          {!hideTimer && (elapsed > 0 || running) && (
             <span
               className={`text-[11px] tabular-nums whitespace-nowrap ${
                 overBudget ? "text-red-600 font-medium" : "text-slate-500"
               }`}
               title={
-                isPaused
-                  ? `Paused after ${formatDuration(elapsed)} of work`
-                  : task.estimated_hours
-                    ? `Worked ${formatDuration(elapsed)} of ${task.estimated_hours}h estimated`
-                    : `Worked ${formatDuration(elapsed)}`
+                task.estimated_hours
+                  ? `Worked ${formatDuration(elapsed)} of ${task.estimated_hours}h estimated`
+                  : `Worked ${formatDuration(elapsed)}`
               }
             >
-              {formatDuration(elapsed)}
+              {formatClock(elapsed)}
             </span>
           )}
         </div>
         {dialog}
-        </>
-      );
-    }
-
-    // ------------------------------------------------------------------
-    // Actions cell: finish it, or the few other things a row can need.
-    // ------------------------------------------------------------------
-    const complete = settled ? undefined : actions.find((a) => a.to === "completed");
-    const reopen = settled ? actions.find((a) => a.to === "in_progress") : undefined;
-    const iconButton =
-      "w-6.5 h-6.5 flex items-center justify-center rounded-md border transition-all disabled:cursor-not-allowed";
-
-    return (
-      <>
-      <span className="inline-flex items-center gap-1.5">
-        {complete && (
-          <Tooltip label={completeGate ? `Cannot complete yet - ${completeGate}` : "Mark complete"}>
-            <button
-              type="button"
-              disabled={isSaving || disabled || !!completeGate}
-              aria-label="Mark complete"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleAction(complete);
-              }}
-              className={`${iconButton} ${
-                completeGate
-                  ? "bg-slate-100 text-slate-400 border-slate-200"
-                  : "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100"
-              } disabled:opacity-60`}
-            >
-              {CHECK}
-            </button>
-          </Tooltip>
-        )}
-
-        {(skip?.allowed || taskHref || reopen || (isPaused && isPlanStep) || (datesPinned && onUnpinDates)) && (
-          <span className="relative">
-            <button
-              type="button"
-              aria-label="More"
-              title="More"
-              disabled={isSaving || disabled}
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpen((v) => !v);
-              }}
-              className={`${iconButton} bg-white text-slate-400 border-slate-200 hover:bg-slate-50 hover:text-slate-600`}
-            >
-              <span className="text-sm leading-none">⋯</span>
-            </button>
-            {menuOpen && (
-              <>
-                <span
-                  className="fixed inset-0 z-40"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMenuOpen(false);
-                  }}
-                />
-                <span
-                  className="absolute right-0 top-8 z-50 min-w-[11rem] rounded-lg border border-slate-200 bg-white shadow-xl py-1 text-xs text-left"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {taskHref && (
-                    <a href={taskHref} className="block px-3 py-1.5 text-slate-700 hover:bg-slate-50">
-                      Open task page
-                    </a>
-                  )}
-                  {isPaused && isPlanStep && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMenuOpen(false);
-                        setHoldOwner(task.hold_owner ?? "");
-                        setHoldCode(task.hold_reason_code ?? "");
-                        setHoldUntil(task.hold_expected_until ?? "");
-                        setHoldWho(task.hold_counterpart ?? "");
-                        setReason("");
-                        setError(null);
-                        setDetailsOpen(true);
-                      }}
-                      className="block w-full text-left px-3 py-1.5 text-slate-700 hover:bg-slate-50"
-                    >
-                      {task.hold_owner ? "Waiting on…" : "Who are we waiting on?…"}
-                    </button>
-                  )}
-                  {datesPinned && onUnpinDates && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMenuOpen(false);
-                        onUnpinDates();
-                      }}
-                      className="block w-full text-left px-3 py-1.5 text-slate-700 hover:bg-slate-50"
-                    >
-                      Let the plan set the dates
-                    </button>
-                  )}
-                  {reopen && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMenuOpen(false);
-                        handleAction(reopen);
-                      }}
-                      className="block w-full text-left px-3 py-1.5 text-slate-700 hover:bg-slate-50"
-                    >
-                      Reopen
-                    </button>
-                  )}
-                  {skip?.allowed && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMenuOpen(false);
-                        const skipAction: ActionConfig = { to: "skipped", label: "Skip", icon: CHECK };
-                        if (skip.needsReason) {
-                          setPendingAction(skipAction);
-                          setReason("");
-                          setError(null);
-                        } else {
-                          void transition("skipped");
-                        }
-                      }}
-                      className="block w-full text-left px-3 py-1.5 text-slate-700 hover:bg-slate-50"
-                    >
-                      Skip this step{skip.needsReason ? "…" : ""}
-                    </button>
-                  )}
-                  {skip && !skip.allowed && skip.reason && (
-                    <span className="block px-3 py-1.5 text-slate-400">{skip.reason}</span>
-                  )}
-                </span>
-              </>
-            )}
-          </span>
-        )}
-      </span>
-      {dialog}
       </>
     );
   }
