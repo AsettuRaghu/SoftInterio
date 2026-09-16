@@ -845,12 +845,22 @@ hours get erased.
 `GET /api/tasks` without a lead/project filter is scoped by permission
 (2026-09-16). `tasks.view` is granted to nearly every role and labelled "view
 all", so it is read as the basic right to use the module; the real split is
-**`tasks.view_all`** (Admin, Owner, Manager, Senior Designer) and
-**`tasks.view_team`** (the seven manager roles), which see every task, against
-everyone else, who sees tasks **assigned to them or created by them**. The
-response carries `scope` and the Tasks page says which it is showing. A list
-scoped to a project or lead is the entity's own view, gated by that entity's
-access - a plan stays whole for anyone who may open the project.
+**`tasks.view_all`** (Admin, Owner, Manager, Senior Designer) - every task -
+against **`tasks.view_team`** (the seven manager roles) - your own tasks plus
+every task on the **projects you manage and the leads assigned to you** -
+against everyone else, who sees tasks **assigned to them or created by them**.
+
+"Team" is defined by responsibility, not by people (decided 2026-09-16,
+option A): there is no team table and no reporting line, and adding one would
+reintroduce the hierarchy the model refuses. A Finance Manager owns no project
+or lead and so sees their own, until the finance module has entities of its
+own. Option B - a department on each role, so a manager also sees the tasks of
+people in their department - was discussed and parked; it composes with A.
+
+The response carries `scope` (`all` / `team` / `own` / `entity`) and the Tasks
+page says which it is showing. A list scoped to a project or lead is the
+entity's own view, gated by that entity's access - a plan stays whole for
+anyone who may open the project.
 
 ### The task rules, in one place
 

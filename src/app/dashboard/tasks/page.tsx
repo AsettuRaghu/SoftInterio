@@ -98,7 +98,7 @@ type TabType = "my-tasks" | "assigned-by-me" | "unassigned" | "all-tasks";
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   /** "all" for a role that sees every task; "own" for everyone else. */
-  const [scope, setScope] = useState<"all" | "own" | "entity">("all");
+  const [scope, setScope] = useState<"all" | "team" | "own" | "entity">("all");
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1308,7 +1308,9 @@ export default function TasksPage() {
                   <p className="text-[11px] text-slate-500">
                     {scope === "own"
                       ? "Your tasks - assigned to you or created by you"
-                      : "Every task in the business"}
+                      : scope === "team"
+                        ? "Your tasks, and every task on the projects and leads you own"
+                        : "Every task in the business"}
                   </p>
                 </div>
               </div>

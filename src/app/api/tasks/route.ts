@@ -19,21 +19,24 @@ export async function GET(request: NextRequest) {
      * Who sees which tasks.
      *
      * `tasks.view` is granted to nearly every role and labelled "view all", so
-     * it cannot mean all - it is the basic right to use the module. The seed
-     * puts the real distinction in `tasks.view_all` (Admin, Owner, Manager,
-     * Senior Designer) and `tasks.view_team` (the manager roles): those see
-     * every task in the tenant. Everyone else sees the tasks assigned to them
-     * or created by them. A designer holding two steps of a 36-step playbook
-     * used to see all 36 of every project under "All tasks".
+     * it cannot mean all - it is the basic right to use the module. The real
+     * split:
+     *
+     *   tasks.view_all   every task in the business (Admin, Owner, Manager,
+     *                    Senior Designer).
+     *   tasks.view_team  your own tasks PLUS every task on the work you are
+     *                    responsible for - the projects you manage and the
+     *                    leads assigned to you. There is no team table and no
+     *                    reporting line (the model is flat), so "team" is
+     *                    defined by responsibility, decided 2026-09-16. A
+     *                    Finance Manager, who owns no project or lead, sees
+     *                    their own until the finance module has entities.
+     *   everyone else    tasks assigned to them or created by them.
      *
      * A list scoped to a lead or a project is the entity's own view and is
      * gated by that entity's access instead, so a plan stays whole for anyone
      * who may open the project.
      */
-    const seesAll =
-      user.isSuperAdmin ||
-      guard.permissions?.has("tasks.view_all") ||
-      guard.permissions?.has("tasks.view_team");
 
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams;
@@ -50,6 +53,19 @@ export async function GET(request: NextRequest) {
     const sortOrder = searchParams.get("sort_order") || "desc";
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
+
+    const seesAll = user.isSuperAdmin || guard.permissions?.has("tasks.view_all");
+    const seesTeam = !seesAll && guard.permissions?.has("tasks.view_team");
+    let ownedProjectIds: string[] = [];
+    let ownedLeadIds: string[] = [];
+    if (seesTeam && !relatedType) {
+      const [{ data: myProjects }, { data: myLeads }] = await Promise.all([
+        supabase.from("projects").select("id").eq("tenant_id", user.tenantId).eq("project_manager_id", user.id),
+        supabase.from("leads").select("id").eq("tenant_id", user.tenantId).eq("assigned_to", user.id),
+      ]);
+      ownedProjectIds = (myProjects ?? []).map((p) => p.id);
+      ownedLeadIds = (myLeads ?? []).map((l) => l.id);
+    }
 
     // Build query using the tasks table directly with joins
     let query = supabase.from("tasks").select(
@@ -80,7 +96,12 @@ export async function GET(request: NextRequest) {
     }
 
     if (!relatedType && !seesAll) {
-      query = query.or(`assigned_to.eq.${user!.id},created_by.eq.${user!.id}`);
+      const clauses = [`assigned_to.eq.${user!.id}`, `created_by.eq.${user!.id}`];
+      if (seesTeam) {
+        if (ownedProjectIds.length) clauses.push(`and(related_type.eq.project,related_id.in.(${ownedProjectIds.join(",")}))`);
+        if (ownedLeadIds.length) clauses.push(`and(related_type.eq.lead,related_id.in.(${ownedLeadIds.join(",")}))`);
+      }
+      query = query.or(clauses.join(","));
     }
 
     // Assigned to filter
@@ -483,7 +504,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       tasks,
-      scope: relatedType ? "entity" : seesAll ? "all" : "own",
+      scope: relatedType ? "entity" : seesAll ? "all" : seesTeam ? "team" : "own",
       pagination: {
         total: count || 0,
         limit,
