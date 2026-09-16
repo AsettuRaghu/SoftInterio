@@ -65,6 +65,13 @@ interface TaskStatusControlsProps {
   skip?: { allowed: boolean; reason: string | null; needsReason: boolean } | null;
   /** Where the task's own page is; the "more" menu offers it. */
   taskHref?: string;
+  /**
+   * compact only. "timer": the one button that moves the clock, plus the
+   * clock - for the Timer column. "actions": Complete and the more-menu - for
+   * the Actions column. Splitting them is what stopped the Timer cell reading
+   * as a media player.
+   */
+  layout?: "timer" | "actions";
   /** Hide the elapsed-time readout (e.g. in dense table rows). */
   hideTimer?: boolean;
   /**
@@ -201,6 +208,7 @@ export function TaskStatusControls({
   onError,
   skip = null,
   taskHref,
+  layout = "timer",
 }: TaskStatusControlsProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -333,129 +341,247 @@ export function TaskStatusControls({
   // ---------------------------------------------------------------
   // Compact: two icon buttons sized to sit inside a table row
   // ---------------------------------------------------------------
-  if (variant === "compact") {
-    // The play/pause toggle. Never offer Block here - it needs a reason to be
-    // worth recording, and there is nowhere in a row to ask for one.
-    //
-    // And nothing at all on a finished task. Reopening is a deliberate act, not
-    // something to put one mis-click away in a list: whatever icon it carried,
-    // a button in the "start" position on a completed row says the work has not
-    // begun. It stays available on the task's own page, where there is a label
-    // and the context to mean it.
-    const settled = task.status === "completed" || task.status === "cancelled";
+  // The pause / block / skip dialog, shared by every variant. It used to be
+  // rendered only by the full variant, so a plan step paused from a table row
+  // set the dialog up and never showed it.
+  const dialog = (
+  <Modal
+    isOpen={!!pendingAction}
+    onClose={() => {
+      setPendingAction(null);
+      setError(null);
+    }}
+    title={
+      pendingAction?.to === "skipped"
+        ? "Skip this step"
+        : pendingAction?.to === "blocked"
+          ? "Block task"
+          : "Pause task"
+    }
+    subtitle={
+      pendingAction?.to === "skipped"
+        ? "The playbook asks for a reason when this step is skipped."
+        : isPlanStep
+          ? "Who are we waiting on, and why? This is what the delay is counted against."
+          : "Why is this being paused? This is recorded against the task's held time."
+    }
+    size="md"
+    footer={
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setPendingAction(null);
+            setError(null);
+          }}
+          className="px-3 py-1.5 text-sm font-medium rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={
+            isSaving ||
+            (pendingAction?.to === "skipped"
+              ? !reason.trim()
+              : isPlanStep
+                ? !holdOwner || !holdCode
+                : !reason.trim())
+          }
+          onClick={() =>
+            pendingAction && void transition(pendingAction.to, reason.trim())
+          }
+          className="px-3 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isSaving ? "Saving..." : pendingAction?.label}
+        </button>
+      </div>
+    }
+  >
+    <div className="space-y-3">
+      {/* Who we are waiting on, why, and until when. This is what the
+          delay log is built from; the free text below is the detail. */}
+      {pendingAction?.to !== "skipped" && (
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-xs text-slate-600">
+          Waiting on
+          <select
+            value={holdOwner}
+            onChange={(e) => {
+              setHoldOwner(e.target.value as DelayOwner | "");
+              setHoldCode("");
+            }}
+            className={`mt-1 w-full px-2 py-1.5 text-sm rounded-md border bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+              isPlanStep && !holdOwner ? "border-amber-300" : "border-slate-200"
+            }`}
+          >
+            <option value="">{isPlanStep ? "Choose…" : "Not recorded"}</option>
+            {(Object.keys(DelayOwnerLabels) as DelayOwner[]).map((o) => (
+              <option key={o} value={o}>
+                {DelayOwnerLabels[o]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-slate-600">
+          Reason
+          <select
+            value={holdCode}
+            disabled={!holdOwner}
+            onChange={(e) => setHoldCode(e.target.value)}
+            className="mt-1 w-full px-2 py-1.5 text-sm rounded-md border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
+          >
+            <option value="">{holdOwner ? "Choose…" : "Pick who first"}</option>
+            {reasons
+              .filter((r) => r.owner === holdOwner)
+              .map((r) => (
+                <option key={r.code} value={r.code}>
+                  {r.label}
+                </option>
+              ))}
+          </select>
+        </label>
+        <label className="text-xs text-slate-600">
+          Expected until
+          <input
+            type="date"
+            value={holdUntil}
+            onChange={(e) => setHoldUntil(e.target.value)}
+            className="mt-1 w-full px-2 py-1.5 text-sm rounded-md border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </label>
+        <label className="text-xs text-slate-600">
+          Who exactly
+          <input
+            type="text"
+            value={holdWho}
+            onChange={(e) => setHoldWho(e.target.value)}
+            placeholder="e.g. Mr Rao / Hettich"
+            className="mt-1 w-full px-2 py-1.5 text-sm rounded-md border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </label>
+      </div>
+      )}
+      {pendingAction?.to !== "skipped" && isPlanStep && holdUntil && (
+        <p className="text-[11px] text-slate-500">
+          If this is later than the step's due date, every step that waits on it moves by the same
+          number of days. The agreed plan stays as it was.
+        </p>
+      )}
+      <textarea
+        autoFocus={pendingAction?.to === "skipped" || !isPlanStep}
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        rows={3}
+        placeholder={
+          pendingAction?.to === "skipped"
+            ? "Why this step is being skipped"
+            : isPlanStep
+              ? "Anything else worth noting (optional)"
+              : pendingAction?.to === "blocked"
+                ? "e.g. Waiting on client to confirm the shutter finish"
+                : "e.g. Parked until the site is handed over"
+        }
+        className="w-full px-3 py-2 text-sm rounded-md border border-slate-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+      />
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </div>
+  </Modal>
+  );
 
+  if (variant === "compact") {
+    const settled = task.status === "completed" || task.status === "cancelled";
+    const isPaused = task.status === "on_hold" || task.status === "blocked";
+    const completeGate = blockedReason ?? completeBlockedReason;
+
+    // One labelled button says what pressing it does, and its colour says
+    // what state the task is in: blue Start, amber Pause while running,
+    // amber Resume while paused. Icons alone read as a media player.
     const primary = settled
       ? undefined
       : isRunning
         ? actions.find((a) => a.to === "on_hold")
         : actions.find((a) => a.to === "in_progress");
-    const complete = settled
-      ? undefined
-      : actions.find((a) => a.to === "completed");
+    const primaryLabel = isRunning ? "Pause" : task.status === "todo" ? "Start" : "Resume";
+    const startBlocked =
+      !!primary && primary.to === "in_progress" && task.status === "todo" && !!startBlockedReason;
+    const primaryClass = isRunning
+      ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+      : isPaused
+        ? "bg-amber-500 text-white border-amber-500 hover:bg-amber-600"
+        : "bg-blue-600 text-white border-blue-600 hover:bg-blue-700";
 
-    const iconButton =
-      "w-7 h-7 flex items-center justify-center rounded-md border transition-all disabled:cursor-not-allowed";
-    const isPaused = task.status === "on_hold" || task.status === "blocked";
-    // A paused task shows a Resume that does not look like Start: amber, not
-    // blue, beside an amber "paused" readout - the row has to say it stopped.
-    const primaryClass =
-      primary && primary.to === "in_progress" && isPaused
-        ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
-        : primary
-          ? `${styleFor(primary.to).idle} ${styleFor(primary.to).hover}`
-          : "";
-    const completeGate = blockedReason ?? completeBlockedReason;
+    const pill =
+      "inline-flex items-center gap-1 h-7 px-2 rounded-md border text-[11px] font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap";
 
-    const primaryLabel = isRunning
-      ? "Pause"
-      : task.status === "completed" || task.status === "cancelled"
-      ? "Reopen"
-      : task.status === "todo"
-      ? "Start"
-      : "Resume";
-
-    if (settled) {
-      /**
-       * A finished row still offers a way back - it just must not look like
-       * Start.
-       *
-       * The play triangle said "not begun" on a task that was done; removing
-       * the button entirely took away the only way to undo a mistaken
-       * completion from a list. So: the same u-turn used on the task page,
-       * drawn in slate rather than the blue of an action you are expected to
-       * take, and labelled Reopen.
-       */
-      const reopen = actions.find((x) => x.to === "in_progress");
+    // ------------------------------------------------------------------
+    // Timer cell: the one button that moves the clock, and the clock.
+    // ------------------------------------------------------------------
+    if (layout === "timer") {
       return (
-        <div className="flex items-center gap-1">
-          {reopen ? (
-            <Tooltip
-              label={
-                error ||
-                (task.status === "completed"
-                  ? "Reopen — this task is completed"
-                  : "Reopen — this task was cancelled")
-              }
-            >
+        <>
+        <div className="flex items-center gap-2">
+          {primary ? (
+            <Tooltip label={error || (startBlocked ? startBlockedReason! : primaryLabel)}>
               <button
                 type="button"
-                disabled={isSaving || disabled}
-                aria-label="Reopen"
+                disabled={isSaving || disabled || startBlocked}
+                aria-label={primaryLabel}
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleAction(reopen);
+                  handleAction(primary);
                 }}
-                className={`${iconButton} bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40`}
+                className={`${pill} ${error ? "bg-red-50 text-red-600 border-red-200" : primaryClass}`}
               >
-                {REOPEN}
+                {primary.icon}
+                <span>{primaryLabel}</span>
               </button>
             </Tooltip>
           ) : (
-            <span className="w-7 h-7" />
+            <span className="inline-flex items-center h-7 text-[11px] text-slate-400">
+              {task.status === "completed" ? "Done" : "Cancelled"}
+            </span>
           )}
-          <span className="w-7 h-7" />
+
+          {!hideTimer && (elapsed > 0 || isRunning || isPaused) && (
+            <span
+              className={`text-[11px] tabular-nums whitespace-nowrap ${
+                isPaused
+                  ? "text-amber-700"
+                  : overBudget
+                    ? "text-red-600 font-medium"
+                    : "text-slate-500"
+              }`}
+              title={
+                isPaused
+                  ? `Paused after ${formatDuration(elapsed)} of work`
+                  : task.estimated_hours
+                    ? `Worked ${formatDuration(elapsed)} of ${task.estimated_hours}h estimated`
+                    : `Worked ${formatDuration(elapsed)}`
+              }
+            >
+              {isPaused ? `paused · ${formatDuration(elapsed)}` : formatDuration(elapsed)}
+            </span>
+          )}
         </div>
+        {dialog}
+        </>
       );
     }
 
-    return (
-      <div className="flex items-center gap-1">
-        {primary ? (
-          <Tooltip
-            label={
-              error ||
-              (primary.to === "in_progress" && task.status === "todo" && startBlockedReason
-                ? startBlockedReason
-                : primaryLabel)
-            }
-          >
-            <button
-              type="button"
-              disabled={
-                isSaving ||
-                disabled ||
-                (primary.to === "in_progress" && task.status === "todo" && !!startBlockedReason)
-              }
-              aria-label={primaryLabel}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleAction(primary);
-              }}
-              className={`${iconButton} ${
-                error ? "bg-red-50 text-red-600 border-red-200" : primaryClass
-              } disabled:opacity-40`}
-            >
-              {primary.icon}
-            </button>
-          </Tooltip>
-        ) : (
-          <span className="w-7 h-7" />
-        )}
+    // ------------------------------------------------------------------
+    // Actions cell: finish it, or the few other things a row can need.
+    // ------------------------------------------------------------------
+    const complete = settled ? undefined : actions.find((a) => a.to === "completed");
+    const reopen = settled ? actions.find((a) => a.to === "in_progress") : undefined;
+    const iconButton =
+      "w-6.5 h-6.5 flex items-center justify-center rounded-md border transition-all disabled:cursor-not-allowed";
 
-        {complete ? (
-          <Tooltip
-            label={completeGate ? `Cannot complete yet - ${completeGate}` : "Mark complete"}
-          >
+    return (
+      <>
+      <span className="inline-flex items-center gap-1.5">
+        {complete && (
+          <Tooltip label={completeGate ? `Cannot complete yet - ${completeGate}` : "Mark complete"}>
             <button
               type="button"
               disabled={isSaving || disabled || !!completeGate}
@@ -467,26 +593,21 @@ export function TaskStatusControls({
               className={`${iconButton} ${
                 completeGate
                   ? "bg-slate-100 text-slate-400 border-slate-200"
-                  : `${styleFor("completed").idle} ${styleFor("completed").hover}`
+                  : "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100"
               } disabled:opacity-60`}
             >
               {CHECK}
             </button>
           </Tooltip>
-        ) : (
-          <span className="w-7 h-7" />
         )}
 
-        {/* More: the few things a row needs that are not start / pause /
-            complete - skipping a step (with a reason when the playbook asks)
-            and opening the task's own page, where files are attached and
-            gates are signed off. Everything else is the edit pencil. */}
-        {(skip?.allowed || taskHref) && !settled && (
+        {(skip?.allowed || taskHref || reopen) && (
           <span className="relative">
             <button
               type="button"
               aria-label="More"
               title="More"
+              disabled={isSaving || disabled}
               onClick={(e) => {
                 e.stopPropagation();
                 setMenuOpen((v) => !v);
@@ -497,15 +618,33 @@ export function TaskStatusControls({
             </button>
             {menuOpen && (
               <>
-                <span className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} />
                 <span
-                  className="absolute left-0 top-8 z-50 min-w-[11rem] rounded-lg border border-slate-200 bg-white shadow-xl py-1 text-xs"
+                  className="fixed inset-0 z-40"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuOpen(false);
+                  }}
+                />
+                <span
+                  className="absolute right-0 top-8 z-50 min-w-[11rem] rounded-lg border border-slate-200 bg-white shadow-xl py-1 text-xs text-left"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {taskHref && (
                     <a href={taskHref} className="block px-3 py-1.5 text-slate-700 hover:bg-slate-50">
                       Open task page
                     </a>
+                  )}
+                  {reopen && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        handleAction(reopen);
+                      }}
+                      className="block w-full text-left px-3 py-1.5 text-slate-700 hover:bg-slate-50"
+                    >
+                      Reopen
+                    </button>
                   )}
                   {skip?.allowed && (
                     <button
@@ -534,28 +673,9 @@ export function TaskStatusControls({
             )}
           </span>
         )}
-
-        {!hideTimer && (elapsed > 0 || isRunning || isPaused) && (
-          <span
-            className={`text-[10px] tabular-nums whitespace-nowrap ${
-              isPaused
-                ? "text-amber-700 font-medium"
-                : overBudget
-                  ? "text-red-600 font-medium"
-                  : "text-slate-400"
-            }`}
-            title={
-              isPaused
-                ? `Paused after ${formatDuration(elapsed)} of work`
-                : task.estimated_hours
-                  ? `Worked ${formatDuration(elapsed)} of ${task.estimated_hours}h estimated`
-                  : `Worked ${formatDuration(elapsed)}`
-            }
-          >
-            {isPaused ? "paused" : formatDuration(elapsed)}
-          </span>
-        )}
-      </div>
+      </span>
+      {dialog}
+      </>
     );
   }
 
@@ -651,148 +771,7 @@ export function TaskStatusControls({
         <p className="text-xs text-red-600">{error}</p>
       )}
 
-      <Modal
-        isOpen={!!pendingAction}
-        onClose={() => {
-          setPendingAction(null);
-          setError(null);
-        }}
-        title={
-          pendingAction?.to === "skipped"
-            ? "Skip this step"
-            : pendingAction?.to === "blocked"
-              ? "Block task"
-              : "Pause task"
-        }
-        subtitle={
-          pendingAction?.to === "skipped"
-            ? "The playbook asks for a reason when this step is skipped."
-            : isPlanStep
-              ? "Who are we waiting on, and why? This is what the delay is counted against."
-              : "Why is this being paused? This is recorded against the task's held time."
-        }
-        size="md"
-        footer={
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setPendingAction(null);
-                setError(null);
-              }}
-              className="px-3 py-1.5 text-sm font-medium rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={
-                isSaving ||
-                (pendingAction?.to === "skipped"
-                  ? !reason.trim()
-                  : isPlanStep
-                    ? !holdOwner || !holdCode
-                    : !reason.trim())
-              }
-              onClick={() =>
-                pendingAction && void transition(pendingAction.to, reason.trim())
-              }
-              className="px-3 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSaving ? "Saving..." : pendingAction?.label}
-            </button>
-          </div>
-        }
-      >
-        <div className="space-y-3">
-          {/* Who we are waiting on, why, and until when. This is what the
-              delay log is built from; the free text below is the detail. */}
-          {pendingAction?.to !== "skipped" && (
-          <div className="grid grid-cols-2 gap-2">
-            <label className="text-xs text-slate-600">
-              Waiting on
-              <select
-                value={holdOwner}
-                onChange={(e) => {
-                  setHoldOwner(e.target.value as DelayOwner | "");
-                  setHoldCode("");
-                }}
-                className={`mt-1 w-full px-2 py-1.5 text-sm rounded-md border bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                  isPlanStep && !holdOwner ? "border-amber-300" : "border-slate-200"
-                }`}
-              >
-                <option value="">{isPlanStep ? "Choose…" : "Not recorded"}</option>
-                {(Object.keys(DelayOwnerLabels) as DelayOwner[]).map((o) => (
-                  <option key={o} value={o}>
-                    {DelayOwnerLabels[o]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs text-slate-600">
-              Reason
-              <select
-                value={holdCode}
-                disabled={!holdOwner}
-                onChange={(e) => setHoldCode(e.target.value)}
-                className="mt-1 w-full px-2 py-1.5 text-sm rounded-md border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
-              >
-                <option value="">{holdOwner ? "Choose…" : "Pick who first"}</option>
-                {reasons
-                  .filter((r) => r.owner === holdOwner)
-                  .map((r) => (
-                    <option key={r.code} value={r.code}>
-                      {r.label}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label className="text-xs text-slate-600">
-              Expected until
-              <input
-                type="date"
-                value={holdUntil}
-                onChange={(e) => setHoldUntil(e.target.value)}
-                className="mt-1 w-full px-2 py-1.5 text-sm rounded-md border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </label>
-            <label className="text-xs text-slate-600">
-              Who exactly
-              <input
-                type="text"
-                value={holdWho}
-                onChange={(e) => setHoldWho(e.target.value)}
-                placeholder="e.g. Mr Rao / Hettich"
-                className="mt-1 w-full px-2 py-1.5 text-sm rounded-md border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </label>
-          </div>
-          )}
-          {pendingAction?.to !== "skipped" && isPlanStep && holdUntil && (
-            <p className="text-[11px] text-slate-500">
-              If this is later than the step's due date, every step that waits on it moves by the same
-              number of days. The agreed plan stays as it was.
-            </p>
-          )}
-          <textarea
-            autoFocus={pendingAction?.to === "skipped" || !isPlanStep}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            rows={3}
-            placeholder={
-              pendingAction?.to === "skipped"
-                ? "Why this step is being skipped"
-                : isPlanStep
-                  ? "Anything else worth noting (optional)"
-                  : pendingAction?.to === "blocked"
-                    ? "e.g. Waiting on client to confirm the shutter finish"
-                    : "e.g. Parked until the site is handed over"
-            }
-            className="w-full px-3 py-2 text-sm rounded-md border border-slate-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
-          />
-          {error && <p className="text-xs text-red-600">{error}</p>}
-        </div>
-      </Modal>
+      {dialog}
     </div>
   );
 }

@@ -32,6 +32,7 @@ import { SearchBox } from "@/components/ui/SearchBox";
 import { Toast } from "@/components/ui/Toast";
 import { CreateTaskModal } from "./CreateTaskModal";
 import { TaskStatusControls } from "./TaskStatusControls";
+import type { TaskWithDetails, TaskTransitionResult } from "@/types/tasks";
 import {
   PlusIcon,
   ChevronDownIcon,
@@ -972,8 +973,9 @@ export default function TaskTable({
       } else {
         // Invalidate cache on successful update
         invalidateCache();
-        // Refresh if status completed
-        if (field === "status" && value === "completed") {
+        // Refresh if status completed - and on any status change in plan
+        // mode, so the Timer buttons follow what the dropdown set.
+        if (field === "status" && (value === "completed" || externalTasks)) {
           handleRefresh();
         }
         // A date changed on a plan step pins it and re-lays everything after
@@ -1079,6 +1081,68 @@ export default function TaskTable({
     isSubtask?: boolean;
     parentTaskId?: string;
   }) => {
+    // One set of props for both instances of the controls on this row: the
+    // Timer cell (start / pause / resume) and the Actions cell (complete, more).
+    const controlProps = {
+      variant: "compact" as const,
+      task: { ...task, total_active_seconds: task.total_active_seconds ?? 0 },
+      startBlockedReason: task.status === "todo" && gates?.[task.id] && !gates[task.id].canStart
+                ? gates[task.id].startReason || "Cannot start yet"
+                : null,
+      completeBlockedReason: gates?.[task.id] && !gates[task.id].canComplete ? gates[task.id].completeReason : null,
+      skip: gates?.[task.id] && task.procedure_run_id
+                ? {
+                    allowed: !!gates[task.id].canSkip,
+                    reason: gates[task.id].skipReason ?? null,
+                    needsReason: gates[task.id].skipNeedsReason !== false,
+                  }
+                : null,
+      taskHref: task.procedure_run_id ? `/dashboard/tasks/${task.id}` : undefined,
+      onError: (message: string) => setActionError(message),
+      disabled: !isEditable,
+      onTransitioned: (updated: TaskWithDetails, result?: TaskTransitionResult) => {
+              // A subtask transition changes its PARENT's gating state too:
+              // completing the last open child unblocks the parent's tick, and
+              // reopening a child pushes a completed parent back to
+              // in_progress (the DB does this - see task_transition). Patching
+              // only the row that moved left the parent stale, so its Complete
+              // button stayed disabled after its subtasks were finished.
+              if (isSubtask && parentTaskId) {
+                setTasks((prev) =>
+                  prev.map((t) => {
+                    if (t.id !== parentTaskId) return t;
+                    const subtasks = (t.subtasks || []).map((st) =>
+                      st.id === task.id ? { ...st, ...updated } : st
+                    );
+                    const settled = (st: { status: string }) =>
+                      st.status === "completed" || st.status === "cancelled";
+                    return {
+                      ...t,
+                      subtasks,
+                      open_subtask_count: subtasks.filter((st) => !settled(st))
+                        .length,
+                      completed_subtask_count: subtasks.filter(
+                        (st) => st.status === "completed"
+                      ).length,
+                      status: result?.parent_reopened
+                        ? ("in_progress" as typeof t.status)
+                        : t.status,
+                    };
+                  })
+                );
+              } else {
+                setTasks((prev) =>
+                  prev.map((t) => (t.id === task.id ? { ...t, ...updated } : t))
+                );
+              }
+              invalidateCache();
+              // When the rows come from a parent (the Plan tab), the parent's
+              // copy is what the next render draws from - the sync effect puts
+              // it back over the local patch. So ask the parent to re-read:
+              // badge, buttons, gates and hours move together, and stay moved.
+              if (externalTasks) handleRefresh();
+            },
+    };
     const isExpanded = expandedTasks.has(task.id);
     const hasSubtasks = task.subtask_count > 0;
     const isEditingTitle =
@@ -1245,70 +1309,7 @@ export default function TaskTable({
 
         {/* Timer - start/pause + complete, with live elapsed time */}
         <td className="px-2 py-1.5 whitespace-nowrap">
-          <TaskStatusControls
-            task={{ ...task, total_active_seconds: task.total_active_seconds ?? 0 }}
-            variant="compact"
-            startBlockedReason={
-              task.status === "todo" && gates?.[task.id] && !gates[task.id].canStart
-                ? gates[task.id].startReason || "Cannot start yet"
-                : null
-            }
-            completeBlockedReason={
-              gates?.[task.id] && !gates[task.id].canComplete ? gates[task.id].completeReason : null
-            }
-            skip={
-              gates?.[task.id] && task.procedure_run_id
-                ? {
-                    allowed: !!gates[task.id].canSkip,
-                    reason: gates[task.id].skipReason ?? null,
-                    needsReason: gates[task.id].skipNeedsReason !== false,
-                  }
-                : null
-            }
-            taskHref={task.procedure_run_id ? `/dashboard/tasks/${task.id}` : undefined}
-            onError={(message) => setActionError(message)}
-            // Table-level, NOT rowEditable: on a settled row this control is
-            // the Reopen button, and gating it on the row being editable would
-            // lock a completed task shut with no way back.
-            disabled={!isEditable}
-            onTransitioned={(updated, result) => {
-              // A subtask transition changes its PARENT's gating state too:
-              // completing the last open child unblocks the parent's tick, and
-              // reopening a child pushes a completed parent back to
-              // in_progress (the DB does this - see task_transition). Patching
-              // only the row that moved left the parent stale, so its Complete
-              // button stayed disabled after its subtasks were finished.
-              if (isSubtask && parentTaskId) {
-                setTasks((prev) =>
-                  prev.map((t) => {
-                    if (t.id !== parentTaskId) return t;
-                    const subtasks = (t.subtasks || []).map((st) =>
-                      st.id === task.id ? { ...st, ...updated } : st
-                    );
-                    const settled = (st: { status: string }) =>
-                      st.status === "completed" || st.status === "cancelled";
-                    return {
-                      ...t,
-                      subtasks,
-                      open_subtask_count: subtasks.filter((st) => !settled(st))
-                        .length,
-                      completed_subtask_count: subtasks.filter(
-                        (st) => st.status === "completed"
-                      ).length,
-                      status: result?.parent_reopened
-                        ? ("in_progress" as typeof t.status)
-                        : t.status,
-                    };
-                  })
-                );
-              } else {
-                setTasks((prev) =>
-                  prev.map((t) => (t.id === task.id ? { ...t, ...updated } : t))
-                );
-              }
-              invalidateCache();
-            }}
-          />
+          <TaskStatusControls {...controlProps} layout="timer" />
         </td>
 
         {/* Notes */}
@@ -1686,6 +1687,7 @@ export default function TaskTable({
             to miss entirely. */}
         <td className="px-2 py-1.5 whitespace-nowrap text-right">
           <span className="inline-flex items-center gap-1.5">
+            <TaskStatusControls {...controlProps} layout="actions" />
             <button
               type="button"
               onClick={(e) => {
