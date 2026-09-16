@@ -12,8 +12,9 @@
  *
  * Not tiny on screen. It used to wrap the inline `Alert` - text-xs, a 16px
  * icon, top-right, max-w-sm - and a completion gate refusing a step read as
- * "the button did nothing". It is now its own thing: bottom-centre, readable
- * type, a bold headline, a clear icon, and it stays until read or dismissed.
+ * "the button did nothing". It is now a white card with a coloured edge,
+ * bottom-centre, readable type and a headline. A solid-colour banner was
+ * tried and was too loud.
  */
 
 import React, { useEffect } from "react";
@@ -38,32 +39,12 @@ interface ToastProps {
 
 const LOOK: Record<
   Variant,
-  { headline: string; wrap: string; icon: string; Icon: typeof CheckCircleIcon }
+  { headline: string; accent: string; icon: string; Icon: typeof CheckCircleIcon }
 > = {
-  success: {
-    headline: "Done",
-    wrap: "bg-emerald-600 text-white",
-    icon: "text-emerald-100",
-    Icon: CheckCircleIcon,
-  },
-  error: {
-    headline: "That did not go through",
-    wrap: "bg-red-600 text-white",
-    icon: "text-red-100",
-    Icon: XCircleIcon,
-  },
-  warning: {
-    headline: "Heads up",
-    wrap: "bg-amber-500 text-white",
-    icon: "text-amber-50",
-    Icon: ExclamationTriangleIcon,
-  },
-  info: {
-    headline: "Note",
-    wrap: "bg-slate-800 text-white",
-    icon: "text-slate-200",
-    Icon: InformationCircleIcon,
-  },
+  success: { headline: "Done", accent: "border-l-emerald-500", icon: "text-emerald-500", Icon: CheckCircleIcon },
+  error: { headline: "That did not go through", accent: "border-l-red-500", icon: "text-red-500", Icon: XCircleIcon },
+  warning: { headline: "Heads up", accent: "border-l-amber-500", icon: "text-amber-500", Icon: ExclamationTriangleIcon },
+  info: { headline: "Note", accent: "border-l-blue-500", icon: "text-blue-500", Icon: InformationCircleIcon },
 };
 
 export function Toast({
@@ -86,21 +67,25 @@ export function Toast({
   return createPortal(
     <div
       role={variant === "error" || variant === "warning" ? "alert" : "status"}
-      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-9999 w-[min(42rem,calc(100vw-2rem))] animate-in fade-in slide-in-from-bottom-3 duration-200"
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-9999 w-[min(36rem,calc(100vw-2rem))] animate-in fade-in slide-in-from-bottom-3 duration-200"
     >
-      <div className={`flex items-start gap-3 rounded-xl px-5 py-4 shadow-2xl ring-1 ring-black/10 ${look.wrap}`}>
-        <Icon className={`w-7 h-7 shrink-0 mt-0.5 ${look.icon}`} />
+      {/* A white card with a coloured edge and icon: readable at a glance,
+          without shouting. A solid red banner was too much. */}
+      <div
+        className={`flex items-start gap-3 rounded-lg border border-slate-200 border-l-4 bg-white px-4 py-3 shadow-xl ${look.accent}`}
+      >
+        <Icon className={`w-6 h-6 shrink-0 ${look.icon}`} />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold leading-5">{look.headline}</p>
-          <p className="text-base leading-6 mt-0.5 break-words">{message}</p>
+          <p className="text-sm font-semibold text-slate-900 leading-5">{look.headline}</p>
+          <p className="text-sm text-slate-700 leading-5 mt-0.5 break-words">{message}</p>
         </div>
         <button
           type="button"
           onClick={onDismiss}
           aria-label="Dismiss"
-          className="shrink-0 -mr-1 -mt-1 rounded-md p-1.5 hover:bg-white/15 transition-colors"
+          className="shrink-0 -mr-1 -mt-1 rounded-md p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
         >
-          <XMarkIcon className="w-5 h-5" />
+          <XMarkIcon className="w-4 h-4" />
         </button>
       </div>
     </div>,
