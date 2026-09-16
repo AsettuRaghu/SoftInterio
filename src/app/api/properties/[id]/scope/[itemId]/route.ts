@@ -20,7 +20,13 @@ const WRITABLE = [
   "notes",
   "display_order",
   "parent_id",
+  // Who does this part of the scope. A client or vendor row is work we wait
+  // for; an excluded row is named so nobody assumes it later.
+  "scope_owner",
+  "scope_vendor_name",
 ] as const;
+
+const SCOPE_OWNERS = new Set(["us", "client", "vendor", "excluded"]);
 
 async function findLeadForProperty(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -71,6 +77,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     // A space cannot be its own parent; deeper cycles are prevented by the UI
     // only offering container types as parents.
+    if ("scope_owner" in body && !SCOPE_OWNERS.has(String(body.scope_owner))) {
+      return NextResponse.json(
+        { error: "scope_owner must be us, client, vendor or excluded" },
+        { status: 400 }
+      );
+    }
     if (body.parent_id === itemId) {
       return NextResponse.json(
         { error: "A space cannot contain itself" },

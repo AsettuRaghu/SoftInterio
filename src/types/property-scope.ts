@@ -60,6 +60,16 @@ export function formatQualityTier(tier: string): string {
   return tier.charAt(0).toUpperCase() + tier.slice(1);
 }
 
+/** Who does this part of the scope. */
+export type ScopeOwner = "us" | "client" | "vendor" | "excluded";
+
+export const SCOPE_OWNER_LABELS: Record<ScopeOwner, string> = {
+  us: "Us",
+  client: "Client",
+  vendor: "Vendor",
+  excluded: "Not in scope",
+};
+
 export interface PropertyScopeItem {
   id: string;
   tenant_id: string;
@@ -78,6 +88,10 @@ export interface PropertyScopeItem {
   measurement_source: MeasurementSource;
   measurement_status: MeasurementStatus;
   notes: string | null;
+  /** Who does this part: us by default. */
+  scope_owner: ScopeOwner;
+  /** Named when a vendor does it. */
+  scope_vendor_name: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

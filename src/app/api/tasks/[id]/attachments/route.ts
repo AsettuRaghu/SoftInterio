@@ -134,9 +134,27 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const description = (formData.get("description") as string | null)?.trim();
+    // A photo attached to one tick of the step's checklist. The tick must be
+    // this task's; the database then ticks it when the row lands.
+    const requirementId = (formData.get("requirement_id") as string | null)?.trim() || null;
 
     if (!file || file.size === 0) {
       return NextResponse.json({ error: "A file is required" }, { status: 400 });
+    }
+
+    if (requirementId) {
+      const { data: req } = await supabase
+        .from("task_completion_requirements")
+        .select("id, needs_photo")
+        .eq("id", requirementId)
+        .eq("task_id", id)
+        .maybeSingle();
+      if (!req) {
+        return NextResponse.json({ error: "That checklist line is not on this task" }, { status: 400 });
+      }
+      if (req.needs_photo && !file.type?.startsWith("image/")) {
+        return NextResponse.json({ error: "This line wants a photo" }, { status: 400 });
+      }
     }
 
     if (file.size > MAX_FILE_SIZE) {
@@ -228,6 +246,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         category,
         description: description || null,
         uploaded_by: user.id,
+        requirement_id: requirementId,
       })
       .select(
         "*, uploaded_user:users!documents_uploaded_by_fkey(id, name, avatar_url)"

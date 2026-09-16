@@ -34,7 +34,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { data, error } = await supabase
       .from("task_completion_requirements")
       .select(
-        "*, satisfied_user:users!task_completion_requirements_satisfied_by_fkey(id, name, avatar_url)"
+        "*, satisfied_user:users!task_completion_requirements_satisfied_by_fkey(id, name, avatar_url), photos:documents!documents_requirement_id_fkey(id, original_name, file_type, created_at)"
       )
       .eq("task_id", id)
       .order("created_at");
@@ -127,7 +127,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { data: requirements } = await supabase
       .from("task_completion_requirements")
       .select(
-        "*, satisfied_user:users!task_completion_requirements_satisfied_by_fkey(id, name, avatar_url)"
+        "*, satisfied_user:users!task_completion_requirements_satisfied_by_fkey(id, name, avatar_url), photos:documents!documents_requirement_id_fkey(id, original_name, file_type, created_at)"
       )
       .eq("task_id", id)
       .order("created_at");

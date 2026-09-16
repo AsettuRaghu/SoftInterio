@@ -1686,18 +1686,69 @@ out of the plan, and its home is the Plan tab and the Tasks list, where
 overdue is already red. The `task_due` type is still known to the calendar's
 filters and labels, harmlessly; nothing produces it.
 
-### A file attached to a step is a project document
+### A file attached to a task is a document, and it is tagged with where it came from
 
-`task_attachments` and `documents` were two stores that never met: a site
-measurement sheet uploaded on a step satisfied the step's upload gate and
-then vanished from view, because the project's Documents tab reads
-`documents` only. Since `20260916180000` a file attached to any task of a
-project is **mirrored** into `documents` by trigger - same storage object,
-`photo` for images and `reference` otherwise, tagged `step: <title>`,
-`stage: <parent title>` and `playbook` where it came from a run. Deleting the
-attachment removes the mirror; the object is the attachment's to delete. The
-mirror is a second row over one object, not a copy of the bytes, so do not
-"tidy" by deleting a document whose `storage_path` an attachment still uses.
+**`task_attachments` is a deprecated, empty table.** A file uploaded on a
+task has been a `documents` row since before the baseline — `linked_type =
+'task'`, `linked_id` = the task, `parent_linked_*` = its lead or project —
+and the project's Documents tab has always read those through
+`parent_linked_*`. A migration on 2026-09-16 mirrored `task_attachments` into
+`documents` without checking this; it could never fire and was dropped the
+same day (`20260916190000`). Before wiring a trigger to a table, check
+something writes to it.
+
+What was actually missing was the **tags**. `trg_documents_tag_task` (BEFORE
+INSERT on `documents`, task rows only) adds `step: <title>`, `stage: <parent
+title>`, `playbook` where the task is in a run, and `space: <name>` where the
+file is attached to a per-space tick. The Documents table searches tags, so
+"kitchen measurement photos" is a filter. Existing task files were tagged by
+the same function.
+
+### A checklist is the ticks inside a step - not a third thing
+
+Decided 2026-09-16 after a proposal with checklist templates, done/check
+kinds and a verify permission was rejected as too many concepts. The model:
+a **playbook** is the list of work, a **scope** is the list of things, and a
+**checklist** is the list of proofs inside one step. A tick has no owner, no
+dates and no status - if something needs its own person or its own time it
+is a step, and a step owed by the client or a vendor is a `client`/`vendor`
+step, which the "waiting on" list already handles. Quality checks are the
+*next step*, assigned to someone else, with their own ticks; a failed check
+is a reopen with a name on it.
+
+Two flags were added to what already existed (`20260916190000`):
+
+- **`checklist_lines`** on a step, `[{label, needs_photo}]`, edited as a
+  proper line list in the playbook editor (the comma box is gone).
+  `checklist_items` stays as the plain labels, derived by the API, so nothing
+  reading it breaks. **`revise_playbook` enumerates both new columns.**
+- **`per_space`** on a step: `create_step_requirements` repeats every line
+  once per top-level, non-excluded space of the project's scope, labelled
+  "Photograph each wall — Kitchen" and carrying `scope_item_id`. A project
+  with no spaces listed gets the plain lines.
+
+**A needs-photo line is ticked by the photo.** `sign_off_requirement`
+refuses it by hand; `POST /api/tasks/[id]/attachments` takes
+`requirement_id` (must be this task's; an image where the line wants one),
+the document carries it, and `trg_satisfy_upload_requirement` ticks that one
+line when the row lands. Deleting the last photo on a line unticks it
+(`trg_documents_untick_on_delete`). `TaskRequirements` shows a camera button
+instead of Confirm on such lines and links the photos.
+
+A batch insert through PostgREST sends an explicit NULL for a column any row
+in the batch names — the `step_key` trap again, met here on `scope_owner`.
+Name a defaulted column on every row of a batch or on none.
+
+### Scope rows say who does them
+
+`property_scope_items.scope_owner` — `us` (default), `client`, `vendor`
+(with `scope_vendor_name`), `excluded` — on spaces and components alike,
+edited in the **Done by** column of the Spaces tab. It is the one addition
+the scope list needed: a kitchen is ours and its counter top is the client's.
+`excluded` rows are skipped by per-space ticks and are named so that "that
+was never in scope" has an answer. Client/vendor rows are **not** raised as
+"waiting on" asks automatically — one ask per client-supplied item would
+drown the list; that is a button for later if wanted.
 
 ### The projects list shows the agreed end against the current one
 

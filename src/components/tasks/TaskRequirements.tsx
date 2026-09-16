@@ -7,6 +7,11 @@
  * review step, and the record is who and when. Upload gates are read-only
  * here: they satisfy themselves when a file lands, and letting someone tick
  * one by hand would make the evidence worthless.
+ *
+ * A checklist line can ask for a photo. Then the photo IS the tick: the
+ * camera button attaches it to that line, the database ticks the line when
+ * the row lands, and Confirm is not offered. Deleting the last photo unticks
+ * it again.
  */
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -22,6 +27,9 @@ interface Requirement {
   satisfied_at?: string | null;
   note?: string | null;
   satisfied_user?: { id: string; name: string } | null;
+  needs_photo?: boolean;
+  scope_item_id?: string | null;
+  photos?: { id: string; original_name: string | null; file_type: string | null }[];
 }
 
 interface Props {
@@ -49,17 +57,59 @@ export function TaskRequirements({ taskId, readOnly = false, onChanged }: Props)
   const [error, setError] = useState<string | null>(null);
   const [noteFor, setNoteFor] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  /** Signed URLs for the photos on ticks, keyed by document id. */
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
+
+  const loadPhotoUrls = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/attachments`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const map: Record<string, string> = {};
+      for (const a of data.attachments ?? []) {
+        if (a.id && a.signed_url) map[a.id] = a.signed_url;
+      }
+      setPhotoUrls(map);
+    } catch {
+      /* the names still show; only the links are missing */
+    }
+  }, [taskId]);
+
+  const attachPhoto = async (requirementId: string, file: File) => {
+    setBusyId(requirementId);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("requirement_id", requirementId);
+      const res = await fetch(`/api/tasks/${taskId}/attachments`, { method: "POST", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Could not attach the photo");
+        return;
+      }
+      await load();
+      await loadPhotoUrls();
+      onChanged?.();
+    } catch {
+      setError("Could not reach the server");
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const load = useCallback(async () => {
     try {
       const response = await fetch(`/api/tasks/${taskId}/requirements`);
       if (!response.ok) return;
       const data = await response.json();
-      setRequirements(data.requirements || []);
+      const rows: Requirement[] = data.requirements || [];
+      setRequirements(rows);
+      if (rows.some((r) => (r.photos?.length ?? 0) > 0)) void loadPhotoUrls();
     } finally {
       setIsLoading(false);
     }
-  }, [taskId]);
+  }, [taskId, loadPhotoUrls]);
 
   useEffect(() => {
     void load();
@@ -154,13 +204,63 @@ export function TaskRequirements({ taskId, readOnly = false, onChanged }: Props)
                       Satisfied automatically once the work is done
                     </span>
                   )}
+                  {!r.is_satisfied && r.needs_photo && (
+                    <span className="block text-[10px] text-slate-500">
+                      Ticked by attaching a photo
+                    </span>
+                  )}
+                  {(r.photos?.length ?? 0) > 0 && (
+                    <span className="flex flex-wrap gap-x-2 text-[10px] text-slate-500">
+                      {r.photos!.map((ph) =>
+                        photoUrls[ph.id] ? (
+                          <a
+                            key={ph.id}
+                            href={photoUrls[ph.id]}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            📷 {ph.original_name || "photo"}
+                          </a>
+                        ) : (
+                          <span key={ph.id}>📷 {ph.original_name || "photo"}</span>
+                        )
+                      )}
+                    </span>
+                  )}
                 </span>
+
+                {!readOnly && r.needs_photo && (
+                  <label
+                    className={`shrink-0 px-2 py-0.5 rounded text-[11px] font-medium border cursor-pointer transition-colors ${
+                      busyId === r.id
+                        ? "opacity-50 pointer-events-none"
+                        : r.is_satisfied
+                          ? "border-slate-200 text-slate-500 hover:bg-slate-100"
+                          : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                    }`}
+                    title={r.is_satisfied ? "Add another photo" : "Attach a photo to tick this line"}
+                  >
+                    {busyId === r.id ? "Uploading…" : r.is_satisfied ? "+ Photo" : "📷 Attach photo"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = "";
+                        if (f) void attachPhoto(r.id, f);
+                      }}
+                    />
+                  </label>
+                )}
 
                 {r.requirement_type === "form" && (
                   <span className="sr-only">form fields below</span>
                 )}
 
-                {!readOnly && signable && (
+                {!readOnly && signable && !(r.needs_photo && !r.is_satisfied) && (
                   <button
                     type="button"
                     disabled={busyId === r.id}

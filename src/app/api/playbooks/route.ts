@@ -269,6 +269,15 @@ export async function replaceSteps(
     step.parent_index !== null &&
     step.parent_index !== "";
 
+  const checklistLinesOf = (step: any): { label: string; needs_photo: boolean }[] => {
+    const lines: any[] = Array.isArray(step.checklist_lines)
+      ? step.checklist_lines
+      : (step.checklist_items ?? []).map((label: string) => ({ label, needs_photo: false }));
+    return lines
+      .map((l) => ({ label: String(l?.label ?? "").trim(), needs_photo: l?.needs_photo === true }))
+      .filter((l) => l.label);
+  };
+
   const rowFor = (step: any, displayOrder: number, parentId: string | null) => ({
     definition_id: definitionId,
     parent_step_id: parentId,
@@ -297,10 +306,16 @@ export async function replaceSteps(
       step.action_type === "upload" && step.required_upload_types?.length
         ? step.required_upload_types
         : null,
+    // The ticks. checklist_lines is what the editor writes ({label,
+    // needs_photo}); checklist_items is derived from it as plain labels so
+    // anything still reading the old column sees the same list.
+    checklist_lines:
+      step.action_type === "checklist" ? checklistLinesOf(step) : [],
     checklist_items:
-      step.action_type === "checklist" && step.checklist_items?.length
-        ? step.checklist_items
+      step.action_type === "checklist" && checklistLinesOf(step).length
+        ? checklistLinesOf(step).map((l) => l.label)
         : null,
+    per_space: step.action_type === "checklist" && step.per_space === true,
     approval_role: step.approval_role || null,
     assign_to_user: step.assign_to_user || null,
     assign_to_role: step.assign_to_role || null,

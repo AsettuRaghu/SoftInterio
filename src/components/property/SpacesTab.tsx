@@ -28,8 +28,10 @@ import {
 } from "@heroicons/react/24/outline";
 import {
   MEASUREMENT_STATUS_LABELS,
+  SCOPE_OWNER_LABELS,
   formatQualityTier,
   type PropertyScopeItem,
+  type ScopeOwner,
   type ScopeBulkEntry,
   type ScopeMeasurementUnit,
   type QualityTier,
@@ -582,6 +584,61 @@ export function SpacesTab({
           )}
         </td>
         <td className="px-3 py-2">
+          {/* Who does this part. A kitchen is ours and its counter top the
+              client's, so it sits on spaces and components alike. Grouped by
+              this, the list is the document the client signs; a later "that
+              was never in scope" is answered by the excluded rows. */}
+          <div className="flex items-center gap-1">
+            <select
+              value={item.scope_owner ?? "us"}
+              disabled={readOnly}
+              onChange={(e) =>
+                void patchItem(item, {
+                  scope_owner: e.target.value as ScopeOwner,
+                  ...(e.target.value !== "vendor" ? { scope_vendor_name: null } : {}),
+                })
+              }
+              className={`px-1.5 py-0.5 text-[10px] font-medium rounded border outline-none disabled:opacity-100 ${
+                item.scope_owner === "client"
+                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                  : item.scope_owner === "vendor"
+                    ? "bg-violet-50 text-violet-700 border-violet-200"
+                    : item.scope_owner === "excluded"
+                      ? "bg-slate-100 text-slate-500 border-slate-200 line-through"
+                      : "bg-white text-slate-600 border-slate-200"
+              }`}
+            >
+              {(Object.keys(SCOPE_OWNER_LABELS) as ScopeOwner[]).map((k) => (
+                <option key={k} value={k}>
+                  {SCOPE_OWNER_LABELS[k]}
+                </option>
+              ))}
+            </select>
+            {item.scope_owner === "vendor" && (
+              <input
+                type="text"
+                value={item.scope_vendor_name ?? ""}
+                disabled={readOnly}
+                placeholder="who?"
+                onChange={(e) =>
+                  setItems((prev) =>
+                    prev.map((i) =>
+                      i.id === item.id ? { ...i, scope_vendor_name: e.target.value } : i
+                    )
+                  )
+                }
+                onBlur={(e) => {
+                  const v = e.target.value.trim() || null;
+                  if (v !== (item.scope_vendor_name ?? null)) {
+                    void patchItem(item, { scope_vendor_name: v });
+                  }
+                }}
+                className="w-20 px-1.5 py-0.5 text-[10px] border border-slate-200 rounded outline-none focus:border-blue-400 disabled:border-transparent disabled:bg-transparent"
+              />
+            )}
+          </div>
+        </td>
+        <td className="px-3 py-2">
           <div className="flex items-center gap-1">
             {(["length", "width"] as const).map((field, idx) => (
               <React.Fragment key={field}>
@@ -759,7 +816,7 @@ export function SpacesTab({
               <tr>
                 <th
                   className="px-3 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider"
-                  style={{ width: "30%" }}
+                  style={{ width: "24%" }}
                 >
                   Space
                 </th>
@@ -771,13 +828,20 @@ export function SpacesTab({
                 </th>
                 <th
                   className="px-3 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider"
-                  style={{ width: "12%" }}
+                  style={{ width: "10%" }}
                 >
                   Quality
                 </th>
                 <th
                   className="px-3 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider"
-                  style={{ width: "24%" }}
+                  style={{ width: "14%" }}
+                  title="Who does this part: us, the client, a vendor, or nobody"
+                >
+                  Done by
+                </th>
+                <th
+                  className="px-3 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider"
+                  style={{ width: "20%" }}
                 >
                   Size
                 </th>

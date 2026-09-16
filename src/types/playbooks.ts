@@ -96,8 +96,12 @@ export interface PlaybookStepDefinition {
   action_type: PlaybookActionType;
   form_schema?: Record<string, unknown> | null;
   required_upload_types?: string[] | null;
-  /** For a checklist step: each item becomes a requirement to tick. */
+  /** For a checklist step: the plain labels of its ticks (derived from checklist_lines). */
   checklist_items?: string[] | null;
+  /** The ticks themselves. A needs_photo line is ticked by attaching a photo, not by hand. */
+  checklist_lines?: ChecklistLine[] | null;
+  /** Repeat the ticks once per top-level space in the project's scope. */
+  per_space?: boolean;
   approval_role?: string | null;
   /** The person this step is for. Wins over assign_to_role. */
   assign_to_user?: string | null;
@@ -120,6 +124,11 @@ export interface PlaybookStepDefinition {
   milestone_role?: StepMilestoneRole | null;
   /** Code from delay_reasons; pre-fills the hold dialog for a client/vendor step. */
   default_delay_reason?: string | null;
+}
+
+export interface ChecklistLine {
+  label: string;
+  needs_photo: boolean;
 }
 
 export type StepOwnerType = "internal" | "client" | "vendor";

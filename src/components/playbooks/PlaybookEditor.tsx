@@ -16,6 +16,7 @@ import {
   PlaybookActionLabels,
   StepOwnerLabels,
   StepMilestoneLabels,
+  type ChecklistLine,
   type StepOwnerType,
   type StepMilestoneRole,
   type PlaybookActionType,
@@ -59,7 +60,12 @@ interface DraftStep {
   approval_role: string | null;
   /** What must be attached before an upload step can complete. */
   required_upload_types: string[] | null;
+  /** @deprecated plain labels; the editor works in checklist_lines and the API derives this. */
   checklist_items: string[] | null;
+  /** The ticks of a checklist step. A needs_photo line is ticked by attaching a photo. */
+  checklist_lines: ChecklistLine[];
+  /** Repeat the ticks once per top-level space in the project's scope. */
+  per_space: boolean;
   /**
    * The steps that must finish first, held by uid rather than position.
    *
@@ -163,6 +169,24 @@ function reindex(next: DraftStep[], prev: DraftStep[]): DraftStep[] {
 let uidCounter = 0;
 const newUid = () => `s${++uidCounter}`;
 
+
+/**
+ * The ticks a step carries, from whichever column the row has: the lines the
+ * editor writes, or the plain labels an older playbook stored.
+ */
+function linesFrom(raw: {
+  checklist_lines?: ChecklistLine[] | null;
+  checklist_items?: string[] | null;
+}): ChecklistLine[] {
+  if (Array.isArray(raw.checklist_lines) && raw.checklist_lines.length) {
+    return raw.checklist_lines.map((l) => ({
+      label: String(l?.label ?? ""),
+      needs_photo: l?.needs_photo === true,
+    }));
+  }
+  return (raw.checklist_items ?? []).map((label) => ({ label, needs_photo: false }));
+}
+
 const blankStep = (): DraftStep => ({
   uid: newUid(),
   title: "",
@@ -185,6 +209,8 @@ const blankStep = (): DraftStep => ({
   approval_role: null,
   required_upload_types: null,
   checklist_items: null,
+  checklist_lines: [],
+  per_space: false,
   depends_on: [],
   allow_parallel: false,
   skip_requires_reason: true,
@@ -298,6 +324,8 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
             approval_role: t.approval_role ?? null,
             required_upload_types: t.required_upload_types ?? null,
             checklist_items: t.checklist_items ?? null,
+            checklist_lines: linesFrom(t),
+            per_space: t.per_space === true,
             description: t.description ?? null,
             form_schema: t.form_schema ?? null,
             depends_on: [],
@@ -326,6 +354,8 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
               approval_role: c.approval_role ?? null,
               required_upload_types: c.required_upload_types ?? null,
               checklist_items: c.checklist_items ?? null,
+              checklist_lines: linesFrom(c),
+              per_space: c.per_space === true,
               description: c.description ?? null,
               form_schema: c.form_schema ?? null,
               depends_on: [],
@@ -645,6 +675,10 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
       const s = steps[old];
       return {
         ...s,
+        // A blank line is nothing to tick; the API derives checklist_items.
+        checklist_lines: s.checklist_lines
+          .map((l) => ({ ...l, label: l.label.trim() }))
+          .filter((l) => l.label),
         parent_index:
           s.parent_index === null
             ? null
@@ -1587,25 +1621,102 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                           </span>
                         )}
                         {step.action_type === "checklist" && (
-                          <span className="flex items-center gap-1.5 flex-1">
-                            <span className="text-emerald-600 whitespace-nowrap">
-                              must tick:
-                            </span>
-                            <input
-                              type="text"
-                              value={(step.checklist_items ?? []).join(", ")}
-                              onChange={(e) =>
+                          <div className="flex-1 space-y-1">
+                            {/* The ticks. Each is a line with a name; a line
+                                marked photo is ticked by attaching one, not
+                                by hand. Per space repeats every line once
+                                per room in the project's scope. */}
+                            <div className="flex items-center gap-3">
+                              <span className="text-emerald-600 whitespace-nowrap">
+                                must tick:
+                              </span>
+                              <label className="flex items-center gap-1 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={step.per_space}
+                                  onChange={(e) => update(i, { per_space: e.target.checked })}
+                                />
+                                <span title="Repeat these lines once for every space in the project's scope - 'photograph each wall' becomes one line per room.">
+                                  Once per space
+                                </span>
+                              </label>
+                            </div>
+                            {step.checklist_lines.map((line, li) => (
+                              <div key={li} className="flex items-center gap-1.5">
+                                <span className="w-3 h-3 rounded-sm border border-slate-300 shrink-0" />
+                                <input
+                                  type="text"
+                                  value={line.label}
+                                  onChange={(e) =>
+                                    update(i, {
+                                      checklist_lines: step.checklist_lines.map((l, k) =>
+                                        k === li ? { ...l, label: e.target.value } : l
+                                      ),
+                                    })
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      update(i, {
+                                        checklist_lines: [
+                                          ...step.checklist_lines.slice(0, li + 1),
+                                          { label: "", needs_photo: false },
+                                          ...step.checklist_lines.slice(li + 1),
+                                        ],
+                                      });
+                                    }
+                                  }}
+                                  placeholder="e.g. site cleared"
+                                  className="flex-1 px-1.5 py-0.5 border border-slate-200 rounded"
+                                />
+                                <label
+                                  className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded border ${
+                                    line.needs_photo
+                                      ? "border-blue-300 bg-blue-50 text-blue-800"
+                                      : "border-slate-200 text-slate-500"
+                                  }`}
+                                  title="Ticked by attaching a photo, not by hand"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="sr-only"
+                                    checked={line.needs_photo}
+                                    onChange={(e) =>
+                                      update(i, {
+                                        checklist_lines: step.checklist_lines.map((l, k) =>
+                                          k === li ? { ...l, needs_photo: e.target.checked } : l
+                                        ),
+                                      })
+                                    }
+                                  />
+                                  📷 photo
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    update(i, {
+                                      checklist_lines: step.checklist_lines.filter((_, k) => k !== li),
+                                    })
+                                  }
+                                  title="Remove this line"
+                                  className="text-slate-400 hover:text-red-600 px-1"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() =>
                                 update(i, {
-                                  checklist_items: e.target.value
-                                    .split(",")
-                                    .map((v) => v.trim())
-                                    .filter(Boolean),
+                                  checklist_lines: [...step.checklist_lines, { label: "", needs_photo: false }],
                                 })
                               }
-                              placeholder="comma separated, e.g. site cleared, power on, access granted"
-                              className="flex-1 px-1.5 py-0.5 border border-slate-200 rounded"
-                            />
-                          </span>
+                              className="text-emerald-700 hover:underline"
+                            >
+                              + add a line
+                            </button>
+                          </div>
                         )}
                         {step.action_type === "form" && (
                           <span className="flex items-center gap-1.5 flex-1">
