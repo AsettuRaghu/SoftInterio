@@ -1674,6 +1674,18 @@ Still there, and worth knowing before the calendar grows:
 selected it in two places, neither checked the error, so a project-linked event
 silently lost its name. Fixed, and verified against the schema.
 
+### The calendar is what someone booked for a date
+
+Meetings (`calendar_events`, `lead_activities` / `project_activities` with
+`meeting_scheduled_at`), site visits, events, and the follow-up reminders set
+on notes. **Not task due dates.** They were derived into it for a while
+(typed `task_due`); once every playbook step carried a scheduled due date a
+project's Calendar tab was 36 deadlines with the meetings lost among them,
+and on 2026-09-16 they came out entirely. A due date is a deadline that falls
+out of the plan, and its home is the Plan tab and the Tasks list, where
+overdue is already red. The `task_due` type is still known to the calendar's
+filters and labels, harmlessly; nothing produces it.
+
 ### The server says why; do not throw that away
 
 Marking a calendar event complete on a lead popped `Failed to complete task` in

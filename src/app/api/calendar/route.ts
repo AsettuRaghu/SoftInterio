@@ -399,132 +399,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Task due dates.
-    //
-    // Derived, like note follow-ups: the task stays the single source of truth
-    // and nothing is copied into calendar_events, so rescheduling or completing
-    // a task cannot leave a stale calendar row behind.
-    //
-    // A due date is a deadline, not an appointment - it has no time and no
-    // duration - so these are all-day rows typed task_due, which the calendar's
-    // existing type filter can hide for anyone who finds them noisy.
-    {
-      let taskQuery = supabaseAdmin
-        .from("tasks")
-        .select(
-          `id, title, description, due_date, status, priority, assigned_to,
-           related_type, related_id, created_by, created_at,
-           assigned_user:users!tasks_assigned_to_fkey(id, name, avatar_url)`
-        )
-        .eq("tenant_id", tenantId)
-        .not("due_date", "is", null)
-        // Finished work is not a reminder.
-        .not("status", "in", "(completed,cancelled,skipped)")
-        // A plan is not a list of appointments. Every step of a playbook now
-        // carries a scheduled due date, and putting all 36 of a project's on
-        // the calendar buried the meetings among them. Only a stage's end
-        // makes the calendar - the milestone a client would ask about - and
-        // ad-hoc tasks as before.
-        .or("procedure_run_id.is.null,parent_task_id.is.null");
-
-      if (source === "lead") taskQuery = taskQuery.eq("related_type", "lead");
-      if (source === "project") taskQuery = taskQuery.eq("related_type", "project");
-      if (linkedId && (source === "lead" || source === "project")) {
-        taskQuery = taskQuery.eq("related_id", linkedId);
-      }
-      if (startDate) taskQuery = taskQuery.gte("due_date", startDate);
-      if (endDate) taskQuery = taskQuery.lte("due_date", endDate);
-
-      const { data: dueTasks, error: taskError } = await taskQuery;
-
-      if (taskError) {
-        console.error("Error fetching task due dates:", taskError);
-      } else if (dueTasks?.length) {
-        // Resolve the names of whatever the tasks hang off, in two batched
-        // lookups rather than one per task.
-        const leadIds = dueTasks
-          .filter((t: any) => t.related_type === "lead" && t.related_id)
-          .map((t: any) => t.related_id);
-        const projectIds = dueTasks
-          .filter((t: any) => t.related_type === "project" && t.related_id)
-          .map((t: any) => t.related_id);
-
-        const [{ data: relLeads }, { data: relProjects }] = await Promise.all([
-          leadIds.length
-            ? supabaseAdmin
-                .from("leads")
-                .select(
-                  `id, lead_number, client:clients!leads_client_id_fkey(name)`
-                )
-                .in("id", leadIds)
-            : Promise.resolve({ data: [] as any[] }),
-          projectIds.length
-            ? supabaseAdmin
-                .from("projects")
-                .select("id, project_number, name")
-                .in("id", projectIds)
-            : Promise.resolve({ data: [] as any[] }),
-        ]);
-
-        const leadById = new Map((relLeads || []).map((l: any) => [l.id, l]));
-        const projectById = new Map(
-          (relProjects || []).map((pr: any) => [pr.id, pr])
-        );
-
-        allEvents.push(
-          ...dueTasks.map((t: any) => {
-            const rel =
-              t.related_type === "lead"
-                ? leadById.get(t.related_id)
-                : t.related_type === "project"
-                ? projectById.get(t.related_id)
-                : null;
-
-            return {
-              id: `task-${t.id}`,
-              source_type: (t.related_type === "project"
-                ? "project"
-                : t.related_type === "lead"
-                ? "lead"
-                : "standalone") as any,
-              source_id: t.related_id,
-              source_number: rel?.lead_number || rel?.project_number,
-              source_name: rel?.client?.name || rel?.name,
-              activity_type: "task_due",
-              event_type: "task_due",
-              meeting_type: "task_due",
-              title: t.title,
-              description: t.description,
-              // Anchored to 09:00 like note follow-ups so both read as
-              // "handle this today" rather than sorting at midnight above
-              // every real appointment.
-              scheduled_at: `${String(t.due_date).slice(0, 10)}T09:00:00`,
-              is_all_day: true,
-              is_completed: false,
-              // The person who must act on a task is its assignee, not its
-              // creator. Listing them as an attendee is what lets the
-              // role-based visibility filter below show the task to them.
-              attendees: t.assigned_to
-                ? [
-                    {
-                      type: "team",
-                      id: t.assigned_to,
-                      name: t.assigned_user?.name || "Assignee",
-                    },
-                  ]
-                : [],
-              created_by: t.created_by,
-              created_at: t.created_at,
-              created_user: t.assigned_user,
-              priority: t.priority,
-              // Derived: there is no calendar_events row to edit or delete.
-              is_derived: true,
-              task_id: t.id,
-            };
-          })
-        );
-      }
-    }
+    // Task due dates are NOT calendar entries. A due date is a deadline that
+    // falls out of the plan, not something anyone booked; its home is the Plan
+    // tab and the Tasks list, where overdue is already red. They were derived
+    // in here for a while, and once every playbook step carried a scheduled
+    // due date a project's calendar was 36 deadlines with the meetings lost
+    // among them (2026-09-16). The calendar is meetings, site visits, events
+    // and the follow-up reminders set on notes - things someone chose a date
+    // for.
 
     allEvents.sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
 
