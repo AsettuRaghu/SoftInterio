@@ -211,6 +211,9 @@ export function TaskStatusControls({
   layout = "timer",
 }: TaskStatusControlsProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  // The dialog can also open AFTER a pause, to add who/why to a hold that is
+  // already in effect. Same fields, saved with a PATCH instead of a transition.
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<ActionConfig | null>(null);
@@ -250,7 +253,14 @@ export function TaskStatusControls({
   }, [baseline, isRunning, tick]);
 
   const transition = useCallback(
-    async (to: TaskStatus, withReason?: string) => {
+    async (
+      to: TaskStatus,
+      withReason?: string,
+      afterwards?: () => void,
+      // State set in the same tick is not yet visible here; an immediate
+      // pause passes the owner and reason it just chose.
+      hold?: { owner: DelayOwner | ""; code: string },
+    ) => {
       setIsSaving(true);
       setError(null);
       try {
@@ -260,8 +270,8 @@ export function TaskStatusControls({
           body: JSON.stringify({
             status: to,
             reason: withReason,
-            hold_owner: holdOwner || undefined,
-            hold_reason_code: holdCode || undefined,
+            hold_owner: (hold ? hold.owner : holdOwner) || undefined,
+            hold_reason_code: (hold ? hold.code : holdCode) || undefined,
             hold_expected_until: holdUntil || undefined,
             hold_counterpart: holdWho || undefined,
           }),
@@ -287,6 +297,7 @@ export function TaskStatusControls({
             data.transition as TaskTransitionResult
           );
         }
+        afterwards?.();
       } catch {
         setError("Could not reach the server");
       } finally {
@@ -296,14 +307,62 @@ export function TaskStatusControls({
     [task.id, onTransitioned, holdOwner, holdCode, holdUntil, holdWho, onError, pendingAction]
   );
 
+  /** Add who/why/until to a hold already in effect (no status change). */
+  const saveHoldDetails = async () => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          hold_owner: holdOwner || null,
+          hold_reason_code: holdCode || null,
+          hold_expected_until: holdUntil || null,
+          hold_counterpart: holdWho || null,
+          hold_reason: reason.trim() || null,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error || "Could not save");
+        return;
+      }
+      setDetailsOpen(false);
+      setReason("");
+      if (data.task) onTransitioned?.(data.task as TaskWithDetails);
+    } catch {
+      setError("Could not reach the server");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleAction = (action: ActionConfig) => {
-    // Full variant asks why before pausing or blocking. Compact does not for
-    // an ad-hoc task - it is a one-click row action. A PLAN step is different:
-    // holding it is a delay on the project, and the delay log needs to know
-    // who it waits on. So a plan step asks in every variant.
+    // In a table row a plan step pauses the moment you press it - the same
+    // feel as the tasks page - and asks who we are waiting on AFTERWARDS,
+    // only when the playbook has not already said. A client or vendor step
+    // carries its owner and usual reason, so those pause silently and
+    // correctly; an internal step pauses and then shows a small amber
+    // "who are we waiting on?" until it is answered.
+    if (variant === "compact" && isPlanStep && action.to === "on_hold") {
+      const stepOwner = task.playbook_step?.owner_type;
+      const known = !!stepOwner && stepOwner !== "internal";
+      const owner: DelayOwner | "" = known ? (stepOwner as DelayOwner) : "";
+      const code = known ? task.playbook_step?.default_delay_reason ?? "" : "";
+      setHoldOwner(owner);
+      setHoldCode(code);
+      setHoldUntil("");
+      setHoldWho("");
+      void transition("on_hold", undefined, known ? undefined : () => setDetailsOpen(true), { owner, code });
+      return;
+    }
+
+    // The full variant (task page, edit modal) still asks first: there is
+    // room for the question there, and it is where a deliberate hold is made.
     if (
       TRANSITIONS_REQUIRING_REASON.includes(action.to) &&
-      (variant === "full" || isPlanStep)
+      variant === "full"
     ) {
       setPendingAction(action);
       setReason("");
@@ -346,24 +405,29 @@ export function TaskStatusControls({
   // set the dialog up and never showed it.
   const dialog = (
   <Modal
-    isOpen={!!pendingAction}
+    isOpen={!!pendingAction || detailsOpen}
     onClose={() => {
       setPendingAction(null);
+      setDetailsOpen(false);
       setError(null);
     }}
     title={
-      pendingAction?.to === "skipped"
-        ? "Skip this step"
-        : pendingAction?.to === "blocked"
-          ? "Block task"
-          : "Pause task"
+      detailsOpen
+        ? "Paused - who are we waiting on?"
+        : pendingAction?.to === "skipped"
+          ? "Skip this step"
+          : pendingAction?.to === "blocked"
+            ? "Block task"
+            : "Pause task"
     }
     subtitle={
-      pendingAction?.to === "skipped"
-        ? "The playbook asks for a reason when this step is skipped."
-        : isPlanStep
-          ? "Who are we waiting on, and why? This is what the delay is counted against."
-          : "Why is this being paused? This is recorded against the task's held time."
+      detailsOpen
+        ? "The step is already paused. This is what the delay is counted against; you can also fill it in later from the row."
+        : pendingAction?.to === "skipped"
+          ? "The playbook asks for a reason when this step is skipped."
+          : isPlanStep
+            ? "Who are we waiting on, and why? This is what the delay is counted against."
+            : "Why is this being paused? This is recorded against the task's held time."
     }
     size="md"
     footer={
@@ -372,28 +436,33 @@ export function TaskStatusControls({
           type="button"
           onClick={() => {
             setPendingAction(null);
+            setDetailsOpen(false);
             setError(null);
           }}
           className="px-3 py-1.5 text-sm font-medium rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
         >
-          Cancel
+          {detailsOpen ? "Later" : "Cancel"}
         </button>
         <button
           type="button"
           disabled={
             isSaving ||
-            (pendingAction?.to === "skipped"
-              ? !reason.trim()
-              : isPlanStep
-                ? !holdOwner || !holdCode
-                : !reason.trim())
+            (detailsOpen
+              ? !holdOwner || !holdCode
+              : pendingAction?.to === "skipped"
+                ? !reason.trim()
+                : isPlanStep
+                  ? !holdOwner || !holdCode
+                  : !reason.trim())
           }
           onClick={() =>
-            pendingAction && void transition(pendingAction.to, reason.trim())
+            detailsOpen
+              ? void saveHoldDetails()
+              : pendingAction && void transition(pendingAction.to, reason.trim())
           }
           className="px-3 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isSaving ? "Saving..." : pendingAction?.label}
+          {isSaving ? "Saving..." : detailsOpen ? "Save" : pendingAction?.label}
         </button>
       </div>
     }
@@ -562,6 +631,25 @@ export function TaskStatusControls({
             >
               {isPaused ? `paused · ${formatDuration(elapsed)}` : formatDuration(elapsed)}
             </span>
+          )}
+          {isPaused && isPlanStep && !task.hold_owner && !disabled && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setHoldOwner("");
+                setHoldCode("");
+                setHoldUntil("");
+                setHoldWho("");
+                setReason("");
+                setError(null);
+                setDetailsOpen(true);
+              }}
+              className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-1.5 h-6 hover:bg-amber-100 whitespace-nowrap"
+              title="Say who we are waiting on, so the delay is counted against them"
+            >
+              who are we waiting on?
+            </button>
           )}
         </div>
         {dialog}

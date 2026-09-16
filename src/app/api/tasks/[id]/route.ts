@@ -406,6 +406,41 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // Who/why/until added to a hold already in effect - the row's "who are
+    // we waiting on?" after an immediate pause. Only while the task is held,
+    // and only when no status change is in the same request (the transition
+    // carries them itself then). The newest history row is updated too, so
+    // the delay log sees the owner on the hold that is actually running.
+    if (
+      !body.status &&
+      (existingTask.status === "on_hold" || existingTask.status === "blocked") &&
+      ("hold_owner" in body || "hold_reason_code" in body || "hold_expected_until" in body || "hold_counterpart" in body || "hold_reason" in body)
+    ) {
+      const h = readHold(body as Record<string, unknown>);
+      const holdPatch: Record<string, unknown> = {};
+      if ("hold_owner" in body) holdPatch.hold_owner = h.p_hold_owner;
+      if ("hold_reason_code" in body) holdPatch.hold_reason_code = h.p_hold_reason_code;
+      if ("hold_expected_until" in body) holdPatch.hold_expected_until = h.p_hold_expected_until;
+      if ("hold_counterpart" in body) holdPatch.hold_counterpart = h.p_hold_counterpart;
+      if ("hold_reason" in body) holdPatch.hold_reason = (body as { hold_reason?: string | null }).hold_reason || null;
+      Object.assign(updateData, holdPatch);
+      const { data: last } = await supabase
+        .from("task_status_history")
+        .select("id")
+        .eq("task_id", id)
+        .in("to_status", ["on_hold", "blocked"])
+        .order("changed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (last) {
+        const { hold_reason: reasonText, ...rest } = holdPatch as { hold_reason?: unknown } & Record<string, unknown>;
+        await supabase
+          .from("task_status_history")
+          .update({ ...rest, ...(reasonText !== undefined ? { reason: reasonText } : {}) })
+          .eq("id", last.id);
+      }
+    }
+
     // A date a person changes on a plan step is pinned: the scheduler lays
     // the rest of the plan around it instead of overwriting it. Only a real
     // change pins - the edit modal echoes unchanged dates back.
