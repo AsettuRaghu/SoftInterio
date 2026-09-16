@@ -227,6 +227,12 @@ export interface TaskTableProps {
    * after the round trip.
    */
   gates?: Record<string, PlanGate>;
+  /**
+   * "given": keep the caller's order until the user clicks a column - unlike
+   * preserveOrder, sorting stays available. The project Tasks tab hands its
+   * stages in playbook order and wants them shown that way by default.
+   */
+  defaultSort?: "created_at" | "given";
   /** Starting page size. A plan is read whole, not 25 rows at a time. */
   initialPageSize?: number;
   // Optional: Filter by linked entity (lead, project, etc.)
@@ -263,6 +269,7 @@ export interface TaskTableProps {
 export default function TaskTable({
   showPlanColumns = false,
   preserveOrder = false,
+  defaultSort = "created_at",
   gates,
   initialPageSize,
   relatedType,
@@ -296,7 +303,7 @@ export default function TaskTable({
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatuses, setSelectedStatuses] = useState<TaskStatus[]>([]);
-  const [sortField, setSortField] = useState<string>("created_at");
+  const [sortField, setSortField] = useState<string>(defaultSort === "given" ? "" : "created_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialPageSize ?? 25);
@@ -649,7 +656,7 @@ export default function TaskTable({
 
     // Sorting
     // The caller's order is meaningful and not derivable from a column.
-    if (preserveOrder) return result;
+    if (preserveOrder || sortField === "") return result;
 
     result.sort((a, b) => {
       let aVal: any = "";

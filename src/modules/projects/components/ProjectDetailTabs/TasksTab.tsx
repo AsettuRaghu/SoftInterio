@@ -87,6 +87,7 @@ export default function TasksTab({
       onCreateTask={onAddTaskClick} // If provided, use custom handler; otherwise uses built-in modal
       // Pass external tasks and refresh
       externalTasks={tasks as any}
+      defaultSort="given"
       onRefresh={onRefresh}
     />
     </div>
