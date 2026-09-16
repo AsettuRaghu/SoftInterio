@@ -419,7 +419,13 @@ export async function GET(request: NextRequest) {
         .eq("tenant_id", tenantId)
         .not("due_date", "is", null)
         // Finished work is not a reminder.
-        .not("status", "in", "(completed,cancelled,skipped)");
+        .not("status", "in", "(completed,cancelled,skipped)")
+        // A plan is not a list of appointments. Every step of a playbook now
+        // carries a scheduled due date, and putting all 36 of a project's on
+        // the calendar buried the meetings among them. Only a stage's end
+        // makes the calendar - the milestone a client would ask about - and
+        // ad-hoc tasks as before.
+        .or("procedure_run_id.is.null,parent_task_id.is.null");
 
       if (source === "lead") taskQuery = taskQuery.eq("related_type", "lead");
       if (source === "project") taskQuery = taskQuery.eq("related_type", "project");
