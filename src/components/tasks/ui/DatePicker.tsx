@@ -20,6 +20,8 @@ interface DatePickerProps {
    * shown in red here. Callers that know the status should pass the answer in.
    */
   overdue?: boolean;
+  /** Always the date, never "Today" / "Tomorrow" - for dates that are facts. */
+  absolute?: boolean;
 }
 
 export function DatePicker({
@@ -31,6 +33,7 @@ export function DatePicker({
   readOnly = false,
   showIcon = true,
   overdue,
+  absolute = false,
 }: DatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0, ready: false });
@@ -92,8 +95,10 @@ export function DatePicker({
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    if (date.toDateString() === today.toDateString()) return "Today";
-    if (date.toDateString() === tomorrow.toDateString()) return "Tomorrow";
+    if (!absolute) {
+      if (date.toDateString() === today.toDateString()) return "Today";
+      if (date.toDateString() === tomorrow.toDateString()) return "Tomorrow";
+    }
 
     return date.toLocaleDateString("en-US", {
       month: "short",

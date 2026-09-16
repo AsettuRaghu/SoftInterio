@@ -21,15 +21,38 @@ import {
 } from "./ui";
 import { isOverdue } from "@/types/tasks";
 
+/** Whole days from `actual` back to `planned`: positive = early, negative = late, 0 = on the day. */
+function daysAhead(planned?: string | null, actual?: string | null): number | null {
+  if (!planned || !actual) return null;
+  const p = new Date(planned); p.setHours(0, 0, 0, 0);
+  const a = new Date(actual); a.setHours(0, 0, 0, 0);
+  return Math.round((p.getTime() - a.getTime()) / 86400000);
+}
+
 /**
- * For a finished task: days between when it was due and when it was done.
- * Positive = early, negative = late, 0 = on the day. Null when unknowable.
+ * The planned-versus-actual chip: the same nudge on both date columns.
+ * Green early or on the day, red late; the tooltip carries the planned date.
  */
-function daysEarly(task: { status: string; due_date?: string | null; completed_at?: string | null }): number | null {
-  if (task.status !== "completed" || !task.due_date || !task.completed_at) return null;
-  const due = new Date(task.due_date); due.setHours(0, 0, 0, 0);
-  const done = new Date(task.completed_at); done.setHours(0, 0, 0, 0);
-  return Math.round((due.getTime() - done.getTime()) / 86400000);
+function PlannedChip({ planned, actual, what }: { planned?: string | null; actual?: string | null; what: "started" | "finished" }) {
+  const d = daysAhead(planned, actual);
+  if (d === null) return null;
+  const plannedText = new Date(planned!).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  const cls = d >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700";
+  const text = d > 0 ? `${d}d early` : d === 0 ? "on time" : `${-d}d late`;
+  return (
+    <span
+      className={`shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${cls}`}
+      title={`Planned to be ${what} ${plannedText}`}
+    >
+      {text}
+    </span>
+  );
+}
+
+/** A finished task, against the due date planned when it began. */
+function daysEarly(task: { status: string; due_date?: string | null; planned_due_date?: string | null; completed_at?: string | null }): number | null {
+  if (task.status !== "completed") return null;
+  return daysAhead(task.planned_due_date ?? task.due_date, task.completed_at);
 }
 
 /** Whole days between a due date and today. Used only for overdue tasks. */
@@ -122,6 +145,11 @@ interface Task {
   hold_counterpart?: string | null;
   /** Dates set by a person; the scheduler lays the plan around them. */
   dates_pinned?: boolean;
+  /** The plan as it stood when the task began; what early/late is measured against. */
+  planned_start_date?: string | null;
+  planned_due_date?: string | null;
+  first_started_at?: string | null;
+  completed_at?: string | null;
   total_active_seconds?: number;
   live_active_seconds?: number;
   is_clock_running?: boolean;
@@ -1470,24 +1498,32 @@ export default function TaskTable({
           />
         </td>
 
-        {/* Start Date */}
+        {/* Start Date. Once a task has begun this is the day it began - a
+            fact, so an absolute date - with a chip saying how that compared
+            to what was planned when it started. */}
         <td className="px-2 py-1.5 whitespace-nowrap">
-          <DatePicker
-            value={task.start_date || ""}
-            onChange={(val) => {
-              if (rowEditable) {
-                updateTaskInline(
-                  task.id,
-                  "start_date",
-                  val || null,
-                  isSubtask,
-                  parentTaskId
-                );
-              }
-            }}
-            placeholder="Start"
-            readOnly={!rowEditable}
-          />
+          <div className="flex items-center gap-1.5">
+            <DatePicker
+              value={task.start_date || ""}
+              onChange={(val) => {
+                if (rowEditable) {
+                  updateTaskInline(
+                    task.id,
+                    "start_date",
+                    val || null,
+                    isSubtask,
+                    parentTaskId
+                  );
+                }
+              }}
+              placeholder="Start"
+              readOnly={!rowEditable}
+              absolute={task.status !== "todo"}
+            />
+            {task.status !== "todo" && (
+              <PlannedChip planned={task.planned_start_date} actual={task.first_started_at ?? task.start_date} what="started" />
+            )}
+          </div>
         </td>
 
         {/* Due Date. A faint cell tint alone was too easy to miss, so an
@@ -1518,6 +1554,7 @@ export default function TaskTable({
               // Without this the picker decides on the date alone, and a task
               // completed after its due date still showed red.
               overdue={isOverdue(task)}
+              absolute={task.status !== "todo"}
             />
 
             {isOverdue(task) && (
@@ -1530,30 +1567,9 @@ export default function TaskTable({
                 {daysLate(task.due_date)}d late
               </span>
             )}
-            {/* A finished task says how it finished against its date: green
-                when early or on the day, red when late. The same nudge the
-                overdue chip gives, pointed the other way. */}
-            {(() => {
-              const early = daysEarly(task);
-              if (early === null) return null;
-              if (early > 0)
-                return (
-                  <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700" title={`Finished ${early} day${early === 1 ? "" : "s"} before it was due`}>
-                    {early}d early
-                  </span>
-                );
-              if (early === 0)
-                return (
-                  <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700" title="Finished on the day it was due">
-                    on time
-                  </span>
-                );
-              return (
-                <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700" title={`Finished ${-early} day${early === -1 ? "" : "s"} after it was due`}>
-                  {-early}d late
-                </span>
-              );
-            })()}
+            {task.status === "completed" && (
+              <PlannedChip planned={task.planned_due_date ?? task.due_date} actual={task.completed_at} what="finished" />
+            )}
           </div>
         </td>
 
