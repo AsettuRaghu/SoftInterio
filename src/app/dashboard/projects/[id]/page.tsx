@@ -953,7 +953,12 @@ export default function ProjectDetailPage({ params }: PageProps) {
               teamMembers={teamMembers}
               onCountChange={(count) => setTasksCount(count)}
               onEditTask={(task) => setEditingTask(task)}
-              onRefresh={fetchCounts}
+              // Quiet: re-read the tasks only. fetchCounts blanks every tab to
+              // a skeleton, which is what "the whole page refreshes" was.
+              onRefresh={() => {
+                void refreshTasks();
+                void refreshPlan();
+              }}
             />
           ) : null}
 
