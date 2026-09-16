@@ -625,8 +625,26 @@ export function TaskStatusControls({
       <>
         <div className="flex items-center gap-1.5">
           {settled ? (
-            <span className="text-[11px] text-slate-400 whitespace-nowrap">
-              {shown === "completed" ? "Done" : "Cancelled"}
+            // Finished: the word and the time it took, green when it came in
+            // within the estimate and red when it ran over - the same nudge
+            // the due-date chip gives, for effort rather than dates.
+            <span
+              className={`text-[11px] font-medium tabular-nums whitespace-nowrap ${
+                shown !== "completed"
+                  ? "text-slate-400"
+                  : !task.estimated_hours
+                    ? "text-slate-500"
+                    : elapsed <= task.estimated_hours * 3600
+                      ? "text-emerald-600"
+                      : "text-red-600"
+              }`}
+              title={
+                shown === "completed" && task.estimated_hours
+                  ? `${formatDuration(elapsed)} worked of ${task.estimated_hours}h estimated`
+                  : undefined
+              }
+            >
+              {shown === "completed" ? `Done ${formatClock(elapsed)}` : "Cancelled"}
             </span>
           ) : (
             <>
@@ -665,7 +683,7 @@ export function TaskStatusControls({
             </>
           )}
 
-          {!hideTimer && (elapsed > 0 || running) && (
+          {!hideTimer && !settled && (elapsed > 0 || running) && (
             <span
               className={`text-[11px] tabular-nums whitespace-nowrap ${
                 overBudget ? "text-red-600 font-medium" : "text-slate-500"

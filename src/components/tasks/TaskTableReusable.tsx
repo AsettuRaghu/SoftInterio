@@ -1125,9 +1125,15 @@ export default function TaskTable({
     const controlProps = {
       variant: "compact" as const,
       task: { ...task, total_active_seconds: task.total_active_seconds ?? 0 },
-      startBlockedReason: task.status === "todo" && gates?.[task.id] && !gates[task.id].canStart
-                ? gates[task.id].startReason || "Cannot start yet"
-                : null,
+      // No assignee is decided here, from the row as it is right now, so the
+      // Start button follows an assignee change the instant it is made rather
+      // than a gate refetch later. Everything else still comes from the gates.
+      startBlockedReason:
+        task.status === "todo" && !task.assigned_to
+          ? "Assign someone first"
+          : task.status === "todo" && gates?.[task.id] && !gates[task.id].canStart
+            ? gates[task.id].startReason || "Cannot start yet"
+            : null,
       completeBlockedReason: gates?.[task.id] && !gates[task.id].canComplete ? gates[task.id].completeReason : null,
       onError: (message: string) => setActionError(message),
       // The badge moves with the buttons, before the server answers.
