@@ -284,6 +284,29 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Whether a row is a playbook step, and of which stage. Any client - the
+    // list page, a phone - can tell a plan step from a plain task from this
+    // alone, without joining anything.
+    {
+      const titleById = new Map<string, string>();
+      for (const t of allRenderedTasks as any[]) titleById.set(t.id, t.title);
+      const missingParents = [
+        ...new Set(
+          (allRenderedTasks as any[])
+            .filter((t) => t.parent_task_id && !titleById.has(t.parent_task_id))
+            .map((t) => t.parent_task_id as string)
+        ),
+      ];
+      if (missingParents.length > 0) {
+        const { data: parents } = await supabase.from("tasks").select("id, title").in("id", missingParents);
+        for (const pr of parents ?? []) titleById.set(pr.id, pr.title);
+      }
+      (allRenderedTasks as any[]).forEach((t) => {
+        t.is_plan_step = !!t.procedure_run_id;
+        t.stage_title = t.parent_task_id && t.procedure_run_id ? titleById.get(t.parent_task_id) ?? null : null;
+      });
+    }
+
     // The agreed plan, where the project has one: each step's dates as they
     // were at kick-off (latest baseline). Early / late on the plan is measured
     // against these, and a step yet to start can show where it was agreed to

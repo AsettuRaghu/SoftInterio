@@ -174,6 +174,9 @@ interface Task {
   /** The plan as it stood when the task began; what early/late is measured against. */
   planned_start_date?: string | null;
   planned_due_date?: string | null;
+  /** From the API: a playbook step, and the stage it belongs to. */
+  is_plan_step?: boolean;
+  stage_title?: string | null;
   /** The agreed plan (latest baseline) - preferred over planned_* when the project has one. */
   agreed_start_date?: string | null;
   agreed_due_date?: string | null;
@@ -299,6 +302,8 @@ export default function TaskTable({
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<TabType>(defaultTab);
   const [showOverdueOnly, setShowOverdueOnly] = useState(false);
+  /** all · plan steps only · ad-hoc tasks only. */
+  const [kindFilter, setKindFilter] = useState<"all" | "plan" | "adhoc">("all");
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -823,8 +828,13 @@ export default function TaskTable({
   );
 
   const activeTasks = useMemo(
-    () => (showOverdueOnly ? tasksInTab.filter((t) => isOverdue(t)) : tasksInTab),
-    [tasksInTab, showOverdueOnly]
+    () => {
+      let list = showOverdueOnly ? tasksInTab.filter((t) => isOverdue(t)) : tasksInTab;
+      if (kindFilter === "plan") list = list.filter((t) => !!t.procedure_run_id);
+      if (kindFilter === "adhoc") list = list.filter((t) => !t.procedure_run_id);
+      return list;
+    },
+    [tasksInTab, showOverdueOnly, kindFilter]
   );
 
   // Pagination
@@ -837,7 +847,7 @@ export default function TaskTable({
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedStatuses, searchQuery, activeTab, showOverdueOnly]);
+  }, [selectedStatuses, searchQuery, activeTab, showOverdueOnly, kindFilter]);
 
   // Nothing left to show once the last one is dealt with - drop the filter
   // rather than leaving the user on a deliberately empty list.
@@ -1414,6 +1424,18 @@ export default function TaskTable({
                   <span className="flex items-center gap-0.5 text-[9px] text-slate-400 bg-slate-100 px-1 py-0.5 rounded shrink-0">
                     <ListBulletIcon className="w-2.5 h-2.5" />
                     {task.completed_subtask_count}/{task.subtask_count}
+                  </span>
+                )}
+                {/* A playbook step says so, quietly: it obeys the plan's
+                    rules and its dates come from the schedule, which a plain
+                    task's do not. Not on the Plan tab itself, where every row
+                    is one. */}
+                {task.procedure_run_id && !showPlanColumns && (
+                  <span
+                    className="shrink-0 rounded border border-blue-200 bg-blue-50 px-1 py-0.5 text-[9px] font-medium uppercase tracking-wide text-blue-700"
+                    title={`Playbook step${task.stage_title ? ` · stage: ${task.stage_title}` : ""}${task.related_name ? ` · ${task.related_name}` : ""}`}
+                  >
+                    plan
                   </span>
                 )}
                 {/* Inline rather than a 9th column - this table is already
@@ -2012,6 +2034,24 @@ export default function TaskTable({
                 </button>
               </div>
 
+              {/* Plan steps or plain tasks. Only where both kinds can meet -
+                  the Plan tab is all steps and needs no switch. */}
+              {!showPlanColumns && tasksInTab.some((t) => t.procedure_run_id) && tasksInTab.some((t) => !t.procedure_run_id) && (
+                <span className="shrink-0 inline-flex rounded-md border border-slate-200 overflow-hidden text-xs">
+                  {(["all", "plan", "adhoc"] as const).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => setKindFilter(k)}
+                      className={`px-2.5 py-1.5 font-medium transition-colors ${
+                        kindFilter === k ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      {k === "all" ? "All" : k === "plan" ? "Plan steps" : "Ad hoc"}
+                    </button>
+                  ))}
+                </span>
+              )}
               {/* Only appears when something is actually late, so it reads as
                   an alert rather than a permanently empty filter. */}
               {overdueCount > 0 && (
