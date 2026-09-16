@@ -48,6 +48,26 @@ export interface PlanGate {
   startReason: string | null;
   canComplete: boolean;
   completeReason: string | null;
+  canSkip?: boolean;
+  skipReason?: string | null;
+  skipNeedsReason?: boolean;
+}
+
+/**
+ * Hours worked so far, including a running clock. The API stamps
+ * live_active_seconds at fetch time; the table's own tick keeps it moving.
+ */
+function elapsedHours(t: { total_active_seconds?: number; live_active_seconds?: number }): number {
+  return Math.round(((t.live_active_seconds ?? t.total_active_seconds ?? 0) / 3600) * 10) / 10;
+}
+
+/** Slate under three quarters of the estimate, amber up to it, red past it. */
+function hoursTone(used: number, est: number): string {
+  if (!est) return "text-slate-600";
+  const r = used / est;
+  if (r > 1) return "text-red-600 font-medium";
+  if (r >= 0.75) return "text-amber-700 font-medium";
+  return "text-slate-600";
 }
 
 const HOLD_OWNER_WORD = {
@@ -378,6 +398,17 @@ export default function TaskTable({
   ]);
 
   // Use external refresh if provided
+  // Running clocks in the Hours column advance without a refetch.
+  const [, setClockTick] = useState(0);
+  useEffect(() => {
+    const anyRunning = tasks.some(
+      (t) => t.is_clock_running || t.subtasks?.some((st) => st.is_clock_running),
+    );
+    if (!anyRunning) return;
+    const id = setInterval(() => setClockTick((n) => n + 1), 60000);
+    return () => clearInterval(id);
+  }, [tasks]);
+
   const handleRefresh = useCallback(() => {
     if (onRefresh) {
       onRefresh();
@@ -946,8 +977,9 @@ export default function TaskTable({
           handleRefresh();
         }
         // A date changed on a plan step pins it and re-lays everything after
-        // it; the other rows have moved, so read them back.
-        if (field === "start_date" || field === "due_date") {
+        // it; the other rows have moved, so read them back. An assignee change
+        // re-reads too, because Start is gated on having one.
+        if (field === "start_date" || field === "due_date" || field === "assigned_to") {
           const row = isSubtask && parentTaskId
             ? tasks.find((t) => t.id === parentTaskId)?.subtasks?.find((st) => st.id === taskId)
             : tasks.find((t) => t.id === taskId);
@@ -1163,6 +1195,19 @@ export default function TaskTable({
                 {gates[task.id].startReason?.replace(/^Waiting for /, "after ")}
               </span>
             )}
+            {/* A step under way that cannot be completed yet says why, in the
+                same chip style, and takes you to where it can be dealt with -
+                a file is attached and a gate signed off on the task page. */}
+            {task.status === "in_progress" && gates?.[task.id] && !gates[task.id].canComplete && gates[task.id].completeReason && (
+              <a
+                href={`/dashboard/tasks/${task.id}`}
+                onClick={(e) => e.stopPropagation()}
+                title={`${gates[task.id].completeReason} — open the task to deal with it`}
+                className="shrink-0 max-w-[12rem] truncate text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-1 py-0.5 hover:bg-amber-100"
+              >
+                needs: {gates[task.id].completeReason}
+              </a>
+            )}
             {(task.status === "on_hold" || task.status === "blocked") && task.hold_owner && (
               <span
                 title={`Waiting on ${HOLD_OWNER_WORD[task.hold_owner]}${task.hold_counterpart ? ` (${task.hold_counterpart})` : ""}${
@@ -1211,6 +1256,16 @@ export default function TaskTable({
             completeBlockedReason={
               gates?.[task.id] && !gates[task.id].canComplete ? gates[task.id].completeReason : null
             }
+            skip={
+              gates?.[task.id] && task.procedure_run_id
+                ? {
+                    allowed: !!gates[task.id].canSkip,
+                    reason: gates[task.id].skipReason ?? null,
+                    needsReason: gates[task.id].skipNeedsReason !== false,
+                  }
+                : null
+            }
+            taskHref={task.procedure_run_id ? `/dashboard/tasks/${task.id}` : undefined}
             onError={(message) => setActionError(message)}
             // Table-level, NOT rowEditable: on a settled row this control is
             // the Reopen button, and gating it on the row being editable would
@@ -1436,22 +1491,26 @@ export default function TaskTable({
               const est = kids.length
                 ? kids.reduce((sum: number, k: any) => sum + Number(k.estimated_hours ?? 0), 0)
                 : Number(task.estimated_hours ?? 0);
-              const act = kids.reduce(
-                (sum: number, k: any) => sum + Number(k.actual_hours ?? 0),
-                Number(task.actual_hours ?? 0),
-              );
+              // Hours spent so far, running clocks included - actual_hours
+              // only settles when a session ends, so a step in progress read
+              // 0h until it was paused.
+              const act = Math.round(
+                (kids.reduce((sum: number, k: any) => sum + elapsedHours(k), 0) + elapsedHours(task)) * 10,
+              ) / 10;
               if (!est && !act) return <span className="text-slate-300">—</span>;
               const over = est > 0 && act > est;
               return (
                 <span
-                  className={over ? "text-amber-700 font-medium" : "text-slate-600"}
+                  className={hoursTone(act, est)}
                   title={
                     over
-                      ? `${act}h logged against ${est}h expected — over by ${Math.round((act - est) * 100) / 100}h`
-                      : `${act}h logged of ${est}h expected`
+                      ? `${act}h spent against ${est}h expected — over by ${Math.round((act - est) * 10) / 10}h`
+                      : est
+                        ? `${act}h spent of ${est}h expected (${Math.round((act / est) * 100)}%)`
+                        : `${act}h spent`
                   }
                 >
-                  {act}h <span className="text-slate-400">/ {est}h</span>
+                  {act}h <span className="text-slate-400 font-normal">/ {est}h</span>
                 </span>
               );
             })()}
@@ -1460,6 +1519,39 @@ export default function TaskTable({
         {showPlanColumns && (
           <td className="px-2 py-1.5 whitespace-nowrap">
             {(() => {
+              // Progress is earned in hours: a finished step is worth its whole
+              // estimate, a step under way is worth the hours spent on it (up to
+              // its estimate), a stage is the sum of its steps. Falls back to
+              // counting steps where no hours were written.
+              const settledSet = ["completed", "skipped", "cancelled"];
+              const earned = (t: any) => {
+                const e = Number(t.estimated_hours ?? 0);
+                if (settledSet.includes(t.status)) return e;
+                return Math.min(e, elapsedHours(t));
+              };
+              const kidsForHours = task.subtasks ?? [];
+              const estTotal = kidsForHours.length
+                ? kidsForHours.reduce((s: number, k: any) => s + Number(k.estimated_hours ?? 0), 0)
+                : Number(task.estimated_hours ?? 0);
+              if (estTotal > 0) {
+                const got = kidsForHours.length
+                  ? kidsForHours.reduce((s: number, k: any) => s + earned(k), 0)
+                  : settledSet.includes(task.status)
+                    ? estTotal
+                    : earned(task);
+                const pctH = Math.min(100, Math.round((got / estTotal) * 100));
+                return (
+                  <span className="flex items-center gap-1.5" title={`${Math.round(got * 10) / 10}h of ${estTotal}h earned`}>
+                    <span className="w-12 h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                      <span
+                        className={`block h-full rounded-full ${pctH >= 100 ? "bg-emerald-500" : "bg-blue-500"}`}
+                        style={{ width: `${pctH}%` }}
+                      />
+                    </span>
+                    <span className="text-[11px] text-slate-500 tabular-nums">{pctH}%</span>
+                  </span>
+                );
+              }
               // A parent reports its children; a leaf is all or nothing, since
               // there is nothing finer to count.
               const kids = task.subtasks ?? [];

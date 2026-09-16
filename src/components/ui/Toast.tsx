@@ -27,7 +27,7 @@ export function Toast({
   message,
   variant = "error",
   onDismiss,
-  duration = 6000,
+  duration = 8000,
 }: ToastProps) {
   useEffect(() => {
     if (!message || duration === 0) return;
@@ -38,8 +38,11 @@ export function Toast({
   if (!message || typeof window === "undefined") return null;
 
   return createPortal(
-    <div className="fixed top-20 right-4 z-9999 max-w-sm animate-in fade-in slide-in-from-top-2 duration-200">
-      <div className="shadow-lg rounded-lg">
+    // Bottom-centre and wide, where the eye lands after clicking something in
+    // a table. Top-right at max-w-sm was missed entirely - a completion gate
+    // refusing a step read as "the button did nothing".
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-9999 w-[min(40rem,calc(100vw-2rem))] animate-in fade-in slide-in-from-bottom-2 duration-200">
+      <div className="shadow-2xl rounded-lg ring-1 ring-black/5 text-sm">
         <Alert variant={variant} message={message} onDismiss={onDismiss} />
       </div>
     </div>,

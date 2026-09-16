@@ -61,6 +61,10 @@ interface TaskStatusControlsProps {
   completeBlockedReason?: string | null;
   /** Surface a refusal here (a toast) instead of turning the button red. */
   onError?: (message: string) => void;
+  /** Whether the playbook lets this step be skipped, and whether it needs a reason. */
+  skip?: { allowed: boolean; reason: string | null; needsReason: boolean } | null;
+  /** Where the task's own page is; the "more" menu offers it. */
+  taskHref?: string;
   /** Hide the elapsed-time readout (e.g. in dense table rows). */
   hideTimer?: boolean;
   /**
@@ -195,7 +199,10 @@ export function TaskStatusControls({
   startBlockedReason = null,
   completeBlockedReason = null,
   onError,
+  skip = null,
+  taskHref,
 }: TaskStatusControlsProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<ActionConfig | null>(null);
@@ -348,6 +355,16 @@ export function TaskStatusControls({
 
     const iconButton =
       "w-7 h-7 flex items-center justify-center rounded-md border transition-all disabled:cursor-not-allowed";
+    const isPaused = task.status === "on_hold" || task.status === "blocked";
+    // A paused task shows a Resume that does not look like Start: amber, not
+    // blue, beside an amber "paused" readout - the row has to say it stopped.
+    const primaryClass =
+      primary && primary.to === "in_progress" && isPaused
+        ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+        : primary
+          ? `${styleFor(primary.to).idle} ${styleFor(primary.to).hover}`
+          : "";
+    const completeGate = blockedReason ?? completeBlockedReason;
 
     const primaryLabel = isRunning
       ? "Pause"
@@ -425,9 +442,7 @@ export function TaskStatusControls({
                 handleAction(primary);
               }}
               className={`${iconButton} ${
-                error
-                  ? "bg-red-50 text-red-600 border-red-200"
-                  : `${styleFor(primary.to).idle} ${styleFor(primary.to).hover}`
+                error ? "bg-red-50 text-red-600 border-red-200" : primaryClass
               } disabled:opacity-40`}
             >
               {primary.icon}
@@ -439,20 +454,18 @@ export function TaskStatusControls({
 
         {complete ? (
           <Tooltip
-            label={
-              blockedReason ? `Cannot complete - ${blockedReason}` : "Mark complete"
-            }
+            label={completeGate ? `Cannot complete yet - ${completeGate}` : "Mark complete"}
           >
             <button
               type="button"
-              disabled={isSaving || disabled || blockedBySubtasks}
+              disabled={isSaving || disabled || !!completeGate}
               aria-label="Mark complete"
               onClick={(e) => {
                 e.stopPropagation();
                 handleAction(complete);
               }}
               className={`${iconButton} ${
-                blockedBySubtasks
+                completeGate
                   ? "bg-slate-100 text-slate-400 border-slate-200"
                   : `${styleFor("completed").idle} ${styleFor("completed").hover}`
               } disabled:opacity-60`}
@@ -464,18 +477,82 @@ export function TaskStatusControls({
           <span className="w-7 h-7" />
         )}
 
-        {!hideTimer && (elapsed > 0 || isRunning) && (
+        {/* More: the few things a row needs that are not start / pause /
+            complete - skipping a step (with a reason when the playbook asks)
+            and opening the task's own page, where files are attached and
+            gates are signed off. Everything else is the edit pencil. */}
+        {(skip?.allowed || taskHref) && !settled && (
+          <span className="relative">
+            <button
+              type="button"
+              aria-label="More"
+              title="More"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen((v) => !v);
+              }}
+              className={`${iconButton} bg-white text-slate-400 border-slate-200 hover:bg-slate-50 hover:text-slate-600`}
+            >
+              <span className="text-sm leading-none">⋯</span>
+            </button>
+            {menuOpen && (
+              <>
+                <span className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} />
+                <span
+                  className="absolute left-0 top-8 z-50 min-w-[11rem] rounded-lg border border-slate-200 bg-white shadow-xl py-1 text-xs"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {taskHref && (
+                    <a href={taskHref} className="block px-3 py-1.5 text-slate-700 hover:bg-slate-50">
+                      Open task page
+                    </a>
+                  )}
+                  {skip?.allowed && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        const skipAction: ActionConfig = { to: "skipped", label: "Skip", icon: CHECK };
+                        if (skip.needsReason) {
+                          setPendingAction(skipAction);
+                          setReason("");
+                          setError(null);
+                        } else {
+                          void transition("skipped");
+                        }
+                      }}
+                      className="block w-full text-left px-3 py-1.5 text-slate-700 hover:bg-slate-50"
+                    >
+                      Skip this step{skip.needsReason ? "…" : ""}
+                    </button>
+                  )}
+                  {skip && !skip.allowed && skip.reason && (
+                    <span className="block px-3 py-1.5 text-slate-400">{skip.reason}</span>
+                  )}
+                </span>
+              </>
+            )}
+          </span>
+        )}
+
+        {!hideTimer && (elapsed > 0 || isRunning || isPaused) && (
           <span
             className={`text-[10px] tabular-nums whitespace-nowrap ${
-              overBudget ? "text-red-600 font-medium" : "text-slate-400"
+              isPaused
+                ? "text-amber-700 font-medium"
+                : overBudget
+                  ? "text-red-600 font-medium"
+                  : "text-slate-400"
             }`}
             title={
-              task.estimated_hours
-                ? `Worked ${formatDuration(elapsed)} of ${task.estimated_hours}h estimated`
-                : `Worked ${formatDuration(elapsed)}`
+              isPaused
+                ? `Paused after ${formatDuration(elapsed)} of work`
+                : task.estimated_hours
+                  ? `Worked ${formatDuration(elapsed)} of ${task.estimated_hours}h estimated`
+                  : `Worked ${formatDuration(elapsed)}`
             }
           >
-            {formatDuration(elapsed)}
+            {isPaused ? "paused" : formatDuration(elapsed)}
           </span>
         )}
       </div>
@@ -580,11 +657,19 @@ export function TaskStatusControls({
           setPendingAction(null);
           setError(null);
         }}
-        title={pendingAction?.to === "blocked" ? "Block task" : "Pause task"}
+        title={
+          pendingAction?.to === "skipped"
+            ? "Skip this step"
+            : pendingAction?.to === "blocked"
+              ? "Block task"
+              : "Pause task"
+        }
         subtitle={
-          pendingAction?.to === "blocked"
-            ? "What is this waiting on? Blocked time is tracked separately from paused time."
-            : "Why is this being paused? This is recorded against the task's held time."
+          pendingAction?.to === "skipped"
+            ? "The playbook asks for a reason when this step is skipped."
+            : isPlanStep
+              ? "Who are we waiting on, and why? This is what the delay is counted against."
+              : "Why is this being paused? This is recorded against the task's held time."
         }
         size="md"
         footer={
@@ -601,7 +686,14 @@ export function TaskStatusControls({
             </button>
             <button
               type="button"
-              disabled={isSaving || !reason.trim() || (isPlanStep && !holdOwner)}
+              disabled={
+                isSaving ||
+                (pendingAction?.to === "skipped"
+                  ? !reason.trim()
+                  : isPlanStep
+                    ? !holdOwner || !holdCode
+                    : !reason.trim())
+              }
               onClick={() =>
                 pendingAction && void transition(pendingAction.to, reason.trim())
               }
@@ -615,6 +707,7 @@ export function TaskStatusControls({
         <div className="space-y-3">
           {/* Who we are waiting on, why, and until when. This is what the
               delay log is built from; the free text below is the detail. */}
+          {pendingAction?.to !== "skipped" && (
           <div className="grid grid-cols-2 gap-2">
             <label className="text-xs text-slate-600">
               Waiting on
@@ -674,21 +767,26 @@ export function TaskStatusControls({
               />
             </label>
           </div>
-          {isPlanStep && holdUntil && (
+          )}
+          {pendingAction?.to !== "skipped" && isPlanStep && holdUntil && (
             <p className="text-[11px] text-slate-500">
               If this is later than the step's due date, every step that waits on it moves by the same
               number of days. The agreed plan stays as it was.
             </p>
           )}
           <textarea
-            autoFocus
+            autoFocus={pendingAction?.to === "skipped" || !isPlanStep}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             rows={3}
             placeholder={
-              pendingAction?.to === "blocked"
-                ? "e.g. Waiting on client to confirm the shutter finish"
-                : "e.g. Parked until the site is handed over"
+              pendingAction?.to === "skipped"
+                ? "Why this step is being skipped"
+                : isPlanStep
+                  ? "Anything else worth noting (optional)"
+                  : pendingAction?.to === "blocked"
+                    ? "e.g. Waiting on client to confirm the shutter finish"
+                    : "e.g. Parked until the site is handed over"
             }
             className="w-full px-3 py-2 text-sm rounded-md border border-slate-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
           />
