@@ -7,13 +7,33 @@ import type { TaskFilters, CreateTaskInput } from "@/types/tasks";
 export async function GET(request: NextRequest) {
   try {
     // Protect API route with user status check
-    const guard = await protectApiRoute(request);
+    const guard = await protectApiRoute(request, { loadPermissions: true });
     if (!guard.success) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
     const { user } = guard;
     const supabase = await createClient();
+
+    /*
+     * Who sees which tasks.
+     *
+     * `tasks.view` is granted to nearly every role and labelled "view all", so
+     * it cannot mean all - it is the basic right to use the module. The seed
+     * puts the real distinction in `tasks.view_all` (Admin, Owner, Manager,
+     * Senior Designer) and `tasks.view_team` (the manager roles): those see
+     * every task in the tenant. Everyone else sees the tasks assigned to them
+     * or created by them. A designer holding two steps of a 36-step playbook
+     * used to see all 36 of every project under "All tasks".
+     *
+     * A list scoped to a lead or a project is the entity's own view and is
+     * gated by that entity's access instead, so a plan stays whole for anyone
+     * who may open the project.
+     */
+    const seesAll =
+      user.isSuperAdmin ||
+      guard.permissions?.has("tasks.view_all") ||
+      guard.permissions?.has("tasks.view_team");
 
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams;
@@ -57,6 +77,10 @@ export async function GET(request: NextRequest) {
     if (priority) {
       const priorities = priority.split(",");
       query = query.in("priority", priorities);
+    }
+
+    if (!relatedType && !seesAll) {
+      query = query.or(`assigned_to.eq.${user!.id},created_by.eq.${user!.id}`);
     }
 
     // Assigned to filter
@@ -459,6 +483,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       tasks,
+      scope: relatedType ? "entity" : seesAll ? "all" : "own",
       pagination: {
         total: count || 0,
         limit,

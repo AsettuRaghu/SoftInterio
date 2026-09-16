@@ -840,6 +840,18 @@ the other loses the ability to tell that something ran late.
 `actual_hours` from the wrong column silently yields zero, which is how logged
 hours get erased.
 
+### Who sees which tasks
+
+`GET /api/tasks` without a lead/project filter is scoped by permission
+(2026-09-16). `tasks.view` is granted to nearly every role and labelled "view
+all", so it is read as the basic right to use the module; the real split is
+**`tasks.view_all`** (Admin, Owner, Manager, Senior Designer) and
+**`tasks.view_team`** (the seven manager roles), which see every task, against
+everyone else, who sees tasks **assigned to them or created by them**. The
+response carries `scope` and the Tasks page says which it is showing. A list
+scoped to a project or lead is the entity's own view, gated by that entity's
+access - a plan stays whole for anyone who may open the project.
+
 ### The task rules, in one place
 
 `docs/testing/task-rules.md` is the list - 30 rows, each with how to try it

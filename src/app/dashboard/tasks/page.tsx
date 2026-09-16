@@ -97,6 +97,8 @@ type TabType = "my-tasks" | "assigned-by-me" | "unassigned" | "all-tasks";
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  /** "all" for a role that sees every task; "own" for everyone else. */
+  const [scope, setScope] = useState<"all" | "own" | "entity">("all");
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -218,6 +220,7 @@ export default function TasksPage() {
 
       const data = await response.json();
       setTasks(data.tasks || []);
+      if (data.scope) setScope(data.scope);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load tasks");
     } finally {
@@ -1303,7 +1306,9 @@ export default function TasksPage() {
                     Tasks
                   </h1>
                   <p className="text-[11px] text-slate-500">
-                    Manage and track your work
+                    {scope === "own"
+                      ? "Your tasks - assigned to you or created by you"
+                      : "Every task in the business"}
                   </p>
                 </div>
               </div>
