@@ -21,6 +21,17 @@ import {
 } from "./ui";
 import { isOverdue } from "@/types/tasks";
 
+/**
+ * For a finished task: days between when it was due and when it was done.
+ * Positive = early, negative = late, 0 = on the day. Null when unknowable.
+ */
+function daysEarly(task: { status: string; due_date?: string | null; completed_at?: string | null }): number | null {
+  if (task.status !== "completed" || !task.due_date || !task.completed_at) return null;
+  const due = new Date(task.due_date); due.setHours(0, 0, 0, 0);
+  const done = new Date(task.completed_at); done.setHours(0, 0, 0, 0);
+  return Math.round((due.getTime() - done.getTime()) / 86400000);
+}
+
 /** Whole days between a due date and today. Used only for overdue tasks. */
 function daysLate(dueDate?: string | null): number {
   if (!dueDate) return 0;
@@ -62,11 +73,15 @@ function elapsedHours(t: { total_active_seconds?: number; live_active_seconds?: 
   return Math.round(((t.live_active_seconds ?? t.total_active_seconds ?? 0) / 3600) * 10) / 10;
 }
 
-/** Slate under three quarters of the estimate, amber up to it, red past it. */
-function hoursTone(used: number, est: number): string {
+/**
+ * Slate under three quarters of the estimate, amber up to it, red past it -
+ * and, once the work is finished, green when it came in under.
+ */
+function hoursTone(used: number, est: number, done = false): string {
   if (!est) return "text-slate-600";
   const r = used / est;
   if (r > 1) return "text-red-600 font-medium";
+  if (done) return "text-emerald-600 font-medium";
   if (r >= 0.75) return "text-amber-700 font-medium";
   return "text-slate-600";
 }
@@ -1458,6 +1473,30 @@ export default function TaskTable({
                 {daysLate(task.due_date)}d late
               </span>
             )}
+            {/* A finished task says how it finished against its date: green
+                when early or on the day, red when late. The same nudge the
+                overdue chip gives, pointed the other way. */}
+            {(() => {
+              const early = daysEarly(task);
+              if (early === null) return null;
+              if (early > 0)
+                return (
+                  <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700" title={`Finished ${early} day${early === 1 ? "" : "s"} before it was due`}>
+                    {early}d early
+                  </span>
+                );
+              if (early === 0)
+                return (
+                  <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700" title="Finished on the day it was due">
+                    on time
+                  </span>
+                );
+              return (
+                <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700" title={`Finished ${-early} day${early === -1 ? "" : "s"} after it was due`}>
+                  {-early}d late
+                </span>
+              );
+            })()}
           </div>
         </td>
 
@@ -1487,7 +1526,7 @@ export default function TaskTable({
               const over = est > 0 && act > est;
               return (
                 <span
-                  className={hoursTone(act, est)}
+                  className={hoursTone(act, est, task.status === "completed")}
                   title={
                     over
                       ? `${act}h spent against ${est}h expected — over by ${Math.round((act - est) * 10) / 10}h`

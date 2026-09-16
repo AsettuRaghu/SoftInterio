@@ -11,7 +11,7 @@
  * authoritative totals always come back from the server on each transition.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useDelayReasons } from "@/lib/tasks/use-delay-reasons";
 import { DelayOwnerLabels, type DelayOwner } from "@/types/tasks";
@@ -235,16 +235,37 @@ export function TaskStatusControls({
   const [tick, setTick] = useState(0);
   const isPlanStep = !!task.procedure_run_id;
 
-  const isRunning = task.is_clock_running ?? task.status === "in_progress";
+  const isRunning = optimistic
+    ? optimistic === "in_progress"
+    : (task.is_clock_running ?? task.status === "in_progress");
 
   // Baseline the elapsed counter whenever the server gives us fresh numbers,
   // then advance it locally so the readout doesn't sit frozen.
   const baseSeconds = task.live_active_seconds ?? task.total_active_seconds ?? 0;
   const [baseline, setBaseline] = useState({ seconds: baseSeconds, at: Date.now() });
+  const wasRunning = useRef(isRunning);
 
+  /**
+   * Re-baseline without a visible jump.
+   *
+   * The server's figure arrives a fetch or two after a click, and it can sit a
+   * second or two either side of what the row has been counting locally. It
+   * used to be adopted blindly, so the clock lurched on every Start and Pause.
+   * Now: the locally counted value carries on unless the server disagrees by
+   * more than a few seconds (a session logged elsewhere, a page left open),
+   * and pausing freezes the clock at exactly what it showed.
+   */
   useEffect(() => {
-    setBaseline({ seconds: baseSeconds, at: Date.now() });
-  }, [baseSeconds, task.status]);
+    const now = Date.now();
+    setBaseline((prev) => {
+      const local = wasRunning.current
+        ? prev.seconds + Math.floor((now - prev.at) / 1000)
+        : prev.seconds;
+      const seconds = Math.abs(baseSeconds - local) > 3 ? baseSeconds : local;
+      return { seconds, at: now };
+    });
+    wasRunning.current = isRunning;
+  }, [baseSeconds, isRunning]);
 
   useEffect(() => {
     if (!isRunning) return;
