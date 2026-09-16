@@ -1127,6 +1127,15 @@ nobody notices until it matters. It is not idempotent — call it once per new
 task.
 
 ### One plan at a time, and who may change one
+
+**Decided 2026-09-16: one playbook per project, full stop.** A tenant keeps
+as many playbooks as it has kinds of project and the PM picks one at kick-off;
+two never run on one project at once (everything - stage strip, progress,
+baseline, delay log, handover milestone - rests on there being one plan); and
+"a playbook that follows another" (snag & warranty after handover) is not
+built until a real case asks for it. Parallel work is *Parallel* stages inside
+the one playbook, not a second run.
+
 `POST /api/playbooks/[id]/run` refuses to start a second run while one is
 active on the same entity. Nothing stopped it before, and the Plan tab shows
 only the most recently started run — so the other kept its tasks, invisible on

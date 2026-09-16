@@ -186,6 +186,12 @@ project** (today Owner, Admin, Manager and Project Manager). Kick-off also
 creates the plan's tasks, so those roles must be allowed to create tasks;
 checked together. No new permission.
 
+**c. Multiple playbooks.**  ✅ decided — one playbook per project, chosen at
+kick-off. A business keeps one per kind of project. Two never run on one
+project at once; parallel work is parallel *stages* inside the one playbook.
+A playbook that follows another (snag & warranty after handover) waits for a
+real case.
+
 **b. Payment gates.**  Parked, by your decision. The design leaves the hook:
 a step the client must do can later be completed automatically "when the
 payment is received" instead of by the PM ticking it.
