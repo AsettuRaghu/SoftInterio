@@ -930,7 +930,11 @@ export default function ProjectDetailPage({ params }: PageProps) {
           ) : activeTab === "tasks" ? (
             <TasksTab
               projectId={project.id}
-              tasks={tasks}
+              // The page holds every task flat - parents and subtasks alike -
+              // because the Plan tab builds its tree from that. The Tasks tab
+              // wants parents only; each already carries its subtasks for
+              // expansion, so handing it the flat list showed every step twice.
+              tasks={tasks.filter((t: any) => !t.parent_task_id)}
               projectClosed={project.status === "completed"}
               teamMembers={teamMembers}
               onCountChange={(count) => setTasksCount(count)}
