@@ -296,6 +296,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
      *
      * tasks.edit_all is the way round it, held by Admin, Manager and Owner.
      */
+    // Work in progress always has an owner. Clearing the assignee on a
+    // running task would leave a clock running against nobody; reassign it
+    // to someone else, or pause it first. Mirrors the rule that nothing goes
+    // in progress without an owner.
+    if (
+      "assigned_to" in body &&
+      !body.assigned_to &&
+      existingTask.assigned_to &&
+      existingTask.status === "in_progress"
+    ) {
+      return NextResponse.json(
+        {
+          error: "This task is in progress - assign it to someone else, or pause it before unassigning.",
+          reason: "in_progress_needs_owner",
+        },
+        { status: 409 }
+      );
+    }
+
     if (
       "assigned_to" in body &&
       body.assigned_to !== existingTask.assigned_to &&

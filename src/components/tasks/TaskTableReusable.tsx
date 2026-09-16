@@ -990,6 +990,19 @@ export default function TaskTable({
     isSubtask: boolean = false,
     parentTaskId?: string
   ) => {
+    // Work in progress always has an owner - the same rule the server
+    // enforces, said here before the row changes rather than after it snaps
+    // back.
+    if (field === "assigned_to" && !value) {
+      const row = isSubtask && parentTaskId
+        ? tasks.find((t) => t.id === parentTaskId)?.subtasks?.find((st) => st.id === taskId)
+        : tasks.find((t) => t.id === taskId);
+      if (row?.status === "in_progress") {
+        setActionError("This task is in progress - assign it to someone else, or pause it before unassigning.");
+        return;
+      }
+    }
+
     noteLocal(taskId, field, value);
 
     // A plan step held from the status dropdown carries what the playbook
