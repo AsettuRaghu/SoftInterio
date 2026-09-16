@@ -349,7 +349,7 @@ export default function TaskTable({
   // Initial load
   useEffect(() => {
     if (externalTasks) {
-      setTasks(externalTasks);
+      setTasks(reconcile(externalTasks));
       setIsLoading(false);
     } else {
       // Try to load from cache immediately for instant display
@@ -392,6 +392,38 @@ export default function TaskTable({
   ]);
 
   // Use external refresh if provided
+  /**
+   * Rows this table changed itself, and the status it gave them. A sync from
+   * the parent (externalTasks) is not allowed to move such a row back to an
+   * older status: the Plan tab refreshes its structure and its task list in
+   * parallel, and when the structure came back first the table rebuilt its
+   * rows from the not-yet-refreshed list - so a step just started flashed
+   * back to To Do for a beat before the fresh list arrived. Once the incoming
+   * row agrees, the entry is dropped; it also expires after a while so a
+   * genuinely reverted server state is not hidden for ever.
+   */
+  const recentLocal = useRef<Map<string, { status: string; at: number }>>(new Map());
+  const noteLocalStatus = (id: string, status: string) => {
+    recentLocal.current.set(id, { status, at: Date.now() });
+  };
+  const reconcile = (incoming: Task[]): Task[] => {
+    const map = recentLocal.current;
+    if (map.size === 0) return incoming;
+    const fix = (row: Task): Task => {
+      const mine = map.get(row.id);
+      if (!mine) return row;
+      if (row.status === mine.status || Date.now() - mine.at > 15000) {
+        map.delete(row.id);
+        return row;
+      }
+      return { ...row, status: mine.status as Task["status"], is_clock_running: mine.status === "in_progress" };
+    };
+    return incoming.map((t) => {
+      const fixed = fix(t);
+      return fixed.subtasks ? { ...fixed, subtasks: fixed.subtasks.map(fix) } : fixed;
+    });
+  };
+
   // Running clocks in the Hours column advance without a refetch.
   const [, setClockTick] = useState(0);
   useEffect(() => {
@@ -909,6 +941,8 @@ export default function TaskTable({
     isSubtask: boolean = false,
     parentTaskId?: string
   ) => {
+    if (field === "status" && typeof value === "string") noteLocalStatus(taskId, value);
+
     // A plan step held from the status dropdown carries what the playbook
     // knows about who it waits on, the same as the pause button does.
     let extra: Record<string, unknown> = {};
@@ -1083,6 +1117,7 @@ export default function TaskTable({
       onError: (message: string) => setActionError(message),
       // The badge moves with the buttons, before the server answers.
       onOptimistic: (status: TaskStatus) => {
+        noteLocalStatus(task.id, status);
         setTasks((prev) =>
           prev.map((t) => {
             if (isSubtask && parentTaskId) {
@@ -1136,6 +1171,7 @@ export default function TaskTable({
                 );
               }
               invalidateCache();
+              if (updated.status) noteLocalStatus(task.id, updated.status);
               // When the rows come from a parent (the Plan tab), the parent's
               // copy is what the next render draws from - the sync effect puts
               // it back over the local patch. So ask the parent to re-read:
