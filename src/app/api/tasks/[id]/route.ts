@@ -41,7 +41,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         `
         *,
         assigned_user:users!tasks_assigned_to_fkey(id, name, email, avatar_url),
-        playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type, default_delay_reason),
+        playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type, default_delay_reason, display_order),
         created_by_user:users!tasks_created_by_fkey(id, name, email),
         completed_by_user:users!tasks_completed_by_fkey(id, name),
         template:task_templates(id, name, category)
@@ -101,7 +101,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           `
           *,
           assigned_user:users!tasks_assigned_to_fkey(id, name, email, avatar_url),
-          playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type, default_delay_reason)
+          playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type, default_delay_reason, display_order)
         `
         )
         .eq("parent_task_id", id)
@@ -641,7 +641,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         `
         *,
         assigned_user:users!tasks_assigned_to_fkey(id, name, email, avatar_url),
-        playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type, default_delay_reason),
+        playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type, default_delay_reason, display_order),
         created_by_user:users!tasks_created_by_fkey(id, name, email)
       `
       )

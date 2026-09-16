@@ -24,6 +24,7 @@ function daysLate(dueDate?: string | null): number {
 }
 import { SearchBox } from "@/components/ui/SearchBox";
 import { Toast } from "@/components/ui/Toast";
+import { defaultTaskOrder } from "@/lib/tasks/order";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import {
   StatusBadge,
@@ -418,7 +419,11 @@ export default function TasksPage() {
         });
       }
 
-      // Sort by selected field
+      // Sort by selected field. The default is the shared order every task
+      // table uses - plan steps in playbook order, grouped by project, then
+      // ad-hoc tasks newest first - so this page and a project's Tasks tab
+      // never disagree about the sequence of the same steps.
+      if (sortField === "created_at") return defaultTaskOrder(result);
       result.sort((a, b) => {
         let aVal: any;
         let bVal: any;

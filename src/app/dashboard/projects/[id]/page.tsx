@@ -49,6 +49,7 @@ import { PlaybooksPanel } from "@/components/playbooks";
 import { KickoffChecklist } from "@/components/projects/KickoffChecklist";
 import { WaitingOnPanel } from "@/components/projects/WaitingOnPanel";
 import { ProjectStatusAction } from "@/components/projects/ProjectStatusAction";
+import { defaultTaskOrder } from "@/lib/tasks/order";
 import { EditTaskModal } from "@/components/tasks";
 
 interface PageProps {
@@ -934,21 +935,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
               // because the Plan tab builds its tree from that. The Tasks tab
               // wants parents only; each already carries its subtasks for
               // expansion, so handing it the flat list showed every step twice.
-              tasks={(() => {
-                // Plan stages in the playbook's order first, then anything
-                // ad hoc, newest last. The table keeps this until a column is
-                // clicked.
-                const order = new Map(playbookStages.map((st, i) => [st.id, i]));
-                return tasks
-                  .filter((t: any) => !t.parent_task_id)
-                  .sort((a: any, b: any) => {
-                    const ai = order.get(a.id), bi = order.get(b.id);
-                    if (ai !== undefined && bi !== undefined) return ai - bi;
-                    if (ai !== undefined) return -1;
-                    if (bi !== undefined) return 1;
-                    return String(a.created_at).localeCompare(String(b.created_at));
-                  });
-              })()}
+              tasks={defaultTaskOrder(tasks.filter((t: any) => !t.parent_task_id))}
               projectClosed={project.status === "completed"}
               teamMembers={teamMembers}
               onCountChange={(count) => setTasksCount(count)}

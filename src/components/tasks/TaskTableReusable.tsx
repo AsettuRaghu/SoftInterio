@@ -92,6 +92,7 @@ import { SearchBox } from "@/components/ui/SearchBox";
 import { Toast } from "@/components/ui/Toast";
 import { CreateTaskModal } from "./CreateTaskModal";
 import { TaskStatusControls } from "./TaskStatusControls";
+import { defaultTaskOrder } from "@/lib/tasks/order";
 import type { TaskWithDetails, TaskTransitionResult } from "@/types/tasks";
 import {
   PlusIcon,
@@ -174,9 +175,10 @@ interface Task {
   /** The plan as it stood when the task began; what early/late is measured against. */
   planned_start_date?: string | null;
   planned_due_date?: string | null;
-  /** From the API: a playbook step, and the stage it belongs to. */
+  /** From the API: a playbook step, the stage it belongs to, its place in the playbook. */
   is_plan_step?: boolean;
   stage_title?: string | null;
+  plan_order?: number | null;
   /** The agreed plan (latest baseline) - preferred over planned_* when the project has one. */
   agreed_start_date?: string | null;
   agreed_due_date?: string | null;
@@ -662,6 +664,14 @@ export default function TaskTable({
     // Sorting
     // The caller's order is meaningful and not derivable from a column.
     if (preserveOrder || sortField === "") return result;
+
+    // The default column is the shared order - plan steps in playbook order,
+    // grouped by project, then ad-hoc newest first - the same as every other
+    // task table. Clicking the column again just reverses it.
+    if (sortField === "created_at") {
+      const ordered = defaultTaskOrder(result);
+      return sortDirection === "desc" ? ordered : ordered.reverse();
+    }
 
     result.sort((a, b) => {
       let aVal: any = "";

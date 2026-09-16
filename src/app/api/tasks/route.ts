@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
       `
         *,
         assigned_user:users!tasks_assigned_to_fkey(id, name, email, avatar_url),
-        playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type, default_delay_reason),
+        playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type, default_delay_reason, display_order),
         created_by_user:users!tasks_created_by_fkey(id, name, email)
       `,
       { count: "exact" }
@@ -180,7 +180,7 @@ export async function GET(request: NextRequest) {
           `
           *,
           assigned_user:users!tasks_assigned_to_fkey(id, name, email, avatar_url),
-          playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type, default_delay_reason)
+          playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type, default_delay_reason, display_order)
         `
         )
         .in("parent_task_id", taskIds)
@@ -349,6 +349,9 @@ export async function GET(request: NextRequest) {
       (allRenderedTasks as any[]).forEach((t) => {
         t.is_plan_step = !!t.procedure_run_id;
         t.stage_title = t.parent_task_id && t.procedure_run_id ? titleById.get(t.parent_task_id) ?? null : null;
+        // The playbook's own order, so any list can show a plan the way the
+        // playbook wrote it without knowing anything about playbooks.
+        t.plan_order = t.procedure_run_id ? (t.playbook_step?.display_order ?? null) : null;
       });
     }
 
@@ -657,7 +660,7 @@ export async function POST(request: NextRequest) {
         `
         *,
         assigned_user:users!tasks_assigned_to_fkey(id, name, email, avatar_url),
-        playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type, default_delay_reason),
+        playbook_step:procedure_step_definitions!tasks_procedure_step_id_fkey(owner_type, default_delay_reason, display_order),
         created_by_user:users!tasks_created_by_fkey(id, name, email)
       `
       )

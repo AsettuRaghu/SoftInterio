@@ -220,8 +220,12 @@ export interface Task {
   /** The playbook run this task belongs to, when it is a plan step. */
   procedure_run_id?: string | null;
   procedure_step_id?: string | null;
-  /** From the step definition: who it waits on and its usual delay reason. */
-  playbook_step?: { owner_type: "internal" | "client" | "vendor"; default_delay_reason: string | null } | null;
+  /** From the step definition: who it waits on, its usual delay reason, its place in the playbook. */
+  playbook_step?: { owner_type: "internal" | "client" | "vendor"; default_delay_reason: string | null; display_order?: number | null } | null;
+  /** The playbook's order for a plan step, from the API; null on an ad-hoc task. */
+  plan_order?: number | null;
+  is_plan_step?: boolean;
+  stage_title?: string | null;
   /** Settled worked seconds. Excludes any running session. */
   total_active_seconds: number;
   /** Accumulated seconds spent on_hold or blocked. */

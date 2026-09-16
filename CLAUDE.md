@@ -840,6 +840,18 @@ the other loses the ability to tell that something ran late.
 `actual_hours` from the wrong column silently yields zero, which is how logged
 hours get erased.
 
+### Every task list orders the same way
+
+`lib/tasks/order.ts` `defaultTaskOrder()` is the one default: plan steps
+first, grouped by project, in the playbook's own order (`plan_order`, the
+step's `display_order`, which the tasks API puts on every row); ad-hoc tasks
+after, newest first. The Tasks page, `TaskTableReusable`'s default column and
+the project Tasks tab all use it. There are **two table implementations** -
+`src/app/dashboard/tasks/page.tsx` has its own, older than the shared one -
+and each sorting its own way is how the same steps read forwards on one screen
+and backwards on another (2026-09-16). Change the order in the helper, not in
+a table.
+
 ### Who sees which tasks
 
 `GET /api/tasks` without a lead/project filter is scoped by permission
