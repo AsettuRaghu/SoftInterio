@@ -628,11 +628,15 @@ run changes:
   /api/tasks/[id]` when a person changes a plan step's date, is treated as
   fixed.
 
-Finishing early pulls the plan forward; late or held pushes it back. The
-`start_date` of a step under way is never rewritten (it is the plan;
-`started_at` is what happened) — only its end moves. `plan_baselines` is never
-touched. Calendar days, not working days. The run's own dating in
-`start_procedure_run` is overwritten by the insert trigger immediately.
+Finishing early pulls the plan forward; late or held pushes it back. **A
+started step's dates are the real ones** (2026-09-16): its `start_date`
+becomes the day it began, its due that day plus its duration (no earlier than
+today), and a finished step shows the days it actually ran between. This
+replaced the earlier "a transition never rewrites `start_date`" rule, which
+predates the baseline - `plan_baselines` is where the plan is kept now, and it
+is never touched. Pinned dates are left alone. Calendar days, not working
+days. The run's own dating in `start_procedure_run` is overwritten by the
+insert trigger immediately.
 
 Five things it got wrong on its first real plans, all fixed the same day:
 the project's planned start anchors **only the first stage** (as a floor for
