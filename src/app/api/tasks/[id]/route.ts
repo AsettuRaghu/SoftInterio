@@ -274,7 +274,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { data: existingTask, error: fetchError } = await supabase
       .from("tasks")
       .select(
-        "id, title, status, priority, start_date, due_date, description, is_from_template, template_id, assigned_to, created_by, related_type, related_id, procedure_step_id, procedure_run_id"
+        "id, title, status, priority, start_date, due_date, estimated_hours, description, is_from_template, template_id, assigned_to, created_by, related_type, related_id, procedure_step_id, procedure_run_id"
       )
       .eq("id", id)
       .single();
@@ -296,6 +296,49 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
      *
      * tasks.edit_all is the way round it, held by Admin, Manager and Owner.
      */
+    // A finished task is not edited; it is reopened first. The tables make
+    // settled rows read-only, but that is a courtesy - this is the rule.
+    // Description and tags stay editable (a note on why it was skipped is
+    // exactly what one adds afterwards); the fields that describe the work
+    // - title, priority, dates, hours, assignee - do not.
+    if (
+      ["completed", "cancelled", "skipped"].includes(existingTask.status) &&
+      !(body.status && body.status !== existingTask.status)
+    ) {
+      const frozen = ["title", "priority", "start_date", "due_date", "estimated_hours", "assigned_to"].filter(
+        (f) => f in body && (body as Record<string, unknown>)[f] !== (existingTask as Record<string, unknown>)[f]
+      );
+      if (frozen.length > 0) {
+        return NextResponse.json(
+          {
+            error: `This task is ${existingTask.status.replace("_", " ")}. Reopen it to change its ${frozen
+              .map((f) => f.replace("_", " "))
+              .join(", ")}.`,
+            reason: "task_settled",
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    // Dates and hours that make sense.
+    {
+      const start = ("start_date" in body ? body.start_date : existingTask.start_date) || null;
+      const due = ("due_date" in body ? body.due_date : existingTask.due_date) || null;
+      if (start && due && String(due) < String(start)) {
+        return NextResponse.json(
+          { error: "The due date cannot be before the start date.", reason: "dates_out_of_order" },
+          { status: 400 }
+        );
+      }
+      if ("estimated_hours" in body && body.estimated_hours != null) {
+        const h = Number(body.estimated_hours);
+        if (!Number.isFinite(h) || h < 0) {
+          return NextResponse.json({ error: "Estimated hours cannot be negative.", reason: "bad_hours" }, { status: 400 });
+        }
+      }
+    }
+
     // Work in progress always has an owner. Clearing the assignee on a
     // running task would leave a clock running against nobody; reassign it
     // to someone else, or pause it first. Mirrors the rule that nothing goes

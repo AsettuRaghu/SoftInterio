@@ -811,6 +811,25 @@ the other loses the ability to tell that something ran late.
 `actual_hours` from the wrong column silently yields zero, which is how logged
 hours get erased.
 
+### The task rules, in one place
+
+`docs/testing/task-rules.md` is the list - 30 rows, each with how to try it
+and what should happen - and is kept current when a rule changes. The rules
+live in three layers and a change goes in all of them:
+
+- **`task_transition`** (database) - the transition matrix, owner required to
+  go in progress or to complete, predecessors and requirements, skip rules,
+  starting a step starts its stage, a stage on hold takes its running steps,
+  a stage cancelled takes its open steps, skipped/cancelled reopenable.
+- **`PATCH /api/tasks/[id]`** - a finished task is not edited except to
+  reopen it (title, priority, dates, hours, assignee frozen; description and
+  tags not), due on or after start, hours not negative, a running task is not
+  unassigned, a playbook-fixed assignee stays.
+- **the row** - the same answers before the round trip, so a button is
+  disabled with the reason rather than refused after: no owner (Start and
+  Complete), the plan gates, settled rows read-only, unassigning a running
+  task declined with the server's sentence.
+
 ### The Plan tab's actions: no prompt where there is no reason to give
 
 A reason is asked for only where it explains a departure: **hold** (why it

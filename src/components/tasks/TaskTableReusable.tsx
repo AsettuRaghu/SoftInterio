@@ -1181,7 +1181,11 @@ export default function TaskTable({
           : task.status === "todo" && gates?.[task.id] && !gates[task.id].canStart
             ? gates[task.id].startReason || "Cannot start yet"
             : null,
-      completeBlockedReason: gates?.[task.id] && !gates[task.id].canComplete ? gates[task.id].completeReason : null,
+      completeBlockedReason: !task.assigned_to
+        ? "Assign someone first"
+        : gates?.[task.id] && !gates[task.id].canComplete
+          ? gates[task.id].completeReason
+          : null,
       onError: (message: string) => setActionError(message),
       // The badge moves with the buttons, before the server answers.
       onOptimistic: (status: TaskStatus) => {

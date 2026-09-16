@@ -364,7 +364,7 @@ export const ValidTaskTransitions: Record<TaskStatus, TaskStatus[]> = {
   blocked: ["in_progress", "on_hold", "completed", "cancelled", "skipped"],
   completed: ["in_progress", "todo"],
   skipped: ["todo", "in_progress"],
-  cancelled: ["todo"],
+  cancelled: ["todo", "in_progress"],
 };
 
 /** Pausing or blocking requires a reason - the DB rejects it otherwise. */
