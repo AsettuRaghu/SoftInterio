@@ -1163,7 +1163,7 @@ export default function TaskTable({
       // Start button follows an assignee change the instant it is made rather
       // than a gate refetch later. Everything else still comes from the gates.
       startBlockedReason:
-        task.status === "todo" && !task.assigned_to
+        task.status !== "in_progress" && !task.assigned_to
           ? "Assign someone first"
           : task.status === "todo" && gates?.[task.id] && !gates[task.id].canStart
             ? gates[task.id].startReason || "Cannot start yet"

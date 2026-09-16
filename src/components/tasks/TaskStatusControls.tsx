@@ -611,7 +611,8 @@ export function TaskStatusControls({
     const running = shown === "in_progress";
     const paused = shown === "on_hold" || shown === "blocked";
     const completeGate = blockedReason ?? completeBlockedReason;
-    const startBlocked = shown === "todo" && !!startBlockedReason;
+    // Start, Resume or Reopen: anything that puts the task in progress.
+    const startBlocked = !running && !!startBlockedReason;
 
     const round =
       "w-7 h-7 rounded-full flex items-center justify-center border transition-all disabled:cursor-not-allowed disabled:opacity-40";
