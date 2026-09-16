@@ -29,9 +29,18 @@ interface Dependency {
   resolved_at: string | null;
 }
 
+interface PlanStep {
+  id: string;
+  title: string;
+  status: string;
+  parent_task_id?: string | null;
+}
+
 interface Props {
   projectId: string;
   canEdit: boolean;
+  /** The plan's open steps, so an ask can say which one it holds up. */
+  steps?: PlanStep[];
   /** Bumped by the page when the plan changes, so the list re-reads. */
   refreshKey?: number;
   onChanged?: () => void;
@@ -55,7 +64,7 @@ function fmt(date: string) {
   return new Date(date).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 
-export function WaitingOnPanel({ projectId, canEdit, refreshKey = 0, onChanged, onError }: Props) {
+export function WaitingOnPanel({ projectId, canEdit, steps = [], refreshKey = 0, onChanged, onError }: Props) {
   const [items, setItems] = useState<Dependency[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
@@ -63,7 +72,7 @@ export function WaitingOnPanel({ projectId, canEdit, refreshKey = 0, onChanged, 
   // scans; the list opens on demand so the plan beneath keeps the space.
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState({ owner_type: "client", description: "", expected_by: "", counterpart: "" });
+  const [draft, setDraft] = useState({ owner_type: "client", description: "", expected_by: "", counterpart: "", blocks_task_id: "" });
 
   const load = useCallback(async () => {
     try {
@@ -119,11 +128,12 @@ export function WaitingOnPanel({ projectId, canEdit, refreshKey = 0, onChanged, 
           description: draft.description.trim(),
           expected_by: draft.expected_by || null,
           counterpart: draft.counterpart.trim() || null,
+          blocks_task_id: draft.blocks_task_id || null,
         }),
       })
     );
     if (ok) {
-      setDraft({ owner_type: "client", description: "", expected_by: "", counterpart: "" });
+      setDraft({ owner_type: "client", description: "", expected_by: "", counterpart: "", blocks_task_id: "" });
       setAdding(false);
     }
   };
@@ -298,6 +308,26 @@ export function WaitingOnPanel({ projectId, canEdit, refreshKey = 0, onChanged, 
             onChange={(e) => setDraft((v) => ({ ...v, expected_by: e.target.value }))}
             className="rounded border border-slate-200 px-1.5 py-1 bg-white"
           />
+          {/* The step this holds up. Naming one puts that step on hold until
+              the expected date and re-lays everything after it - the way a
+              delay nobody foresaw gets onto the timeline. */}
+          {steps.length > 0 && (
+            <select
+              value={draft.blocks_task_id}
+              onChange={(e) => setDraft((v) => ({ ...v, blocks_task_id: e.target.value }))}
+              title="The step this holds up - it will wait until the expected date"
+              className="rounded border border-slate-200 bg-white px-1.5 py-1 max-w-[14rem]"
+            >
+              <option value="">holds up nothing in particular</option>
+              {steps
+                .filter((st) => !["completed", "skipped", "cancelled"].includes(st.status))
+                .map((st) => (
+                  <option key={st.id} value={st.id}>
+                    holds up: {st.parent_task_id ? "· " : ""}{st.title}
+                  </option>
+                ))}
+            </select>
+          )}
           <button
             type="button"
             disabled={busy === "new" || !draft.description.trim()}

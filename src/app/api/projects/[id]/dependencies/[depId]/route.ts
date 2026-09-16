@@ -38,7 +38,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const { data: existing } = await supabase
       .from("project_dependencies")
-      .select("id, task_id, description, owner_type, resolved_at")
+      .select("id, task_id, description, owner_type, resolved_at, blocks_task_id")
       .eq("id", depId)
       .eq("project_id", id)
       .maybeSingle();
@@ -78,6 +78,28 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (error || !data) {
       log.error("Could not update dependency", error, { projectId: id, depId });
       return NextResponse.json({ error: "Could not save the change" }, { status: 500 });
+    }
+
+    // Delivered: a step that was only waiting to start is released. One that
+    // had been paused stays paused - whoever picks it up resumes it.
+    if (update.resolved_at && existing.blocks_task_id) {
+      const { data: step } = await supabase
+        .from("tasks")
+        .select("id, status")
+        .eq("id", existing.blocks_task_id)
+        .maybeSingle();
+      if (step?.status === "blocked") {
+        await supabase.rpc("task_transition", {
+          p_task_id: step.id,
+          p_user_id: user.id,
+          p_to: "todo",
+          p_reason: null,
+          p_hold_owner: null,
+          p_hold_reason_code: null,
+          p_hold_expected_until: null,
+          p_hold_counterpart: null,
+        });
+      }
     }
 
     if (update.resolved_at) {

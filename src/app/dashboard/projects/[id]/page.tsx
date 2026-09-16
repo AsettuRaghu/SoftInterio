@@ -104,7 +104,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
     startedAt: string | null;
   } | null>(null);
   const [playbookStages, setPlaybookStages] = useState<
-    { id: string; steps?: { id: string }[] }[]
+    { id: string; name: string; status: string; steps?: { id: string; name: string; status: string }[] }[]
   >([]);
   // Set when the playbook has moved on since this plan adopted it.
   const [playbookDrift, setPlaybookDrift] = useState<{
@@ -842,6 +842,10 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 <WaitingOnPanel
                   projectId={project.id}
                   canEdit={canEditProject && project.status !== "completed"}
+                  steps={playbookStages.flatMap((st) => [
+                    { id: st.id, title: st.name, status: st.status, parent_task_id: null },
+                    ...(st.steps ?? []).map((c) => ({ id: c.id, title: c.name, status: c.status, parent_task_id: st.id })),
+                  ])}
                   refreshKey={planVersion}
                   onChanged={() => void fetchCounts()}
                   onError={(message) => setNotice({ message, variant: "error" })}
