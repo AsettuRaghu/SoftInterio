@@ -239,6 +239,8 @@ export interface Project {
   /** Set by kick_off_project(). A project with this set is past `new`. */
   kicked_off_at?: string | null;
   kicked_off_by?: string | null;
+  /** The latest agreed plan's span, from plan_baselines. */
+  agreed_plan?: { version: number; set_at: string; start: string | null; end: string | null } | null;
 
   // Progress & Cost
   overall_progress: number;

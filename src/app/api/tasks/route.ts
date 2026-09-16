@@ -284,6 +284,49 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // The agreed plan, where the project has one: each step's dates as they
+    // were at kick-off (latest baseline). Early / late on the plan is measured
+    // against these, and a step yet to start can show where it was agreed to
+    // be. One query per project in the result set.
+    if (allRenderedTasks.length > 0) {
+      const projectIds = [
+        ...new Set(
+          allRenderedTasks
+            .filter((t: any) => t.related_type === "project" && t.related_id)
+            .map((t: any) => t.related_id as string)
+        ),
+      ];
+      if (projectIds.length > 0) {
+        const { data: baselines } = await supabase
+          .from("plan_baselines")
+          .select("id, project_id, version")
+          .in("project_id", projectIds)
+          .order("version", { ascending: false });
+        const latestByProject = new Map<string, { id: string; version: number }>();
+        for (const b of baselines ?? []) {
+          if (!latestByProject.has(b.project_id)) latestByProject.set(b.project_id, { id: b.id, version: b.version });
+        }
+        const baselineIds = [...latestByProject.values()].map((b) => b.id);
+        if (baselineIds.length > 0) {
+          const { data: agreed } = await supabase
+            .from("plan_baseline_tasks")
+            .select("baseline_id, task_id, start_date, due_date")
+            .in("baseline_id", baselineIds)
+            .in("task_id", allRenderedTasks.map((t: any) => t.id));
+          const versionOf = new Map([...latestByProject.values()].map((b) => [b.id, b.version]));
+          const byTask = new Map((agreed ?? []).map((a) => [a.task_id, a]));
+          allRenderedTasks.forEach((task: any) => {
+            const a = byTask.get(task.id);
+            if (a) {
+              task.agreed_start_date = a.start_date;
+              task.agreed_due_date = a.due_date;
+              task.agreed_version = versionOf.get(a.baseline_id) ?? null;
+            }
+          });
+        }
+      }
+    }
+
     // Fetch tags for all rendered rows, subtasks included.
     if (allRenderedTasks.length > 0) {
       const taskIds = allRenderedTasks.map((t) => t.id);

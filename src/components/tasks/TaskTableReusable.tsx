@@ -33,18 +33,44 @@ function daysAhead(planned?: string | null, actual?: string | null): number | nu
  * The planned-versus-actual chip: the same nudge on both date columns.
  * Green early or on the day, red late; the tooltip carries the planned date.
  */
-function PlannedChip({ planned, actual, what }: { planned?: string | null; actual?: string | null; what: "started" | "finished" }) {
+function PlannedChip({
+  planned,
+  actual,
+  what,
+  agreedVersion,
+}: {
+  planned?: string | null;
+  actual?: string | null;
+  what: "started" | "finished";
+  agreedVersion?: number | null;
+}) {
   const d = daysAhead(planned, actual);
   if (d === null) return null;
   const plannedText = new Date(planned!).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
   const cls = d >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700";
   const text = d > 0 ? `${d}d early` : d === 0 ? "on time" : `${-d}d late`;
+  const source = agreedVersion ? `agreed plan v${agreedVersion}` : "the plan at the time";
   return (
     <span
       className={`shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${cls}`}
-      title={`Planned to be ${what} ${plannedText}`}
+      title={`${what === "started" ? "Start" : "Finish"} was ${plannedText} in the ${source}`}
     >
       {text}
+    </span>
+  );
+}
+
+/** A step yet to begin whose current date has drifted from the agreed one says so, quietly. */
+function AgreedHint({ agreed, current, version }: { agreed?: string | null; current?: string | null; version?: number | null }) {
+  if (!agreed || !current || agreed.slice(0, 10) === current.slice(0, 10)) return null;
+  const d = daysAhead(agreed, current);
+  const txt = new Date(agreed).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  return (
+    <span
+      className="shrink-0 text-[10px] text-slate-400 whitespace-nowrap"
+      title={`Agreed plan${version ? ` v${version}` : ""}: ${txt}${d !== null ? ` (now ${d > 0 ? d + "d later" : -d + "d earlier"})` : ""}`}
+    >
+      agreed {txt}
     </span>
   );
 }
@@ -148,6 +174,10 @@ interface Task {
   /** The plan as it stood when the task began; what early/late is measured against. */
   planned_start_date?: string | null;
   planned_due_date?: string | null;
+  /** The agreed plan (latest baseline) - preferred over planned_* when the project has one. */
+  agreed_start_date?: string | null;
+  agreed_due_date?: string | null;
+  agreed_version?: number | null;
   first_started_at?: string | null;
   completed_at?: string | null;
   total_active_seconds?: number;
@@ -1520,8 +1550,15 @@ export default function TaskTable({
               readOnly={!rowEditable}
               absolute={task.status !== "todo"}
             />
-            {task.status !== "todo" && (
-              <PlannedChip planned={task.planned_start_date} actual={task.first_started_at ?? task.start_date} what="started" />
+            {task.status !== "todo" ? (
+              <PlannedChip
+                planned={task.agreed_start_date ?? task.planned_start_date}
+                actual={task.first_started_at ?? task.start_date}
+                what="started"
+                agreedVersion={task.agreed_start_date ? task.agreed_version : null}
+              />
+            ) : (
+              <AgreedHint agreed={task.agreed_start_date} current={task.start_date} version={task.agreed_version} />
             )}
           </div>
         </td>
@@ -1567,9 +1604,16 @@ export default function TaskTable({
                 {daysLate(task.due_date)}d late
               </span>
             )}
-            {task.status === "completed" && (
-              <PlannedChip planned={task.planned_due_date ?? task.due_date} actual={task.completed_at} what="finished" />
-            )}
+            {task.status === "completed" ? (
+              <PlannedChip
+                planned={task.agreed_due_date ?? task.planned_due_date ?? task.due_date}
+                actual={task.completed_at}
+                what="finished"
+                agreedVersion={task.agreed_due_date ? task.agreed_version : null}
+              />
+            ) : task.status === "todo" ? (
+              <AgreedHint agreed={task.agreed_due_date} current={task.due_date} version={task.agreed_version} />
+            ) : null}
           </div>
         </td>
 

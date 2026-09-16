@@ -333,22 +333,56 @@ export default function OverviewTab({
               {project.project_manager?.name || "—"}
             </p>
           </div>
-          <div>
-            <p className="text-sm font-medium text-slate-900">
-              <span className="text-slate-500">Start Date</span> :{" "}
-              {project.expected_start_date
-                ? formatDate(project.expected_start_date)
-                : "—"}
-            </p>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-slate-900">
-              <span className="text-slate-500">Expected End Date</span> :{" "}
-              {project.expected_end_date
-                ? formatDate(project.expected_end_date)
-                : "—"}
-            </p>
-          </div>
+          {/* Three sets of dates, named for what they are. "Promised at sale"
+              is what Sales told the client and never moves; "Agreed plan" is
+              what the PM committed to at kick-off; "Current plan" is where
+              the steps stand today. Until kick-off there is only the promise. */}
+          {project.kicked_off_at ? (
+            <>
+              <div>
+                <p className="text-sm font-medium text-slate-900">
+                  <span className="text-slate-500">Promised at sale</span> :{" "}
+                  {project.committed_start_date ? formatDate(project.committed_start_date) : "—"}
+                  {" → "}
+                  {project.committed_end_date ? formatDate(project.committed_end_date) : "—"}
+                </p>
+              </div>
+              {project.agreed_plan && (
+                <div>
+                  <p className="text-sm font-medium text-slate-900">
+                    <span className="text-slate-500">Agreed plan v{project.agreed_plan.version}</span> :{" "}
+                    {project.agreed_plan.start ? formatDate(project.agreed_plan.start) : "—"}
+                    {" → "}
+                    {project.agreed_plan.end ? formatDate(project.agreed_plan.end) : "—"}
+                    <span className="text-xs text-slate-400"> (set {formatDate(project.agreed_plan.set_at)})</span>
+                  </p>
+                </div>
+              )}
+              <div>
+                <p className="text-sm font-medium text-slate-900">
+                  <span className="text-slate-500">Current plan</span> :{" "}
+                  {project.expected_start_date ? formatDate(project.expected_start_date) : "—"}
+                  {" → "}
+                  {project.expected_end_date ? formatDate(project.expected_end_date) : "—"}
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <p className="text-sm font-medium text-slate-900">
+                  <span className="text-slate-500">Planned start</span> :{" "}
+                  {project.expected_start_date ? formatDate(project.expected_start_date) : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-900">
+                  <span className="text-slate-500">Planned end</span> :{" "}
+                  {project.expected_end_date ? formatDate(project.expected_end_date) : "—"}
+                </p>
+              </div>
+            </>
+          )}
           <div>
             <p className="text-sm font-medium text-slate-900">
               {/* The column has always existed and was displayed nowhere, so a

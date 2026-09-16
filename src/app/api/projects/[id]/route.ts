@@ -178,6 +178,32 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       project_manager: pManager || project.project_manager
     };
 
+    // The agreed plan: the latest baseline's span, for the Overview's
+    // "promised / agreed / current / actual" reading.
+    const { data: latestBaseline } = await supabase
+      .from("plan_baselines")
+      .select("id, version, set_at")
+      .eq("project_id", id)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    let agreedPlan: { version: number; set_at: string; start: string | null; end: string | null } | null = null;
+    if (latestBaseline) {
+      const { data: span } = await supabase
+        .from("plan_baseline_tasks")
+        .select("start_date, due_date, task:tasks!task_id(parent_task_id, status)")
+        .eq("baseline_id", latestBaseline.id);
+      const tops = (span ?? []).filter((r: any) => !r.task?.parent_task_id && r.start_date && r.due_date);
+      const starts = tops.map((r: any) => r.start_date as string).sort();
+      const ends = tops.map((r: any) => r.due_date as string).sort();
+      agreedPlan = {
+        version: latestBaseline.version,
+        set_at: latestBaseline.set_at,
+        start: starts[0] ?? null,
+        end: ends[ends.length - 1] ?? null,
+      };
+    }
+
     // Fetch payment milestones
     const { data: paymentMilestones } = await supabase
       .from("project_payment_milestones")
@@ -223,6 +249,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         lead_id: fullProject?.lead_id, // Include lead_id for navigation
         won_amount: pLead?.won_amount, // Include won amount from lead
         payment_milestones: paymentMilestones || [],
+        agreed_plan: agreedPlan,
         calendar_events: calendarEvents || [],
       },
     });
