@@ -301,12 +301,6 @@ export default function OverviewTab({
               <span className="capitalize">{project.priority || "—"}</span>
             </p>
           </div>
-          <div>
-            <p className="text-sm font-medium text-slate-900">
-              <span className="text-slate-500">Current Phase</span> :{" "}
-              {project.current_phase || "—"}
-            </p>
-          </div>
           {/*
             * Where the client came from. `lead_source` has no column on
             * `projects`, so it is read from the lead and read-only.
