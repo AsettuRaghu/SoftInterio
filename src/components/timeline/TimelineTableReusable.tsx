@@ -118,6 +118,11 @@ const DEFAULT_ACTIVITY_LABELS: Record<string, string> = {
   lead_updated: "Lead Updated",
   project_updated: "Project Updated",
   project_kicked_off: "Kicked Off",
+  project_held: "On Hold",
+  project_resumed: "Resumed",
+  project_completed: "Completed",
+  project_cancelled: "Cancelled",
+  project_reopened: "Reopened",
   plan_agreed: "Plan Agreed",
   dependency_raised: "Waiting On",
   dependency_resolved: "Delivered",
@@ -217,7 +222,7 @@ export default function TimelineTableReusable({
     if (activityType.startsWith("follow_up")) {
       return <BellAlertIcon className="w-4 h-4" />;
     }
-    if (activityType === "project_kicked_off" || activityType === "plan_agreed") {
+    if (activityType.startsWith("project_") && activityType !== "project_updated") {
       return <FlagIcon className="w-4 h-4" />;
     }
     if (activityType.startsWith("dependency_")) {
@@ -268,9 +273,11 @@ export default function TimelineTableReusable({
     if (activityType.startsWith("follow_up")) {
       return "bg-amber-100 text-amber-600";
     }
-    if (activityType === "project_kicked_off" || activityType === "plan_agreed") {
+    if (activityType === "project_kicked_off" || activityType === "plan_agreed" || activityType === "project_completed" || activityType === "project_resumed" || activityType === "project_reopened") {
       return "bg-emerald-100 text-emerald-600";
     }
+    if (activityType === "project_held") return "bg-amber-100 text-amber-600";
+    if (activityType === "project_cancelled") return "bg-red-100 text-red-600";
     if (activityType === "dependency_raised") {
       return "bg-amber-100 text-amber-600";
     }

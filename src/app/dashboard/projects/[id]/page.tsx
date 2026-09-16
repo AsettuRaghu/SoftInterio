@@ -48,6 +48,7 @@ import { usePrompt } from "@/components/ui/PromptDialog";
 import { PlaybooksPanel } from "@/components/playbooks";
 import { KickoffChecklist } from "@/components/projects/KickoffChecklist";
 import { WaitingOnPanel } from "@/components/projects/WaitingOnPanel";
+import { ProjectStatusAction } from "@/components/projects/ProjectStatusAction";
 import { EditTaskModal } from "@/components/tasks";
 
 interface PageProps {
@@ -670,6 +671,18 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 )}
               </button>
             )}
+            {!awaitingKickoff && (
+              <ProjectStatusAction
+                projectId={project.id}
+                status={project.status}
+                canEdit={canEditProject}
+                onChanged={(message) => {
+                  setNotice({ message, variant: "success" });
+                  void fetchProject({ quiet: true });
+                  void fetchCounts();
+                }}
+              />
+            )}
             <button
               onClick={() => {
                 // The dialog lives on the Overview tab, so move there before
@@ -677,7 +690,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 setActiveTab("overview");
                 setShowEditDetailsModal(true);
               }}
-              className={cn(buttonVariants({ variant: awaitingKickoff ? "outline" : "default" }))}
+              className={cn(buttonVariants({ variant: "outline" }))}
             >
               Edit
             </button>

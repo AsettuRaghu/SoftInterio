@@ -578,6 +578,31 @@ plan.
 with "malformed array literal". Use `array_append`. This cost one repair of
 `20260915141000`.
 
+### A project's status changes through one function, from the header
+
+Built 2026-09-16. After kick-off every status move goes through
+`project_transition()` (`POST /api/projects/[id]/status`), which holds the
+rules, the cascades and the timeline entry in one transaction. `PATCH
+/api/projects/[id]` **refuses any status change** (409
+`status_is_a_transition`), and the edit dialog shows status read-only. The
+header carries `ProjectStatusAction`: exactly the moves the status allows,
+each with a small dialog, and always a note.
+
+| from → to | needs | cascades |
+|---|---|---|
+| new → in_progress | kick-off only (`kick_off_project`) | |
+| in_progress → on_hold | who, why (from `delay_reasons`), until | running steps go on hold on the same hold |
+| on_hold → in_progress | note | days held logged against the owner; steps resume one by one |
+| in_progress → completed | no open steps · the `handover` milestone step complete · no open asks | the run completes |
+| new / in_progress / on_hold → cancelled | reason | run cancelled, open stages cancelled (their steps with them) |
+| completed / cancelled → in_progress | note | the run comes back |
+
+Nothing goes back to `new`. `projects.hold_owner/hold_reason_code/
+hold_expected_until/held_at/completed_at/cancelled_at` carry the state;
+`project_held/resumed/completed/cancelled/reopened` are the timeline entries.
+This is the first place `milestone_role` is **read**: a playbook's `handover`
+step gates completion.
+
 ### A hold says who we are waiting on, and the current plan moves with it
 
 Step 3 of the lifecycle plan, 2026-09-15.

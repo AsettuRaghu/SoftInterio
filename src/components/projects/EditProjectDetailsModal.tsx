@@ -583,41 +583,17 @@ export function EditProjectDetailsModal({
                     <label className="block text-sm font-medium text-slate-700 mb-2">
                       Status<Star field="status" />
                     </label>
-                    <select
-                      value={editForm.status}
-                      onChange={(e) =>
-                        handleInputChange("status", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      {(
-                        [
-                          "new",
-                          "in_progress",
-                          "on_hold",
-                          "completed",
-                          "cancelled",
-                        ] as const
-                      ).map((value) => (
-                        <option
-                          key={value}
-                          value={value}
-                          // New -> In Progress is kick-off, done from the Plan
-                          // tab; the server refuses it here. Say so in the
-                          // list rather than after Save.
-                          disabled={
-                            value === "in_progress" &&
-                            project.status === "new" &&
-                            !project.kicked_off_at
-                          }
-                        >
-                          {ProjectStatusLabels[value]}
-                          {value === "in_progress" && project.status === "new" && !project.kicked_off_at
-                            ? " — use Kick-off on the Plan tab"
-                            : ""}
-                        </option>
-                      ))}
-                    </select>
+                    {/* Status is changed with the button in the project
+                        header, where each move has its own rules and dialog;
+                        here it is only read. */}
+                    <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-sm text-slate-700">
+                      {ProjectStatusLabels[editForm.status as keyof typeof ProjectStatusLabels] ?? editForm.status}
+                      <span className="ml-2 text-xs text-slate-400">
+                        {project.status === "new" && !project.kicked_off_at
+                          ? "— kick off from the Plan tab"
+                          : "— change it from the project header"}
+                      </span>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">

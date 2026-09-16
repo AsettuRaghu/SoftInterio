@@ -74,10 +74,11 @@ what is missing, and only then changes anything.
 | From → To | Allowed only when |
 |---|---|
 | New → In Progress | the kick-off checklist is complete |
-| In Progress → On Hold | you say why, who owns the wait, and when you expect to resume |
-| On Hold → In Progress | (the days on hold are logged against that owner) |
-| In Progress → Completed | no open steps *(exists)*, the handover milestone is done, nothing still owed by the client |
-| → Cancelled | you say why; open work is cancelled *(exists)* |
+| In Progress → On Hold | ✅ built — you say why, who owns the wait, and when you expect to resume; running steps pause with it |
+| On Hold → In Progress | ✅ built — the days on hold are logged against that owner |
+| In Progress → Completed | ✅ built — no open steps, the handover milestone is done, nothing still owed by the client |
+| → Cancelled | ✅ built — you say why; the plan and its open work are cancelled |
+| Completed / Cancelled → In Progress | ✅ built — Reopen, with a note; the plan comes back |
 
 ## 5. Kick-off is a checklist, not a wizard  ✅ decided
 

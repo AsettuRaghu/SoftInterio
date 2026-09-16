@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { requireProjectAccess } from "@/lib/projects/guard";
-import { projectClosingBlockers, describeBlockers } from "@/lib/projects/closing";
 import { requestLogger } from "@/lib/logger/request";
 import { logProjectActivity } from "@/lib/activity/log";
 
@@ -385,37 +384,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     /*
-     * new -> in_progress is kick-off, and only kick-off. Setting the status by
-     * hand would skip the plan, the agreed dates and the timeline entry that
-     * make a project's start a recorded thing. The Plan tab has the checklist.
+     * Status is not a field. new -> in_progress is kick-off (the checklist on
+     * the Plan tab); every later move goes through POST /status, which holds
+     * the rules and the cascades. A status arriving here that differs from
+     * the current one is refused, so no dialog can slip a project from In
+     * Progress back to New or into On Hold with nobody named.
      */
-    if (
-      projectUpdates.status === "in_progress" &&
-      existingProject?.status === "new" &&
-      !existingProject?.kicked_off_at
-    ) {
+    if (projectUpdates.status && projectUpdates.status !== existingProject?.status) {
       return NextResponse.json(
         {
-          error: "Kick off the project from its Plan tab to move it to In Progress.",
-          reason: "kickoff_required",
+          error:
+            existingProject?.status === "new" && projectUpdates.status === "in_progress"
+              ? "Kick off the project from its Plan tab to move it to In Progress."
+              : "Change the status with the button in the project header, not from the edit dialog.",
+          reason: "status_is_a_transition",
         },
         { status: 409 }
       );
     }
-
-    /*
-     * A project moved back to in_progress by hand (from on_hold) has started,
-     * if nothing else has said so. Tasks stamp this through a trigger when the
-     * first one starts. Never overwrites a date already set or supplied.
-     */
-    if (
-      projectUpdates.status === "in_progress" &&
-      existingProject?.status !== "in_progress" &&
-      !existingProject?.actual_start_date &&
-      projectUpdates.actual_start_date === undefined
-    ) {
-      projectUpdates.actual_start_date = new Date().toISOString().slice(0, 10);
-    }
+    delete projectUpdates.status;
 
     const rejected = Object.keys(projectUpdateData).filter(
       (k) => !(EDITABLE_PROJECT_FIELDS as readonly string[]).includes(k)
@@ -430,28 +417,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       });
     }
 
-    // Closing a project requires it to be clear, the same way winning a lead
-    // does. Without this, "completed" was a free-text value anyone could set
-    // while the playbook still showed twenty steps open - and the playbook was
-    // the honest one.
-    const isClosing =
-      projectUpdates.status === "completed" &&
-      existingProject?.status !== "completed";
-
-    if (isClosing) {
-      const check = await projectClosingBlockers(supabase, id);
-      if (!check.ok) {
-        return NextResponse.json(
-          {
-            error: describeBlockers(check.blockers),
-            reason: "project_not_clear",
-            blockers: check.blockers,
-          },
-          { status: 409 }
-        );
-      }
-    }
-
     const { data: project, error } = await supabase
       .from("projects")
       .update(projectUpdates)
@@ -463,29 +428,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (error) {
       log.error("Error updating project", error, { projectId: id });
       return NextResponse.json({ error: "Failed to update project" }, { status: 500 });
-    }
-
-    // The project is finished, so its playbook run is too. Leaving the run
-    // active would keep the plan open on a closed project and keep it counting
-    // toward "one run at a time".
-    if (isClosing) {
-      const { data: activeRun } = await supabase
-        .from("procedure_runs")
-        .select("id")
-        .eq("related_type", "project")
-        .eq("related_id", id)
-        .eq("status", "active")
-        .maybeSingle();
-
-      if (activeRun) {
-        await supabase
-          .from("procedure_runs")
-          .update({
-            status: "completed",
-            completed_at: new Date().toISOString(),
-          })
-          .eq("id", activeRun.id);
-      }
     }
 
     log.info("Project updated", {
