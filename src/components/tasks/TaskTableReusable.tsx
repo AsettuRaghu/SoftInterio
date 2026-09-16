@@ -408,30 +408,44 @@ export default function TaskTable({
 
   // Use external refresh if provided
   /**
-   * Rows this table changed itself, and the status it gave them. A sync from
-   * the parent (externalTasks) is not allowed to move such a row back to an
-   * older status: the Plan tab refreshes its structure and its task list in
-   * parallel, and when the structure came back first the table rebuilt its
-   * rows from the not-yet-refreshed list - so a step just started flashed
-   * back to To Do for a beat before the fresh list arrived. Once the incoming
-   * row agrees, the entry is dropped; it also expires after a while so a
-   * genuinely reverted server state is not hidden for ever.
+   * Fields this table changed itself, per row, and the value it gave them.
+   *
+   * A sync from the parent (externalTasks) is not allowed to move such a field
+   * back to an older value. The Plan tab refreshes its structure and its task
+   * list in parallel, and when the structure came back first the table
+   * rebuilt its rows from the not-yet-refreshed list - so a step just started
+   * flashed back to To Do, and an assignee just cleared flashed back to the
+   * old name, for a beat before the fresh list arrived. This is the general
+   * rule, for every field: once the incoming value agrees the entry is
+   * dropped, and it expires after a while so a genuine server-side change is
+   * never hidden for long.
    */
-  const recentLocal = useRef<Map<string, { status: string; at: number }>>(new Map());
-  const noteLocalStatus = (id: string, status: string) => {
-    recentLocal.current.set(id, { status, at: Date.now() });
+  const recentLocal = useRef<Map<string, Map<string, { value: unknown; at: number }>>>(new Map());
+  const noteLocal = (id: string, field: string, value: unknown) => {
+    const row = recentLocal.current.get(id) ?? new Map();
+    row.set(field, { value, at: Date.now() });
+    recentLocal.current.set(id, row);
   };
+  const noteLocalStatus = (id: string, status: string) => noteLocal(id, "status", status);
   const reconcile = (incoming: Task[]): Task[] => {
-    const map = recentLocal.current;
-    if (map.size === 0) return incoming;
+    const all = recentLocal.current;
+    if (all.size === 0) return incoming;
+    const same = (x: unknown, y: unknown) => (x ?? null) === (y ?? null);
     const fix = (row: Task): Task => {
-      const mine = map.get(row.id);
+      const mine = all.get(row.id);
       if (!mine) return row;
-      if (row.status === mine.status || Date.now() - mine.at > 15000) {
-        map.delete(row.id);
-        return row;
+      let out: Task = row;
+      for (const [field, { value, at }] of mine) {
+        const current = (row as unknown as Record<string, unknown>)[field];
+        if (same(current, value) || Date.now() - at > 15000) {
+          mine.delete(field);
+          continue;
+        }
+        out = { ...out, [field]: value } as Task;
+        if (field === "status") out = { ...out, is_clock_running: value === "in_progress" };
       }
-      return { ...row, status: mine.status as Task["status"], is_clock_running: mine.status === "in_progress" };
+      if (mine.size === 0) all.delete(row.id);
+      return out;
     };
     return incoming.map((t) => {
       const fixed = fix(t);
@@ -956,7 +970,7 @@ export default function TaskTable({
     isSubtask: boolean = false,
     parentTaskId?: string
   ) => {
-    if (field === "status" && typeof value === "string") noteLocalStatus(taskId, value);
+    noteLocal(taskId, field, value);
 
     // A plan step held from the status dropdown carries what the playbook
     // knows about who it waits on, the same as the pause button does.
