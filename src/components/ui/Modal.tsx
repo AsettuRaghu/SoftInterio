@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { cn } from "@/utils/cn";
 
@@ -82,7 +83,7 @@ export function Modal({
     }
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === "undefined") return null;
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (closeOnBackdropClick && e.target === e.currentTarget) {
@@ -90,8 +91,17 @@ export function Modal({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
+  // Portaled to <body>: a dialog opened from inside a table cell or a
+  // transformed container must still float above the whole page. Clicks
+  // inside it are stopped from reaching whatever opened it (a table row that
+  // itself opens the task on click), which React would otherwise deliver
+  // through the component tree even across the portal.
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
       {/* Backdrop - semi-transparent to show content behind */}
       <div
         className="fixed inset-0 bg-slate-900/50 backdrop-blur-[2px] transition-opacity"
@@ -149,7 +159,8 @@ export function Modal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
