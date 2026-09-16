@@ -1106,7 +1106,9 @@ export default function TaskTable({
                   prev.map((t) => {
                     if (t.id !== parentTaskId) return t;
                     const subtasks = (t.subtasks || []).map((st) =>
-                      st.id === task.id ? { ...st, ...updated } : st
+                      st.id === task.id
+                        ? { ...st, ...updated, is_clock_running: updated.status === "in_progress" }
+                        : st
                     );
                     const settled = (st: { status: string }) =>
                       st.status === "completed" || st.status === "cancelled";
@@ -1126,7 +1128,11 @@ export default function TaskTable({
                 );
               } else {
                 setTasks((prev) =>
-                  prev.map((t) => (t.id === task.id ? { ...t, ...updated } : t))
+                  prev.map((t) =>
+                    t.id === task.id
+                      ? { ...t, ...updated, is_clock_running: updated.status === "in_progress" }
+                      : t
+                  )
                 );
               }
               invalidateCache();

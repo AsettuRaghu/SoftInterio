@@ -580,7 +580,10 @@ export function TaskStatusControls({
     // back with a toast saying why. The clock beside them runs by the second.
     const shown = optimistic ?? task.status;
     const settled = shown === "completed" || shown === "cancelled";
-    const running = optimistic ? optimistic === "in_progress" : isRunning;
+    // From status alone. is_clock_running is a separate flag that arrives a
+    // fetch later than the status does, and reading it here flashed Start
+    // between the optimistic Pause and the refetched one.
+    const running = shown === "in_progress";
     const paused = shown === "on_hold" || shown === "blocked";
     const completeGate = blockedReason ?? completeBlockedReason;
     const startBlocked = shown === "todo" && !!startBlockedReason;
