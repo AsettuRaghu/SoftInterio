@@ -364,7 +364,7 @@ export default function TaskTable({
   // Initial load
   useEffect(() => {
     if (externalTasks) {
-      setTasks(reconcile(externalTasks));
+      setTasks((prev) => reconcile(externalTasks, prev));
       setIsLoading(false);
     } else {
       // Try to load from cache immediately for instant display
@@ -427,24 +427,44 @@ export default function TaskTable({
     recentLocal.current.set(id, row);
   };
   const noteLocalStatus = (id: string, status: string) => noteLocal(id, "status", status);
-  const reconcile = (incoming: Task[]): Task[] => {
+  const reconcile = (incoming: Task[], previous: Task[]): Task[] => {
     const all = recentLocal.current;
     if (all.size === 0) return incoming;
     const same = (x: unknown, y: unknown) => (x ?? null) === (y ?? null);
+    const localById = new Map<string, Task>();
+    for (const t of previous) {
+      localById.set(t.id, t);
+      for (const st of t.subtasks ?? []) localById.set(st.id, st);
+    }
     const fix = (row: Task): Task => {
       const mine = all.get(row.id);
       if (!mine) return row;
       let out: Task = row;
+      let held = false;
       for (const [field, { value, at }] of mine) {
         const current = (row as unknown as Record<string, unknown>)[field];
         if (same(current, value) || Date.now() - at > 15000) {
           mine.delete(field);
           continue;
         }
+        held = true;
         out = { ...out, [field]: value } as Task;
         if (field === "status") out = { ...out, is_clock_running: value === "in_progress" };
       }
       if (mine.size === 0) all.delete(row.id);
+      // An incoming row we are holding a field against is a stale one, so its
+      // clock is stale too: keep the seconds the row already has rather than
+      // snapping back to an older count and forward again a moment later.
+      if (held) {
+        const local = localById.get(row.id);
+        if (local) {
+          out = {
+            ...out,
+            live_active_seconds: local.live_active_seconds,
+            total_active_seconds: local.total_active_seconds,
+          };
+        }
+      }
       return out;
     };
     return incoming.map((t) => {

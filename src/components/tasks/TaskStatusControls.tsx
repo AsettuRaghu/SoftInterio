@@ -261,7 +261,11 @@ export function TaskStatusControls({
       const local = wasRunning.current
         ? prev.seconds + Math.floor((now - prev.at) / 1000)
         : prev.seconds;
-      const seconds = Math.abs(baseSeconds - local) > 3 ? baseSeconds : local;
+      // A running clock never goes backwards on a server figure - that is
+      // always a stale fetch. Forward jumps and any change while stopped are
+      // taken only when the disagreement is real (more than a few seconds).
+      const behind = wasRunning.current && baseSeconds < local;
+      const seconds = !behind && Math.abs(baseSeconds - local) > 3 ? baseSeconds : local;
       return { seconds, at: now };
     });
     wasRunning.current = isRunning;
