@@ -156,6 +156,31 @@ export default function ProjectDetailPage({ params }: PageProps) {
   const canEditProject = hasAnyPermission(["projects.edit", "projects.update"]);
   const awaitingKickoff = project?.status === "new" && !project?.kicked_off_at;
 
+  /**
+   * How far the kick-off checklist has got, for the header button and the
+   * Overview banner - the two places that tell a new project's PM that
+   * kick-off exists at all. The checklist itself is on the Plan tab.
+   */
+  const [kickoffReady, setKickoffReady] = useState<{ ready: number; of: number } | null>(null);
+  const fetchKickoffReady = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects/${id}/kickoff`);
+      const json = await res.json();
+      if (!res.ok || !json.data) return;
+      const missing = new Set<string>(json.data.missing ?? []);
+      const sections = [
+        !missing.has("handover_review"),
+        !missing.has("playbook"),
+        !missing.has("playbook") && !missing.has("stage_owners") && !missing.has("stage_dates"),
+        !missing.has("ask_dates"),
+      ];
+      setKickoffReady({ ready: sections.filter(Boolean).length, of: sections.length });
+    } catch {
+      /* the button still reads "Kick off" */
+    }
+  }, [id]);
+
+
   /*
    * Payments has been taken off the project page deliberately.
    *
@@ -247,6 +272,9 @@ export default function ProjectDetailPage({ params }: PageProps) {
    * simply changes.
    */
   const [planVersion, setPlanVersion] = useState(0);
+  useEffect(() => {
+    if (awaitingKickoff) void fetchKickoffReady();
+  }, [awaitingKickoff, fetchKickoffReady, planVersion]);
   const refreshPlan = useCallback(async () => {
     setPlanVersion((v) => v + 1);
     try {
@@ -622,6 +650,26 @@ export default function ProjectDetailPage({ params }: PageProps) {
         }
         actions={
           <div className="flex items-center gap-2">
+            {/* The next thing to do, like the lead page's stage button. A new
+                project's next thing is kick-off, and nothing else on the page
+                said so - the checklist sat on the Plan tab waiting to be
+                found. Hold / complete / reopen take this slot as they arrive. */}
+            {awaitingKickoff && (
+              <button
+                onClick={() => {
+                  setActiveTab("project-mgmt");
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className={cn(buttonVariants(), "bg-emerald-600 hover:bg-emerald-700 gap-2")}
+              >
+                Kick off
+                {kickoffReady && (
+                  <span className="rounded bg-white/20 px-1.5 py-0.5 text-[11px] font-medium tabular-nums">
+                    {kickoffReady.ready} of {kickoffReady.of} ready
+                  </span>
+                )}
+              </button>
+            )}
             <button
               onClick={() => {
                 // The dialog lives on the Overview tab, so move there before
@@ -629,7 +677,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 setActiveTab("overview");
                 setShowEditDetailsModal(true);
               }}
-              className={cn(buttonVariants())}
+              className={cn(buttonVariants({ variant: awaitingKickoff ? "outline" : "default" }))}
             >
               Edit
             </button>
@@ -819,6 +867,28 @@ export default function ProjectDetailPage({ params }: PageProps) {
               a project needs is what is to be built. */}
           {activeTab === "spaces" && (
             <SpacesTab propertyId={project.property_id || null} />
+          )}
+
+          {activeTab === "overview" && awaitingKickoff && (
+            <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 flex flex-wrap items-center gap-3">
+              <div className="flex-1 min-w-[16rem]">
+                <p className="text-sm font-semibold text-emerald-900">This project has not been kicked off</p>
+                <p className="text-xs text-emerald-800">
+                  Review the handover from Sales, choose the playbook, set owners and dates, and confirm.
+                  That is what moves it to In Progress
+                  {kickoffReady ? ` — ${kickoffReady.ready} of ${kickoffReady.of} parts are ready.` : "."}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setActiveTab("project-mgmt");
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className={cn(buttonVariants({ size: "sm" }), "bg-emerald-600 hover:bg-emerald-700")}
+              >
+                Open the kick-off checklist
+              </button>
+            </div>
           )}
 
           {activeTab === "overview" && (
