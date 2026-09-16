@@ -543,6 +543,10 @@ export interface ProjectSummary {
   priority?: ProjectPriority;
   /** Name of the stage the project is on, derived from its playbook. */
   current_phase?: string;
+  /** The agreed plan's end (latest baseline); null before kick-off. */
+  agreed_end_date?: string | null;
+  kicked_off_at?: string | null;
+  committed_end_date?: string | null;
   payment_status?: ProjectPaymentStatus;
   overall_progress: number;
   expected_start_date?: string;

@@ -62,6 +62,8 @@ export async function GET(request: NextRequest) {
         actual_cost,
         contract_value,
         overall_progress,
+        kicked_off_at,
+        committed_end_date,
         created_at,
         updated_at,
         project_category,
@@ -231,6 +233,35 @@ export async function GET(request: NextRequest) {
       const stepOrder = new Map(
         (steps ?? []).map((st: any) => [st.id, st.display_order ?? 0])
       );
+
+      // The agreed plan's end for each kicked-off project: the latest
+      // baseline, and the last due date among its stages. Two queries for
+      // the whole page, so the list can say "agreed 10 Dec → now 22 Dec".
+      const agreedEndByProject = new Map<string, string>();
+      {
+        const { data: baselines } = await supabase
+          .from("plan_baselines")
+          .select("id, project_id, version")
+          .in("project_id", projectIds)
+          .order("version", { ascending: false });
+        const latest = new Map<string, string>();
+        for (const b of baselines ?? []) if (!latest.has(b.project_id)) latest.set(b.project_id, b.id);
+        if (latest.size > 0) {
+          const { data: bt } = await supabase
+            .from("plan_baseline_tasks")
+            .select("baseline_id, due_date, task:tasks!task_id(parent_task_id)")
+            .in("baseline_id", [...latest.values()]);
+          const projectOfBaseline = new Map([...latest.entries()].map(([pid, bid]) => [bid, pid]));
+          for (const r of bt ?? []) {
+            const t = r.task as unknown as { parent_task_id: string | null } | null;
+            if (t?.parent_task_id || !r.due_date) continue;
+            const pid = projectOfBaseline.get(r.baseline_id);
+            if (!pid) continue;
+            const cur = agreedEndByProject.get(pid);
+            if (!cur || r.due_date > cur) agreedEndByProject.set(pid, r.due_date);
+          }
+        }
+      }
       const tasksByRun = new Map<string, any[]>();
       for (const t of runTasks ?? []) {
         const list = tasksByRun.get(t.procedure_run_id) ?? [];
@@ -271,6 +302,7 @@ export async function GET(request: NextRequest) {
 
         return {
           ...p,
+          agreed_end_date: agreedEndByProject.get(p.id) ?? null,
           // Kept for the stage filter, which reads a single name.
           current_phase: current?.name ?? null,
           stage_summary: derived.stages.length

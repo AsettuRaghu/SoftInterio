@@ -379,6 +379,14 @@ export const navigationConfig: NavigationItem[] = [
         permission: "tasks.templates.view",
       },
       {
+        // The short list a hold picks "why" from, grouped by who owns the
+        // delay. Company-level, like Config, because it shapes how the whole
+        // business accounts for time.
+        name: "Delay reasons",
+        href: "/dashboard/settings/delay-reasons",
+        permission: "settings.company.update",
+      },
+      {
         name: "Billing and Subscription",
         href: "/dashboard/settings/billing",
         permission: "settings.billing",

@@ -1686,6 +1686,41 @@ out of the plan, and its home is the Plan tab and the Tasks list, where
 overdue is already red. The `task_due` type is still known to the calendar's
 filters and labels, harmlessly; nothing produces it.
 
+### A file attached to a step is a project document
+
+`task_attachments` and `documents` were two stores that never met: a site
+measurement sheet uploaded on a step satisfied the step's upload gate and
+then vanished from view, because the project's Documents tab reads
+`documents` only. Since `20260916180000` a file attached to any task of a
+project is **mirrored** into `documents` by trigger - same storage object,
+`photo` for images and `reference` otherwise, tagged `step: <title>`,
+`stage: <parent title>` and `playbook` where it came from a run. Deleting the
+attachment removes the mirror; the object is the attachment's to delete. The
+mirror is a second row over one object, not a copy of the bytes, so do not
+"tidy" by deleting a document whose `storage_path` an attachment still uses.
+
+### The projects list shows the agreed end against the current one
+
+After kick-off the Timelines cell reads "Agreed 10 Dec → now 22 Dec (+12d)":
+the agreed end is the latest `plan_baselines` version's end, the current end is
+`expected_end_date`, which the scheduler moves as the plan moves. Before
+kick-off the cell keeps its planned-dates reading, because there is no agreed
+plan to compare against. The list route resolves the baseline in one query for
+the page rather than per project.
+
+### Delay reasons are configured, not hard-coded
+
+Settings → Delay reasons (`/dashboard/settings/delay-reasons`, gated on
+`settings.company.update` like Config) lists what a hold can say, grouped by
+owner. Shipped defaults (`tenant_id` NULL) are read-only and shared by every
+business; a tenant adds its own beside them, may hide one, and may remove only
+its own. A hidden reason stays on the holds that used it - `hold_reason_code`
+is a string, not a foreign key, on purpose. `GET /api/delay-reasons` answers
+active rows for the hold dialogs and `?all=1` for the settings page; the
+client hook caches the list and `invalidateDelayReasons()` drops it after an
+edit. New codes are `<owner>_<slug>` so the unique default codes never collide
+with a tenant's.
+
 ### The server says why; do not throw that away
 
 Marking a calendar event complete on a lead popped `Failed to complete task` in

@@ -453,11 +453,29 @@ export default function ProjectsTable({
                 {t.note}
               </p>
             )}
-            {planned && (
+            {/* After kick-off the reference is the agreed plan, and the one
+                line that matters is how far the current end has moved from
+                it. Before kick-off there is only the planned span. */}
+            {project.kicked_off_at && project.agreed_end_date && project.expected_end_date ? (
+              (() => {
+                const a = new Date(project.agreed_end_date); a.setHours(0, 0, 0, 0);
+                const c = new Date(project.expected_end_date); c.setHours(0, 0, 0, 0);
+                const d = Math.round((c.getTime() - a.getTime()) / 86400000);
+                return (
+                  <p
+                    className={`mt-0.5 text-[11px] tabular-nums ${d > 0 ? "text-red-600" : d < 0 ? "text-emerald-600" : "text-slate-400"}`}
+                    title={`Agreed plan ends ${dayMonth(project.agreed_end_date)}; the current plan ends ${dayMonth(project.expected_end_date)}`}
+                  >
+                    Agreed {dayMonth(project.agreed_end_date)}
+                    {d !== 0 ? ` → now ${dayMonth(project.expected_end_date)} (${d > 0 ? "+" : ""}${d}d)` : " · on plan"}
+                  </p>
+                );
+              })()
+            ) : planned ? (
               <p className="mt-0.5 text-[11px] text-slate-400 tabular-nums">
                 Planned {planned}
               </p>
-            )}
+            ) : null}
           </div>
         );
       },

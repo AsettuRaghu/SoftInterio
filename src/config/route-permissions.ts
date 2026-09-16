@@ -70,6 +70,11 @@ export const routePermissions: RoutePermission[] = [
     description: "Playbooks",
   },
   {
+    pattern: "/dashboard/settings/delay-reasons",
+    permissions: ["settings.company.update"],
+    description: "Delay reasons",
+  },
+  {
     pattern: "/dashboard/settings/billing",
     permissions: ["settings.billing"],
     description: "Billing and subscription",
