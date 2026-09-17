@@ -2,6 +2,8 @@
 
 import React, { useState } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
+import { LeadStageLabels, type LeadStage } from "@/types/leads";
+import { ProjectStatusLabels, type ProjectStatus } from "@/types/projects";
 
 interface Lead {
   id: string;
@@ -216,17 +218,21 @@ export function CreateQuotationModal({
                           lead.property?.property_name ||
                           lead.property?.unit_number ||
                           lead.property_name;
+                        // The customer first - that is how the team knows
+                        // the work - then the number, the property and
+                        // where the lead stands.
+                        const stage = LeadStageLabels[lead.stage as LeadStage] ?? lead.stage;
                         return (
                           <option key={lead.id} value={lead.id}>
-                            {lead.lead_number} - {clientName}
-                            {propertyName ? ` (${propertyName})` : ""}
+                            {clientName} · {lead.lead_number}
+                            {propertyName ? ` · ${propertyName}` : ""} · {stage}
                           </option>
                         );
                       })}
                     </select>
                     {leads.length === 0 && (
                       <p className="mt-1 text-xs text-slate-500">
-                        No leads in Proposal Discussion or Negotiation stage
+                        No leads at the Proposal & Negotiation stage
                       </p>
                     )}
                   </div>
@@ -246,16 +252,14 @@ export function CreateQuotationModal({
                       <option value="">Choose a project...</option>
                       {projects.map((project) => (
                         <option key={project.id} value={project.id}>
-                          {project.project_number} - {project.name}
-                          {project.client_name
-                            ? ` (${project.client_name})`
-                            : ""}
+                          {project.client_name || project.name} · {project.project_number} ·{" "}
+                          {ProjectStatusLabels[project.status as ProjectStatus] ?? project.status}
                         </option>
                       ))}
                     </select>
                     {projects.length === 0 && (
                       <p className="mt-1 text-xs text-slate-500">
-                        No projects in Execution stage
+                        No projects in progress
                       </p>
                     )}
                   </div>

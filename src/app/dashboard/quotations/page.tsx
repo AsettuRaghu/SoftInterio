@@ -311,8 +311,10 @@ export default function QuotationsListPage() {
         fetch(
           "/api/sales/leads?limit=100&stages=proposal_discussion,negotiation"
         ),
-        // Fetch projects in execution stage only
-        fetch("/api/projects?status=execution&limit=100"),
+        // Projects under way. "execution" was never a project status - the
+        // list came back empty - and since 2026-09-16 a project is
+        // new / in_progress / on_hold / completed / cancelled.
+        fetch("/api/projects?status=in_progress&limit=100"),
         // Fetch only active templates
         fetch("/api/quotations/templates?status=active"),
       ]);
