@@ -19,12 +19,6 @@ import {
   ClipboardDocumentListIcon,
   UserIcon,
 } from "@heroicons/react/24/outline";
-import {
-  PageLayout,
-  PageHeader,
-  PageContent,
-  StatBadge,
-} from "@/components/ui/PageLayout";
 import { TagInput, tagColour } from "@/components/ui/TagInput";
 import {
   DocumentWithUrl,
@@ -478,37 +472,14 @@ export default function DocumentsPage() {
   const availableEntities = selectedLinkedType === "lead" ? leads : projects;
 
   return (
-    <PageLayout isLoading={isLoading} loadingText="Loading documents...">
-      <PageHeader
-        title="Documents"
-        subtitle="Manage and organize all your project and lead documents"
-        breadcrumbs={[{ label: "Documents" }]}
-        icon={<FolderIcon className="w-5 h-5 text-white" />}
-        iconBgClass="from-emerald-500 to-emerald-600"
-        actions={
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-linear-to-r from-emerald-600 to-emerald-500 text-white text-sm font-medium rounded-lg hover:from-emerald-700 hover:to-emerald-600 transition-all shadow-sm hover:shadow-md"
-          >
-            <PlusIcon className="w-4 h-4" />
-            Add Document
-          </button>
-        }
-        stats={
-          documents.length > 0 ? (
-            <>
-              <StatBadge label="Total" value={stats.total} color="slate" />
-              <StatBadge label="Leads" value={stats.leads} color="amber" />
-              <StatBadge label="Projects" value={stats.projects} color="blue" />
-              {stats.tasks > 0 && (
-                <StatBadge label="Tasks" value={stats.tasks} color="slate" />
-              )}
-            </>
-          ) : undefined
-        }
-      />
-
-      <PageContent>
+    // The whole page for the files, no header: the facet rail is the left
+    // column, the toolbar carries the one action, and only the file area
+    // scrolls. Same height arithmetic as the calendar (100vh minus the
+    // shell's top bar and padding).
+    <div className="h-[calc(100vh-104px)] flex flex-col min-h-0">
+      {isLoading && documents.length === 0 && (
+        <div className="shrink-0 text-xs text-slate-400 px-1 pb-2">Loading documents…</div>
+      )}
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
             {error}
@@ -522,9 +493,18 @@ export default function DocumentsPage() {
          * the grid. Filters compose; the active ones are named above the
          * files and cleared in one click.
          */}
-        <div className="grid grid-cols-1 xl:grid-cols-[220px_1fr] gap-6">
+        <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[220px_1fr] gap-6">
           {/* Facet rail */}
-          <aside className="space-y-5">
+          <aside className="space-y-5 min-h-0 overflow-y-auto pr-1">
+            <div className="flex items-center gap-2 px-1">
+              <div className="w-9 h-9 rounded-lg bg-linear-to-br from-emerald-500 to-emerald-600 text-white flex items-center justify-center shrink-0">
+                <FolderIcon className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-base font-bold text-slate-900 leading-tight">Documents</h1>
+                <p className="text-[11px] text-slate-500 tabular-nums">{documents.length} files</p>
+              </div>
+            </div>
             <Facet
               title="Kind"
               options={[
@@ -575,9 +555,9 @@ export default function DocumentsPage() {
           </aside>
 
           {/* Files */}
-          <div className="min-w-0 space-y-4">
+          <div className="min-w-0 min-h-0 flex flex-col gap-4">
             {/* Toolbar */}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               <div className="relative flex-1 min-w-[220px]">
                 <MagnifyingGlassIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
@@ -618,8 +598,16 @@ export default function DocumentsPage() {
                   </button>
                 ))}
               </div>
+              <button
+                onClick={() => setIsAddModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
+              >
+                <PlusIcon className="w-4 h-4" />
+                Add Document
+              </button>
             </div>
 
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-0.5">
             {/* Active filters, named */}
             {(categoryFilter !== "all" || linkedTypeFilter !== "all" || tagFilter || searchQuery) && (
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
@@ -749,9 +737,9 @@ export default function DocumentsPage() {
                 ))}
               </div>
             )}
+            </div>
           </div>
         </div>
-      </PageContent>
 
       {/* Add Document Modal */}
       {isAddModalOpen && (
@@ -1021,7 +1009,7 @@ export default function DocumentsPage() {
         onClose={() => setPreviewDocument(null)}
       />
       {confirmDialog}
-    </PageLayout>
+    </div>
   );
 }
 
