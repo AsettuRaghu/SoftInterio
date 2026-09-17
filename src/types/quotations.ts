@@ -297,6 +297,15 @@ export interface PaymentTerm {
  * Quotation (Main Header)
  */
 export interface Quotation {
+  /** For the list: the project this belongs to, when it is a project's. */
+  project_number?: string | null;
+  project_name?: string | null;
+  project_status?: string | null;
+  /** assigned_to, else created_by - named through tenant_directory. */
+  owner?: { id: string; name: string; avatar_url: string | null } | null;
+  /** How many versions this quotation number has, for "v2 of 3". */
+  versions_total?: number;
+
   id: string;
   tenant_id: string;
   quotation_number: string;

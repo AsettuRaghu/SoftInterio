@@ -31,6 +31,9 @@ import {
   EyeIcon,
 } from "@heroicons/react/24/outline";
 import { CreateQuotationModal } from "@/components/quotations/CreateQuotationModal";
+import { LastActivityCell, daysSince } from "@/components/leads/activity-cells";
+import { LeadStageLabels, type LeadStage } from "@/types/leads";
+import { ProjectStatusLabels, type ProjectStatus } from "@/types/projects";
 import {
   QUOTATION_STATUS_OPTIONS,
   ACTIVE_QUOTATION_STATUSES,
@@ -100,6 +103,34 @@ const ALLOWED_STATUS_FILTER_OPTIONS = QUOTATION_STATUS_OPTIONS.filter((opt) =>
  * detail page makes the real decision with is_locked and the project link as
  * well, so this only picks an icon; it never grants anything.
  */
+const dayMonth = (iso?: string | null) =>
+  iso ? new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "";
+
+/**
+ * A quotation's activity is its timestamps. Each becomes a touch with a
+ * type the shared activity cell can label; newest first.
+ */
+const TOUCH_LABELS: Record<string, string> = {
+  created: "Created",
+  edited: "Edited",
+  sent: "Sent to client",
+  viewed: "Client viewed",
+  approved: "Approved",
+  rejected: "Rejected",
+};
+function touchesOf(q: Quotation): { type: string; at: string }[] {
+  const lastView = (q as { last_client_view_at?: string | null }).last_client_view_at;
+  const list: { type: string; at: string }[] = [];
+  if (q.created_at) list.push({ type: "created", at: q.created_at });
+  if (q.updated_at && q.updated_at !== q.created_at) list.push({ type: "edited", at: q.updated_at });
+  if (q.sent_at) list.push({ type: "sent", at: q.sent_at });
+  if (lastView || q.viewed_at) list.push({ type: "viewed", at: (lastView || q.viewed_at) as string });
+  if (q.approved_at) list.push({ type: "approved", at: q.approved_at });
+  if (q.rejected_at) list.push({ type: "rejected", at: q.rejected_at });
+  return list.sort((a, b) => (a.at < b.at ? 1 : -1));
+}
+const lastTouch = (q: Quotation) => touchesOf(q)[0] ?? { type: null, at: null };
+
 const isEditableStatus = (q: { status: string; lead_stage?: string | null }) =>
   !["sent", "approved", "rejected", "superseded"].includes(q.status) &&
   !["won", "lost", "disqualified"].includes(q.lead_stage || "");
@@ -179,6 +210,9 @@ export default function QuotationsListPage() {
             quotation.client_email?.toLowerCase().includes(query) ||
             quotation.property_name?.toLowerCase().includes(query) ||
             quotation.quotation_number?.toLowerCase().includes(query) ||
+            quotation.lead_number?.toLowerCase().includes(query) ||
+            quotation.project_number?.toLowerCase().includes(query) ||
+            quotation.owner?.name?.toLowerCase().includes(query) ||
             quotation.title?.toLowerCase().includes(query) ||
             (quotation.property_type &&
               PropertyTypeLabels[quotation.property_type]
@@ -217,7 +251,11 @@ export default function QuotationsListPage() {
         ];
         return statusOrder.indexOf(item.status);
       case "valid_until":
-        return item.created_at ? new Date(item.created_at) : null;
+        return item.valid_until ? new Date(item.valid_until) : null;
+      case "owner":
+        return item.owner?.name?.toLowerCase() || "";
+      case "last_activity":
+        return lastTouch(item).at ? new Date(lastTouch(item).at as string) : null;
       case "created_at":
       default:
         return item.created_at ? new Date(item.created_at) : null;
@@ -655,149 +693,229 @@ export default function QuotationsListPage() {
       },
     },
     {
-      key: "quotation_number",
-      header: "Quotation #",
-      width: "11%",
-      sortable: true,
-      render: (quotation) => (
-        <div>
-          <p className="text-sm font-medium text-blue-600">
-            {quotation.quotation_number}
-          </p>
-          <p className="text-xs text-slate-500">v{quotation.version}</p>
-        </div>
-      ),
-    },
-    {
       key: "client_name",
-      header: "Client",
-      width: "16%",
+      header: "Quotation",
+      width: "20%",
       sortable: true,
-      render: (quotation) => (
-        <div>
-          <p className="text-sm font-medium text-slate-900">
-            {quotation.client_name}
-          </p>
-          {quotation.client_email && (
-            <p className="text-xs text-slate-500">{quotation.client_email}</p>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "property_name",
-      header: "Property",
-      width: "14%",
-      sortable: true,
-      render: (quotation) => (
-        <div>
-          {quotation.property_name && (
-            <p className="text-sm font-medium text-slate-900">
-              {quotation.property_name}
+      render: (quotation) => {
+        /*
+         * The same shape as the leads and projects lists: the customer in
+         * bold, then what this is - the number and version, and which lead
+         * or project it belongs to - then the property. A quotation is known
+         * by who it is for; the number is searchable and on the page.
+         */
+        const belongs = quotation.lead_id
+          ? `Lead ${quotation.lead_number || ""}`.trim()
+          : quotation.project_id
+            ? `Project ${quotation.project_number || ""}`.trim()
+            : "Standalone";
+        const versions = quotation.versions_total ?? quotation.version;
+        const line1 = [
+          `${quotation.quotation_number} · v${quotation.version}${versions > 1 ? ` of ${versions}` : ""}`,
+          belongs,
+        ].join(" · ");
+        const line2 = [
+          quotation.property_name || null,
+          quotation.property_type ? PropertyTypeLabels[quotation.property_type] : null,
+          quotation.property_city || null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        return (
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-900 truncate">
+              {quotation.client_name || quotation.title || "No customer"}
             </p>
-          )}
-          {quotation.property_type && (
-            <p className="text-xs text-slate-500">
-              {PropertyTypeLabels[quotation.property_type]}
+            <p className="text-xs text-slate-600 truncate" title={line1}>
+              {line1}
             </p>
-          )}
-        </div>
-      ),
+            {line2 && (
+              <p className="text-xs text-slate-400 truncate" title={line2}>
+                {line2}
+              </p>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "spaces",
-      header: "Details",
-      width: "9%",
-      render: (quotation) => (
-        <div className="flex items-center gap-3 text-xs text-slate-500">
-          <span title="Spaces">
-            <span className="font-medium text-slate-700">
-              {quotation.spaces_count || 0}
-            </span>{" "}
-            Spaces
-          </span>
-          <span title="Components">
-            <span className="font-medium text-slate-700">
-              {quotation.components_count || 0}
-            </span>{" "}
-            Items
-          </span>
-        </div>
-      ),
-    },
-    {
-      key: "linked_to",
-      header: "Linked To",
-      width: "9%",
+      header: "Contents",
+      width: "10%",
       render: (quotation) => {
-        if (quotation.lead_id) {
-          return (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-blue-50 text-blue-700">
-              Lead
-            </span>
-          );
-        }
-        if (quotation.project_id) {
-          return (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-purple-50 text-purple-700">
-              Project
-            </span>
-          );
-        }
+        const stageOrStatus = quotation.lead_id
+          ? LeadStageLabels[quotation.lead_stage as LeadStage] ?? quotation.lead_stage
+          : quotation.project_id
+            ? ProjectStatusLabels[quotation.project_status as ProjectStatus] ?? quotation.project_status
+            : null;
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-slate-100 text-slate-500">
-            Standalone
-          </span>
+          <div className="min-w-0">
+            <p className="text-sm text-slate-700">
+              <span className="font-medium tabular-nums">{quotation.spaces_count || 0}</span>
+              <span className="text-slate-500"> spaces · </span>
+              <span className="font-medium tabular-nums">{quotation.components_count || 0}</span>
+              <span className="text-slate-500"> items</span>
+            </p>
+            {stageOrStatus && (
+              <p className="text-xs text-slate-400 truncate" title={quotation.lead_id ? "Where the lead stands" : "Where the project stands"}>
+                {quotation.lead_id ? "Lead" : "Project"}: {stageOrStatus}
+              </p>
+            )}
+          </div>
         );
       },
     },
     {
       key: "grand_total",
-      header: "Amount",
-      width: "10%",
+      header: "Value",
+      width: "12%",
       sortable: true,
-      render: (quotation) => (
-        <div>
-          <p className="text-sm font-semibold text-slate-900">
-            {formatCurrency(quotation.grand_total)}
-          </p>
-        </div>
-      ),
+      render: (quotation) => {
+        const discount = quotation.discount_amount || 0;
+        const tax = quotation.tax_percent || 0;
+        const line = tax > 0
+          ? `${formatCurrency(quotation.taxable_amount ?? quotation.subtotal)} + ${tax}% GST`
+          : "no tax";
+        return (
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-900 tabular-nums">
+              {formatCurrency(quotation.grand_total)}
+            </p>
+            <p className="text-xs text-slate-400 truncate">{line}</p>
+            {discount > 0 && (
+              <p className="text-xs text-emerald-600 truncate">−{formatCurrency(discount)} discount</p>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "status",
       header: "Status",
-      width: "11%",
+      width: "12%",
       sortable: true,
       render: (quotation) => {
         const colors = QuotationStatusColors[quotation.status];
+        // The moment the status was reached, beneath the badge, so "Sent"
+        // says when and "Approved" says when - the dates a client asks about.
+        const when =
+          quotation.status === "approved" && quotation.approved_at
+            ? `on ${dayMonth(quotation.approved_at)}`
+            : quotation.status === "rejected" && quotation.rejected_at
+              ? `on ${dayMonth(quotation.rejected_at)}`
+              : ["sent", "viewed", "negotiating"].includes(quotation.status) && quotation.sent_at
+                ? `sent ${dayMonth(quotation.sent_at)}`
+                : quotation.status === "draft"
+                  ? `since ${dayMonth(quotation.created_at)}`
+                  : null;
+        const views = (quotation as { client_view_count?: number }).client_view_count || 0;
         return (
-          <span
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full ${colors.bg} ${colors.text}`}
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`}></span>
-            {QuotationStatusLabels[quotation.status]}
-          </span>
+          <div className="min-w-0">
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full ${colors.bg} ${colors.text}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`}></span>
+              {QuotationStatusLabels[quotation.status]}
+            </span>
+            {(when || views > 0) && (
+              <p className="mt-1 text-xs text-slate-400 truncate">
+                {when}
+                {when && views > 0 ? " · " : ""}
+                {views > 0 ? `client viewed ${views}×` : ""}
+              </p>
+            )}
+          </div>
         );
       },
     },
     {
       key: "valid_until",
-      header: "Created At",
+      header: "Validity",
       width: "10%",
       sortable: true,
-      render: (quotation) => (
-        <div>
-          <p className="text-sm text-slate-700">
-            {formatDate(quotation.created_at)}
-          </p>
-        </div>
-      ),
+      render: (quotation) => {
+        /*
+         * Only an open quotation has a validity that matters: for a draft or
+         * one with the client it is a countdown, and the last week is amber,
+         * past is red. An approved or rejected one is settled and says so.
+         */
+        const open = ["draft", "sent", "viewed", "negotiating"].includes(quotation.status);
+        if (!quotation.valid_until) return <span className="text-xs text-slate-400">—</span>;
+        const days = -(daysSince(quotation.valid_until) ?? 0);
+        const future = new Date(quotation.valid_until).getTime() > Date.now();
+        const left = future ? Math.ceil((new Date(quotation.valid_until).getTime() - Date.now()) / 86400000) : 0;
+        const tone = !open
+          ? "text-slate-400"
+          : left <= 0
+            ? "text-red-600"
+            : left <= 7
+              ? "text-amber-600"
+              : "text-slate-600";
+        const note = !open
+          ? "settled"
+          : left <= 0
+            ? `expired ${-days === 0 ? "today" : `${Math.abs(days)}d ago`}`
+            : `${left} day${left === 1 ? "" : "s"} left`;
+        return (
+          <div className="min-w-0">
+            <p className="text-sm text-slate-700">{dayMonth(quotation.valid_until)}</p>
+            <p className={`text-xs ${tone}`}>{note}</p>
+          </div>
+        );
+      },
+    },
+    {
+      key: "owner",
+      header: "Owner",
+      width: "11%",
+      sortable: true,
+      render: (quotation) => {
+        const o = quotation.owner;
+        if (!o) return <span className="text-xs text-amber-600">Unassigned</span>;
+        return (
+          <div className="flex items-center gap-2 min-w-0">
+            {o.avatar_url ? (
+              <img src={o.avatar_url} alt="" className="w-6 h-6 rounded-full shrink-0 object-cover" />
+            ) : (
+              <span className="w-6 h-6 rounded-full shrink-0 bg-blue-100 text-blue-700 text-[10px] font-semibold flex items-center justify-center">
+                {o.name
+                  .split(" ")
+                  .map((w) => w[0])
+                  .slice(0, 2)
+                  .join("")
+                  .toUpperCase()}
+              </span>
+            )}
+            <span className="text-sm text-slate-700 truncate">{o.name}</span>
+          </div>
+        );
+      },
+    },
+    {
+      key: "last_activity",
+      header: "Last Activity",
+      width: "11%",
+      sortable: true,
+      render: (quotation) => {
+        // Drawn by the same cell the leads and projects lists use. A
+        // quotation's history is its timestamps - created, edited, sent,
+        // viewed, approved, rejected - so those are the activities.
+        const touches = touchesOf(quotation);
+        const last = touches[0];
+        return (
+          <LastActivityCell
+            at={last?.at}
+            type={last?.type}
+            recent={touches.slice(1, 4)}
+            labels={TOUCH_LABELS}
+          />
+        );
+      },
     },
     {
       key: "actions",
       header: "",
-      width: "13%",
+      width: "10%",
       render: (quotation) => (
         <div className="flex items-center justify-end gap-1">
           {/* One destination either way - viewing and editing are the same

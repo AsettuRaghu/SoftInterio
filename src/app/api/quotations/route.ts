@@ -165,6 +165,67 @@ export async function GET(request: NextRequest) {
     }); 
 
 
+    // What the list shows beside each row, read in one query each:
+    //  - the project a quotation belongs to (quotations.project_id carries
+    //    no foreign key, so it cannot be embedded);
+    //  - the owner's name and avatar through tenant_directory - the users
+    //    embed above resolves only for the caller and returns null for a
+    //    colleague, which read as "no owner" on every row but one's own;
+    //  - how many versions the quotation number has, for "v2 of 3".
+    const projectIds = [...new Set((quotations || []).map((q: any) => q.project_id).filter(Boolean))] as string[];
+    const projectById = new Map<string, any>();
+    if (projectIds.length > 0) {
+      const { data: projectRows } = await supabase
+        .from("projects")
+        .select("id, project_number, name, status, client:clients!client_id(name, email, phone), property:properties!property_id(property_name, property_type, city)")
+        .in("id", projectIds);
+      for (const p of projectRows ?? []) projectById.set(p.id, p);
+    }
+
+    const ownerIds = [...new Set((quotations || []).flatMap((q: any) => [q.assigned_to, q.created_by]).filter(Boolean))] as string[];
+    const personById = new Map<string, { id: string; name: string; avatar_url: string | null }>();
+    if (ownerIds.length > 0) {
+      const { data: people } = await supabase.from("tenant_directory").select("id, name, avatar_url").in("id", ownerIds);
+      for (const p of people ?? []) personById.set(p.id, p);
+    }
+
+    const numbers = [...new Set((quotations || []).map((q: any) => q.quotation_number).filter(Boolean))] as string[];
+    const versionsOf = new Map<string, number>();
+    if (numbers.length > 0) {
+      const { data: versionRows } = await supabase
+        .from("quotations")
+        .select("quotation_number, version")
+        .in("quotation_number", numbers);
+      for (const r of versionRows ?? []) {
+        versionsOf.set(r.quotation_number, Math.max(versionsOf.get(r.quotation_number) ?? 0, r.version ?? 1));
+      }
+    }
+
+    for (const q of quotations as any[]) {
+      const project = q.project_id ? projectById.get(q.project_id) : null;
+      const pClient = project ? (Array.isArray(project.client) ? project.client[0] : project.client) : null;
+      const pProperty = project ? (Array.isArray(project.property) ? project.property[0] : project.property) : null;
+      if (project) {
+        q.project_number = project.project_number;
+        q.project_name = project.name;
+        q.project_status = project.status;
+        if (!q.client_name && pClient?.name) {
+          q.client_name = pClient.name;
+          q.client_email = pClient.email || "";
+          q.client_phone = pClient.phone || "";
+        }
+        if (!q.property_name && pProperty?.property_name) {
+          q.property_name = pProperty.property_name;
+          q.property_type = pProperty.property_type || "";
+          q.property_city = pProperty.city || null;
+        }
+      }
+      if (q.lead?.property?.city) q.property_city = q.lead.property.city;
+      const ownerId = q.assigned_to || q.created_by;
+      q.owner = ownerId ? (personById.get(ownerId) ?? null) : null;
+      q.versions_total = versionsOf.get(q.quotation_number) ?? q.version ?? 1;
+    }
+
     // Fetch spaces and components counts for all quotations
     const quotationIds = (quotations || []).map((q) => q.id);
     
