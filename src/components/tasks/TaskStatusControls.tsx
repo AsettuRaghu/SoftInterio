@@ -559,12 +559,12 @@ export function TaskStatusControls({
           />
         </label>
         <label className="text-xs text-slate-600">
-          Who exactly
+          Who exactly <span className="text-slate-400">(optional)</span>
           <input
             type="text"
             value={holdWho}
             onChange={(e) => setHoldWho(e.target.value)}
-            placeholder="e.g. Mr Rao / Hettich"
+            placeholder="a name — e.g. Mr Rao, Hettich"
             className="mt-1 w-full px-2 py-1.5 text-sm rounded-md border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
         </label>

@@ -147,7 +147,11 @@ export function DelayLogPanel({ projectId, refreshKey }: Props) {
             <li key={`${e.task_id}-${i}`} className="px-3 py-2 flex items-start gap-3 text-sm">
               <span className={cn("mt-0.5 text-[11px] px-1.5 py-0.5 rounded border whitespace-nowrap shrink-0", OWNER_TONE[e.owner])}>
                 {DelayOwnerLabels[e.owner]}
-                {e.counterpart ? ` · ${e.counterpart}` : ""}
+                {/* The name typed under "who exactly" - unless it merely
+                    repeats the owner ("Client · Client"). */}
+                {e.counterpart && e.counterpart.trim().toLowerCase() !== DelayOwnerLabels[e.owner].toLowerCase()
+                  ? ` · ${e.counterpart}`
+                  : ""}
               </span>
               <span className="flex-1 min-w-0">
                 <span className="block text-slate-800">
