@@ -8,6 +8,7 @@
  */
 
 import React, { Suspense, useCallback, useEffect, useState } from "react";
+import { isEnabledPartnerType } from "@/lib/partners/enabled-types";
 import { useParams, useRouter } from "next/navigation";
 import { PageLayout, PageHeader, PageContent } from "@/components/ui/PageLayout";
 import { Headline, StatusPill, Chip } from "@/components/ui/list-cells";
@@ -100,7 +101,7 @@ function PartnerDetail() {
     if (p.ok) setPartner(pj.data);
     else setNotice({ message: pj.error || "Could not load the partner", variant: "error" });
     if (r.ok) setRelated(rj.data);
-    if (t.ok) setTypes(tj.data ?? []);
+    if (t.ok) setTypes((tj.data ?? []).filter((x: PartnerType) => isEnabledPartnerType(x.code)));
     setLoading(false);
   }, [id]);
   useEffect(() => {
@@ -147,7 +148,7 @@ function PartnerDetail() {
     <PageLayout>
       <PageHeader
         title={partner.name}
-        subtitle={[partner.kind === "organisation" ? "Organisation" : "Person", partner.types.map((t) => typeLabel.get(t) ?? t).join(", "), partner.city].filter(Boolean).join(" · ")}
+        subtitle={[partner.kind === "organisation" ? "Organisation" : "Person", partner.types.filter(isEnabledPartnerType).map((t) => typeLabel.get(t) ?? t).join(", "), partner.city].filter(Boolean).join(" · ")}
         basePath={{ label: "Partners", href: "/dashboard/partners" }}
         breadcrumbs={[{ label: partner.name }]}
         actions={
@@ -215,7 +216,7 @@ function PartnerDetail() {
             <section className="rounded-lg border border-slate-200 bg-white p-4">
               <h3 className="text-sm font-semibold text-slate-800 mb-3">What they are to us</h3>
               <div className="flex flex-wrap gap-1.5 mb-4">
-                {partner.types.map((t) => (
+                {partner.types.filter(isEnabledPartnerType).map((t) => (
                   <Chip key={t} label={typeLabel.get(t) ?? t} tone="violet" />
                 ))}
               </div>

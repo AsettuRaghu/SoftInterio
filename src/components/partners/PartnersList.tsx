@@ -10,6 +10,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { isEnabledPartnerType } from "@/lib/partners/enabled-types";
 import { useRouter } from "next/navigation";
 import { PageLayout, PageHeader, PageContent } from "@/components/ui/PageLayout";
 import { AppTable, useAppTableSort, useAppTablePagination, type ColumnDef } from "@/components/ui/AppTable";
@@ -58,8 +59,8 @@ export function PartnersList({ type = "" }: { type?: string }) {
       const [t, p] = await Promise.all([fetch("/api/partners/types"), fetch("/api/partners")]);
       const tj = await t.json().catch(() => ({}));
       const pj = await p.json().catch(() => ({}));
-      if (t.ok) setTypes(tj.data ?? []);
-      if (p.ok) setRows(pj.data ?? []);
+      if (t.ok) setTypes((tj.data ?? []).filter((x: PartnerType) => isEnabledPartnerType(x.code)));
+      if (p.ok) setRows((pj.data ?? []).filter((r: PartnerRow) => r.types.some(isEnabledPartnerType)));
       else setNotice({ message: pj.error || "Could not load partners", variant: "error" });
     } finally {
       setLoading(false);
@@ -115,7 +116,7 @@ export function PartnersList({ type = "" }: { type?: string }) {
           chips={
             <>
               {p.types
-                .filter((t) => t !== type)
+                .filter((t) => t !== type && isEnabledPartnerType(t))
                 .map((t) => (
                   <Chip key={t} label={typeLabel.get(t) ?? t} tone="violet" />
                 ))}
@@ -201,6 +202,7 @@ export function PartnersList({ type = "" }: { type?: string }) {
       />
       <PageContent>
         <div className="mb-3 flex flex-wrap items-center gap-2">
+          {types.length > 1 && (
           <button
             type="button"
             onClick={() => router.push("/dashboard/partners")}
@@ -208,7 +210,8 @@ export function PartnersList({ type = "" }: { type?: string }) {
           >
             All {rows.length}
           </button>
-          {types.map((t) => {
+          )}
+          {types.length > 1 && types.map((t) => {
             const n = rows.filter((r) => r.types.includes(t.code) && (showInactive || r.status === "active")).length;
             return (
               <button

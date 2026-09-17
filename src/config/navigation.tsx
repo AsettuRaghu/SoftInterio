@@ -265,18 +265,16 @@ export const navigationConfig: NavigationItem[] = [
     // Everyone the business works with, one list per hat. The shipped hats
     // are listed here; a business's own appear as tabs on the page. Gated on
     // the clients.* keys - the customer module grown up.
+    // Customers only for now; the other types (architects, factories,
+    // distributors, producers, contractors) are in the database and appear
+    // here as each one's integration is built - see
+    // lib/partners/enabled-types.ts.
     name: "Partners",
-    href: "/dashboard/partners",
+    href: "/dashboard/partners/t/customer",
     icon: Icons.partners,
     permission: "clients.view",
     subItems: [
-      { name: "All Partners", href: "/dashboard/partners", permission: "clients.view" },
       { name: "Customers", href: "/dashboard/partners/t/customer", permission: "clients.view" },
-      { name: "Architects", href: "/dashboard/partners/t/architect", permission: "clients.view" },
-      { name: "Interior Factory / OEM", href: "/dashboard/partners/t/interior_factory", permission: "clients.view" },
-      { name: "Distributors", href: "/dashboard/partners/t/distributor", permission: "clients.view" },
-      { name: "Producers", href: "/dashboard/partners/t/producer", permission: "clients.view" },
-      { name: "Contractors", href: "/dashboard/partners/t/contractor", permission: "clients.view" },
     ],
   },
   {

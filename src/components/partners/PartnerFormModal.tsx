@@ -77,10 +77,13 @@ export function PartnerFormModal({ isOpen, onClose, types, defaultType, initial,
 
   useEffect(() => {
     if (!isOpen) return;
-    setValues({ ...EMPTY, ...(initial ?? {}), types: initial?.types ?? (defaultType ? [defaultType] : []) });
+    // With one type on offer it is simply set; the chips only appear when
+    // there is a choice to make.
+    const only = types.length === 1 ? [types[0].code] : [];
+    setValues({ ...EMPTY, ...(initial ?? {}), types: initial?.types ?? (defaultType ? [defaultType] : only) });
     setError(null);
     setMatches([]);
-  }, [isOpen, initial, defaultType]);
+  }, [isOpen, initial, defaultType, types]);
 
   // Do we already know this person? Asked as the phone or email is typed,
   // only while creating.
@@ -142,7 +145,11 @@ export function PartnerFormModal({ isOpen, onClose, types, defaultType, initial,
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={editing ? "Edit partner" : "New partner"}
+      title={
+        editing
+          ? `Edit ${types.length === 1 ? types[0].label.toLowerCase() : "partner"}`
+          : `New ${types.length === 1 ? types[0].label.toLowerCase() : "partner"}`
+      }
       size="md"
       footer={
         <div className="flex justify-end gap-2">
@@ -150,7 +157,7 @@ export function PartnerFormModal({ isOpen, onClose, types, defaultType, initial,
             Cancel
           </button>
           <button type="button" disabled={busy} onClick={() => void save()} className={cn(buttonVariants())}>
-            {busy ? "Saving…" : editing ? "Save" : "Add partner"}
+            {busy ? "Saving…" : editing ? "Save" : "Add"}
           </button>
         </div>
       }
@@ -181,6 +188,7 @@ export function PartnerFormModal({ isOpen, onClose, types, defaultType, initial,
           className={input}
         />
 
+        {types.length > 1 && (
         <div>
           <p className="text-xs font-medium text-slate-600 mb-1">What are they to us?</p>
           <div className="flex flex-wrap gap-1.5">
@@ -202,6 +210,7 @@ export function PartnerFormModal({ isOpen, onClose, types, defaultType, initial,
             ))}
           </div>
         </div>
+        )}
 
         <div className="grid grid-cols-2 gap-2">
           <input type="tel" value={values.phone} onChange={(e) => set("phone", e.target.value)} placeholder="Phone" className={input} />
