@@ -9,13 +9,11 @@
  *               it is, then where or what about. Small chips sit beside the
  *               name for a fact that changes what the row IS.
  *   StatusPill  a rounded pill with a dot, one tone per meaning.
- *   UpdatedCell when it was last touched, in plain slate - the same cell the
- *               leads and projects lists use for activity, without the
- *               staleness colouring, which means nothing for a template.
+ *   UpdatedCell when it was last touched: the date, and whether that was a
+ *               creation or an edit. No colour - nothing here is chased.
  */
 
 import React from "react";
-import { LastActivityCell } from "@/components/leads/activity-cells";
 
 export function Headline({
   title,
@@ -79,21 +77,21 @@ export function Chip({ label, tone = "slate" }: { label: string; tone?: PillTone
   );
 }
 
-const TOUCH_LABELS: Record<string, string> = { created: "Created", edited: "Edited" };
-
+/**
+ * When it was last touched. A date, plainly - not "3d ago" in a colour. A
+ * template or a clause is not something anyone chases.
+ */
 export function UpdatedCell({ created_at, updated_at }: { created_at?: string | null; updated_at?: string | null }) {
-  const touches: { type: string; at: string }[] = [];
-  if (created_at) touches.push({ type: "created", at: created_at });
-  if (updated_at && updated_at !== created_at) touches.push({ type: "edited", at: updated_at });
-  touches.sort((a, b) => (a.at < b.at ? 1 : -1));
-  const last = touches[0];
+  const at = updated_at || created_at;
+  if (!at) return <span className="text-xs text-slate-300">—</span>;
+  const d = new Date(at);
+  const edited = !!updated_at && updated_at !== created_at;
   return (
-    <LastActivityCell
-      at={last?.at}
-      type={last?.type}
-      recent={touches.slice(1)}
-      labels={TOUCH_LABELS}
-      urgency={false}
-    />
+    <div className="min-w-0">
+      <p className="text-sm text-slate-700 tabular-nums">
+        {d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+      </p>
+      <p className="text-xs text-slate-400">{edited ? "edited" : "created"}</p>
+    </div>
   );
 }

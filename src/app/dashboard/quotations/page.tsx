@@ -31,7 +31,7 @@ import {
   EyeIcon,
 } from "@heroicons/react/24/outline";
 import { CreateQuotationModal } from "@/components/quotations/CreateQuotationModal";
-import { LastActivityCell, daysSince } from "@/components/leads/activity-cells";
+import { daysSince } from "@/components/leads/activity-cells";
 import { LeadStageLabels, type LeadStage } from "@/types/leads";
 import { ProjectStatusLabels, type ProjectStatus } from "@/types/projects";
 import {
@@ -881,19 +881,19 @@ export default function QuotationsListPage() {
       width: "11%",
       sortable: true,
       render: (quotation) => {
-        // Drawn by the same cell the leads and projects lists use. A
-        // quotation's history is its timestamps - created, edited, sent,
-        // viewed, approved, rejected - so those are the activities.
+        // The date of the last thing that happened to it and what that was
+        // - created, edited, sent, client viewed, approved, rejected. A date,
+        // not a coloured "3d ago": a quotation is not chased from this list.
         const touches = touchesOf(quotation);
         const last = touches[0];
+        if (!last) return <span className="text-xs text-slate-300">—</span>;
         return (
-          <LastActivityCell
-            at={last?.at}
-            type={last?.type}
-            recent={touches.slice(1, 4)}
-            labels={TOUCH_LABELS}
-            urgency={false}
-          />
+          <div className="min-w-0">
+            <p className="text-sm text-slate-700 tabular-nums">
+              {new Date(last.at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+            </p>
+            <p className="text-xs text-slate-400 truncate">{TOUCH_LABELS[last.type] ?? last.type}</p>
+          </div>
         );
       },
     },

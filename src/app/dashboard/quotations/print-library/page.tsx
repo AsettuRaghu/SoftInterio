@@ -124,9 +124,11 @@ export default function PrintLibraryPage() {
     () => [
       {
         key: "name",
-        header: "Format",
-        width: "34%",
+        header: "Name",
+        width: "26%",
         sortable: true,
+        // The name, and the chips that change what the row is. What the
+        // format prints is the next column's job.
         render: (f) => (
           <Headline
             title={f.name}
@@ -136,33 +138,47 @@ export default function PrintLibraryPage() {
                 {f.cover_enabled && f.cover_image_path && <Chip label="Cover" tone="slate" />}
               </>
             }
-            line1={`${ITEMISE_LEVEL_LABELS[f.itemise_to]} · priced ${PRICE_AT_LABELS[f.price_at].toLowerCase()}`}
-            line2={f.description || undefined}
+            line1={f.description || undefined}
           />
         ),
       },
       {
         key: "itemise_to",
-        header: "Shows",
-        width: "28%",
+        header: "Prints",
+        width: "36%",
         sortable: true,
-        // What the document carries, said as a list - the switches behind it
-        // are the format's, and a reader wants the outcome, not the flags.
+        // How this format differs from the next one, in one line: how far
+        // the document itemises, where it puts prices, and what it adds on
+        // each line. "Spaces + components + descriptions · price per space".
         render: (f) => {
-          const shows = [
+          const levels: Record<string, string> = {
+            space: "spaces",
+            component: "spaces + components",
+            category: "spaces + components + categories",
+            cost_item: "spaces + components + every cost item",
+          };
+          const extras = [
             f.show_descriptions && "descriptions",
             f.show_specifications && "specifications",
             f.show_dimensions && "dimensions",
             f.show_quantities && "quantities",
+          ].filter(Boolean) as string[];
+          const trailer = [
             f.show_company_details && "company details",
             f.show_bank_details && "bank details",
             f.show_payment_terms && "payment terms",
             f.show_terms && "terms",
           ].filter(Boolean) as string[];
+          const line1 = [levels[f.itemise_to] ?? f.itemise_to, ...extras].join(" + ");
+          const price = PRICE_AT_LABELS[f.price_at].toLowerCase();
           return (
-            <p className="text-xs text-slate-600 whitespace-normal leading-snug" title={shows.join(", ")}>
-              {shows.length ? shows.join(" · ") : "figures only"}
-            </p>
+            <div className="min-w-0">
+              <p className="text-sm text-slate-700 whitespace-normal leading-snug">{line1}</p>
+              <p className="text-xs text-slate-500 whitespace-normal leading-snug">
+                {price}
+                {trailer.length ? ` · with ${trailer.join(", ")}` : ""}
+              </p>
+            </div>
           );
         },
       },
