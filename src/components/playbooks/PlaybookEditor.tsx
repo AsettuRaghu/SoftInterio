@@ -234,6 +234,19 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
   const [tenantType, setTenantType] = useState<string>("");
   const delayReasons = useDelayReasons();
   const [steps, setSteps] = useState<DraftStep[]>([blankStep()]);
+  /**
+   * The tick input to put the cursor in after the list changes - "uid:index".
+   * Enter on a line opens the next one; without this the cursor stayed on the
+   * line just finished. An effect rather than autoFocus, because a line
+   * inserted mid-list re-renders an input that already exists.
+   */
+  const [focusTick, setFocusTick] = useState<string | null>(null);
+  useEffect(() => {
+    if (!focusTick) return;
+    const el = document.querySelector<HTMLInputElement>(`input[data-tick="${focusTick}"]`);
+    el?.focus();
+    setFocusTick(null);
+  }, [focusTick, steps]);
   // Naming a person is the point of configuring a playbook once: adopt it,
   // start it, and the work is already on the right desks.
   const [people, setPeople] = useState<
@@ -1646,6 +1659,7 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                                 <span className="w-3 h-3 rounded-sm border border-slate-300 shrink-0" />
                                 <input
                                   type="text"
+                                  data-tick={`${step.uid}:${li}`}
                                   value={line.label}
                                   onChange={(e) =>
                                     update(i, {
@@ -1655,6 +1669,9 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                                     })
                                   }
                                   onKeyDown={(e) => {
+                                    // Enter opens the next line and moves the
+                                    // cursor into it, like a list. Backspace on
+                                    // an empty line removes it and steps back.
                                     if (e.key === "Enter") {
                                       e.preventDefault();
                                       update(i, {
@@ -1664,6 +1681,17 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                                           ...step.checklist_lines.slice(li + 1),
                                         ],
                                       });
+                                      setFocusTick(`${step.uid}:${li + 1}`);
+                                    } else if (
+                                      e.key === "Backspace" &&
+                                      !line.label &&
+                                      step.checklist_lines.length > 1
+                                    ) {
+                                      e.preventDefault();
+                                      update(i, {
+                                        checklist_lines: step.checklist_lines.filter((_, k) => k !== li),
+                                      });
+                                      setFocusTick(`${step.uid}:${Math.max(0, li - 1)}`);
                                     }
                                   }}
                                   placeholder="e.g. site cleared"
@@ -1707,11 +1735,12 @@ export function PlaybookEditor({ onCancel, playbookId, onSaved }: Props) {
                             ))}
                             <button
                               type="button"
-                              onClick={() =>
+                              onClick={() => {
                                 update(i, {
                                   checklist_lines: [...step.checklist_lines, { label: "", needs_photo: false }],
-                                })
-                              }
+                                });
+                                setFocusTick(`${step.uid}:${step.checklist_lines.length}`);
+                              }}
                               className="text-emerald-700 hover:underline"
                             >
                               + add a line
