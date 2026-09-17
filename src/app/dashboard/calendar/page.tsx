@@ -15,12 +15,6 @@ import {
   XMarkIcon,
   LinkIcon,
 } from "@heroicons/react/24/outline";
-import {
-  PageLayout,
-  PageHeader,
-  PageContent,
-  StatBadge,
-} from "@/components/ui/PageLayout";
 import { LinkedEntity } from "@/components/tasks/ui";
 import {
   MonthView,
@@ -339,55 +333,27 @@ export default function CalendarPage() {
   );
 
   return (
-    <PageLayout isLoading={isLoading} loadingText="Loading calendar...">
-      <PageHeader
-        title="Calendar"
-        subtitle="Schedule and manage meetings, site visits, and appointments"
-        breadcrumbs={[{ label: "Calendar" }]}
-        icon={<CalendarIcon className="w-5 h-5 text-white" />}
-        iconBgClass="from-indigo-500 to-indigo-600"
-        actions={
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-linear-to-r from-indigo-600 to-indigo-500 text-white text-sm font-medium rounded-lg hover:from-indigo-700 hover:to-indigo-600 transition-all shadow-sm hover:shadow-md"
-          >
-            <PlusIcon className="w-4 h-4" />
-            New Event
-          </button>
-        }
-        stats={
-          events.length > 0 ? (
-            <>
-              <StatBadge
-                label="This Month"
-                value={events.length}
-                color="blue"
-              />
-              <StatBadge
-                label="Upcoming"
-                value={upcomingEvents.length}
-                color="green"
-              />
-              {overdueEvents.length > 0 && (
-                <StatBadge
-                  label="Overdue"
-                  value={overdueEvents.length}
-                  color="red"
-                />
-              )}
-            </>
-          ) : undefined
-        }
-      />
-
-      <PageContent>
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+    // The whole calendar in the viewable area, no page scroll: the shell
+    // leaves 100vh minus its top bar (pt-20) and padding (p-3 above and
+    // below), and this fills exactly that. No page header - the month name
+    // is the title, and the toolbar carries the one action.
+    <div className="h-[calc(100vh-104px)] flex flex-col min-h-0 gap-3">
+      {isLoading && events.length === 0 && (
+        <div className="shrink-0 text-xs text-slate-400 px-1">Loading calendar…</div>
+      )}
+      {error && (
+        <div className="shrink-0 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">{error}</div>
+      )}
+        <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-4 gap-4">
           {/* Main Calendar */}
-          <div className="xl:col-span-3">
-            <div className="bg-white rounded-lg border border-slate-200 shadow-sm">
+          <div className="xl:col-span-3 min-h-0 flex flex-col">
+            <div className="bg-white rounded-lg border border-slate-200 shadow-sm flex-1 min-h-0 flex flex-col">
               {/* Calendar Header */}
-              <div className="p-4 border-b border-slate-200 flex flex-wrap items-center gap-3">
-                <h2 className="text-lg font-bold text-slate-900 tabular-nums">
+              <div className="px-4 py-3 border-b border-slate-200 flex flex-wrap items-center gap-3 shrink-0">
+                <div className="w-9 h-9 rounded-lg bg-linear-to-br from-indigo-500 to-indigo-600 text-white flex items-center justify-center shrink-0">
+                  <CalendarIcon className="w-5 h-5" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-900 tabular-nums">
                   {viewMode === "week"
                     ? (() => {
                         const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() - currentDate.getDay());
@@ -436,10 +402,17 @@ export default function CalendarPage() {
                     </button>
                   ))}
                 </div>
+                <button
+                  onClick={() => setIsCreateModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                >
+                  <PlusIcon className="w-4 h-4" />
+                  New Event
+                </button>
               </div>
 
               {/* One colour per kind, and the legend is the filter. */}
-              <div className="px-4 py-2 border-b border-slate-100 bg-slate-50/60">
+              <div className="px-4 py-2 border-b border-slate-100 bg-slate-50/60 shrink-0">
                 <KindLegend
                   counts={events.reduce<Record<string, number>>((acc, e) => {
                     const k = kindOf(e as CalendarEventLite);
@@ -458,6 +431,7 @@ export default function CalendarPage() {
                 />
               </div>
 
+              <div className="flex-1 min-h-0">
               {viewMode === "month" && (
                 <MonthView
                   cursor={currentDate}
@@ -482,12 +456,13 @@ export default function CalendarPage() {
                   onOpen={(e) => setSelectedEvent(e as CalendarEvent)}
                 />
               )}
+              </div>
             </div>
           </div>
 
           {/* Side panels: the selected day (today by default), what is
-              overdue, and what is coming. */}
-          <div className="space-y-4">
+              overdue, and what is coming. They scroll on their own. */}
+          <div className="min-h-0 overflow-y-auto space-y-4 pr-0.5">
             <DayPanel
               date={selectedDay ?? new Date()}
               events={visibleEvents}
@@ -924,7 +899,6 @@ export default function CalendarPage() {
             </div>
           </div>
         )}
-      </PageContent>
-    </PageLayout>
+    </div>
   );
 }

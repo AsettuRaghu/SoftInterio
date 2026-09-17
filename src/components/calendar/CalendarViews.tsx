@@ -172,16 +172,18 @@ export function MonthView({
     });
   }, [cursor, events]);
 
+  // Six rows always (42 cells), so the grid can be told to fill its box and
+  // every row takes a sixth of it - the whole month in view, no scrolling.
   return (
-    <div className="p-3">
-      <div className="grid grid-cols-7 mb-1">
+    <div className="p-3 h-full flex flex-col min-h-0">
+      <div className="grid grid-cols-7 mb-1 shrink-0">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, i) => (
-          <div key={d} className={cn("py-1.5 text-center text-[11px] font-semibold uppercase tracking-wider", i === 0 || i === 6 ? "text-slate-400" : "text-slate-500")}>
+          <div key={d} className={cn("py-1 text-center text-[11px] font-semibold uppercase tracking-wider", i === 0 || i === 6 ? "text-slate-400" : "text-slate-500")}>
             {d}
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-px bg-slate-200 rounded-lg overflow-hidden border border-slate-200">
+      <div className="flex-1 min-h-0 grid grid-cols-7 grid-rows-6 gap-px bg-slate-200 rounded-lg overflow-hidden border border-slate-200">
         {days.map(({ date, inMonth, events: list }) => {
           const isToday = sameDay(date, today);
           const isSel = selected ? sameDay(date, selected) : false;
@@ -191,7 +193,7 @@ export function MonthView({
               key={dayKey(date)}
               onClick={() => onSelectDay(date)}
               className={cn(
-                "min-h-[112px] p-1.5 cursor-pointer transition-colors",
+                "min-h-0 overflow-hidden p-1.5 cursor-pointer transition-colors",
                 inMonth ? (weekend ? "bg-slate-50/70" : "bg-white") : "bg-slate-50",
                 isSel && "ring-2 ring-inset ring-blue-500",
                 !isSel && "hover:bg-blue-50/40"
@@ -253,8 +255,8 @@ export function WeekView({
   }, [cursor, events]);
 
   return (
-    <div className="p-3">
-      <div className="grid grid-cols-7 gap-2">
+    <div className="p-3 h-full min-h-0">
+      <div className="grid grid-cols-7 gap-2 h-full min-h-0">
         {days.map(({ date, allDay, timed }) => {
           const isToday = sameDay(date, today);
           const isSel = selected ? sameDay(date, selected) : false;
@@ -263,7 +265,7 @@ export function WeekView({
               key={dayKey(date)}
               onClick={() => onSelectDay(date)}
               className={cn(
-                "rounded-lg border min-h-[360px] flex flex-col cursor-pointer transition-colors",
+                "rounded-lg border min-h-0 flex flex-col cursor-pointer transition-colors",
                 isSel ? "border-blue-500 ring-1 ring-blue-500" : "border-slate-200 hover:border-slate-300",
                 isToday ? "bg-blue-50/30" : "bg-white"
               )}
@@ -279,7 +281,7 @@ export function WeekView({
                   ))}
                 </div>
               )}
-              <div className="p-1.5 space-y-1 flex-1">
+              <div className="p-1.5 space-y-1 flex-1 min-h-0 overflow-y-auto">
                 {timed.length === 0 && allDay.length === 0 && <p className="text-[11px] text-slate-300 text-center pt-6">—</p>}
                 {timed.map((e) => {
                   const s = styleOf(e);
@@ -331,7 +333,7 @@ export function AgendaView({ events, onOpen }: { events: CalendarEventLite[]; on
   }
   const today = new Date();
   return (
-    <div className="p-3 divide-y divide-slate-100">
+    <div className="p-3 divide-y divide-slate-100 h-full overflow-y-auto">
       {groups.map(([k, list]) => {
         const d = new Date(list[0].scheduled_at);
         const isToday = sameDay(d, today);
