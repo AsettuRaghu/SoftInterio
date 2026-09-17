@@ -11,7 +11,7 @@
  * tooltip at the row edge.
  */
 
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 interface TooltipProps {
@@ -42,6 +42,19 @@ export function Tooltip({
   }, [disabled, label, placement]);
 
   const hide = useCallback(() => setCoords(null), []);
+
+  // A tooltip is a hover; a click or a scroll ends the hover as far as the
+  // reader is concerned, even when the element under the pointer is about
+  // to change and its mouseleave never comes.
+  useEffect(() => {
+    if (!coords) return;
+    window.addEventListener("mousedown", hide, true);
+    window.addEventListener("scroll", hide, true);
+    return () => {
+      window.removeEventListener("mousedown", hide, true);
+      window.removeEventListener("scroll", hide, true);
+    };
+  }, [coords, hide]);
 
   return (
     <>

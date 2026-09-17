@@ -864,6 +864,10 @@ export default function TasksPage() {
     setNotesPopoverParentId(null);
   };
 
+  // A render function, called as TaskRow({ task }) - never <TaskRow />. As
+  // an element it is a new component type on every render, so React
+  // remounted every row each time (see TaskTableReusable for the full
+  // account). No hooks inside.
   const TaskRow = ({
     task,
     isSubtask = false,
@@ -1621,7 +1625,7 @@ export default function TasksPage() {
                 <tbody>
                   {paginatedTasks.map((task) => (
                     <React.Fragment key={task.id}>
-                      <TaskRow key={`task-${task.id}`} task={task} />
+                      {TaskRow({ task })}
                       {/* Inline Subtask Input - inlined directly to prevent focus loss */}
                       {inlineSubtaskFor === task.id && (
                         <tr
@@ -1689,12 +1693,9 @@ export default function TasksPage() {
                       {/* Expanded Subtasks - also rendered outside TaskRow */}
                       {expandedTasks.has(task.id) &&
                         task.subtasks?.map((subtask, index) => (
-                          <TaskRow
-                            key={`subtask-${task.id}-${subtask.id || index}`}
-                            task={subtask}
-                            isSubtask
-                            parentTaskId={task.id}
-                          />
+                          <React.Fragment key={`subtask-${task.id}-${subtask.id || index}`}>
+                            {TaskRow({ task: subtask, isSubtask: true, parentTaskId: task.id })}
+                          </React.Fragment>
                         ))}
                     </React.Fragment>
                   ))}

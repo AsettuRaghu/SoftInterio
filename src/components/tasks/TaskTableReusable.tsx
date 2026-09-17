@@ -1286,7 +1286,22 @@ export default function TaskTable({
     setNotesPopoverParentId(null);
   };
 
-  // Task Row Component
+  /**
+   * One row, as a render function - called as `TaskRow({ task })`, NEVER as
+   * `<TaskRow />`.
+   *
+   * It closes over the table's state and handlers, so it is re-created on
+   * every render. Used as a JSX element that made it a new component TYPE
+   * each time, and React answers a changed type by unmounting the old row
+   * and mounting a fresh one: every row's DOM was replaced on every render,
+   * the timer controls lost their optimistic and clock state, chips blinked
+   * as their nodes were swapped, a hovered tooltip was orphaned (its element
+   * vanished without a mouseleave) and reappeared under the cursor, and the
+   * focused button lost focus. Called as a function the rows are ordinary
+   * children of the table, keyed and kept.
+   *
+   * It must therefore hold no hooks of its own.
+   */
   const TaskRow = ({
     task,
     isSubtask = false,
@@ -1319,13 +1334,24 @@ export default function TaskTable({
       // The badge moves with the buttons, before the server answers.
       onOptimistic: (status: TaskStatus) => {
         noteLocalStatus(task.id, status);
+        // The stamps the transition is about to write, so the early/late
+        // chip that reads them appears with the click rather than a round
+        // trip later. The server's own values replace these on answer.
+        const now = new Date().toISOString();
+        const stamps: Partial<Task> =
+          status === "completed"
+            ? { completed_at: now }
+            : status === "in_progress" && !task.first_started_at
+              ? { first_started_at: now }
+              : {};
+        const apply = (t: Task): Task => ({ ...t, status, ...stamps });
         setTasks((prev) =>
           prev.map((t) => {
             if (isSubtask && parentTaskId) {
               if (t.id !== parentTaskId) return t;
-              return { ...t, subtasks: t.subtasks?.map((st) => (st.id === task.id ? { ...st, status } : st)) };
+              return { ...t, subtasks: t.subtasks?.map((st) => (st.id === task.id ? apply(st) : st)) };
             }
-            return t.id === task.id ? { ...t, status } : t;
+            return t.id === task.id ? apply(t) : t;
           }),
         );
       },
@@ -2293,7 +2319,7 @@ export default function TaskTable({
                 <tbody className="bg-white divide-y divide-slate-100">
                   {paginatedTasks.map((task) => (
                     <React.Fragment key={task.id}>
-                      <TaskRow task={task} />
+                      {TaskRow({ task })}
                       {/* Inline Subtask Input */}
                       {inlineSubtaskFor === task.id && (
                         <tr className="border-b border-slate-100 bg-blue-50/30">
@@ -2369,12 +2395,9 @@ export default function TaskTable({
                       {/* Subtasks */}
                       {expandedTasks.has(task.id) &&
                         task.subtasks?.map((subtask, index) => (
-                          <TaskRow
-                            key={`subtask-${task.id}-${subtask.id || index}`}
-                            task={subtask}
-                            isSubtask
-                            parentTaskId={task.id}
-                          />
+                          <React.Fragment key={`subtask-${task.id}-${subtask.id || index}`}>
+                            {TaskRow({ task: subtask, isSubtask: true, parentTaskId: task.id })}
+                          </React.Fragment>
                         ))}
                     </React.Fragment>
                   ))}
