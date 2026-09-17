@@ -122,7 +122,7 @@ export function DelayLogPanel({ projectId, refreshKey }: Props) {
           {owned.map((o) => (
             <span
               key={o}
-              className={cn("text-[11px] px-1.5 py-0.5 rounded border whitespace-nowrap", OWNER_TONE[o])}
+              className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap", OWNER_TONE[o])}
               title={`Days on hold waiting on ${DelayOwnerLabels[o].toLowerCase()}`}
             >
               {DelayOwnerLabels[o]} {expected_totals[o]}d
@@ -144,8 +144,8 @@ export function DelayLogPanel({ projectId, refreshKey }: Props) {
       {open && entries.length > 0 && (
         <ul className="divide-y divide-slate-100 border-t border-slate-100">
           {entries.map((e, i) => (
-            <li key={`${e.task_id}-${i}`} className="px-3 py-2 flex items-start gap-3 text-sm">
-              <span className={cn("mt-0.5 text-[11px] px-1.5 py-0.5 rounded border whitespace-nowrap shrink-0", OWNER_TONE[e.owner])}>
+            <li key={`${e.task_id}-${i}`} className="px-4 py-2 flex items-start gap-2 text-xs">
+              <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap shrink-0", OWNER_TONE[e.owner])}>
                 {DelayOwnerLabels[e.owner]}
                 {/* The name typed under "who exactly" - unless it merely
                     repeats the owner ("Client · Client"). */}
@@ -159,7 +159,7 @@ export function DelayLogPanel({ projectId, refreshKey }: Props) {
                   {e.step}
                   {e.reason_label ? <span className="text-slate-500"> — {e.reason_label}</span> : null}
                 </span>
-                <span className="block text-xs text-slate-500">
+                <span className="block text-[11px] text-slate-500">
                   {fmt(e.started_at)} → {e.ended_at ? fmt(e.ended_at) : "still waiting"}
                   {!e.ended_at && e.expected_until ? ` (expected ${fmt(e.expected_until)})` : ""}
                   {e.recorded_by ? ` · recorded by ${e.recorded_by}` : ""}
@@ -167,11 +167,11 @@ export function DelayLogPanel({ projectId, refreshKey }: Props) {
                 </span>
               </span>
               <span className="shrink-0 text-right">
-                <span className={cn("block text-sm font-semibold tabular-nums", e.ended_at ? "text-slate-800" : "text-red-600")}>
+                <span className={cn("block text-xs font-semibold tabular-nums", e.ended_at ? "text-slate-800" : "text-red-600")}>
                   {e.days}d
                 </span>
                 {!e.ended_at && e.expected_days !== null && e.expected_days > e.days && (
-                  <span className="block text-[11px] text-slate-500 tabular-nums">of {e.expected_days} expected</span>
+                  <span className="block text-[10px] text-slate-500 tabular-nums">of {e.expected_days} expected</span>
                 )}
               </span>
             </li>
