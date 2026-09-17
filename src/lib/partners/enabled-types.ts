@@ -9,7 +9,7 @@
  * ready; nothing else needs to change for the menu, the lists, the form
  * and the detail page to pick it up.
  */
-export const ENABLED_PARTNER_TYPES = ["customer"] as const;
+export const ENABLED_PARTNER_TYPES = ["customer", "architect"] as const;
 
 export const isEnabledPartnerType = (code: string) =>
   (ENABLED_PARTNER_TYPES as readonly string[]).includes(code);

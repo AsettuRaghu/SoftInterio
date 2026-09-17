@@ -18,6 +18,7 @@ import { Modal } from "@/components/ui/Modal";
 import { buttonVariants } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
 import { PartnerFormModal, type PartnerType } from "@/components/partners/PartnerFormModal";
+import { UserGroupIcon } from "@heroicons/react/24/outline";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
 import { QuotationStatusLabels, QuotationStatusColors, type QuotationStatus } from "@/types/quotations";
 import { LeadStageLabels, type LeadStage } from "@/types/leads";
@@ -49,6 +50,7 @@ interface Partner {
   pan_number: string | null;
   notes: string | null;
   status: "active" | "inactive";
+  platform_identity_id: string | null;
   created_at: string;
   updated_at: string;
   types: string[];
@@ -109,6 +111,7 @@ function PartnerDetail() {
   }, [load]);
 
   const typeLabel = new Map(types.map((t) => [t.code, t.label]));
+  const primaryType = types.find((t) => partner?.types.includes(t.code)) ?? null;
   const isCustomer = partner?.types.includes("customer");
   const isVendor = !!partner?.vendor || !!partner?.types.some((t) => ["distributor", "producer", "interior_factory", "contractor"].includes(t));
 
@@ -150,9 +153,19 @@ function PartnerDetail() {
         title={partner.name}
         subtitle={[partner.kind === "organisation" ? "Organisation" : "Person", partner.types.filter(isEnabledPartnerType).map((t) => typeLabel.get(t) ?? t).join(", "), partner.city].filter(Boolean).join(" · ")}
         basePath={{ label: "Partners", href: "/dashboard/partners" }}
-        breadcrumbs={[{ label: partner.name }]}
+        breadcrumbs={[
+          ...(primaryType ? [{ label: `${primaryType.label}s`, href: `/dashboard/partners/t/${primaryType.code}` }] : []),
+          { label: partner.name },
+        ]}
+        icon={<UserGroupIcon className="w-5 h-5 text-white" />}
+        iconBgClass="from-blue-500 to-blue-600"
         actions={
           <div className="flex items-center gap-2">
+            {partner.platform_identity_id ? (
+              <StatusPill label="On SoftInterio" tone="blue" />
+            ) : (
+              <span className="text-xs text-slate-400" title="They do not have their own SoftInterio account yet">Not on SoftInterio</span>
+            )}
             <StatusPill label={partner.status === "active" ? "Active" : "Inactive"} tone={partner.status === "active" ? "green" : "slate"} />
             {canEdit && (
               <>

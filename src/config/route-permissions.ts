@@ -108,16 +108,6 @@ export const routePermissions: RoutePermission[] = [
     description: "Sales pipeline",
   },
   {
-    pattern: "/dashboard/sales/clients/*",
-    permissions: ["clients.view"],
-    description: "Client detail pages",
-  },
-  {
-    pattern: "/dashboard/sales/clients",
-    permissions: ["clients.view"],
-    description: "Clients list",
-  },
-  {
     pattern: "/dashboard/sales",
     permissions: ["leads.view", "clients.view"],
     requireAll: false, // ANY of these permissions
@@ -347,16 +337,6 @@ export const routePermissions: RoutePermission[] = [
     pattern: "/dashboard/partners",
     permissions: ["clients.view"],
     description: "Partners",
-  },
-  {
-    pattern: "/dashboard/clients/*",
-    permissions: ["clients.view"],
-    description: "Client detail pages",
-  },
-  {
-    pattern: "/dashboard/clients",
-    permissions: ["clients.view"],
-    description: "Clients list",
   },
 ];
 

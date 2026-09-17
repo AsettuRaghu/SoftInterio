@@ -513,9 +513,38 @@ add-on services) hangs off the platform side later. Do not put anything the
 party owns onto `partners`.
 
 Gated on the existing `clients.*` keys; menu **Partners** with one entry per
-shipped type (`/dashboard/partners/t/<code>`); `/dashboard/clients`
-forwards to Customers. A partner with records against it cannot be deleted
-- mark it inactive.
+*enabled* type (`lib/partners/enabled-types.ts` - customer and architect
+today; the rest wait for their integrations) at
+`/dashboard/partners/t/<code>`. The old `/dashboard/clients` page, the
+`/api/clients` routes and `ClientSelector` were retired with it. A partner
+with records against it cannot be deleted - mark it inactive. The list and
+the detail page show whether the party is **on SoftInterio** (their
+`platform_identity_id` is set) - "Subscriber" or "Not yet"; nobody is yet.
+
+### Every list page is built the same way - do not ask, copy
+
+The leads and projects pages are the reference, and a new list page copies
+them without being told to (settled 2026-09-17, after Partners was first
+built with its own header and filter row):
+
+- **Header**: `PageHeader` with `title`, `subtitle`, `breadcrumbs`,
+  `basePath`, an `icon` (heroicon, `w-5 h-5 text-white`) on
+  `iconBgClass="from-blue-500 to-blue-600"`, and one primary action - a
+  blue `px-4 py-2 rounded-lg` button with a `PlusIcon`.
+- **Body**: `PageContent noPadding`; an error state with "Try Again";
+  otherwise the filter bar then the table.
+- **Filter bar**: one line - `ListFilterBar` (search input taking the width)
+  with `MultiSelectFilter`s ("Status: Active ▾", check-marked options, an
+  "All" row). Both live in `components/ui/ListFilterBar`; the leads and
+  projects bars predate it and still carry their own copies.
+- **Table**: `AppTable` with `className="table-fixed"`, `showToolbar={false}`,
+  percentage widths on every column, `onRowClick` to the detail page, an
+  `emptyState` with icon/title/description. Cells from
+  `components/ui/list-cells` (below).
+- **Detail page**: the same `PageHeader` with icon, the record's name as
+  title, the facts as subtitle, breadcrumbs back through the list; the tab
+  bar of the lead and project pages (`px-4 py-3 text-sm font-medium
+  border-b-2`, active `border-blue-600 text-blue-600`).
 
 ### Every list is built from the same cells
 

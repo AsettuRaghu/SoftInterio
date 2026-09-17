@@ -275,6 +275,7 @@ export const navigationConfig: NavigationItem[] = [
     permission: "clients.view",
     subItems: [
       { name: "Customers", href: "/dashboard/partners/t/customer", permission: "clients.view" },
+      { name: "Architects", href: "/dashboard/partners/t/architect", permission: "clients.view" },
     ],
   },
   {

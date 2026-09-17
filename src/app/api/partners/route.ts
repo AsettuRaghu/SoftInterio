@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from("partners")
     .select(
-      "id, kind, name, display_name, phone, email, website, city, state, status, notes, created_at, updated_at, " +
+      "id, kind, name, display_name, phone, email, website, city, state, status, notes, platform_identity_id, created_at, updated_at, " +
         "types:partner_type_links(type_code), contacts:partner_contacts(id, name, designation, phone, email, is_primary), " +
         "clients:clients(id)"
     )
@@ -83,6 +83,9 @@ export async function GET(request: NextRequest) {
       state: p.state,
       status: p.status,
       notes: p.notes,
+      // Whether the party has its own account on SoftInterio - the
+      // ecosystem's pointer, empty for everyone today.
+      on_platform: !!p.platform_identity_id,
       created_at: p.created_at,
       updated_at: p.updated_at,
       types,

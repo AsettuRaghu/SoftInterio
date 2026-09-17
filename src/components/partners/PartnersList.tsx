@@ -3,24 +3,25 @@
 /**
  * Partners - everyone this business works with, one list per hat.
  *
- * /dashboard/partners shows everyone; /dashboard/partners/t/customer the
- * customers, /t/distributor the distributors. The menu offers one entry per
- * shipped type; a business's own types appear as tabs here. Same list shape
- * as leads, projects and quotations. See docs/plans/partners.md.
+ * /dashboard/partners/t/customer is the customers, /t/architect the
+ * architects. The page is built the way every list page in the app is: the
+ * header with its icon and one primary action, a one-line filter bar
+ * (search, then "Status: …" dropdowns), and a fixed-layout table whose
+ * first column is the name in bold with what-it-is beneath. See
+ * docs/plans/partners.md.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { isEnabledPartnerType } from "@/lib/partners/enabled-types";
 import { useRouter } from "next/navigation";
 import { PageLayout, PageHeader, PageContent } from "@/components/ui/PageLayout";
 import { AppTable, useAppTableSort, useAppTablePagination, type ColumnDef } from "@/components/ui/AppTable";
+import { ListFilterBar, MultiSelectFilter } from "@/components/ui/ListFilterBar";
 import { Headline, StatusPill, Chip, UpdatedCell } from "@/components/ui/list-cells";
 import { Toast } from "@/components/ui/Toast";
-import { buttonVariants } from "@/components/ui/Button";
-import { cn } from "@/utils/cn";
-import { PlusIcon, UsersIcon } from "@heroicons/react/24/outline";
+import { PlusIcon, UserGroupIcon } from "@heroicons/react/24/outline";
 import { PartnerFormModal, type PartnerType } from "@/components/partners/PartnerFormModal";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
+import { isEnabledPartnerType } from "@/lib/partners/enabled-types";
 
 interface PartnerRow {
   id: string;
@@ -31,6 +32,7 @@ interface PartnerRow {
   email: string | null;
   city: string | null;
   status: "active" | "inactive";
+  on_platform: boolean;
   created_at: string;
   updated_at: string;
   types: string[];
@@ -41,6 +43,9 @@ interface PartnerRow {
   purchase_orders_count: number;
 }
 
+type StatusKey = "active" | "inactive";
+type PlatformKey = "on" | "off";
+
 export function PartnersList({ type = "" }: { type?: string }) {
   const router = useRouter();
   const { hasPermission } = useUserPermissions();
@@ -48,8 +53,10 @@ export function PartnersList({ type = "" }: { type?: string }) {
   const [types, setTypes] = useState<PartnerType[]>([]);
   const [rows, setRows] = useState<PartnerRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [showInactive, setShowInactive] = useState(false);
+  const [statuses, setStatuses] = useState<StatusKey[]>(["active"]);
+  const [platform, setPlatform] = useState<PlatformKey[]>(["on", "off"]);
   const [adding, setAdding] = useState(false);
   const [notice, setNotice] = useState<{ message: string; variant: "success" | "error" } | null>(null);
   const { sortState, handleSort, sortData } = useAppTableSort<PartnerRow>();
@@ -61,7 +68,9 @@ export function PartnersList({ type = "" }: { type?: string }) {
       const pj = await p.json().catch(() => ({}));
       if (t.ok) setTypes((tj.data ?? []).filter((x: PartnerType) => isEnabledPartnerType(x.code)));
       if (p.ok) setRows((pj.data ?? []).filter((r: PartnerRow) => r.types.some(isEnabledPartnerType)));
-      else setNotice({ message: pj.error || "Could not load partners", variant: "error" });
+      else setError(pj.error || "Could not load partners");
+    } catch {
+      setError("Could not reach the server");
     } finally {
       setLoading(false);
     }
@@ -72,15 +81,17 @@ export function PartnersList({ type = "" }: { type?: string }) {
 
   const typeLabel = useMemo(() => new Map(types.map((t) => [t.code, t.label])), [types]);
   const current = types.find((t) => t.code === type) ?? null;
+  const noun = current ? current.label.toLowerCase() : "partner";
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = rows.filter(
       (r) =>
         (!type || r.types.includes(type)) &&
-        (showInactive || r.status === "active") &&
+        statuses.includes(r.status) &&
+        platform.includes(r.on_platform ? "on" : "off") &&
         (!q ||
-          [r.name, r.display_name, r.phone, r.email, r.city, r.primary_contact?.name, r.primary_contact?.phone, ...r.types.map((t) => typeLabel.get(t))]
+          [r.name, r.display_name, r.phone, r.email, r.city, r.primary_contact?.name, r.primary_contact?.phone]
             .filter(Boolean)
             .some((v) => String(v).toLowerCase().includes(q)))
     );
@@ -88,8 +99,6 @@ export function PartnersList({ type = "" }: { type?: string }) {
       switch (column) {
         case "name":
           return item.name.toLowerCase();
-        case "city":
-          return (item.city || "").toLowerCase();
         case "work":
           return item.leads_count + item.projects_count + item.purchase_orders_count;
         case "status":
@@ -100,7 +109,7 @@ export function PartnersList({ type = "" }: { type?: string }) {
           return null;
       }
     });
-  }, [rows, type, query, showInactive, sortData, typeLabel]);
+  }, [rows, type, query, statuses, platform, sortData]);
 
   const { paginatedData, pagination, setPage, setPageSize } = useAppTablePagination(filtered, 25);
 
@@ -108,7 +117,7 @@ export function PartnersList({ type = "" }: { type?: string }) {
     {
       key: "name",
       header: current ? current.label : "Partner",
-      width: "30%",
+      width: "28%",
       sortable: true,
       render: (p) => (
         <Headline
@@ -133,27 +142,23 @@ export function PartnersList({ type = "" }: { type?: string }) {
     },
     {
       key: "contact",
-      header: "Reach them on",
-      width: "20%",
+      header: "Contact",
+      width: "18%",
       render: (p) => {
         const phone = p.primary_contact?.phone || p.phone;
         return (
-          <div className="min-w-0">
-            <p className="text-sm text-slate-700 tabular-nums">{phone || <span className="text-slate-300">no phone</span>}</p>
-            <p className="text-xs text-slate-400 truncate">{p.email || ""}</p>
-            {p.contacts_count > 1 && (
-              <p className="text-xs text-slate-400">
-                {p.contacts_count} contacts
-              </p>
-            )}
+          <div className="space-y-0.5">
+            <p className="text-sm text-slate-700 tabular-nums">{phone || <span className="text-slate-400">—</span>}</p>
+            {p.email && <p className="text-xs text-slate-500 truncate">{p.email}</p>}
+            {p.contacts_count > 1 && <p className="text-xs text-slate-400">{p.contacts_count} contacts</p>}
           </div>
         );
       },
     },
     {
       key: "work",
-      header: "Work together",
-      width: "20%",
+      header: "Work Together",
+      width: "18%",
       sortable: true,
       render: (p) => {
         const parts = [
@@ -164,9 +169,23 @@ export function PartnersList({ type = "" }: { type?: string }) {
         return parts.length ? (
           <p className="text-sm text-slate-700">{parts.join(" · ")}</p>
         ) : (
-          <p className="text-xs text-slate-400">nothing yet</p>
+          <p className="text-sm text-slate-400">—</p>
         );
       },
+    },
+    {
+      key: "platform",
+      header: "On SoftInterio",
+      width: "12%",
+      // Whether the party has an account of their own on the platform. The
+      // ecosystem - their portal, ratings, services - hangs off that; today
+      // nobody is linked, and the column says so honestly.
+      render: (p) =>
+        p.on_platform ? (
+          <StatusPill label="Subscriber" tone="blue" />
+        ) : (
+          <span className="text-xs text-slate-400">Not yet</span>
+        ),
     },
     {
       key: "status",
@@ -185,73 +204,101 @@ export function PartnersList({ type = "" }: { type?: string }) {
   ];
 
   return (
-    <PageLayout isLoading={loading} loadingText="Loading partners...">
+    <PageLayout isLoading={loading} loadingText={`Loading ${noun}s...`}>
       <PageHeader
         title={current ? `${current.label}s` : "Partners"}
         subtitle={current?.description || "Everyone this business works with."}
+        breadcrumbs={current ? [{ label: `${current.label}s` }] : []}
         basePath={{ label: "Partners", href: "/dashboard/partners" }}
-        breadcrumbs={current ? [{ label: current.label }] : []}
+        icon={<UserGroupIcon className="w-5 h-5 text-white" />}
+        iconBgClass="from-blue-500 to-blue-600"
         actions={
           hasPermission("clients.create") ? (
-            <button type="button" onClick={() => setAdding(true)} className={cn(buttonVariants())}>
-              <PlusIcon className="w-4 h-4 mr-1.5" />
-              New {current ? current.label.toLowerCase() : "partner"}
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all text-sm font-medium flex items-center gap-2"
+            >
+              <PlusIcon className="w-4 h-4" />
+              Add {current ? current.label : "Partner"}
             </button>
           ) : undefined
         }
       />
-      <PageContent>
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          {types.length > 1 && (
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard/partners")}
-            className={cn("px-3 py-1.5 text-xs font-medium rounded-full border", !type ? "bg-slate-800 text-white border-slate-800" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}
-          >
-            All {rows.length}
-          </button>
-          )}
-          {types.length > 1 && types.map((t) => {
-            const n = rows.filter((r) => r.types.includes(t.code) && (showInactive || r.status === "active")).length;
-            return (
-              <button
-                key={t.code}
-                type="button"
-                onClick={() => router.push(`/dashboard/partners/t/${t.code}`)}
-                className={cn("px-3 py-1.5 text-xs font-medium rounded-full border", type === t.code ? "bg-slate-800 text-white border-slate-800" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}
-              >
-                {t.label} {n}
-              </button>
-            );
-          })}
-          <span className="flex-1" />
-          <label className="flex items-center gap-1.5 text-xs text-slate-500">
-            <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
-            show inactive
-          </label>
-        </div>
 
-        <AppTable<PartnerRow>
-          data={paginatedData}
-          columns={columns}
-          keyExtractor={(p) => p.id}
-          searchValue={query}
-          onSearchChange={setQuery}
-          searchPlaceholder="Search by name, phone, email, city…"
-          sortable
-          sortState={sortState}
-          onSort={handleSort}
-          pagination={pagination}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-          stickyHeader
-          onRowClick={(p) => router.push(`/dashboard/partners/${p.id}`)}
-          emptyState={{
-            icon: <UsersIcon className="w-6 h-6 text-slate-400" />,
-            title: query ? "No partners match" : current ? `No ${current.label.toLowerCase()}s yet` : "No partners yet",
-            description: query ? "Try a different search." : "Add the people and companies this business works with.",
-          }}
-        />
+      <PageContent noPadding>
+        {error ? (
+          <div className="flex-1 flex flex-col items-center justify-center py-8 text-center px-4">
+            <p className="text-sm font-medium text-red-600 mb-1">{error}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setLoading(true);
+                void load();
+              }}
+              className="px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
+        ) : (
+          <>
+            <ListFilterBar
+              searchValue={query}
+              onSearchChange={(v) => {
+                setQuery(v);
+                setPage(1);
+              }}
+              searchPlaceholder="Search by name, phone, email, city..."
+            >
+              <MultiSelectFilter<StatusKey>
+                label="Status"
+                options={[
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ]}
+                selected={statuses}
+                onChange={(v) => {
+                  setStatuses(v);
+                  setPage(1);
+                }}
+              />
+              <MultiSelectFilter<PlatformKey>
+                label="On SoftInterio"
+                options={[
+                  { value: "on", label: "Subscriber" },
+                  { value: "off", label: "Not yet" },
+                ]}
+                selected={platform}
+                onChange={(v) => {
+                  setPlatform(v);
+                  setPage(1);
+                }}
+              />
+            </ListFilterBar>
+
+            <AppTable<PartnerRow>
+              className="table-fixed"
+              data={paginatedData}
+              columns={columns}
+              keyExtractor={(p) => p.id}
+              showToolbar={false}
+              sortable
+              sortState={sortState}
+              onSort={handleSort}
+              pagination={pagination}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              onRowClick={(p) => router.push(`/dashboard/partners/${p.id}`)}
+              emptyState={{
+                icon: <UserGroupIcon className="w-6 h-6 text-slate-400" />,
+                title: query ? `No ${noun}s match` : `No ${noun}s yet`,
+                description: query ? "Try adjusting your search" : `Add the ${noun}s this business works with.`,
+              }}
+            />
+          </>
+        )}
       </PageContent>
 
       <PartnerFormModal
@@ -260,7 +307,7 @@ export function PartnersList({ type = "" }: { type?: string }) {
         types={types}
         defaultType={type || undefined}
         onSaved={(id) => {
-          setNotice({ message: "Partner added.", variant: "success" });
+          setNotice({ message: `${current ? current.label : "Partner"} added.`, variant: "success" });
           void load();
           router.push(`/dashboard/partners/${id}`);
         }}
