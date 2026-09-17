@@ -127,8 +127,9 @@ export default function PrintLibraryPage() {
         header: "Name",
         width: "26%",
         sortable: true,
-        // The name, and the chips that change what the row is. What the
-        // format prints is the next column's job.
+        // The name, and the chips that change what the row is - nothing
+        // else. What the format prints is the next column's job, and the
+        // description (often a paragraph) is read in the editor.
         render: (f) => (
           <Headline
             title={f.name}
@@ -138,7 +139,6 @@ export default function PrintLibraryPage() {
                 {f.cover_enabled && f.cover_image_path && <Chip label="Cover" tone="slate" />}
               </>
             }
-            line1={f.description || undefined}
           />
         ),
       },
