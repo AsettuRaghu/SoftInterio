@@ -493,6 +493,22 @@ export default function TaskTable({
    * never hidden for long.
    */
   const recentLocal = useRef<Map<string, Map<string, { value: unknown; at: number }>>>(new Map());
+  /** The fields a transition's answer settles for the row. */
+  const PINNED_AFTER_TRANSITION = [
+    "status",
+    "start_date",
+    "due_date",
+    "started_at",
+    "completed_at",
+    "first_started_at",
+    "first_completed_at",
+    "hold_owner",
+    "hold_reason_code",
+    "hold_expected_until",
+    "hold_reason",
+    "actual_hours",
+    "dates_pinned",
+  ] as const;
   const noteLocal = (id: string, field: string, value: unknown) => {
     const row = recentLocal.current.get(id) ?? new Map();
     row.set(field, { value, at: Date.now() });
@@ -1144,6 +1160,34 @@ export default function TaskTable({
       } else {
         // Invalidate cache on successful update
         invalidateCache();
+        // The row takes the server's answer at once - a status set from the
+        // dropdown comes back with the dates the scheduler moved and the
+        // stamps the transition wrote - and those fields are pinned so a
+        // stale sync cannot undo them. The parent's refresh then brings the
+        // OTHER rows in line in one render.
+        const answered = (await response.json().catch(() => ({})))?.task as Record<string, unknown> | undefined;
+        if (answered) {
+          const patch: Record<string, unknown> = {};
+          for (const f of PINNED_AFTER_TRANSITION) {
+            if (f in answered) {
+              patch[f] = answered[f];
+              noteLocal(taskId, f, answered[f]);
+            }
+          }
+          const apply = (t: Task) =>
+            ({ ...t, ...patch, is_clock_running: (patch.status ?? t.status) === "in_progress" }) as Task;
+          setTasks((prev) =>
+            prev.map((t) =>
+              isSubtask && parentTaskId
+                ? t.id === parentTaskId
+                  ? { ...t, subtasks: t.subtasks?.map((st) => (st.id === taskId ? apply(st) : st)) }
+                  : t
+                : t.id === taskId
+                  ? apply(t)
+                  : t,
+            ),
+          );
+        }
         // Refresh if status completed - and on any status change in plan
         // mode, so the Timer buttons follow what the dropdown set.
         if (field === "status" && (value === "completed" || externalTasks)) {
@@ -1328,7 +1372,16 @@ export default function TaskTable({
                 );
               }
               invalidateCache();
-              if (updated.status) noteLocalStatus(task.id, updated.status);
+              // The server's answer is the truth for this row now - status,
+              // the dates the scheduler moved, the stamps, the hold. Note
+              // every one of them, not just status, so a sync from the parent
+              // that was read a beat earlier cannot flash the row back to
+              // what it was before the click. (The parent now reads its
+              // data in one batch, but this row must be right regardless of
+              // which of its readers answers first.)
+              for (const field of PINNED_AFTER_TRANSITION) {
+                if (field in updated) noteLocal(task.id, field, (updated as unknown as Record<string, unknown>)[field]);
+              }
               // When the rows come from a parent (the Plan tab), the parent's
               // copy is what the next render draws from - the sync effect puts
               // it back over the local patch. So ask the parent to re-read:

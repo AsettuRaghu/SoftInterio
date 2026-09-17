@@ -47,6 +47,12 @@ interface PlanTabProps {
   orderedStages: { id: string; steps?: { id: string }[] }[];
   projectClosed?: boolean;
   teamMembers: TeamMember[];
+  /**
+   * What the server would accept on each row, read by the page together with
+   * the tasks so buttons and rows change in the same render. Left out, the
+   * tab reads them itself whenever the tasks change.
+   */
+  gates?: Record<string, PlanGate>;
   onRefresh: () => void;
   onTaskClick?: (task: Task) => void;
 }
@@ -58,6 +64,7 @@ export function PlanTab({
   orderedStages,
   projectClosed = false,
   teamMembers,
+  gates: gatesProp,
   onRefresh,
   onTaskClick,
 }: PlanTabProps) {
@@ -69,18 +76,19 @@ export function PlanTab({
    * the row - "Waiting for Layout Drawings to finish" - rather than turning
    * red after a click. One round trip for the whole plan.
    */
-  const [gates, setGates] = React.useState<Record<string, PlanGate>>({});
+  const [ownGates, setOwnGates] = React.useState<Record<string, PlanGate>>({});
+  const gates = gatesProp ?? ownGates;
   React.useEffect(() => {
-    if (!runId) return;
+    if (!runId || gatesProp) return;
     let alive = true;
     fetch(`/api/projects/${projectId}/plan-gates`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => alive && j?.data?.gates && setGates(j.data.gates))
+      .then((j) => alive && j?.data?.gates && setOwnGates(j.data.gates))
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [projectId, runId, tasks]);
+  }, [projectId, runId, tasks, gatesProp]);
 
   /**
    * The plan, in the playbook's own order, nested.

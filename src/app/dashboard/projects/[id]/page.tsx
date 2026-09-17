@@ -49,6 +49,7 @@ import { PlaybooksPanel } from "@/components/playbooks";
 import { KickoffChecklist } from "@/components/projects/KickoffChecklist";
 import { WaitingOnPanel } from "@/components/projects/WaitingOnPanel";
 import { DelayLogPanel } from "@/components/projects/DelayLogPanel";
+import type { PlanGate } from "@/components/tasks/TaskTableReusable";
 import { ProjectStatusAction } from "@/components/projects/ProjectStatusAction";
 import { defaultTaskOrder } from "@/lib/tasks/order";
 import { EditTaskModal } from "@/components/tasks";
@@ -275,20 +276,54 @@ export default function ProjectDetailPage({ params }: PageProps) {
    * simply changes.
    */
   const [planVersion, setPlanVersion] = useState(0);
+  /** What the server would accept on each plan row; read with the plan. */
+  const [planGates, setPlanGates] = useState<Record<string, PlanGate>>({});
   useEffect(() => {
     if (awaitingKickoff) void fetchKickoffReady();
   }, [awaitingKickoff, fetchKickoffReady, planVersion]);
+  /**
+   * One read, one render.
+   *
+   * After an action on a plan row the project (progress, stage strip), the
+   * playbook (stage statuses, order), the task list (every row's dates - the
+   * scheduler moves the rows after the one acted on) and the gates (which
+   * buttons the server would accept) all change together. They used to be
+   * read by three functions setting state as each answer arrived, so the row
+   * that had just been acted on was rebuilt from the fresh stages and the
+   * STALE task list for a beat - its dates and their early/late chips flashed
+   * back to the old values, then forward again - and the gates arrived a beat
+   * after that, so the buttons changed twice. Now the four are awaited
+   * together and every setState below runs in one tick, which React batches
+   * into a single render. The panels keyed on planVersion re-read after.
+   */
   const refreshPlan = useCallback(async () => {
-    setPlanVersion((v) => v + 1);
     try {
-      const [projectRes] = await Promise.all([
+      const [projectRes, playbookRes, tasksRes, gatesRes] = await Promise.all([
         fetch(`/api/projects/${id}`),
-        fetchPlaybook(),
+        fetch(`/api/projects/${id}/playbook`),
+        fetch(`/api/tasks?related_type=project&related_id=${id}`),
+        fetch(`/api/projects/${id}/plan-gates`),
       ]);
-      if (projectRes.ok) {
-        const data = await projectRes.json();
-        if (data.project) setProject(data.project);
+      const [projectJson, playbookJson, tasksJson, gatesJson] = await Promise.all([
+        projectRes.ok ? projectRes.json() : null,
+        playbookRes.ok ? playbookRes.json() : null,
+        tasksRes.ok ? tasksRes.json() : null,
+        gatesRes.ok ? gatesRes.json() : null,
+      ]);
+      // Everything from here is synchronous, so it paints once.
+      if (projectJson?.project) setProject(projectJson.project);
+      if (playbookJson) {
+        setPlaybook(playbookJson.playbook);
+        setPlaybookStages(playbookJson.stages || []);
+        setPlaybookDrift(playbookJson.drift ?? null);
       }
+      if (tasksJson) {
+        const list = tasksJson.tasks || [];
+        setTasks(list);
+        setTasksCount(list.length);
+      }
+      if (gatesJson?.data?.gates) setPlanGates(gatesJson.data.gates);
+      setPlanVersion((v) => v + 1);
     } catch {
       // A failed refresh leaves what is on screen, which is the last thing
       // known to be true. Better than emptying the tab.
@@ -344,12 +379,16 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
   const fetchPlaybook = async () => {
     try {
-      const res = await fetch(`/api/projects/${id}/playbook`);
+      const [res, gatesRes] = await Promise.all([
+        fetch(`/api/projects/${id}/playbook`),
+        fetch(`/api/projects/${id}/plan-gates`),
+      ]);
       if (!res.ok) return;
-      const data = await res.json();
+      const [data, gatesJson] = await Promise.all([res.json(), gatesRes.ok ? gatesRes.json() : null]);
       setPlaybook(data.playbook);
       setPlaybookStages(data.stages || []);
       setPlaybookDrift(data.drift ?? null);
+      if (gatesJson?.data?.gates) setPlanGates(gatesJson.data.gates);
     } catch {
       // Leave the plan as it was rather than emptying the tab.
     }
@@ -869,10 +908,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
                   orderedStages={playbookStages}
                   projectClosed={project.status === "completed"}
                   teamMembers={teamMembers}
-                  onRefresh={() => {
-                    void refreshPlan();
-                    void refreshTasks();
-                  }}
+                  gates={planGates}
+                  onRefresh={() => void refreshPlan()}
                   onTaskClick={(task) => setEditingTask(task)}
                 />
               ) : !canManagePlaybook && !awaitingKickoff ? (
@@ -949,10 +986,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
               onEditTask={(task) => setEditingTask(task)}
               // Quiet: re-read the tasks only. fetchCounts blanks every tab to
               // a skeleton, which is what "the whole page refreshes" was.
-              onRefresh={() => {
-                void refreshTasks();
-                void refreshPlan();
-              }}
+              onRefresh={() => void refreshPlan()}
             />
           ) : null}
 
