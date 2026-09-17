@@ -68,24 +68,32 @@ export function LastActivityCell({
   detail,
   recent,
   labels,
+  urgency = true,
 }: {
   at?: string | null;
   type?: string | null;
   detail?: string | null;
   recent?: RecentActivity[];
   labels: Record<string, string>;
+  /**
+   * Colour the headline by staleness. Right for a lead or a project, where
+   * silence is a warning; wrong for a quotation, which is expected to sit
+   * untouched once sent - there the days are a fact, in plain slate.
+   */
+  urgency?: boolean;
 }) {
   const days = daysSince(at);
+  const quiet = "text-slate-700";
   const { label, tone } =
     days === null
-      ? { label: "Never", tone: "text-red-600" }
+      ? { label: "Never", tone: urgency ? "text-red-600" : "text-slate-400" }
       : days === 0
-        ? { label: "Today", tone: "text-emerald-600" }
+        ? { label: "Today", tone: urgency ? "text-emerald-600" : quiet }
         : days === 1
-          ? { label: "Yesterday", tone: "text-emerald-600" }
+          ? { label: "Yesterday", tone: urgency ? "text-emerald-600" : quiet }
           : days <= 15
-            ? { label: `${days}d ago`, tone: "text-orange-600" }
-            : { label: `${days}d ago`, tone: "text-red-600" };
+            ? { label: `${days}d ago`, tone: urgency ? "text-orange-600" : quiet }
+            : { label: `${days}d ago`, tone: urgency ? "text-red-600" : quiet };
 
   const earlier = (recent || []).slice(1);
   const typeLabel = (t?: string | null) => (t ? labels[t] || t : "");

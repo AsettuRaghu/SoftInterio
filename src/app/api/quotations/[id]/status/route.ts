@@ -36,16 +36,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { status, notes } = body;
 
     // Validate status
-    const validStatuses = [
-      "draft",
-      "sent",
-      "viewed",
-      "negotiating",
-      "approved",
-      "rejected",
-      "expired",
-      "cancelled",
-    ];
+    // Superseded is the system's to set, below, never picked.
+    const validStatuses = ["draft", "sent", "approved", "rejected", "cancelled"];
 
     if (!status || !validStatuses.includes(status)) {
       return NextResponse.json(
@@ -118,38 +110,28 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     /**
-     * A lead has one agreed price.
+     * One approved version per quotation NUMBER.
      *
-     * Approving supersedes whatever was approved before. Doing it here means
-     * the database constraint is never the thing the user meets; they get a
-     * sentence saying what was replaced.
+     * Approving v3 of QT-0004 supersedes the approved v2 of QT-0004 - and
+     * only that. QT-0011 on the same lead or project is a different
+     * quotation for a different thing and is left alone. Same rule on a lead
+     * and on a project. Doing it here means the unique index
+     * (quotations_one_approved_per_number) is never the thing the user
+     * meets; they get a sentence saying which version was replaced.
      *
      * "Superseded", not "cancelled": nobody withdrew it, and it may have been
      * the right price at the time. It is simply not the agreed one any more,
-     * and that difference is what someone needs a year later when they ask why
-     * a quotation was dropped.
-     *
-     * Baseline copies are left alone: they record what a project was sold on,
-     * not a competing offer.
-     *
-     * The two baseline_quotation_id filters below are kept deliberately, though
-     * handover stopped copying on 2026-09-15 and no new baselines are created.
-     * One historical copy still carries the marker, and skipping it is still
-     * right - it is superseded and not a competing offer. For everything else
-     * they are no-ops.
+     * and that difference is what someone needs a year later when they ask
+     * why a quotation was dropped.
      */
     let supersededNumber: string | null = null;
-    if (
-      status === "approved" &&
-      existingQuotation.lead_id &&
-      !existingQuotation.baseline_quotation_id
-    ) {
+    if (status === "approved") {
       const { data: alreadyApproved } = await supabase
         .from("quotations")
-        .select("id, quotation_number")
-        .eq("lead_id", existingQuotation.lead_id)
+        .select("id, quotation_number, version")
+        .eq("tenant_id", existingQuotation.tenant_id)
+        .eq("quotation_number", existingQuotation.quotation_number)
         .eq("status", "approved")
-        .is("baseline_quotation_id", null)
         .neq("id", id)
         .maybeSingle();
 
@@ -162,12 +144,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         if (supersedeError) {
           return NextResponse.json(
             {
-              error: `Could not supersede ${alreadyApproved.quotation_number}, so this was not approved.`,
+              error: `Could not supersede ${alreadyApproved.quotation_number} v${alreadyApproved.version}, so this was not approved.`,
             },
             { status: 500 }
           );
         }
-        supersededNumber = alreadyApproved.quotation_number;
+        supersededNumber = `${alreadyApproved.quotation_number} v${alreadyApproved.version}`;
       }
     }
 
@@ -259,7 +241,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       quotation: updated,
       supersededNumber,
       message: supersededNumber
-        ? `Approved. ${supersededNumber} was the approved quotation and is now superseded.`
+        ? `Approved. ${supersededNumber} was the approved version and is now superseded.`
         : `Quotation marked as ${status}`,
     });
   } catch (error) {

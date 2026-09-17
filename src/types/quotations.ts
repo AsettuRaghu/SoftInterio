@@ -8,25 +8,36 @@
 // ENUMS
 // ============================================================================
 
+/**
+ * Six statuses, and the lifecycle in one line:
+ *
+ *   draft -> sent -> approved | rejected | cancelled
+ *
+ * with `superseded` applied by the system when a later version of the same
+ * quotation NUMBER is approved. Revising anything that is not a draft opens
+ * a fresh draft of the next version.
+ *
+ * "viewed", "negotiating" and "expired" were removed on 2026-09-17: the
+ * first two are facts about a sent quotation (the list shows client views
+ * from `client_view_count`; a reply is a revision), and nothing ever set
+ * expired automatically - validity is read from `valid_until`.
+ * "linked_to_project" / "project_baseline" died with the handover copy.
+ * `cancelled` is shown as "Withdrawn": we pulled it back.
+ */
 export type QuotationStatus =
   | "draft"
   | "sent"
-  | "viewed"
-  | "negotiating"
   | "approved"
   | "rejected"
-  | "expired"
   | "cancelled"
   /**
-   * Replaced by a different approved quotation on the same lead.
+   * Replaced by a newer approved version of the same quotation number.
    *
    * Not cancelled: nobody withdrew it, and it may well have been the right
    * price at the time. It simply is not the agreed one any more, and that
    * difference matters when someone asks later why a quotation was dropped.
    */
-  | "superseded"
-  | "linked_to_project"
-  | "project_baseline";
+  | "superseded";
 
 /**
  * The specification ladder a cost item sits on.
@@ -686,76 +697,22 @@ export interface MasterDataResponse {
 export const QuotationStatusLabels: Record<QuotationStatus, string> = {
   draft: "Draft",
   sent: "Sent",
-  viewed: "Viewed",
-  negotiating: "Negotiating",
   approved: "Approved",
   rejected: "Rejected",
-  expired: "Expired",
-  cancelled: "Cancelled",
+  cancelled: "Withdrawn",
   superseded: "Superseded",
-  linked_to_project: "Linked to Project",
-  project_baseline: "Project Baseline",
 };
 
 export const QuotationStatusColors: Record<
   QuotationStatus,
   { bg: string; text: string; dot: string }
 > = {
-  draft: {
-    bg: "bg-slate-100",
-    text: "text-slate-700",
-    dot: "bg-slate-500",
-  },
-  sent: {
-    bg: "bg-blue-100",
-    text: "text-blue-700",
-    dot: "bg-blue-500",
-  },
-  viewed: {
-    bg: "bg-cyan-100",
-    text: "text-cyan-700",
-    dot: "bg-cyan-500",
-  },
-  negotiating: {
-    bg: "bg-amber-100",
-    text: "text-amber-700",
-    dot: "bg-amber-500",
-  },
-  approved: {
-    bg: "bg-green-100",
-    text: "text-green-700",
-    dot: "bg-green-500",
-  },
-  rejected: {
-    bg: "bg-red-100",
-    text: "text-red-700",
-    dot: "bg-red-500",
-  },
-  expired: {
-    bg: "bg-gray-100",
-    text: "text-gray-700",
-    dot: "bg-gray-500",
-  },
-  cancelled: {
-    bg: "bg-orange-100",
-    text: "text-orange-700",
-    dot: "bg-orange-500",
-  },
-  superseded: {
-    bg: "bg-amber-100",
-    text: "text-amber-700",
-    dot: "bg-amber-500",
-  },
-  linked_to_project: {
-    bg: "bg-purple-100",
-    text: "text-purple-700",
-    dot: "bg-purple-500",
-  },
-  project_baseline: {
-    bg: "bg-indigo-100",
-    text: "text-indigo-700",
-    dot: "bg-indigo-500",
-  },
+  draft: { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-500" },
+  sent: { bg: "bg-blue-100", text: "text-blue-700", dot: "bg-blue-500" },
+  approved: { bg: "bg-green-100", text: "text-green-700", dot: "bg-green-500" },
+  rejected: { bg: "bg-red-100", text: "text-red-700", dot: "bg-red-500" },
+  cancelled: { bg: "bg-orange-100", text: "text-orange-700", dot: "bg-orange-500" },
+  superseded: { bg: "bg-amber-100", text: "text-amber-700", dot: "bg-amber-500" },
 };
 
 export const QualityTierLabels: Record<QualityTier, string> = {

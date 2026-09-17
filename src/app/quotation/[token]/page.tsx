@@ -138,9 +138,12 @@ export default async function ClientQuotationPage({ params }: PageProps) {
           ? (quotation as any).client_view_count + 1
           : 1,
         last_client_view_at: new Date().toISOString(),
+        // A view is a fact about a sent quotation, not a status: the first
+        // one stamps viewed_at, every one counts. The status stays "sent".
         viewed_at:
-          quotation.status === "sent" ? new Date().toISOString() : undefined,
-        status: quotation.status === "sent" ? "viewed" : quotation.status,
+          quotation.status === "sent" && !(quotation as any).viewed_at
+            ? new Date().toISOString()
+            : undefined,
       })
       .eq("id", quotation.id);
   } catch (e) {

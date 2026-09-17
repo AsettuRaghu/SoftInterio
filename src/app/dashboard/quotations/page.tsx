@@ -78,23 +78,11 @@ interface Template {
   components_count?: number;
 }
 
-// Status options for bulk updates (exclude auto-set statuses)
-const STATUS_OPTIONS = QUOTATION_STATUS_OPTIONS.filter(
-  (opt) => opt.value !== "linked_to_project" && opt.value !== "project_baseline"
-);
+// Status options for bulk updates. Superseded is the system's to set.
+const STATUS_OPTIONS = QUOTATION_STATUS_OPTIONS.filter((opt) => opt.value !== "superseded");
 
-// Allowed status filter options for list view display
-const ALLOWED_STATUS_FILTER_OPTIONS = QUOTATION_STATUS_OPTIONS.filter((opt) =>
-  [
-    "draft",
-    "sent",
-    "negotiating",
-    "approved",
-    "project_baseline",
-    "rejected",
-    "cancelled",
-  ].includes(opt.value)
-);
+// Every status can be filtered on; superseded rows are hidden by default.
+const ALLOWED_STATUS_FILTER_OPTIONS = QUOTATION_STATUS_OPTIONS;
 
 /**
  * A best guess at whether this row will open editable.
@@ -159,13 +147,9 @@ export default function QuotationsListPage() {
   const [selectedStatuses, setSelectedStatuses] = useState<
     Set<QuotationStatus>
   >(
-    new Set([
-      "draft",
-      "sent",
-      "negotiating",
-      "approved",
-      "project_baseline",
-    ] as QuotationStatus[])
+    // The live ones. Rejected, withdrawn and superseded are history, a
+    // filter away.
+    new Set(["draft", "sent", "approved"] as QuotationStatus[])
   );
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showLeadStatusDropdown, setShowLeadStatusDropdown] = useState(false);
@@ -244,10 +228,10 @@ export default function QuotationsListPage() {
         const statusOrder: QuotationStatus[] = [
           "draft",
           "sent",
-          "negotiating",
           "approved",
           "rejected",
-          "expired",
+          "cancelled",
+          "superseded",
         ];
         return statusOrder.indexOf(item.status);
       case "valid_until":
@@ -803,7 +787,7 @@ export default function QuotationsListPage() {
             ? `on ${dayMonth(quotation.approved_at)}`
             : quotation.status === "rejected" && quotation.rejected_at
               ? `on ${dayMonth(quotation.rejected_at)}`
-              : ["sent", "viewed", "negotiating"].includes(quotation.status) && quotation.sent_at
+              : quotation.status === "sent" && quotation.sent_at
                 ? `sent ${dayMonth(quotation.sent_at)}`
                 : quotation.status === "draft"
                   ? `since ${dayMonth(quotation.created_at)}`
@@ -839,7 +823,7 @@ export default function QuotationsListPage() {
          * one with the client it is a countdown, and the last week is amber,
          * past is red. An approved or rejected one is settled and says so.
          */
-        const open = ["draft", "sent", "viewed", "negotiating"].includes(quotation.status);
+        const open = quotation.status === "draft" || quotation.status === "sent";
         if (!quotation.valid_until) return <span className="text-xs text-slate-400">—</span>;
         const days = -(daysSince(quotation.valid_until) ?? 0);
         const future = new Date(quotation.valid_until).getTime() > Date.now();
@@ -908,6 +892,7 @@ export default function QuotationsListPage() {
             type={last?.type}
             recent={touches.slice(1, 4)}
             labels={TOUCH_LABELS}
+            urgency={false}
           />
         );
       },

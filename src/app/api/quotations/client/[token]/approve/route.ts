@@ -16,7 +16,7 @@ export async function POST(
     // Find quotation by token
     const { data: quotation, error: findError } = await supabase
       .from("quotations")
-      .select("id, status, quotation_number, client_access_expires_at")
+      .select("id, tenant_id, status, quotation_number, client_access_expires_at")
       .eq("client_access_token", token)
       .single();
 
@@ -39,7 +39,7 @@ export async function POST(
     }
 
     // Check if quotation can be approved
-    const validStatuses = ["sent", "viewed", "negotiating"];
+    const validStatuses = ["sent"];
     if (!validStatuses.includes(quotation.status)) {
       return NextResponse.json(
         { 
@@ -49,6 +49,17 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    // The same rule as approving from inside: one approved version per
+    // quotation number, so the version the client approves supersedes the
+    // one approved before it - and nothing else on the lead or project.
+    await supabase
+      .from("quotations")
+      .update({ status: "superseded" })
+      .eq("tenant_id", quotation.tenant_id)
+      .eq("quotation_number", quotation.quotation_number)
+      .eq("status", "approved")
+      .neq("id", quotation.id);
 
     // Update quotation status
     const { error: updateError } = await supabase

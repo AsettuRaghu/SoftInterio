@@ -207,18 +207,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // The lead's approved quotations: what it is won on, and what it is worth.
+    const { data: approvedRows } = await supabase
+      .from("quotations")
+      .select("id, quotation_number, version, grand_total")
+      .eq("lead_id", id)
+      .eq("status", "approved")
+      .order("grand_total", { ascending: false });
+    const approvedQuotations = (approvedRows ?? []) as {
+      id: string;
+      quotation_number: string;
+      version: number;
+      grand_total: number | null;
+    }[];
+    const approvedTotal = approvedQuotations.reduce((sum, q) => sum + (Number(q.grand_total) || 0), 0);
+
     if (to_stage === "won") {
       // Won requires all previous fields + won-specific fields
       checkQualifiedRequirements();
       checkRequirementDiscussionRequirements();
       
-      // MANDATORY: Quotation selection is required for won transitions
-      if (!body.selected_quotation_id) {
-        missingFields.push("Selected Quotation");
-      }
-      
-      if (!body.won_amount) {
-        missingFields.push("Won Amount");
+      // A lead is won on its approved quotations - all of them, since a lead
+      // may carry several for different things - and the won amount is
+      // their sum, read from the record rather than typed. Checked here with
+      // the other pre-conditions, before anything is written.
+      if (approvedQuotations.length === 0) {
+        missingFields.push("An approved quotation");
       }
       /*
        * A won lead becomes a project, and a project must have a manager - its own
@@ -317,37 +331,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // VALIDATION: For "won" stage, validate the selected quotation
-    if (to_stage === "won" && body.selected_quotation_id) {
-      const { data: selectedQuotation, error: quotationError } = await supabase
-        .from("quotations")
-        .select("id, status, quotation_number, version")
-        .eq("id", body.selected_quotation_id)
-        .eq("lead_id", id)
-        .single();
-
-      if (quotationError || !selectedQuotation) {
-        return NextResponse.json(
-          { 
-            error: "Selected quotation not found or does not belong to this lead",
-            details: "The quotation must exist and be linked to this lead"
-          },
-          { status: 400 }
-        );
-      }
-
-      // Only allow approved quotations to be linked to projects
-      if (selectedQuotation.status !== "approved") {
-        return NextResponse.json(
-          { 
-            error: `Cannot link quotation to project - status is '${selectedQuotation.status}'`,
-            details: "Only approved quotations can be linked to projects. Please approve the quotation first.",
-            quotation_number: selectedQuotation.quotation_number,
-            version: selectedQuotation.version
-          },
-          { status: 400 }
-        );
-      }
-    }
 
     // STEP 1: Update or Create Property record if property fields provided
     const propertyFields = [
@@ -440,7 +423,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     if (to_stage === "won") {
-      updateData.won_amount = body.won_amount;
+      // The sum of the approved quotations, not a typed figure.
+      updateData.won_amount = approvedTotal;
       updateData.won_at = new Date().toISOString();
       updateData.contract_signed_date = body.contract_signed_date;
       updateData.expected_project_start = body.expected_project_start;
@@ -688,8 +672,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           const projectCategory =
             lead.service_type === "modular" ? "modular" : "turnkey";
 
-          // Use selected quotation (already validated above for "won" stage)
-          let winningQuotationId = body.selected_quotation_id || null;
+          // The project points at the largest approved quotation; every
+          // approved one is attached below.
+          let winningQuotationId = approvedQuotations[0]?.id || null;
 
           log.info("Creating project from won lead", {
             leadId: id,
@@ -825,17 +810,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                   projectId,
                 });
 
-                const { error: lockError } = await supabase.rpc(
-                  "lock_quotation_for_project",
-                  {
-                    p_quotation_id: winningQuotationId,
-                    p_project_id: projectId,
+                for (const q of approvedQuotations) {
+                  const { error: lockError } = await supabase.rpc(
+                    "lock_quotation_for_project",
+                    {
+                      p_quotation_id: q.id,
+                      p_project_id: projectId,
+                    }
+                  );
+                  if (lockError) {
+                    log.warn("Warning: Failed to lock an approved quotation", { quotationId: q.id, detail: lockError });
+                    // Don't fail project creation if locking fails
                   }
-                );
-
-                if (lockError) {
-                  log.warn("Warning: Failed to lock original quotation", { detail: lockError });
-                  // Don't fail project creation if locking fails
                 }
 
                 /*
@@ -843,13 +829,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                  * project's Quotations tab queries `?project_id=`. Without it the
                  * agreed quotation would not appear on the project at all.
                  */
+                // Every approved quotation carries across - the kitchen and
+                // the false ceiling alike - so the project's Quotations tab
+                // shows all of what was agreed.
                 const { error: attachError } = await supabase
                   .from("quotations")
                   .update({
                     project_id: projectId,
                     updated_at: new Date().toISOString(),
                   })
-                  .eq("id", winningQuotationId);
+                  .in("id", approvedQuotations.map((q) => q.id));
 
                 if (attachError) {
                   log.error("Error attaching quotation to project", attachError);

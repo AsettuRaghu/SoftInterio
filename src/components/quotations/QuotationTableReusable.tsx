@@ -53,20 +53,6 @@ type SortField =
   | "valid_until";
 type SortDirection = "asc" | "desc";
 
-const DEFAULT_STATUS_LABELS: Record<QuotationStatus, string> = {
-  draft: "Draft",
-  sent: "Sent",
-  viewed: "Viewed",
-  negotiating: "Negotiating",
-  approved: "Approved",
-  rejected: "Rejected",
-  expired: "Expired",
-  cancelled: "Cancelled",
-  superseded: "Superseded",
-  linked_to_project: "Linked to Project",
-  project_baseline: "Project Baseline",
-};
-
 export default function QuotationTableReusable({
   quotations,
   allowCreate = true,
@@ -110,8 +96,7 @@ export default function QuotationTableReusable({
   // Get status badge colors
   const getStatusBadge = (status: QuotationStatus) => {
     const colors = QuotationStatusColors[status] || QuotationStatusColors.draft;
-    const label =
-      QuotationStatusLabels[status] || DEFAULT_STATUS_LABELS[status];
+    const label = QuotationStatusLabels[status] || status;
 
     return (
       <span
@@ -146,7 +131,7 @@ export default function QuotationTableReusable({
           q.spaces_count?.toString(),
           q.components_count?.toString(),
           formatCurrency(q.grand_total),
-          QuotationStatusLabels[q.status] || DEFAULT_STATUS_LABELS[q.status],
+          QuotationStatusLabels[q.status] || q.status,
         ]
           .filter(Boolean)
           .join(" ")

@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
     // Filter by status
     if (status && status !== "all") {
       if (status === "active") {
-        query = query.in("status", ["draft", "sent", "viewed", "negotiating"]);
+        query = query.in("status", ["draft", "sent"]);
       } else {
         query = query.eq("status", status);
       }

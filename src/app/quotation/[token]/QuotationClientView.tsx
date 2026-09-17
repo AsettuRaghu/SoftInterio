@@ -192,10 +192,7 @@ export function QuotationClientView({ quotation, company, token }: Props) {
     ? new Date(quotation.valid_until) < new Date()
     : false;
 
-  const canTakeAction =
-    quotation.status === "sent" ||
-    quotation.status === "viewed" ||
-    quotation.status === "negotiating";
+  const canTakeAction = quotation.status === "sent";
 
   if (actionComplete) {
     return (

@@ -774,12 +774,10 @@ export default function QuotationDetailPage() {
       // price is often agreed on a call before anything is formally issued.
       case "draft":
       case "sent":
-      case "viewed":
-      case "negotiating":
         return {
           to: "approved",
           label: "Approve",
-          hint: "This is the agreed price. Any other approved quotation on this lead is superseded.",
+          hint: "This is the agreed price. Any other approved version of this quotation number is superseded.",
         };
       default:
         return null;

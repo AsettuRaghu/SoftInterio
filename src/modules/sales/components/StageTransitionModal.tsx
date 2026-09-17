@@ -982,86 +982,62 @@ export function StageTransitionModal({
               </h3>
 
               {/* Quotation Selection - First */}
-              {quotations.length > 0 ? (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Select Winning Quotation{" "}
-                    <span className="text-red-500">*</span>
-                  </label>
-                  <p className="text-xs text-slate-500 mb-2">
-                    Choose an approved quotation to attach to the new project.
-                    Only approved quotations are eligible.
-                  </p>
-                  <select
-                    required
-                    value={formData.selected_quotation_id}
-                    onChange={(e) => {
-                      const selectedQuotation = quotations.find(
-                        (q) => q.id === e.target.value
-                      );
-                      const quotationAmount = Math.floor(
-                        selectedQuotation?.grand_total ||
-                          selectedQuotation?.total_amount ||
-                          0
-                      );
-                      setFormData({
-                        ...formData,
-                        selected_quotation_id: e.target.value,
-                        won_amount: quotationAmount.toString(),
-                      });
-                    }}
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
-                  >
-                    <option value="">Select an approved quotation</option>
-                    {quotations
-                      .filter((q) => q.status === "approved")
-                      .map((quote) => (
-                        <option key={quote.id} value={quote.id}>
-                          {quote.quotation_number || `#${quote.id.slice(0, 8)}`}{" "}
-                          v{quote.version} - ₹
-                          {new Intl.NumberFormat("en-IN", {
-                            maximumFractionDigits: 0,
-                          }).format(
-                            quote.grand_total || quote.total_amount || 0
-                          )}
-                        </option>
+              {/* What the lead is won on: every approved quotation, and
+                  their sum as the won amount. Read from the record, not
+                  typed - a lead may carry several quotations for different
+                  things (the kitchen, the false ceiling), and all of them
+                  carry to the project. */}
+              {(() => {
+                const approved = quotations.filter((q) => q.status === "approved");
+                const total = approved.reduce(
+                  (sum, q) => sum + (Number(q.grand_total ?? q.total_amount) || 0),
+                  0
+                );
+                const inr = (n: number) =>
+                  `₹${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(n)}`;
+                return approved.length > 0 ? (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Won on
+                    </label>
+                    <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 bg-white">
+                      {approved.map((q) => (
+                        <div key={q.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                          <span className="text-slate-700">
+                            {q.quotation_number || `#${q.id.slice(0, 8)}`}{" "}
+                            <span className="text-slate-400">v{q.version}</span>
+                            {q.title ? <span className="text-slate-400"> · {q.title}</span> : null}
+                          </span>
+                          <span className="tabular-nums text-slate-800">
+                            {inr(Number(q.grand_total ?? q.total_amount) || 0)}
+                          </span>
+                        </div>
                       ))}
-                  </select>
-                </div>
-              ) : (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                  <p className="text-sm text-amber-800 mb-2">
-                    <strong>No approved quotations available</strong>
-                  </p>
-                  <p className="text-sm text-amber-700">
-                    You must convert at least one quotation to{" "}
-                    <strong>Approved</strong> status before marking this lead as
-                    won. Please go to the Quotations page and change the
-                    quotation status to "Approved" first.
-                  </p>
-                </div>
-              )}
+                      <div className="flex items-center justify-between px-3 py-2 text-sm bg-slate-50">
+                        <span className="font-medium text-slate-700">
+                          Won amount{approved.length > 1 ? ` · ${approved.length} quotations` : ""}
+                        </span>
+                        <span className="font-semibold tabular-nums text-slate-900">{inr(total)}</span>
+                      </div>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      All of these carry to the project. To change the figure, revise and approve the quotation.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-sm text-amber-800 mb-2">
+                      <strong>No approved quotation</strong>
+                    </p>
+                    <p className="text-sm text-amber-700">
+                      A lead is won on an approved quotation. Approve one on the
+                      Quotations tab first.
+                    </p>
+                  </div>
+                );
+              })()}
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Won Amount <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    step="1"
-                    value={formData.won_amount}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        won_amount: e.target.value,
-                      })
-                    }
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter amount in ₹"
-                  />
-                </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     Contract Signed Date <span className="text-red-500">*</span>
