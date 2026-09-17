@@ -23,6 +23,8 @@ export interface PartnerType {
 export interface PartnerFormValues {
   name: string;
   kind: "person" | "organisation";
+  /** The person we deal with at an organisation; the primary contact. */
+  contact_name: string;
   types: string[];
   phone: string;
   email: string;
@@ -59,6 +61,7 @@ interface Props {
 const EMPTY: PartnerFormValues = {
   name: "",
   kind: "person",
+  contact_name: "",
   types: [],
   phone: "",
   email: "",
@@ -116,14 +119,21 @@ export function PartnerFormModal({ isOpen, onClose, types, defaultType, initial,
 
   const save = async () => {
     setError(null);
-    if (!values.name.trim()) return setError("Give the partner a name.");
+    if (!values.name.trim()) return setError(values.kind === "organisation" ? "Give the organisation a name." : "Give the person a name.");
+    if (values.kind === "organisation" && !editing && !values.contact_name.trim()) return setError("Who do we deal with there? Name the person.");
     if (values.types.length === 0) return setError("Choose at least one type - what is this partner to us?");
     setBusy(true);
     try {
       const res = await fetch(editing ? `/api/partners/${initial!.id}` : "/api/partners", {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify({
+          ...values,
+          contact:
+            values.kind === "organisation" && values.contact_name.trim()
+              ? { name: values.contact_name.trim(), phone: values.phone, email: values.email }
+              : undefined,
+        }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -163,6 +173,9 @@ export function PartnerFormModal({ isOpen, onClose, types, defaultType, initial,
       }
     >
       <div className="space-y-3">
+        {/* A person is their own contact; an organisation names the person
+            we deal with, and can carry more (the accounts person, the site
+            engineer) on its Contacts tab. */}
         <div className="flex gap-2">
           {(["person", "organisation"] as const).map((k) => (
             <button
@@ -179,16 +192,39 @@ export function PartnerFormModal({ isOpen, onClose, types, defaultType, initial,
           ))}
         </div>
 
-        <input
-          type="text"
-          value={values.name}
-          onChange={(e) => set("name", e.target.value)}
-          placeholder={values.kind === "person" ? "Full name *" : "Organisation name *"}
-          autoFocus
-          className={input}
-        />
+        {values.kind === "person" ? (
+          <input
+            type="text"
+            value={values.name}
+            onChange={(e) => set("name", e.target.value)}
+            placeholder="Full name *"
+            autoFocus
+            className={input}
+          />
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="text"
+              value={values.name}
+              onChange={(e) => set("name", e.target.value)}
+              placeholder="Organisation / company name *"
+              autoFocus
+              className={input}
+            />
+            <input
+              type="text"
+              value={values.contact_name}
+              onChange={(e) => set("contact_name", e.target.value)}
+              placeholder="Person we deal with *"
+              className={input}
+            />
+          </div>
+        )}
 
-        {types.length > 1 && (
+        {/* Opened from the Customers list, this is a customer - the hat is
+            the list's and is not asked. Editing offers the chips so a
+            customer can also become an architect, or the reverse. */}
+        {types.length > 1 && !defaultType && (
         <div>
           <p className="text-xs font-medium text-slate-600 mb-1">What are they to us?</p>
           <div className="flex flex-wrap gap-1.5">
@@ -213,8 +249,8 @@ export function PartnerFormModal({ isOpen, onClose, types, defaultType, initial,
         )}
 
         <div className="grid grid-cols-2 gap-2">
-          <input type="tel" value={values.phone} onChange={(e) => set("phone", e.target.value)} placeholder="Phone" className={input} />
-          <input type="email" value={values.email} onChange={(e) => set("email", e.target.value)} placeholder="Email" className={input} />
+          <input type="tel" value={values.phone} onChange={(e) => set("phone", e.target.value)} placeholder={values.kind === "organisation" ? "Their phone" : "Phone"} className={input} />
+          <input type="email" value={values.email} onChange={(e) => set("email", e.target.value)} placeholder={values.kind === "organisation" ? "Their email" : "Email"} className={input} />
         </div>
 
         {matches.length > 0 && (

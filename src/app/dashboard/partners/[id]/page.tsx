@@ -385,6 +385,7 @@ function PartnerDetail() {
           website: partner.website ?? "",
           gst_number: partner.gst_number ?? "",
           notes: partner.notes ?? "",
+          contact_name: partner.contacts.find((c) => c.is_primary)?.name ?? "",
         }}
         onSaved={() => {
           setNotice({ message: "Saved.", variant: "success" });
