@@ -66,6 +66,9 @@ const ORDER: DelayOwner[] = ["client", "vendor", "internal", "third_party"];
 export function DelayLogPanel({ projectId, refreshKey }: Props) {
   const [data, setData] = useState<Data | null>(null);
   const [open, setOpen] = useState(false);
+  /** Holds lifted the same day they began - a mis-click, a six-minute
+   *  pause - are kept but folded, so they do not sit beside real delays. */
+  const [showShort, setShowShort] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -143,7 +146,7 @@ export function DelayLogPanel({ projectId, refreshKey }: Props) {
 
       {open && entries.length > 0 && (
         <ul className="divide-y divide-slate-100 border-t border-slate-100">
-          {entries.map((e, i) => (
+          {(showShort ? entries : entries.filter((e) => !(e.ended_at && e.days === 0))).map((e, i) => (
             <li key={`${e.task_id}-${i}`} className="px-4 py-2 flex items-start gap-2 text-xs">
               <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap shrink-0", OWNER_TONE[e.owner])}>
                 {DelayOwnerLabels[e.owner]}
@@ -176,6 +179,19 @@ export function DelayLogPanel({ projectId, refreshKey }: Props) {
               </span>
             </li>
           ))}
+          {(() => {
+            const short = entries.filter((e) => e.ended_at && e.days === 0).length;
+            if (short === 0) return null;
+            return (
+              <li className="px-4 py-1.5 text-[11px] text-slate-500">
+                <button type="button" onClick={() => setShowShort((v) => !v)} className="hover:text-slate-800 hover:underline">
+                  {showShort
+                    ? "Hide holds lifted the same day"
+                    : `${short} hold${short === 1 ? "" : "s"} lifted the same day, not shown`}
+                </button>
+              </li>
+            );
+          })()}
         </ul>
       )}
     </div>
