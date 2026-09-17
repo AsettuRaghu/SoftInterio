@@ -79,8 +79,34 @@ export function relative(iso: string): string {
 
 /* ------------------------------------------------------------------ chip */
 
+/**
+ * An event in a cell, the way Google Calendar draws them: an all-day event
+ * is a filled bar in its colour; a timed one is a dot, the time and the
+ * title on the cell's own background. Both truncate to one line.
+ */
 export function EventChip({ event, onClick, dense = false }: { event: CalendarEventLite; onClick: () => void; dense?: boolean }) {
   const s = styleOf(event);
+  const title = `${event.is_all_day ? "All day" : timeOf(event.scheduled_at)} · ${event.title}${event.source_name ? ` · ${event.source_name}` : ""}`;
+  if (event.is_all_day) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+        title={title}
+        className={cn(
+          "w-full text-left rounded px-1.5 leading-tight truncate text-white font-medium transition-opacity hover:opacity-90",
+          dense ? "py-0.5 text-[11px]" : "py-1 text-xs",
+          s.solid,
+          event.is_completed && "opacity-50 line-through"
+        )}
+      >
+        {event.title}
+      </button>
+    );
+  }
   return (
     <button
       type="button"
@@ -88,19 +114,16 @@ export function EventChip({ event, onClick, dense = false }: { event: CalendarEv
         e.stopPropagation();
         onClick();
       }}
-      title={`${timeOf(event.scheduled_at)} · ${event.title}${event.source_name ? ` · ${event.source_name}` : ""}`}
+      title={title}
       className={cn(
-        "w-full text-left rounded-md border px-1.5 leading-tight truncate transition-colors hover:brightness-95",
+        "w-full text-left rounded px-1 leading-tight truncate transition-colors hover:bg-slate-100",
         dense ? "py-0.5 text-[11px]" : "py-1 text-xs",
-        s.bg,
-        s.border,
-        s.text,
         event.is_completed && "opacity-50 line-through"
       )}
     >
-      <span className={cn("inline-block w-1.5 h-1.5 rounded-full mr-1 align-middle", s.dot)} />
-      {!event.is_all_day && <span className="font-medium tabular-nums">{timeOf(event.scheduled_at)} </span>}
-      {event.title}
+      <span className={cn("inline-block w-2 h-2 rounded-full mr-1.5 align-middle", s.dot)} />
+      <span className="text-slate-600 tabular-nums">{timeOf(event.scheduled_at)}</span>{" "}
+      <span className="font-medium text-slate-800">{event.title}</span>
     </button>
   );
 }
@@ -147,12 +170,15 @@ export function MonthView({
   selected,
   onSelectDay,
   onOpen,
+  onMore,
 }: {
   cursor: Date;
   events: CalendarEventLite[];
   selected: Date | null;
   onSelectDay: (d: Date) => void;
   onOpen: (e: CalendarEventLite) => void;
+  /** "+N more" pressed on a day: open it, anchored to the cell. */
+  onMore?: (d: Date, rect: DOMRect) => void;
 }) {
   const today = new Date();
   const days = useMemo(() => {
@@ -174,50 +200,56 @@ export function MonthView({
 
   // Six rows always (42 cells), so the grid can be told to fill its box and
   // every row takes a sixth of it - the whole month in view, no scrolling.
+  const visibleRows = 3;
   return (
-    <div className="p-3 h-full flex flex-col min-h-0">
-      <div className="grid grid-cols-7 mb-1 shrink-0">
-        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, i) => (
-          <div key={d} className={cn("py-1 text-center text-[11px] font-semibold uppercase tracking-wider", i === 0 || i === 6 ? "text-slate-400" : "text-slate-500")}>
+    <div className="h-full flex flex-col min-h-0">
+      <div className="grid grid-cols-7 shrink-0 border-b border-slate-200">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+          <div key={d} className="py-2 text-center text-[11px] font-medium uppercase tracking-wider text-slate-500">
             {d}
           </div>
         ))}
       </div>
-      <div className="flex-1 min-h-0 grid grid-cols-7 grid-rows-6 gap-px bg-slate-200 rounded-lg overflow-hidden border border-slate-200">
-        {days.map(({ date, inMonth, events: list }) => {
+      <div className="flex-1 min-h-0 grid grid-cols-7 grid-rows-6">
+        {days.map(({ date, inMonth, events: list }, i) => {
           const isToday = sameDay(date, today);
           const isSel = selected ? sameDay(date, selected) : false;
-          const weekend = date.getDay() === 0 || date.getDay() === 6;
+          const firstOfMonth = date.getDate() === 1;
           return (
             <div
               key={dayKey(date)}
               onClick={() => onSelectDay(date)}
               className={cn(
-                "min-h-0 overflow-hidden p-1.5 cursor-pointer transition-colors",
-                inMonth ? (weekend ? "bg-slate-50/70" : "bg-white") : "bg-slate-50",
-                isSel && "ring-2 ring-inset ring-blue-500",
-                !isSel && "hover:bg-blue-50/40"
+                "min-h-0 overflow-hidden px-1 pt-1 pb-0.5 cursor-pointer transition-colors border-b border-r border-slate-200",
+                i % 7 === 0 && "border-l",
+                isSel ? "bg-blue-50/60" : "bg-white hover:bg-slate-50/70"
               )}
             >
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex justify-center mb-0.5">
                 <span
                   className={cn(
-                    "text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full",
-                    isToday ? "bg-blue-600 text-white" : inMonth ? "text-slate-700" : "text-slate-400"
+                    "text-xs tabular-nums h-6 min-w-6 px-1.5 flex items-center justify-center rounded-full",
+                    isToday ? "bg-blue-600 text-white font-semibold" : inMonth ? "text-slate-700" : "text-slate-400"
                   )}
                 >
-                  {date.getDate()}
+                  {firstOfMonth ? date.toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : date.getDate()}
                 </span>
-                {list.length > 0 && (
-                  <span className="text-[10px] text-slate-400 tabular-nums">{list.length}</span>
-                )}
               </div>
-              <div className="space-y-0.5">
-                {list.slice(0, 3).map((e) => (
+              <div className="space-y-px">
+                {list.slice(0, visibleRows).map((e) => (
                   <EventChip key={e.id} event={e} onClick={() => onOpen(e)} dense />
                 ))}
-                {list.length > 3 && (
-                  <p className="px-1 text-[11px] text-slate-500 hover:text-slate-800">+{list.length - 3} more</p>
+                {list.length > visibleRows && (
+                  <button
+                    type="button"
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      onMore?.(date, (ev.currentTarget as HTMLElement).getBoundingClientRect());
+                    }}
+                    className="w-full text-left px-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100 rounded"
+                  >
+                    {list.length - visibleRows} more
+                  </button>
                 )}
               </div>
             </div>
@@ -498,5 +530,102 @@ export function OverduePanel({ events, onOpen }: { events: CalendarEventLite[]; 
         ))}
       </div>
     </section>
+  );
+}
+
+/* ------------------------------------------------------------ mini month */
+
+/** The small month in the left rail: navigates the big one, marks today and days with events. */
+export function MiniMonth({
+  cursor,
+  onCursor,
+  eventDays,
+  onPickDay,
+}: {
+  cursor: Date;
+  onCursor: (d: Date) => void;
+  eventDays: Set<string>;
+  onPickDay: (d: Date) => void;
+}) {
+  const today = new Date();
+  const y = cursor.getFullYear();
+  const m = cursor.getMonth();
+  const first = new Date(y, m, 1);
+  const start = new Date(y, m, 1 - first.getDay());
+  const days = Array.from({ length: 42 }, (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+  return (
+    <div className="select-none">
+      <div className="flex items-center justify-between px-1 mb-1">
+        <p className="text-sm font-medium text-slate-800">{cursor.toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</p>
+        <div className="flex items-center">
+          <button type="button" onClick={() => onCursor(new Date(y, m - 1, 1))} className="p-1 rounded-full text-slate-500 hover:bg-slate-100" aria-label="Previous month">‹</button>
+          <button type="button" onClick={() => onCursor(new Date(y, m + 1, 1))} className="p-1 rounded-full text-slate-500 hover:bg-slate-100" aria-label="Next month">›</button>
+        </div>
+      </div>
+      <div className="grid grid-cols-7 text-center text-[10px] text-slate-500 mb-0.5">
+        {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <span key={i} className="py-0.5">{d}</span>)}
+      </div>
+      <div className="grid grid-cols-7 gap-y-0.5">
+        {days.map((d) => {
+          const isToday = sameDay(d, today);
+          const inMonth = d.getMonth() === m;
+          const has = eventDays.has(dayKey(d));
+          return (
+            <button
+              key={dayKey(d)}
+              type="button"
+              onClick={() => onPickDay(d)}
+              className={cn(
+                "relative mx-auto w-6 h-6 rounded-full text-[11px] tabular-nums flex items-center justify-center transition-colors",
+                isToday ? "bg-blue-600 text-white font-semibold" : inMonth ? "text-slate-700 hover:bg-slate-100" : "text-slate-300 hover:bg-slate-50"
+              )}
+            >
+              {d.getDate()}
+              {has && !isToday && <span className="absolute bottom-0.5 w-1 h-1 rounded-full bg-blue-500" />}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------- day popover */
+
+/** "+N more" opens the day: its events, over the grid, anchored to the cell. */
+export function DayPopover({
+  date,
+  events,
+  anchor,
+  onOpen,
+  onClose,
+  onAdd,
+}: {
+  date: Date;
+  events: CalendarEventLite[];
+  anchor: { top: number; left: number; width: number };
+  onOpen: (e: CalendarEventLite) => void;
+  onClose: () => void;
+  onAdd: () => void;
+}) {
+  const list = events.filter((e) => sameDay(new Date(e.scheduled_at), date)).sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
+  const left = Math.min(anchor.left, window.innerWidth - 300);
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div className="fixed z-50 w-72 rounded-xl bg-white shadow-xl border border-slate-200 p-3" style={{ top: anchor.top, left }}>
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-slate-500">{date.toLocaleDateString("en-IN", { weekday: "short" })}</p>
+            <p className="text-2xl font-semibold text-slate-800 leading-none">{date.getDate()}</p>
+          </div>
+          <button type="button" onClick={onClose} className="p-1 rounded-full text-slate-400 hover:bg-slate-100" aria-label="Close">✕</button>
+        </div>
+        <div className="space-y-1 max-h-72 overflow-y-auto">
+          {list.map((e) => <EventChip key={e.id} event={e} onClick={() => onOpen(e)} />)}
+        </div>
+        <button type="button" onClick={onAdd} className="mt-2 w-full text-left text-xs text-blue-600 hover:underline">+ Add on this day</button>
+      </div>
+    </>
   );
 }

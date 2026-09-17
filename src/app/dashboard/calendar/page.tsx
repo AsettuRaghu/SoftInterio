@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { cn } from "@/utils/cn";
 import Link from "next/link";
 import {
   CalendarIcon,
@@ -20,11 +21,12 @@ import {
   MonthView,
   WeekView,
   AgendaView,
-  DayPanel,
-  UpNextPanel,
-  OverduePanel,
-  KindLegend,
+  MiniMonth,
+  DayPopover,
+  AgendaRow,
+  KIND_STYLES,
   kindOf,
+  keyOfIso,
   sameDay,
   type CalendarEventLite,
 } from "@/components/calendar/CalendarViews";
@@ -149,6 +151,9 @@ export default function CalendarPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   // The day the side panel shows; null means today.
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  // "+N more" on a month cell opens that day over the grid.
+  const [dayPopover, setDayPopover] = useState<{ date: Date; anchor: { top: number; left: number; width: number } } | null>(null);
+  const [railOpen, setRailOpen] = useState(true);
   // Kinds switched off from the legend. Empty means everything.
   const [hiddenKinds, setHiddenKinds] = useState<Set<string>>(new Set());
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(
@@ -337,139 +342,138 @@ export default function CalendarPage() {
     // leaves 100vh minus its top bar (pt-20) and padding (p-3 above and
     // below), and this fills exactly that. No page header - the month name
     // is the title, and the toolbar carries the one action.
-    <div className="h-[calc(100vh-104px)] flex flex-col min-h-0 gap-3">
-      {isLoading && events.length === 0 && (
-        <div className="shrink-0 text-xs text-slate-400 px-1">Loading calendar…</div>
-      )}
+    <div className="h-[calc(100vh-104px)] flex flex-col min-h-0">
       {error && (
-        <div className="shrink-0 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">{error}</div>
+        <div className="shrink-0 mb-2 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">{error}</div>
       )}
-        <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-4 gap-4">
-          {/* Main Calendar */}
-          <div className="xl:col-span-3 min-h-0 flex flex-col">
-            <div className="bg-white rounded-lg border border-slate-200 shadow-sm flex-1 min-h-0 flex flex-col">
-              {/* Calendar Header */}
-              <div className="px-4 py-3 border-b border-slate-200 flex flex-wrap items-center gap-3 shrink-0">
-                <div className="w-9 h-9 rounded-lg bg-linear-to-br from-indigo-500 to-indigo-600 text-white flex items-center justify-center shrink-0">
-                  <CalendarIcon className="w-5 h-5" />
-                </div>
-                <h2 className="text-xl font-bold text-slate-900 tabular-nums">
-                  {viewMode === "week"
-                    ? (() => {
-                        const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() - currentDate.getDay());
-                        const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
-                        const f = (d: Date) => d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-                        return `${f(start)} – ${f(end)}${end.getFullYear() !== start.getFullYear() ? "" : `, ${end.getFullYear()}`}`;
-                      })()
-                    : `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`}
-                </h2>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={goToPreviousMonth}
-                    className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-                    aria-label="Previous"
-                  >
-                    <ChevronLeftIcon className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      goToToday();
-                      setSelectedDay(null);
-                    }}
-                    className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
-                  >
-                    Today
-                  </button>
-                  <button
-                    onClick={goToNextMonth}
-                    className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-                    aria-label="Next"
-                  >
-                    <ChevronRightIcon className="w-5 h-5" />
-                  </button>
-                </div>
-                <span className="flex-1" />
-                <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
-                  {(["month", "week", "agenda"] as ViewMode[]).map((mode) => (
-                    <button
-                      key={mode}
-                      onClick={() => setViewMode(mode)}
-                      className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                        viewMode === mode ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                    </button>
+
+      {/* Top bar, the way Google Calendar has it: a menu toggle for the rail,
+          Today, the arrows, the month as the title; the view on the right. */}
+      <div className="shrink-0 flex items-center gap-2 pb-3">
+        <button type="button" onClick={() => setRailOpen((v) => !v)} className="p-2 rounded-full text-slate-600 hover:bg-slate-100" aria-label="Toggle the side rail">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </button>
+        <div className="flex items-center gap-2 mr-2">
+          <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center text-sm font-bold tabular-nums">{new Date().getDate()}</div>
+          <span className="text-lg text-slate-800">Calendar</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            goToToday();
+            setSelectedDay(null);
+          }}
+          className="px-4 py-1.5 text-sm font-medium text-slate-700 border border-slate-300 rounded-full hover:bg-slate-50"
+        >
+          Today
+        </button>
+        <button onClick={goToPreviousMonth} className="p-1.5 rounded-full text-slate-600 hover:bg-slate-100" aria-label="Previous"><ChevronLeftIcon className="w-5 h-5" /></button>
+        <button onClick={goToNextMonth} className="p-1.5 rounded-full text-slate-600 hover:bg-slate-100" aria-label="Next"><ChevronRightIcon className="w-5 h-5" /></button>
+        <h2 className="text-xl text-slate-900 ml-1 tabular-nums">
+          {viewMode === "week"
+            ? (() => {
+                const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() - currentDate.getDay());
+                const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+                const f = (d: Date) => d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+                return `${f(start)} – ${f(end)}, ${end.getFullYear()}`;
+              })()
+            : `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`}
+        </h2>
+        <span className="flex-1" />
+        <select
+          value={viewMode}
+          onChange={(e) => setViewMode(e.target.value as ViewMode)}
+          className="px-3 py-1.5 text-sm font-medium text-slate-700 border border-slate-300 rounded-full bg-white hover:bg-slate-50"
+        >
+          <option value="month">Month</option>
+          <option value="week">Week</option>
+          <option value="agenda">Agenda</option>
+        </select>
+      </div>
+
+      <div className="flex-1 min-h-0 flex gap-4">
+        {/* Left rail: Create, the mini month, the calendars (one per kind,
+            each a checkbox), and what is overdue. */}
+        {railOpen && (
+          <aside className="w-60 shrink-0 min-h-0 overflow-y-auto pr-1 space-y-5">
+            <button
+              type="button"
+              onClick={() => setIsCreateModalOpen(true)}
+              className="inline-flex items-center gap-2 pl-4 pr-5 py-3 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md text-sm font-medium text-slate-800 transition-shadow"
+            >
+              <PlusIcon className="w-5 h-5" />
+              Create
+            </button>
+
+            <MiniMonth
+              cursor={currentDate}
+              onCursor={(d) => setCurrentDate(d)}
+              eventDays={new Set(visibleEvents.map((e) => keyOfIso(e.scheduled_at)))}
+              onPickDay={(d) => {
+                setCurrentDate(viewMode === "week" ? d : new Date(d.getFullYear(), d.getMonth(), 1));
+                setSelectedDay(sameDay(d, new Date()) ? null : d);
+              }}
+            />
+
+            <div>
+              <p className="text-sm font-medium text-slate-800 mb-1">My calendars</p>
+              <ul className="space-y-0.5">
+                {Object.entries(KIND_STYLES)
+                  .filter(([k]) => events.some((e) => kindOf(e as CalendarEventLite) === k))
+                  .map(([k, st]) => {
+                    const on = !hiddenKinds.has(k);
+                    const n = events.filter((e) => kindOf(e as CalendarEventLite) === k).length;
+                    return (
+                      <li key={k}>
+                        <label className="flex items-center gap-2 px-1 py-1 rounded hover:bg-slate-100 cursor-pointer text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={() =>
+                              setHiddenKinds((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(k)) next.delete(k);
+                                else next.add(k);
+                                return next;
+                              })
+                            }
+                            className="sr-only"
+                          />
+                          <span className={cn("w-4 h-4 rounded flex items-center justify-center text-white", on ? st.solid : "border-2 border-slate-300")}>
+                            {on && <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 01-1.4 0l-4-4a1 1 0 111.4-1.4L8 12.6l7.3-7.3a1 1 0 011.4 0z" clipRule="evenodd" /></svg>}
+                          </span>
+                          <span className="flex-1 truncate">{st.label}s</span>
+                          <span className="text-xs text-slate-400 tabular-nums">{n}</span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                {events.length === 0 && <li className="px-1 text-xs text-slate-400">Nothing booked this month.</li>}
+              </ul>
+            </div>
+
+            {overdueEvents.length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-red-700 mb-1">Overdue <span className="text-red-400 font-normal">{overdueEvents.length}</span></p>
+                <div className="space-y-1">
+                  {(overdueEvents as CalendarEventLite[]).slice(0, 6).map((e) => (
+                    <AgendaRow key={e.id} event={e} onOpen={() => setSelectedEvent(e as CalendarEvent)} showDate />
                   ))}
                 </div>
-                <button
-                  onClick={() => setIsCreateModalOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-                >
-                  <PlusIcon className="w-4 h-4" />
-                  New Event
-                </button>
               </div>
+            )}
+          </aside>
+        )}
 
-              {/* One colour per kind, and the legend is the filter. */}
-              <div className="px-4 py-2 border-b border-slate-100 bg-slate-50/60 shrink-0">
-                <KindLegend
-                  counts={events.reduce<Record<string, number>>((acc, e) => {
-                    const k = kindOf(e as CalendarEventLite);
-                    acc[k] = (acc[k] ?? 0) + 1;
-                    return acc;
-                  }, {})}
-                  active={new Set(Object.keys(events.reduce<Record<string, true>>((acc, e) => { const k = kindOf(e as CalendarEventLite); if (!hiddenKinds.has(k)) acc[k] = true; return acc; }, {})))}
-                  onToggle={(k) =>
-                    setHiddenKinds((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(k)) next.delete(k);
-                      else next.add(k);
-                      return next;
-                    })
-                  }
-                />
-              </div>
-
-              <div className="flex-1 min-h-0">
-              {viewMode === "month" && (
-                <MonthView
-                  cursor={currentDate}
-                  events={visibleEvents}
-                  selected={selectedDay}
-                  onSelectDay={(d) => setSelectedDay(sameDay(d, new Date()) ? null : d)}
-                  onOpen={(e) => setSelectedEvent(e as CalendarEvent)}
-                />
-              )}
-              {viewMode === "week" && (
-                <WeekView
-                  cursor={currentDate}
-                  events={visibleEvents}
-                  selected={selectedDay}
-                  onSelectDay={(d) => setSelectedDay(sameDay(d, new Date()) ? null : d)}
-                  onOpen={(e) => setSelectedEvent(e as CalendarEvent)}
-                />
-              )}
-              {viewMode === "agenda" && (
-                <AgendaView
-                  events={visibleEvents.filter((e) => new Date(e.scheduled_at).getMonth() === currentDate.getMonth())}
-                  onOpen={(e) => setSelectedEvent(e as CalendarEvent)}
-                />
-              )}
-              </div>
-            </div>
-          </div>
-
-          {/* Side panels: the selected day (today by default), what is
-              overdue, and what is coming. They scroll on their own. */}
-          <div className="min-h-0 overflow-y-auto space-y-4 pr-0.5">
-            <DayPanel
-              date={selectedDay ?? new Date()}
+        {/* The grid */}
+        <div className="flex-1 min-w-0 min-h-0 bg-white rounded-lg border border-slate-200 overflow-hidden flex flex-col">
+          {viewMode === "month" && (
+            <MonthView
+              cursor={currentDate}
               events={visibleEvents}
-              onOpen={(e) => setSelectedEvent(e as CalendarEvent)}
-              onClear={() => setSelectedDay(null)}
-              onAdd={() => {
-                const d = selectedDay ?? new Date();
+              selected={selectedDay}
+              onSelectDay={(d) => {
+                // Clicking an empty day starts an event on it, as Google does.
                 const at = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 10, 0);
                 const pad = (n: number) => String(n).padStart(2, "0");
                 setNewEvent((prev) => ({
@@ -478,11 +482,47 @@ export default function CalendarPage() {
                 }));
                 setIsCreateModalOpen(true);
               }}
+              onOpen={(e) => setSelectedEvent(e as CalendarEvent)}
+              onMore={(d, rect) => setDayPopover({ date: d, anchor: { top: rect.top - 8, left: rect.left, width: rect.width } })}
             />
-            <OverduePanel events={overdueEvents as CalendarEventLite[]} onOpen={(e) => setSelectedEvent(e as CalendarEvent)} />
-            <UpNextPanel events={visibleEvents} onOpen={(e) => setSelectedEvent(e as CalendarEvent)} />
-          </div>
+          )}
+          {viewMode === "week" && (
+            <WeekView
+              cursor={currentDate}
+              events={visibleEvents}
+              selected={selectedDay}
+              onSelectDay={(d) => setSelectedDay(sameDay(d, new Date()) ? null : d)}
+              onOpen={(e) => setSelectedEvent(e as CalendarEvent)}
+            />
+          )}
+          {viewMode === "agenda" && (
+            <AgendaView
+              events={visibleEvents.filter((e) => new Date(e.scheduled_at).getMonth() === currentDate.getMonth())}
+              onOpen={(e) => setSelectedEvent(e as CalendarEvent)}
+            />
+          )}
         </div>
+      </div>
+
+      {dayPopover && (
+        <DayPopover
+          date={dayPopover.date}
+          events={visibleEvents}
+          anchor={dayPopover.anchor}
+          onOpen={(e) => {
+            setDayPopover(null);
+            setSelectedEvent(e as CalendarEvent);
+          }}
+          onClose={() => setDayPopover(null)}
+          onAdd={() => {
+            const d = dayPopover.date;
+            const pad = (n: number) => String(n).padStart(2, "0");
+            setNewEvent((prev) => ({ ...prev, scheduled_at: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T10:00` }));
+            setDayPopover(null);
+            setIsCreateModalOpen(true);
+          }}
+        />
+      )}
 
         {/* Event Detail Modal */}
         {selectedEvent && (
