@@ -18,8 +18,6 @@ import {
   BuildingOfficeIcon,
   ClipboardDocumentListIcon,
   UserIcon,
-  ChevronUpIcon,
-  ChevronDownIcon,
 } from "@heroicons/react/24/outline";
 import {
   PageLayout,
@@ -239,26 +237,6 @@ export default function DocumentsPage() {
   ]);
 
   // Handle sort click
-  const handleSort = (field: typeof sortField) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortDirection("asc");
-    }
-  };
-
-  // Sort indicator component
-  const SortIndicator = ({ field }: { field: typeof sortField }) => {
-    if (sortField !== field) {
-      return <span className="ml-1 text-slate-300">⇅</span>;
-    }
-    return sortDirection === "asc" ? (
-      <ChevronUpIcon className="w-3 h-3 ml-1 inline" />
-    ) : (
-      <ChevronDownIcon className="w-3 h-3 ml-1 inline" />
-    );
-  };
 
   // Stats
   const stats = useMemo(() => {
@@ -537,395 +515,242 @@ export default function DocumentsPage() {
           </div>
         )}
 
-        {/* Tag chips. Only rendered once tags exist, so the bar stays out of
-            the way until the feature is actually in use. Tags are what a file
-            is about; the category select below is what kind of file it is. */}
-        {allTags.length > 0 && (
-          <div className="mb-3 flex items-center gap-1.5 flex-wrap">
-            <span className="text-[11px] font-medium text-slate-400 mr-0.5">
-              Tags
-            </span>
-            {allTags.map((t) => {
-              const isActive = tagFilter === t.name;
-              return (
-                <button
-                  key={t.name}
-                  type="button"
-                  onClick={() => setTagFilter(isActive ? null : t.name)}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border whitespace-nowrap transition-opacity hover:opacity-80"
-                  style={
-                    isActive
-                      ? {
-                          color: "#fff",
-                          backgroundColor: tagColour(t.name),
-                          borderColor: tagColour(t.name),
-                        }
-                      : {
-                          color: tagColour(t.name),
-                          borderColor: `${tagColour(t.name)}40`,
-                          backgroundColor: `${tagColour(t.name)}14`,
-                        }
-                  }
-                >
-                  {t.name}
-                  <span className="opacity-60">{t.count}</span>
-                </button>
-              );
-            })}
-            {tagFilter && (
-              <button
-                type="button"
-                onClick={() => setTagFilter(null)}
-                className="text-[11px] text-slate-500 hover:text-slate-700 underline ml-1"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Filters Bar */}
-        <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          {/* Search */}
-          <div className="relative flex-1 max-w-md">
-            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search documents..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Category Filter */}
-            <select
+        {/*
+         * Three parts, left to right: a facet rail (what kind, where it
+         * belongs, what it is about - each with counts, each a filter), and
+         * the files themselves: a strip of the most recent, then the list or
+         * the grid. Filters compose; the active ones are named above the
+         * files and cleared in one click.
+         */}
+        <div className="grid grid-cols-1 xl:grid-cols-[220px_1fr] gap-6">
+          {/* Facet rail */}
+          <aside className="space-y-5">
+            <Facet
+              title="Kind"
+              options={[
+                { value: "all", label: "All files", count: documents.length },
+                ...Object.entries(DocumentCategoryLabels)
+                  .map(([value, label]) => ({ value, label, count: documents.filter((d) => d.category === value).length }))
+                  .filter((o) => o.count > 0),
+              ]}
               value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none bg-white"
-            >
-              <option value="all">All Types</option>
-              {Object.entries(DocumentCategoryLabels).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-
-            {/* Linked Type Filter */}
-            <select
+              onChange={setCategoryFilter}
+            />
+            <Facet
+              title="Belongs to"
+              options={[
+                { value: "all", label: "Anything", count: documents.length },
+                { value: "project", label: "Projects", count: stats.projects },
+                { value: "lead", label: "Leads", count: stats.leads },
+                { value: "task", label: "Task steps", count: stats.tasks },
+              ].filter((o) => o.count > 0)}
               value={linkedTypeFilter}
-              onChange={(e) => setLinkedTypeFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none bg-white"
-            >
-              <option value="all">All Sources</option>
-              <option value="lead">Leads</option>
-              <option value="project">Projects</option>
-            </select>
+              onChange={setLinkedTypeFilter}
+            />
+            {allTags.length > 0 && (
+              <div>
+                <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Tags</p>
+                <div className="flex flex-wrap gap-1">
+                  {allTags.slice(0, 24).map((t) => {
+                    const on = tagFilter === t.name;
+                    return (
+                      <button
+                        key={t.name}
+                        type="button"
+                        onClick={() => setTagFilter(on ? null : t.name)}
+                        className={
+                          "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border transition-colors " +
+                          (on ? "bg-slate-800 text-white border-slate-800" : tagColour(t.name) + " border-transparent hover:brightness-95")
+                        }
+                        title={`${t.count} file${t.count === 1 ? "" : "s"}`}
+                      >
+                        {t.name}
+                        <span className="opacity-60 tabular-nums">{t.count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </aside>
 
-            {/* View Mode Toggle */}
-            <div className="flex border border-slate-200 rounded-lg overflow-hidden">
-              <button
-                onClick={() => setViewMode("list")}
-                className={
-                  "p-2 transition-colors " +
-                  (viewMode === "list"
-                    ? "bg-blue-50 text-blue-600"
-                    : "text-slate-400 hover:bg-slate-50")
-                }
+          {/* Files */}
+          <div className="min-w-0 space-y-4">
+            {/* Toolbar */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-[220px]">
+                <MagnifyingGlassIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search files, tags, leads and projects..."
+                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                />
+              </div>
+              <select
+                value={`${sortField}:${sortDirection}`}
+                onChange={(e) => {
+                  const [f, d] = e.target.value.split(":");
+                  setSortField(f as typeof sortField);
+                  setSortDirection(d as typeof sortDirection);
+                }}
+                className="px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 bg-white"
               >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 6h16M4 12h16M4 18h16"
-                  />
-                </svg>
-              </button>
-              <button
-                onClick={() => setViewMode("grid")}
-                className={
-                  "p-2 transition-colors " +
-                  (viewMode === "grid"
-                    ? "bg-blue-50 text-blue-600"
-                    : "text-slate-400 hover:bg-slate-50")
-                }
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
-                  />
-                </svg>
-              </button>
+                <option value="uploaded:desc">Newest first</option>
+                <option value="uploaded:asc">Oldest first</option>
+                <option value="name:asc">Name A–Z</option>
+                <option value="name:desc">Name Z–A</option>
+                <option value="size:desc">Largest first</option>
+                <option value="linked:asc">By lead / project</option>
+              </select>
+              <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
+                {(["list", "grid"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setViewMode(m)}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                      viewMode === m ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    {m === "list" ? "List" : "Grid"}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        </div>
 
-        {/* Documents List/Grid */}
-        {filteredDocuments.length === 0 ? (
-          <div className="text-center py-12">
-            <FolderIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500 text-sm">
-              {searchQuery ||
-              categoryFilter !== "all" ||
-              linkedTypeFilter !== "all"
-                ? "No documents match your filters"
-                : "No documents uploaded yet"}
-            </p>
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="mt-4 text-sm text-blue-600 hover:text-blue-700 font-medium"
-            >
-              Upload your first document
-            </button>
-          </div>
-        ) : viewMode === "list" ? (
-          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th
-                    className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
-                    onClick={() => handleSort("name")}
-                  >
-                    Name
-                    <SortIndicator field="name" />
-                  </th>
-                  <th
-                    className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
-                    onClick={() => handleSort("type")}
-                  >
-                    Type
-                    <SortIndicator field="type" />
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
-                    Tags
-                  </th>
-                  <th
-                    className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
-                    onClick={() => handleSort("linked")}
-                  >
-                    Linked To
-                    <SortIndicator field="linked" />
-                  </th>
-                  <th
-                    className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
-                    onClick={() => handleSort("size")}
-                  >
-                    Size
-                    <SortIndicator field="size" />
-                  </th>
-                  <th
-                    className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
-                    onClick={() => handleSort("uploaded")}
-                  >
-                    Uploaded
-                    <SortIndicator field="uploaded" />
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
+            {/* Active filters, named */}
+            {(categoryFilter !== "all" || linkedTypeFilter !== "all" || tagFilter || searchQuery) && (
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <span>
+                  {filteredDocuments.length} of {documents.length} files
+                </span>
+                {categoryFilter !== "all" && <FilterPill label={DocumentCategoryLabels[categoryFilter as keyof typeof DocumentCategoryLabels] ?? categoryFilter} onClear={() => setCategoryFilter("all")} />}
+                {linkedTypeFilter !== "all" && <FilterPill label={{ project: "Projects", lead: "Leads", task: "Task steps" }[linkedTypeFilter] ?? linkedTypeFilter} onClear={() => setLinkedTypeFilter("all")} />}
+                {tagFilter && <FilterPill label={`#${tagFilter}`} onClear={() => setTagFilter(null)} />}
+                {searchQuery && <FilterPill label={`"${searchQuery}"`} onClear={() => setSearchQuery("")} />}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategoryFilter("all");
+                    setLinkedTypeFilter("all");
+                    setTagFilter(null);
+                    setSearchQuery("");
+                  }}
+                  className="text-blue-600 hover:underline"
+                >
+                  Clear all
+                </button>
+              </div>
+            )}
+
+            {/* Recently added - only when nothing is being filtered, so the
+                strip is a welcome rather than a second copy of the list. */}
+            {!searchQuery && categoryFilter === "all" && linkedTypeFilter === "all" && !tagFilter && documents.length > 3 && (
+              <section>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">Recently added</p>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {[...documents]
+                    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+                    .slice(0, 6)
+                    .map((doc) => (
+                      <DocTile key={doc.id} doc={doc} onOpen={() => handlePreview(doc)} icon={getFileIcon(doc)} />
+                    ))}
+                </div>
+              </section>
+            )}
+
+            {filteredDocuments.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-300 bg-white py-14 text-center">
+                <FolderIcon className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                <p className="text-sm font-medium text-slate-700">
+                  {documents.length === 0 ? "No documents yet" : "Nothing matches"}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {documents.length === 0
+                    ? "Files uploaded on leads, projects and plan steps all land here."
+                    : "Try another search, or clear the filters."}
+                </p>
+              </div>
+            ) : viewMode === "list" ? (
+              <div className="bg-white rounded-lg border border-slate-200 divide-y divide-slate-100">
                 {filteredDocuments.map((doc) => (
-                  <tr
-                    key={doc.id}
-                    className="hover:bg-slate-50 transition-colors"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
-                          {getFileIcon(doc)}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-medium text-slate-900 truncate max-w-xs">
-                            {doc.title || doc.original_name}
-                          </p>
-                          {doc.title && doc.title !== doc.original_name && (
-                            <p className="text-xs text-slate-500 truncate max-w-xs">
-                              {doc.original_name}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-slate-100 text-slate-700">
-                        {DocumentCategoryLabels[
-                          doc.category as DocumentCategory
-                        ] || doc.category}
-                      </span>
-                    </td>
-                    {/* Clickable, so a tag seen on one row filters the whole
-                        list to its siblings. */}
-                    <td className="px-4 py-3">
-                      {doc.tags?.length ? (
-                        <div className="flex items-center gap-1 flex-wrap">
-                          {doc.tags.map((tag) => (
+                  <div key={doc.id} className="group flex items-center gap-4 px-4 py-3 hover:bg-slate-50 transition-colors">
+                    <button type="button" onClick={() => handlePreview(doc)} className="shrink-0">
+                      <DocGlyph doc={doc} icon={getFileIcon(doc)} size="md" />
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <button type="button" onClick={() => handlePreview(doc)} className="block text-left max-w-full">
+                        <span className="block text-sm font-semibold text-slate-900 truncate">{doc.title || doc.original_name}</span>
+                      </button>
+                      <p className="text-xs text-slate-600 truncate">
+                        {DocumentCategoryLabels[doc.category as keyof typeof DocumentCategoryLabels] ?? doc.category}
+                        {doc.linked_name ? ` · ${doc.linked_name}` : ""}
+                        {doc.parent_linked_name ? ` · in ${doc.parent_linked_name}` : ""}
+                      </p>
+                      {(doc.tags?.length ?? 0) > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {doc.tags!.slice(0, 5).map((t) => (
                             <button
-                              key={tag}
+                              key={t}
                               type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setTagFilter(tagFilter === tag ? null : tag);
-                              }}
-                              className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium border whitespace-nowrap transition-opacity hover:opacity-80"
-                              style={
-                                tagFilter === tag
-                                  ? {
-                                      color: "#fff",
-                                      backgroundColor: tagColour(tag),
-                                      borderColor: tagColour(tag),
-                                    }
-                                  : {
-                                      color: tagColour(tag),
-                                      borderColor: `${tagColour(tag)}40`,
-                                      backgroundColor: `${tagColour(tag)}14`,
-                                    }
-                              }
+                              onClick={() => setTagFilter(t)}
+                              className={"px-1.5 py-0.5 rounded-full text-[10px] " + tagColour(t)}
                             >
-                              {tag}
+                              {t}
                             </button>
                           ))}
                         </div>
-                      ) : (
-                        <span className="text-xs text-slate-300">—</span>
                       )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-1">
-                        {getLinkedTypeBadge(doc.linked_type)}
-                        {doc.linked_name && (
-                          <span className="text-xs text-slate-600 truncate max-w-xs">
-                            {doc.linked_name}
-                          </span>
-                        )}
-                        {/* A task file belongs to a lead/project too - that is
-                            the object people scan this column for. */}
-                        {doc.parent_linked_name && (
-                          <span className="text-xs text-slate-400 truncate max-w-xs">
-                            in {doc.parent_linked_name}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">
-                      {formatFileSize(doc.file_size)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-sm text-slate-900">
-                        {new Date(doc.created_at).toLocaleDateString()}
+                    </div>
+                    <div className="hidden md:block w-28 shrink-0">{getLinkedTypeBadge(doc.linked_type)}</div>
+                    <div className="hidden md:block w-20 shrink-0 text-right text-xs text-slate-500 tabular-nums">{formatFileSize(doc.file_size)}</div>
+                    <div className="hidden lg:block w-36 shrink-0 text-right">
+                      <p className="text-xs text-slate-700 tabular-nums">
+                        {new Date(doc.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                       </p>
-                      {doc.uploaded_user && (
-                        <p className="text-xs text-slate-500">
-                          by {doc.uploaded_user.name}
-                        </p>
-                      )}
-                    </td>
-                    {/* Chip buttons, matching the other tables. Slate for
-                        neutral actions, blue for edit, red for delete. */}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => handlePreview(doc)}
-                          className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300 transition-all"
-                          title="Preview"
-                        >
-                          <EyeIcon className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDownload(doc)}
-                          className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300 transition-all"
-                          title="Download"
-                        >
-                          <ArrowDownTrayIcon className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setEditingDoc(doc)}
-                          className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-all"
-                          title="Edit document"
-                        >
-                          <PencilSquareIcon className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(doc)}
-                          className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 transition-all"
-                          title="Delete"
-                        >
-                          <TrashIcon className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          /* Grid View */
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {filteredDocuments.map((doc) => (
-              <div
-                key={doc.id}
-                className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition-all cursor-pointer group"
-              >
-                <div className="flex justify-center mb-3">
-                  <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center">
-                    {getFileIcon(doc)}
+                      {doc.uploaded_user?.name && <p className="text-[11px] text-slate-400 truncate">{doc.uploaded_user.name}</p>}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                      <button type="button" onClick={() => handlePreview(doc)} title="Preview" className="p-1.5 rounded-md text-slate-500 hover:text-blue-600 hover:bg-blue-50">
+                        <EyeIcon className="w-4 h-4" />
+                      </button>
+                      <button type="button" onClick={() => handleDownload(doc)} title="Download" className="p-1.5 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100">
+                        <ArrowDownTrayIcon className="w-4 h-4" />
+                      </button>
+                      <button type="button" onClick={() => setEditingDoc(doc)} title="Edit" className="p-1.5 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100">
+                        <PencilSquareIcon className="w-4 h-4" />
+                      </button>
+                      <button type="button" onClick={() => handleDelete(doc)} title="Delete" className="p-1.5 rounded-md text-slate-500 hover:text-red-600 hover:bg-red-50">
+                        <TrashIcon className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <h3
-                  className="font-medium text-slate-900 text-sm truncate mb-1 text-center"
-                  title={doc.title || doc.original_name}
-                >
-                  {doc.title || doc.original_name}
-                </h3>
-                <p className="text-xs text-slate-500 text-center mb-2">
-                  {formatFileSize(doc.file_size)}
-                </p>
-                <div className="flex justify-center mb-2">
-                  {getLinkedTypeBadge(doc.linked_type)}
-                </div>
-                <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pt-2 border-t border-slate-100">
-                  <button
-                    onClick={() => handlePreview(doc)}
-                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                  >
-                    <EyeIcon className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDownload(doc)}
-                    className="p-1.5 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                  >
-                    <ArrowDownTrayIcon className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(doc)}
-                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <TrashIcon className="w-4 h-4" />
-                  </button>
-                </div>
+                ))}
               </div>
-            ))}
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3">
+                {filteredDocuments.map((doc) => (
+                  <div key={doc.id} className="group relative">
+                    <DocTile doc={doc} onOpen={() => handlePreview(doc)} icon={getFileIcon(doc)} showMeta />
+                    <div className="absolute top-2 right-2 flex items-center gap-0.5 rounded-md bg-white/95 shadow-sm border border-slate-200 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button type="button" onClick={() => handleDownload(doc)} title="Download" className="p-1.5 text-slate-500 hover:text-slate-800">
+                        <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+                      </button>
+                      <button type="button" onClick={() => setEditingDoc(doc)} title="Edit" className="p-1.5 text-slate-500 hover:text-slate-800">
+                        <PencilSquareIcon className="w-3.5 h-3.5" />
+                      </button>
+                      <button type="button" onClick={() => handleDelete(doc)} title="Delete" className="p-1.5 text-slate-500 hover:text-red-600">
+                        <TrashIcon className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </PageContent>
 
       {/* Add Document Modal */}
@@ -1197,5 +1022,108 @@ export default function DocumentsPage() {
       />
       {confirmDialog}
     </PageLayout>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Module-scope pieces. Defined inside the page they would be a new
+   component type on every render and remount - the TaskRow lesson.      */
+
+function Facet({
+  title,
+  options,
+  value,
+  onChange,
+}: {
+  title: string;
+  options: { value: string; label: string; count: number }[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">{title}</p>
+      <ul className="space-y-0.5">
+        {options.map((o) => {
+          const on = value === o.value;
+          return (
+            <li key={o.value}>
+              <button
+                type="button"
+                onClick={() => onChange(o.value)}
+                className={
+                  "w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors " +
+                  (on ? "bg-blue-50 text-blue-800 font-medium" : "text-slate-600 hover:bg-slate-100")
+                }
+              >
+                <span className="truncate">{o.label}</span>
+                <span className={"text-xs tabular-nums " + (on ? "text-blue-600" : "text-slate-400")}>{o.count}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function FilterPill({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-slate-100 text-slate-700">
+      {label}
+      <button type="button" onClick={onClear} className="p-0.5 rounded-full hover:bg-slate-200" aria-label={`Clear ${label}`}>
+        <XMarkIcon className="w-3 h-3" />
+      </button>
+    </span>
+  );
+}
+
+const GLYPH_TONE: Record<string, string> = {
+  photo: "bg-blue-50",
+  pdf: "bg-red-50",
+  word: "bg-blue-50",
+  excel: "bg-green-50",
+  powerpoint: "bg-orange-50",
+  cad: "bg-purple-50",
+  archive: "bg-amber-50",
+  default: "bg-slate-100",
+};
+
+/** A file's face: the image itself for a photo, otherwise its type icon on a tinted tile. */
+function DocGlyph({ doc, icon, size }: { doc: DocumentWithLinked; icon: React.ReactNode; size: "md" | "lg" }) {
+  const isImage = (doc.file_type || "").startsWith("image/") && !!doc.signed_url;
+  const tone = GLYPH_TONE[getFileTypeIcon(doc.file_type, doc.file_extension)] ?? GLYPH_TONE.default;
+  const box = size === "lg" ? "aspect-[4/3] w-full" : "w-11 h-11";
+  if (isImage) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={doc.signed_url} alt="" className={box + " object-cover rounded-md bg-slate-100"} loading="lazy" />;
+  }
+  return (
+    <div className={box + " rounded-md flex items-center justify-center " + tone}>
+      <span className={size === "lg" ? "scale-[1.8]" : ""}>{icon}</span>
+    </div>
+  );
+}
+
+function DocTile({ doc, icon, onOpen, showMeta = false }: { doc: DocumentWithLinked; icon: React.ReactNode; onOpen: () => void; showMeta?: boolean }) {
+  const ext = (doc.file_extension || doc.original_name?.split(".").pop() || "").replace(".", "").toUpperCase();
+  return (
+    <button type="button" onClick={onOpen} className="w-full text-left rounded-lg border border-slate-200 bg-white p-2 hover:border-blue-300 hover:shadow-sm transition-all">
+      <DocGlyph doc={doc} icon={icon} size="lg" />
+      <p className="mt-2 text-xs font-semibold text-slate-800 truncate" title={doc.title || doc.original_name}>
+        {doc.title || doc.original_name}
+      </p>
+      <p className="text-[11px] text-slate-500 truncate">
+        {ext ? `${ext} · ` : ""}
+        {formatFileSize(doc.file_size)}
+        {doc.linked_name ? ` · ${doc.linked_name}` : ""}
+      </p>
+      {showMeta && (
+        <p className="text-[10px] text-slate-400 truncate">
+          {new Date(doc.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+          {doc.uploaded_user?.name ? ` · ${doc.uploaded_user.name}` : ""}
+        </p>
+      )}
+    </button>
   );
 }
