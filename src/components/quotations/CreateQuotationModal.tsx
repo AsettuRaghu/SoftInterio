@@ -30,6 +30,7 @@ interface Project {
   name: string;
   client_name?: string;
   status: string;
+  property_name?: string | null;
 }
 
 interface Template {
@@ -41,6 +42,11 @@ interface Template {
   components_count?: number;
 }
 
+/** One shape for both pickers: customer · number · property · where it stands. */
+function entityLabel(customer: string, number: string, property?: string | null, standing?: string) {
+  return [customer, number, property || null, standing || null].filter(Boolean).join(" · ");
+}
+
 interface CreateQuotationModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -50,6 +56,8 @@ interface CreateQuotationModalProps {
     projectId?: string;
     templateId?: string;
     fromScope?: boolean;
+    /** A standalone quotation's customer, typed here. */
+    client?: { name: string; phone?: string; email?: string; address?: string };
   }) => Promise<void>;
   leads: Lead[];
   projects: Project[];
@@ -81,6 +89,9 @@ export function CreateQuotationModal({
   // Validation belongs beside the control it is about. An alert() for "pick a
   // lead" is an OS-level interruption for a field the person is looking at.
   const [validationError, setValidationError] = useState<string | null>(null);
+  // The customer on a standalone quotation. A quotation holds only a
+  // client_id, so without this a standalone one had no name to print.
+  const [client, setClient] = useState({ name: "", phone: "", email: "", address: "" });
 
   if (!isOpen) return null;
 
@@ -94,6 +105,10 @@ export function CreateQuotationModal({
       setValidationError("Choose a project before creating the quotation.");
       return;
     }
+    if (source === "standalone" && !client.name.trim()) {
+      setValidationError("Give the customer's name - it is what the quotation is addressed to.");
+      return;
+    }
 
     try {
       await onCreate({
@@ -102,6 +117,15 @@ export function CreateQuotationModal({
         projectId: selectedProjectId || undefined,
         templateId: selectedTemplateId || undefined,
         fromScope: useScope && !selectedTemplateId,
+        client:
+          source === "standalone"
+            ? {
+                name: client.name.trim(),
+                phone: client.phone.trim() || undefined,
+                email: client.email.trim() || undefined,
+                address: client.address.trim() || undefined,
+              }
+            : undefined,
       });
       // Reset form
       setSource("lead");
@@ -109,6 +133,7 @@ export function CreateQuotationModal({
       setSelectedProjectId("");
       setSelectedTemplateId("");
       setUseScope(true);
+      setClient({ name: "", phone: "", email: "", address: "" });
     } catch (error) {
       console.error("Error creating quotation:", error);
     }
@@ -118,7 +143,7 @@ export function CreateQuotationModal({
     isCreating ||
     (source === "lead" && !selectedLeadId) ||
     (source === "project" && !selectedProjectId) ||
-    (source === "standalone" && isLoading);
+    (source === "standalone" && (isLoading || !client.name.trim()));
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -130,7 +155,7 @@ export function CreateQuotationModal({
         />
 
         {/* Modal */}
-        <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg transform transition-all">
+        <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg transform transition-all overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
             <h3 className="text-lg font-semibold text-slate-900">
@@ -208,7 +233,7 @@ export function CreateQuotationModal({
                     <select
                       value={selectedLeadId}
                       onChange={(e) => setSelectedLeadId(e.target.value)}
-                      className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                      className="w-full max-w-full truncate px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
                     >
                       <option value="">Choose a lead...</option>
                       {leads.map((lead) => {
@@ -224,8 +249,7 @@ export function CreateQuotationModal({
                         const stage = LeadStageLabels[lead.stage as LeadStage] ?? lead.stage;
                         return (
                           <option key={lead.id} value={lead.id}>
-                            {clientName} · {lead.lead_number}
-                            {propertyName ? ` · ${propertyName}` : ""} · {stage}
+                            {entityLabel(clientName, lead.lead_number, propertyName, stage)}
                           </option>
                         );
                       })}
@@ -247,33 +271,67 @@ export function CreateQuotationModal({
                     <select
                       value={selectedProjectId}
                       onChange={(e) => setSelectedProjectId(e.target.value)}
-                      className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                      className="w-full max-w-full truncate px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
                     >
                       <option value="">Choose a project...</option>
                       {projects.map((project) => (
                         <option key={project.id} value={project.id}>
-                          {project.client_name || project.name} · {project.project_number} ·{" "}
-                          {ProjectStatusLabels[project.status as ProjectStatus] ?? project.status}
+                          {entityLabel(
+                            project.client_name || project.name,
+                            project.project_number,
+                            project.property_name === "Unknown Property" ? null : project.property_name,
+                            ProjectStatusLabels[project.status as ProjectStatus] ?? project.status
+                          )}
                         </option>
                       ))}
                     </select>
                     {projects.length === 0 && (
                       <p className="mt-1 text-xs text-slate-500">
-                        No projects in progress
+                        No projects in progress or on hold
                       </p>
                     )}
                   </div>
                 )}
 
-                {/* Standalone Info */}
+                {/* Standalone: who it is for. Not linked to a lead or a
+                    project - a vendor's quotation handed to the customer,
+                    an accessory sold on its own. */}
                 {source === "standalone" && (
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
-                    <p className="text-sm text-slate-600">
-                      <span className="font-medium">Standalone quotation</span>{" "}
-                      — This quotation will not be linked to any lead or
-                      project. You can add client and property details manually
-                      in the quotation editor.
+                  <div className="space-y-2">
+                    <p className="text-xs text-slate-500">
+                      Not linked to a lead or project - it lives on this list. Who is it for?
                     </p>
+                    <input
+                      type="text"
+                      value={client.name}
+                      onChange={(e) => setClient((c) => ({ ...c, name: e.target.value }))}
+                      placeholder="Customer name *"
+                      autoFocus
+                      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="tel"
+                        value={client.phone}
+                        onChange={(e) => setClient((c) => ({ ...c, phone: e.target.value }))}
+                        placeholder="Phone"
+                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                      />
+                      <input
+                        type="email"
+                        value={client.email}
+                        onChange={(e) => setClient((c) => ({ ...c, email: e.target.value }))}
+                        placeholder="Email"
+                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      value={client.address}
+                      onChange={(e) => setClient((c) => ({ ...c, address: e.target.value }))}
+                      placeholder="Site address (optional)"
+                      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                    />
                   </div>
                 )}
 
@@ -288,7 +346,7 @@ export function CreateQuotationModal({
                   <select
                     value={selectedTemplateId}
                     onChange={(e) => setSelectedTemplateId(e.target.value)}
-                    className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                    className="w-full max-w-full truncate px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
                   >
                     <option value="">Start from scratch</option>
                     {templates.map((template) => (

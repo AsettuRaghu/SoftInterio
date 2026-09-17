@@ -314,7 +314,7 @@ export default function QuotationsListPage() {
         // Projects under way. "execution" was never a project status - the
         // list came back empty - and since 2026-09-16 a project is
         // new / in_progress / on_hold / completed / cancelled.
-        fetch("/api/projects?status=in_progress&limit=100"),
+        fetch("/api/projects?status=in_progress,on_hold&limit=100"),
         // Fetch only active templates
         fetch("/api/quotations/templates?status=active"),
       ]);
@@ -368,6 +368,7 @@ export default function QuotationsListPage() {
     projectId?: string;
     templateId?: string;
     fromScope?: boolean;
+    client?: { name: string; phone?: string; email?: string; address?: string };
   }) => {
     const leadId = data?.leadId || selectedLeadId;
     const projectId = data?.projectId || selectedProjectId;
@@ -375,6 +376,7 @@ export default function QuotationsListPage() {
     const source = data?.source || createSource;
     // Read here because `data` is shadowed further down by the response body.
     const fromScope = data?.fromScope === true;
+    const typedClient = data?.client;
 
     // For lead/project source, require selection
     if (source === "lead" && !leadId) {
@@ -388,13 +390,15 @@ export default function QuotationsListPage() {
 
     setIsCreating(true);
     try {
-      const payload: Record<string, string | boolean> = {};
+      const payload: Record<string, unknown> = {};
       if (source === "lead" && leadId) {
         payload.lead_id = leadId;
       } else if (source === "project" && projectId) {
         payload.project_id = projectId;
+      } else if (source === "standalone" && typedClient) {
+        // The customer typed in the dialog; the server makes the client row.
+        payload.client = typedClient;
       }
-      // For standalone, we don't add lead_id or project_id
       if (templateId) {
         payload.template_id = templateId;
       }

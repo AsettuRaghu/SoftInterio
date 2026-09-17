@@ -238,7 +238,26 @@ export async function POST(request: NextRequest) {
 
     const { lead_id, project_id, template_id , from_scope } = body;
 
-    // Standalone quotations are allowed (no lead_id or project_id required)
+    // Standalone quotations are allowed (no lead_id or project_id required).
+    // They carry the customer the person typed: a clients row, created here
+    // and linked, the same way a directly created project gets one - a
+    // quotation has client_id and nothing else to hold a name. A vendor
+    // quotation handed to a customer to pay the painter is the usual case.
+    const typedClient =
+      !lead_id && !project_id && body.client && typeof body.client === "object"
+        ? {
+            name: String(body.client.name ?? "").trim(),
+            phone: String(body.client.phone ?? "").trim() || null,
+            email: String(body.client.email ?? "").trim().toLowerCase() || null,
+            address: String(body.client.address ?? "").trim() || null,
+          }
+        : null;
+    if (!lead_id && !project_id && !typedClient?.name) {
+      return NextResponse.json(
+        { error: "A standalone quotation needs the customer's name" },
+        { status: 400 }
+      );
+    }
 
     // Get user's tenant_id
     const { data: userData, error: userError } = await supabase
@@ -338,12 +357,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (typedClient) {
+      const { data: made, error: clientError } = await supabase
+        .from("clients")
+        .insert({
+          tenant_id: userData.tenant_id,
+          client_type: "individual",
+          status: "active",
+          name: typedClient.name,
+          phone: typedClient.phone,
+          email: typedClient.email,
+          address_line1: typedClient.address,
+          created_by: user!.id,
+        })
+        .select("id")
+        .single();
+      if (clientError || !made) {
+        console.error("[QUOTATION API] Could not create the client:", clientError);
+        return NextResponse.json({ error: "Could not save the customer" }, { status: 500 });
+      }
+      clientId = made.id;
+      clientName = typedClient.name;
+    }
+
     // Create the quotation
     // Determine title based on whether it's linked or standalone
     const isStandalone = !lead_id && !project_id;
-    const quotationTitle = isStandalone 
-      ? "Standalone Quotation"
-      : `Quotation for ${clientName || "New Client"}`;
+    const quotationTitle = `Quotation for ${clientName || "New Client"}`;
 
     const { data: newQuotation, error: createError } = await supabase
       .from("quotations")

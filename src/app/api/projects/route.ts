@@ -100,7 +100,9 @@ export async function GET(request: NextRequest) {
     }
 
     if (status) {
-      query = query.eq("status", status);
+      // "in_progress,on_hold" asks for either.
+      const statuses = status.split(",").map((v) => v.trim()).filter(Boolean);
+      query = statuses.length > 1 ? query.in("status", statuses) : query.eq("status", statuses[0]);
     }
 
     if (project_category) {
