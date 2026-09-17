@@ -1050,6 +1050,26 @@ so.
 isolated playbook: blocked at two open steps, blocked at one, allowed at none,
 accepted, and stamped with a start and an end.
 
+### `TaskRow` is called, never rendered as an element
+
+Both task tables define their row as a function inside the table component,
+closing over its state. Written as `<TaskRow task={t} />` that function is a
+**new component type on every render**, and React answers a changed type by
+unmounting the old row and mounting a fresh one - so every row's DOM was
+replaced on every render. Found 2026-09-17 after two days of "flicker"
+reports that were all this: chips blinking as their nodes were swapped, the
+timer controls losing their optimistic and clock state (the "timer acting
+weird", the "flash on click"), a hovered tooltip orphaned without its
+mouseleave and reappearing under the cursor, focus lost from the button just
+pressed. The Tasks page had even worked around one symptom by inlining the
+subtask input "to prevent focus loss".
+
+Rows are now `{TaskRow({ task })}` - a render function whose output is an
+ordinary keyed child of the table. **It must hold no hooks of its own**; a
+hook inside would then belong to the table and vary in count with the rows.
+Before writing a component inside another component, ask whether it will be
+rendered as an element; if so, hoist it or call it.
+
 ### A plan action paints twice: the row, then the page - never in between
 
 After Start / Pause / Complete / a dropdown change / a date or assignee edit
