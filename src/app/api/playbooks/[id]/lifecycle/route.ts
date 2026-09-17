@@ -188,6 +188,7 @@ export async function POST(
         runs_moved?: number;
         tasks_added?: number;
         tasks_cancelled?: number;
+        ticks_refreshed?: number;
       };
 
       if (!outcome?.success) {
@@ -213,6 +214,8 @@ export async function POST(
         if (outcome.tasks_added) parts.push(`${outcome.tasks_added} step(s) added`);
         if (outcome.tasks_cancelled)
           parts.push(`${outcome.tasks_cancelled} removed step(s) cancelled`);
+        if (outcome.ticks_refreshed)
+          parts.push(`${outcome.ticks_refreshed} tick(s) set on steps not yet started`);
       }
 
       return NextResponse.json({

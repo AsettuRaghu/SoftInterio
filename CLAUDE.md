@@ -1301,8 +1301,16 @@ running plan onto it**, in one transaction. Existing work is matched by
   deleting recorded work to tidy up a playbook would be the worse bug.
 
 The route reports what it did ("Version 5 is live. 1 running project moved onto
-it, 3 step(s) added") because it changed live projects, and silently reshaping
-somebody's plan is not acceptable.
+it, 3 step(s) added, 12 tick(s) set on steps not yet started") because it
+changed live projects, and silently reshaping somebody's plan is not
+acceptable.
+
+**Ticks follow the same rule as removal** (`20260917090000`): a repointed
+step still `todo` has its requirements replaced from the new step; a step
+under way, held or finished keeps the ticks it was given. Until then commit
+never touched requirements at all — a checklist added in v10 reached no
+project already on v9, and a step *new* in a version arrived with **no gates**
+because commit inserted the task without calling `create_step_requirements`.
 
 `task_status` is `todo | in_progress | on_hold | blocked | completed | skipped |
 cancelled`. It does **not** have `not_started` — that is phase vocabulary, and
