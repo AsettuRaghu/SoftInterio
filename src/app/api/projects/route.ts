@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { normalisePhone } from "@/lib/partners/identity";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { generateUniqueProjectNumber } from "@/utils/project-number-generator";
@@ -587,6 +588,34 @@ export async function POST(request: NextRequest) {
         { error: "Failed to create client record" },
         { status: 500 }
       );
+    }
+
+    // A partner above the customer record, so the next lead or quotation
+    // that sees this phone number is offered this person.
+    const { data: partner } = await supabase
+      .from("partners")
+      .insert({
+        tenant_id: user.tenantId,
+        kind: "person",
+        name: client_name.trim(),
+        phone: normalisePhone(client_phone),
+        email: client_email?.trim().toLowerCase() || null,
+        city: city?.trim() || null,
+        created_by: user.id,
+      })
+      .select("id")
+      .single();
+    if (partner) {
+      await supabase.from("partner_type_links").insert({ partner_id: partner.id, type_code: "customer" });
+      await supabase.from("partner_contacts").insert({
+        tenant_id: user.tenantId,
+        partner_id: partner.id,
+        name: client_name.trim(),
+        phone: normalisePhone(client_phone),
+        email: client_email?.trim().toLowerCase() || null,
+        is_primary: true,
+      });
+      await supabase.from("clients").update({ partner_id: partner.id }).eq("id", client.id);
     }
 
     // STEP 2: Create the property record, if there is anything to put in it.

@@ -506,6 +506,8 @@ export interface Lead {
 // Lead creation input - client and property data are provided inline
 // API will create client/property records automatically
 export interface CreateLeadInput {
+  /** A partner we already know, chosen on the form instead of typing a new customer. */
+  partner_id?: string;
   // Client Details (will create a new client record)
   client_name: string;
   phone: string;

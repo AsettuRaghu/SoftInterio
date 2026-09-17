@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { KnownPartnerHint, type KnownPartner } from "@/components/partners/KnownPartnerHint";
 import type {
   PropertyType,
   PropertyCategory,
@@ -38,6 +39,8 @@ export function CreateLeadModal({
   onSuccess: () => void;
 }) {
   const { user } = useCurrentUser();
+  // A customer we already know, picked from the hint under the phone field.
+  const [knownPartner, setKnownPartner] = useState<KnownPartner | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -169,7 +172,8 @@ export function CreateLeadModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          // Client details
+          // Client details - or the partner we already know
+          partner_id: knownPartner?.id || undefined,
           client_name: formData.client_name.trim(),
           phone: formData.phone.trim(),
           email: formData.email.trim() || undefined,
@@ -363,6 +367,21 @@ export function CreateLeadModal({
                   onChange={(e) => updateField("email", e.target.value)}
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="client@email.com"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <KnownPartnerHint
+                  phone={formData.phone}
+                  email={formData.email}
+                  chosen={knownPartner}
+                  onChoose={(p) => {
+                    setKnownPartner(p);
+                    if (p) {
+                      updateField("client_name", p.name);
+                      if (p.phone) updateField("phone", p.phone);
+                      if (p.email) updateField("email", p.email);
+                    }
+                  }}
                 />
               </div>
             </div>

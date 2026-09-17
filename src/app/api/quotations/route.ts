@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { normalisePhone } from "@/lib/partners/identity";
 import { createClient } from "@/lib/supabase/server";
 import { copyScopeToQuotation } from "@/lib/quotations/scope-to-quotation";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
@@ -418,10 +419,68 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (typedClient) {
+    if (typedClient && typeof body.client?.partner_id === "string" && body.client.partner_id) {
+      // A partner we already know: its customer record, or one made now.
+      const { data: partner } = await supabase
+        .from("partners")
+        .select("id, name, phone, email, city, kind, clients:clients(id)")
+        .eq("id", body.client.partner_id)
+        .maybeSingle();
+      if (!partner) return NextResponse.json({ error: "That partner was not found" }, { status: 400 });
+      const existing = ((partner as any).clients ?? [])[0];
+      if (existing) {
+        clientId = existing.id;
+      } else {
+        const { data: made } = await supabase
+          .from("clients")
+          .insert({
+            tenant_id: userData.tenant_id,
+            partner_id: partner.id,
+            client_type: partner.kind === "organisation" ? "company" : "individual",
+            status: "active",
+            name: partner.name,
+            phone: partner.phone,
+            email: partner.email,
+            city: partner.city,
+            created_by: user!.id,
+          })
+          .select("id")
+          .single();
+        clientId = made?.id ?? null;
+        await supabase.from("partner_type_links").upsert({ partner_id: partner.id, type_code: "customer" }, { onConflict: "partner_id,type_code" });
+      }
+      clientName = partner.name;
+    } else if (typedClient) {
+      // A new person: a partner above the customer record, so the next form
+      // that sees this phone number offers them instead of duplicating.
+      const { data: partner } = await supabase
+        .from("partners")
+        .insert({
+          tenant_id: userData.tenant_id,
+          kind: "person",
+          name: typedClient.name,
+          phone: normalisePhone(typedClient.phone),
+          email: typedClient.email,
+          address_line1: typedClient.address,
+          created_by: user!.id,
+        })
+        .select("id")
+        .single();
+      if (partner) {
+        await supabase.from("partner_type_links").insert({ partner_id: partner.id, type_code: "customer" });
+        await supabase.from("partner_contacts").insert({
+          tenant_id: userData.tenant_id,
+          partner_id: partner.id,
+          name: typedClient.name,
+          phone: normalisePhone(typedClient.phone),
+          email: typedClient.email,
+          is_primary: true,
+        });
+      }
       const { data: made, error: clientError } = await supabase
         .from("clients")
         .insert({
+          partner_id: partner?.id ?? null,
           tenant_id: userData.tenant_id,
           client_type: "individual",
           status: "active",

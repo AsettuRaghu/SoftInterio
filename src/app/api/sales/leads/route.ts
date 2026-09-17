@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { normalisePhone } from "@/lib/partners/identity";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
@@ -416,26 +417,92 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // STEP 1: Create Client record
-    log.debug("Creating client record");
-    const { data: client, error: clientError } = await supabase
-      .from("clients")
-      .insert({
-        tenant_id: userData.tenant_id,
-        client_type: "individual",
-        status: "active",
-        name: body.client_name.trim(),
-        phone: body.phone.trim(),
-        email: body.email?.trim().toLowerCase() || null,
-        created_by: user.id,
-      })
-      .select("id")
-      .single();
+    // STEP 1: the customer. A partner we already know (picked on the form)
+    // is reused - its clients row, or one made for it now; otherwise a new
+    // client is created, and a partner above it, so the next lead from the
+    // same number is offered this person instead of making a second one.
+    log.debug("Resolving the customer");
+    let client: { id: string } | null = null;
+    let clientError: { message: string } | null = null;
+    if (typeof body.partner_id === "string" && body.partner_id) {
+      const { data: partner } = await supabase
+        .from("partners")
+        .select("id, name, phone, email, city, kind, clients:clients(id)")
+        .eq("id", body.partner_id)
+        .maybeSingle();
+      if (!partner) {
+        return NextResponse.json({ error: "That partner was not found" }, { status: 400 });
+      }
+      const existing = ((partner as any).clients ?? [])[0];
+      if (existing) {
+        client = { id: existing.id };
+      } else {
+        const made = await supabase
+          .from("clients")
+          .insert({
+            tenant_id: userData.tenant_id,
+            partner_id: partner.id,
+            client_type: partner.kind === "organisation" ? "company" : "individual",
+            status: "active",
+            name: partner.name,
+            phone: partner.phone,
+            email: partner.email,
+            city: partner.city,
+            created_by: user.id,
+          })
+          .select("id")
+          .single();
+        client = made.data;
+        clientError = made.error;
+        // Wearing the customer hat from now on.
+        await supabase.from("partner_type_links").upsert({ partner_id: partner.id, type_code: "customer" }, { onConflict: "partner_id,type_code" });
+      }
+    } else {
+      const { data: partner } = await supabase
+        .from("partners")
+        .insert({
+          tenant_id: userData.tenant_id,
+          kind: "person",
+          name: body.client_name.trim(),
+          phone: normalisePhone(body.phone),
+          email: body.email?.trim().toLowerCase() || null,
+          created_by: user.id,
+        })
+        .select("id")
+        .single();
+      if (partner) {
+        await supabase.from("partner_type_links").insert({ partner_id: partner.id, type_code: "customer" });
+        await supabase.from("partner_contacts").insert({
+          tenant_id: userData.tenant_id,
+          partner_id: partner.id,
+          name: body.client_name.trim(),
+          phone: normalisePhone(body.phone),
+          email: body.email?.trim().toLowerCase() || null,
+          is_primary: true,
+        });
+      }
+      const made = await supabase
+        .from("clients")
+        .insert({
+          tenant_id: userData.tenant_id,
+          partner_id: partner?.id ?? null,
+          client_type: "individual",
+          status: "active",
+          name: body.client_name.trim(),
+          phone: body.phone.trim(),
+          email: body.email?.trim().toLowerCase() || null,
+          created_by: user.id,
+        })
+        .select("id")
+        .single();
+      client = made.data;
+      clientError = made.error;
+    }
 
-    if (clientError) {
+    if (clientError || !client) {
       log.error("Error creating client", clientError);
       return NextResponse.json(
-        { error: "Failed to create client record", details: clientError.message },
+        { error: "Failed to create client record", details: clientError?.message },
         { status: 500 }
       );
     }

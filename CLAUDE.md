@@ -476,6 +476,47 @@ name required, phone/email/address optional - and `POST /api/quotations`
 creates the `clients` row and links it, as a directly created project does.
 A quotation holds only `client_id`; there was nowhere else for a name.
 
+### Partners: one identity above the records that already hold outside parties
+
+Built 2026-09-17; the plain-language plan is `docs/plans/partners.md` - read
+it first. A **partner** is an outside party as this business sees it (a
+person or an organisation), wearing one or more **types** (customer,
+architect, interior_factory, distributor, producer, contractor - shipped
+with `tenant_id NULL`; a business adds its own), with **contacts** (exactly
+one primary - the owner of the relationship, enforced by a partial unique
+index).
+
+It sits **above** `clients` and `stock_vendors`, which both gained a
+`partner_id` and were backfilled (16 customers, 10 distributors). Neither
+was changed otherwise: leads, projects, quotations and purchase orders
+point at them exactly as before. A partner wearing the customer hat has a
+`clients` row (made on demand); the vendor hat's procurement settings
+(payment terms, credit, materials, brands) still live on Stock → Vendors
+until phase 2 folds them into the partner page.
+
+**Phone is the identity within a business**; email is a second hint; a
+name alone is never enough. `lib/partners/identity.ts` normalises both.
+Enforced at creation time, not by a unique index - `GET /api/partners/match`
+answers "do we know this person?", `KnownPartnerHint` shows it under the
+phone field on the new-lead form and the standalone-quotation dialog, and
+the lead, quotation and direct-project routes accept `partner_id` to reuse
+the person (creating their `clients` row if they have none). Every one of
+those routes creates a partner + primary contact when it creates a new
+customer, so nothing bypasses the identity. The test data has fifteen
+customers on `1234567890`, kept as fifteen partners deliberately.
+
+`platform_identity_id` is the party's own account on SoftInterio - the
+customer's portal, a factory that is itself a tenant. **Empty today, read by
+nothing.** A partner record is a business's view of a party, never the
+source of truth for the party's identity; the ecosystem (portal, ratings,
+add-on services) hangs off the platform side later. Do not put anything the
+party owns onto `partners`.
+
+Gated on the existing `clients.*` keys; menu **Partners** with one entry per
+shipped type (`/dashboard/partners/t/<code>`); `/dashboard/clients`
+forwards to Customers. A partner with records against it cannot be deleted
+- mark it inactive.
+
 ### Every list is built from the same cells
 
 `components/ui/list-cells` - `Headline` (name in bold, then one or two

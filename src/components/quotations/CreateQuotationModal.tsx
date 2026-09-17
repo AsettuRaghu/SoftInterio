@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { KnownPartnerHint, type KnownPartner } from "@/components/partners/KnownPartnerHint";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { LeadStageLabels, type LeadStage } from "@/types/leads";
 import { ProjectStatusLabels, type ProjectStatus } from "@/types/projects";
@@ -56,8 +57,8 @@ interface CreateQuotationModalProps {
     projectId?: string;
     templateId?: string;
     fromScope?: boolean;
-    /** A standalone quotation's customer, typed here. */
-    client?: { name: string; phone?: string; email?: string; address?: string };
+    /** A standalone quotation's customer, typed here - or a partner we already know. */
+    client?: { name: string; phone?: string; email?: string; address?: string; partner_id?: string };
   }) => Promise<void>;
   leads: Lead[];
   projects: Project[];
@@ -92,6 +93,7 @@ export function CreateQuotationModal({
   // The customer on a standalone quotation. A quotation holds only a
   // client_id, so without this a standalone one had no name to print.
   const [client, setClient] = useState({ name: "", phone: "", email: "", address: "" });
+  const [knownPartner, setKnownPartner] = useState<KnownPartner | null>(null);
 
   if (!isOpen) return null;
 
@@ -124,6 +126,7 @@ export function CreateQuotationModal({
                 phone: client.phone.trim() || undefined,
                 email: client.email.trim() || undefined,
                 address: client.address.trim() || undefined,
+                partner_id: knownPartner?.id,
               }
             : undefined,
       });
@@ -134,6 +137,7 @@ export function CreateQuotationModal({
       setSelectedTemplateId("");
       setUseScope(true);
       setClient({ name: "", phone: "", email: "", address: "" });
+      setKnownPartner(null);
     } catch (error) {
       console.error("Error creating quotation:", error);
     }
@@ -325,6 +329,15 @@ export function CreateQuotationModal({
                         className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
                       />
                     </div>
+                    <KnownPartnerHint
+                      phone={client.phone}
+                      email={client.email}
+                      chosen={knownPartner}
+                      onChoose={(p) => {
+                        setKnownPartner(p);
+                        if (p) setClient((c) => ({ ...c, name: p.name, phone: p.phone ?? c.phone, email: p.email ?? c.email }));
+                      }}
+                    />
                     <input
                       type="text"
                       value={client.address}

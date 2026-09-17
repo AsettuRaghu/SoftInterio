@@ -339,6 +339,16 @@ export const routePermissions: RoutePermission[] = [
   // CLIENTS (standalone route)
   // ============================================
   {
+    pattern: "/dashboard/partners/*",
+    permissions: ["clients.view"],
+    description: "Partner detail and typed lists",
+  },
+  {
+    pattern: "/dashboard/partners",
+    permissions: ["clients.view"],
+    description: "Partners",
+  },
+  {
     pattern: "/dashboard/clients/*",
     permissions: ["clients.view"],
     description: "Client detail pages",

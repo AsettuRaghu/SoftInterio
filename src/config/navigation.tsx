@@ -93,6 +93,16 @@ export const Icons = {
       />
     </svg>
   ),
+  partners: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#64748b">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+      />
+    </svg>
+  ),
   library: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#64748b">
       <path
@@ -249,6 +259,24 @@ export const navigationConfig: NavigationItem[] = [
         href: "/dashboard/quotations/config",
         permission: "quotations.view",
       },
+    ],
+  },
+  {
+    // Everyone the business works with, one list per hat. The shipped hats
+    // are listed here; a business's own appear as tabs on the page. Gated on
+    // the clients.* keys - the customer module grown up.
+    name: "Partners",
+    href: "/dashboard/partners",
+    icon: Icons.partners,
+    permission: "clients.view",
+    subItems: [
+      { name: "All Partners", href: "/dashboard/partners", permission: "clients.view" },
+      { name: "Customers", href: "/dashboard/partners/t/customer", permission: "clients.view" },
+      { name: "Architects", href: "/dashboard/partners/t/architect", permission: "clients.view" },
+      { name: "Interior Factory / OEM", href: "/dashboard/partners/t/interior_factory", permission: "clients.view" },
+      { name: "Distributors", href: "/dashboard/partners/t/distributor", permission: "clients.view" },
+      { name: "Producers", href: "/dashboard/partners/t/producer", permission: "clients.view" },
+      { name: "Contractors", href: "/dashboard/partners/t/contractor", permission: "clients.view" },
     ],
   },
   {
