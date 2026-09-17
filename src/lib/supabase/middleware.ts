@@ -4,6 +4,7 @@
  */
 
 import { createServerClient } from "@supabase/ssr";
+import { getVerifiedUser } from "@/lib/auth/verify-session";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSubscriptionStatus, hasAccessToplatform, getAccessBlockedMessage } from "@/lib/billing/subscription-status";
 import type { TenantSubscriptionData } from "@/lib/billing/subscription-status";
@@ -89,12 +90,11 @@ export async function updateSession(request: NextRequest) {
   // supabase.auth.getUser(). A simple mistake could make it very hard to debug
   // issues with users being randomly logged out.
 
-  let user = null;
+  let user: { id: string; email: string | null } | null = null;
   try {
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser();
-    user = authUser;
+    // Verified against the project's signing keys, not by asking the Auth
+    // server on every navigation (see verify-session.ts).
+    user = await getVerifiedUser(supabase);
   } catch (error) {
     // Handle network errors gracefully - allow request to proceed
     // User will be checked on the client side

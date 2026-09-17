@@ -12,6 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getVerifiedUser } from "@/lib/auth/verify-session";
 import { createClient } from "@/lib/supabase/server";
 import { fetchEffectivePermissions } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -183,12 +184,11 @@ export async function protectApiRoute(
     // ----------------------------------------
     // Step 1: Verify Authentication
     // ----------------------------------------
-    const {
-      data: { user: authUser },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // The token is verified locally (see verify-session.ts) - getUser()
+    // was a round trip to the Auth server on every API call.
+    const authUser = await getVerifiedUser(supabase);
 
-    if (authError || !authUser) {
+    if (!authUser) {
       return {
         success: false,
         error: "Not authenticated",
