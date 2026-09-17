@@ -1,7 +1,7 @@
 /**
  * "Add to library" from a project's Documents tab.
  *
- *   POST /api/library/promote { document_id, title?, space_type_id?, style_code?, tags?, kind? }
+ *   POST /api/library/promote { document_id | document_ids[], title?, space_type_id?, component_type_id?, cost_item_id?, style_code?, tags?, kind?, visible_to_customer? }
  *
  * Makes an entry of kind "our_work" (by default) whose image IS the
  * project's document - a reference, not a copy. The entry remembers the
@@ -19,16 +19,28 @@ export async function POST(request: NextRequest) {
   const { user } = guard;
   const supabase = await createClient();
   const body = await request.json().catch(() => ({}));
-  const documentId = String(body.document_id ?? "");
-  if (!documentId) return NextResponse.json({ error: "document_id is required" }, { status: 400 });
+  const documentIds: string[] = Array.isArray(body.document_ids)
+    ? body.document_ids.map(String).filter(Boolean)
+    : body.document_id
+      ? [String(body.document_id)]
+      : [];
+  if (documentIds.length === 0) return NextResponse.json({ error: "document_id is required" }, { status: 400 });
+  const made: string[] = [];
+  for (const documentId of documentIds) {
 
   const { data: doc } = await supabase
     .from("documents")
     .select("id, tenant_id, original_name, title, file_type, file_size, storage_bucket, storage_path, linked_type, linked_id, parent_linked_type, parent_linked_id")
     .eq("id", documentId)
     .maybeSingle();
-  if (!doc) return NextResponse.json({ error: "Document not found" }, { status: 404 });
-  if (!(doc.file_type || "").startsWith("image/")) return NextResponse.json({ error: "Only an image can go in the library" }, { status: 400 });
+  if (!doc) {
+    if (documentIds.length === 1) return NextResponse.json({ error: "Document not found" }, { status: 404 });
+    continue;
+  }
+  if (!(doc.file_type || "").startsWith("image/")) {
+    if (documentIds.length === 1) return NextResponse.json({ error: "Only an image can go in the library" }, { status: 400 });
+    continue;
+  }
 
   const projectId =
     doc.linked_type === "project" ? doc.linked_id : doc.parent_linked_type === "project" ? doc.parent_linked_id : null;
@@ -39,9 +51,11 @@ export async function POST(request: NextRequest) {
     .insert({
       tenant_id: user.tenantId,
       kind,
-      title: String(body.title ?? "").trim() || doc.title || doc.original_name || "Untitled",
+      title: (documentIds.length === 1 && String(body.title ?? "").trim()) || doc.title || doc.original_name || "Untitled",
       description: String(body.description ?? "").trim() || null,
       space_type_id: body.space_type_id || null,
+      component_type_id: body.component_type_id || null,
+      cost_item_id: body.cost_item_id || null,
       style_code: body.style_code || null,
       tags: cleanTags(body.tags),
       visible_to_customer: body.visible_to_customer !== false,
@@ -50,7 +64,10 @@ export async function POST(request: NextRequest) {
     })
     .select("id")
     .single();
-  if (error || !entry) return NextResponse.json({ error: "Could not add to the library" }, { status: 500 });
+  if (error || !entry) {
+    if (documentIds.length === 1) return NextResponse.json({ error: "Could not add to the library" }, { status: 500 });
+    continue;
+  }
 
   await supabase.from("library_entry_images").insert({
     tenant_id: user.tenantId,
@@ -62,7 +79,9 @@ export async function POST(request: NextRequest) {
     document_id: doc.id,
     display_order: 0,
   });
-  const { data: row } = await supabase.from("library_entries").select(ENTRY_SELECT).eq("id", entry.id).single();
-  const [shaped] = await shapeEntries(row ? [row] : []);
-  return NextResponse.json({ success: true, data: shaped }, { status: 201 });
+  made.push(entry.id);
+  }
+  const { data: rows } = made.length ? await supabase.from("library_entries").select(ENTRY_SELECT).in("id", made) : { data: [] };
+  const shaped = await shapeEntries(rows ?? []);
+  return NextResponse.json({ success: true, data: documentIds.length === 1 ? shaped[0] : shaped, count: made.length }, { status: 201 });
 }

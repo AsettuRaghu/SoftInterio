@@ -15,7 +15,7 @@ import { buttonVariants } from "@/components/ui/Button";
 import { TagInput } from "@/components/ui/TagInput";
 import { cn } from "@/utils/cn";
 import { PhotoIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { LIBRARY_KIND_LABELS, type LibraryEntryShape, type LibraryKind } from "@/lib/library/shape";
+import { LIBRARY_KIND_HELP, LIBRARY_KIND_LABELS, type LibraryEntryShape, type LibraryKind } from "@/lib/library/shape";
 
 export interface SpaceTypeOption {
   id: string;
@@ -25,11 +25,20 @@ export interface StyleOption {
   code: string;
   label: string;
 }
+/** The vocabulary the library links to - GET /api/library/catalogue. */
+export interface LibraryCatalogue {
+  space_types: SpaceTypeOption[];
+  component_types: { id: string; name: string }[];
+  cost_categories: { id: string; name: string }[];
+  cost_items: { id: string; name: string; category_id: string | null; quality_tier: string | null }[];
+  quality_tiers: string[];
+  stages: { key: string; title: string; playbook: string }[];
+}
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  spaceTypes: SpaceTypeOption[];
+  catalogue: LibraryCatalogue;
   styles: StyleOption[];
   tagSuggestions: string[];
   /** Editing this entry; absent means creating. */
@@ -38,12 +47,6 @@ interface Props {
   onSaved: (entry: LibraryEntryShape) => void;
 }
 
-const KIND_HELP: Record<LibraryKind, string> = {
-  our_work: "Something we made. Say which project if it came from one.",
-  product: "Something we sell. The catalogue item, if it has one, carries the price.",
-  inspiration: "A reference we admire - not ours, and never shown as ours.",
-};
-
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <div className="space-y-3">
     <h3 className="text-sm font-semibold text-slate-900 pb-2 border-b border-slate-100">{title}</h3>
@@ -51,12 +54,18 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
   </div>
 );
 
-export function LibraryEntryModal({ isOpen, onClose, spaceTypes, styles, tagSuggestions, entry, defaultKind = "inspiration", onSaved }: Props) {
+export function LibraryEntryModal({ isOpen, onClose, catalogue, styles, tagSuggestions, entry, defaultKind = "inspiration", onSaved }: Props) {
+  const spaceTypes = catalogue.space_types;
   const editing = !!entry;
   const [kind, setKind] = useState<LibraryKind>(defaultKind);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [spaceTypeId, setSpaceTypeId] = useState("");
+  const [componentTypeId, setComponentTypeId] = useState("");
+  const [costCategoryId, setCostCategoryId] = useState("");
+  const [costItemId, setCostItemId] = useState("");
+  const [tier, setTier] = useState("");
+  const [stageKey, setStageKey] = useState("");
   const [styleCode, setStyleCode] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [visible, setVisible] = useState(true);
@@ -71,6 +80,11 @@ export function LibraryEntryModal({ isOpen, onClose, spaceTypes, styles, tagSugg
     setTitle(entry?.title ?? "");
     setDescription(entry?.description ?? "");
     setSpaceTypeId(entry?.space_type_id ?? "");
+    setComponentTypeId(entry?.component_type_id ?? "");
+    setCostCategoryId(entry?.cost_category_id ?? entry?.cost_item?.category_id ?? "");
+    setCostItemId(entry?.cost_item_id ?? "");
+    setTier(entry?.quality_tier ?? "");
+    setStageKey(entry?.stage_key ?? "");
     setStyleCode(entry?.style_code ?? "");
     setTags(entry?.tags ?? []);
     setVisible(entry?.visible_to_customer ?? true);
@@ -95,7 +109,12 @@ export function LibraryEntryModal({ isOpen, onClose, spaceTypes, styles, tagSugg
         res = await fetch(`/api/library/entries/${entry!.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ kind, title, description, space_type_id: spaceTypeId || null, style_code: styleCode || null, tags, visible_to_customer: visible, source_url: sourceUrl }),
+          body: JSON.stringify({
+            kind, title, description, tags, visible_to_customer: visible, source_url: sourceUrl,
+            space_type_id: spaceTypeId || null, component_type_id: componentTypeId || null,
+            cost_category_id: costCategoryId || null, cost_item_id: costItemId || null,
+            quality_tier: tier || null, stage_key: stageKey || null, style_code: styleCode || null,
+          }),
         });
         if (res.ok && files.length) {
           const fd = new FormData();
@@ -108,6 +127,11 @@ export function LibraryEntryModal({ isOpen, onClose, spaceTypes, styles, tagSugg
         fd.append("title", title);
         fd.append("description", description);
         fd.append("space_type_id", spaceTypeId);
+        fd.append("component_type_id", componentTypeId);
+        fd.append("cost_category_id", costCategoryId);
+        fd.append("cost_item_id", costItemId);
+        fd.append("quality_tier", tier);
+        fd.append("stage_key", stageKey);
         fd.append("style_code", styleCode);
         fd.append("tags", tags.join(","));
         fd.append("visible_to_customer", visible ? "true" : "false");
@@ -146,7 +170,7 @@ export function LibraryEntryModal({ isOpen, onClose, spaceTypes, styles, tagSugg
     >
       <div className="space-y-6">
         <Section title="What is it?">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
             {(Object.keys(LIBRARY_KIND_LABELS) as LibraryKind[]).map((k) => (
               <button
                 key={k}
@@ -158,7 +182,7 @@ export function LibraryEntryModal({ isOpen, onClose, spaceTypes, styles, tagSugg
                 )}
               >
                 <span className={cn("block text-sm font-medium", kind === k ? "text-blue-800" : "text-slate-800")}>{LIBRARY_KIND_LABELS[k]}</span>
-                <span className="block text-[11px] text-slate-500 leading-snug mt-0.5">{KIND_HELP[k]}</span>
+                <span className="block text-[11px] text-slate-500 leading-snug mt-0.5">{LIBRARY_KIND_HELP[k]}</span>
               </button>
             ))}
           </div>
@@ -166,25 +190,96 @@ export function LibraryEntryModal({ isOpen, onClose, spaceTypes, styles, tagSugg
             <label className={label}>Title <span className="text-red-500">*</span></label>
             <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. L-shaped kitchen with tall unit, matte olive" autoFocus className={input} />
           </div>
+          {/* What it is ABOUT: the catalogue. Which links are offered
+              follows the kind - a material is about a cost item and a
+              tier; a process picture is about a stage. */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className={label}>Space</label>
-              <select value={spaceTypeId} onChange={(e) => setSpaceTypeId(e.target.value)} className={input}>
-                <option value="">—</option>
-                {spaceTypes.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={label}>Style</label>
-              <select value={styleCode} onChange={(e) => setStyleCode(e.target.value)} className={input}>
-                <option value="">—</option>
-                {styles.map((s) => (
-                  <option key={s.code} value={s.code}>{s.label}</option>
-                ))}
-              </select>
-            </div>
+            {kind !== "material" && kind !== "process" && (
+              <div>
+                <label className={label}>Space</label>
+                <select value={spaceTypeId} onChange={(e) => setSpaceTypeId(e.target.value)} className={input}>
+                  <option value="">—</option>
+                  {spaceTypes.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {(kind === "our_work" || kind === "drawing" || kind === "product" || kind === "inspiration") && (
+              <div>
+                <label className={label}>Component</label>
+                <select value={componentTypeId} onChange={(e) => setComponentTypeId(e.target.value)} className={input}>
+                  <option value="">—</option>
+                  {catalogue.component_types.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {(kind === "material" || kind === "product") && (
+              <>
+                <div>
+                  <label className={label}>Category</label>
+                  <select
+                    value={costCategoryId}
+                    onChange={(e) => {
+                      setCostCategoryId(e.target.value);
+                      setCostItemId("");
+                    }}
+                    className={input}
+                  >
+                    <option value="">—</option>
+                    {catalogue.cost_categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={label}>Cost item</label>
+                  <select value={costItemId} onChange={(e) => setCostItemId(e.target.value)} className={input} disabled={!costCategoryId && catalogue.cost_items.length > 60}>
+                    <option value="">{costCategoryId ? "—" : "Pick a category first"}</option>
+                    {catalogue.cost_items
+                      .filter((i) => !costCategoryId || i.category_id === costCategoryId)
+                      .map((i) => (
+                        <option key={i.id} value={i.id}>{i.name}{i.quality_tier ? ` · ${i.quality_tier}` : ""}</option>
+                      ))}
+                  </select>
+                </div>
+                {catalogue.quality_tiers.length > 0 && (
+                  <div>
+                    <label className={label}>Grade</label>
+                    <select value={tier} onChange={(e) => setTier(e.target.value)} className={input}>
+                      <option value="">—</option>
+                      {catalogue.quality_tiers.map((t) => (
+                        <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </>
+            )}
+            {kind === "process" && (
+              <div className="md:col-span-2">
+                <label className={label}>Stage of the plan</label>
+                <select value={stageKey} onChange={(e) => setStageKey(e.target.value)} className={input}>
+                  <option value="">—</option>
+                  {catalogue.stages.map((st) => (
+                    <option key={st.key} value={st.key}>{st.title}{catalogue.stages.some((o) => o.key !== st.key && o.playbook !== st.playbook) ? ` · ${st.playbook}` : ""}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {kind !== "material" && kind !== "process" && (
+              <div>
+                <label className={label}>Style</label>
+                <select value={styleCode} onChange={(e) => setStyleCode(e.target.value)} className={input}>
+                  <option value="">—</option>
+                  {styles.map((s) => (
+                    <option key={s.code} value={s.code}>{s.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
           <div>
             <label className={label}>Tags</label>

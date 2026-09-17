@@ -529,13 +529,31 @@ the detail page show whether the party is **on SoftInterio** (their
 
 ### The Design Library references pictures; it is not a second file store
 
-Built 2026-09-17 (`20260917130000`), replacing a hard-coded mock. An entry
-is one of three **kinds** - `our_work`, `product`, `inspiration` - with a
-space type (the tenant's own `space_types`), a style (shipped +
-tenant-added, `library_styles`), tags, and `visible_to_customer`. The kind
-labels exist so someone else's work is never shown as ours; the flag is what
-the customer portal will read. **Collections** are named sets, optionally
-tied to a lead - the shortlist for a conversation.
+Built 2026-09-17 (`20260917130000`, reworked `20260918090000`), replacing a
+hard-coded mock. An entry has a **kind** - what the picture IS: `our_work`,
+`drawing`, `material`, `product`, `process`, `inspiration` - and **links** -
+what it is ABOUT: the catalogue (space type, component type, cost category,
+cost item, quality tier), the project, and for a process picture the
+playbook stage by `step_key`. The facet rail is the catalogue's vocabulary;
+the kind labels exist so someone else's work is never shown as ours;
+`visible_to_customer` is what the customer portal will read. **Collections**
+are named sets, optionally tied to a lead - the shortlist for a
+conversation.
+
+Pictures reach it three ways, all landing in the same shape: one entry with
+several pictures (`POST /api/library/entries`), **a batch** - up to forty
+files, one entry each, sharing the links set on the batch, titles from file
+names (`/api/library/batch`) - and **from a project** - its photos ticked
+inside the library (`/api/library/project-photos` + `promote` with
+`document_ids`). Selection mode on the grid then tags many at once
+(`PATCH /api/library/bulk`; blank means leave as is, tags are added or
+removed). `GET /api/library/catalogue` is the one read for the vocabulary,
+without prices.
+
+**"Quotation Config" is now Settings → Catalogue** (2026-09-18): space
+types, component types, categories and cost items are the business's
+vocabulary for what it builds and sells - the quotation, the Spaces tab and
+the library all read it. The old route forwards.
 
 Images are `library_entry_images` rows pointing at storage. A picture
 uploaded in the library is the library's to delete; a photo **promoted from

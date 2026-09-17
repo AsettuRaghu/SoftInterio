@@ -40,7 +40,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     patch.kind = body.kind;
   }
   for (const f of ["description", "source_url"] as const) if (f in body) patch[f] = String(body[f] ?? "").trim() || null;
-  for (const f of ["space_type_id", "style_code", "project_id", "cost_item_id", "partner_id"] as const) if (f in body) patch[f] = body[f] || null;
+  for (const f of ["space_type_id", "component_type_id", "cost_item_id", "cost_category_id", "quality_tier", "stage_key", "style_code", "project_id", "partner_id"] as const)
+    if (f in body) patch[f] = body[f] || null;
   if ("tags" in body) patch.tags = cleanTags(body.tags);
   if ("visible_to_customer" in body) patch.visible_to_customer = body.visible_to_customer !== false;
 
