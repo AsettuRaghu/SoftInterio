@@ -9,6 +9,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Headline, StatusPill, Chip, UpdatedCell } from "@/components/ui/list-cells";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Toast } from "@/components/ui/Toast";
 import {
@@ -105,6 +106,8 @@ export default function TermsLibraryPage() {
           return (item.category || "").toLowerCase();
         case "is_active":
           return item.is_active ? 1 : 0;
+        case "updated_at":
+          return item.updated_at || item.created_at || "";
         default:
           return null;
       }
@@ -119,35 +122,27 @@ export default function TermsLibraryPage() {
       {
         key: "title",
         header: "Clause",
-        width: "40%",
+        width: "44%",
         sortable: true,
-        // Title only. Clauses of the same kind open with almost identical
-        // wording, so a preview distinguished nothing while making every row
-        // taller; the wording is read in the edit modal instead.
+        // Title and category; no preview of the wording. Clauses of the
+        // same kind open with almost identical text, so a preview told a
+        // reader nothing and made every row taller.
         render: (c) => (
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-800">
-              {c.title}
-            </span>
-            {c.is_default && (
-              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                <CheckBadgeIcon className="w-3 h-3" />
-                Default
-              </span>
-            )}
-          </div>
+          <Headline
+            title={c.title}
+            chips={c.is_default ? <Chip label="Default" tone="blue" /> : undefined}
+            line1={c.category ? `${c.category}` : undefined}
+          />
         ),
       },
       {
         key: "category",
         header: "Category",
-        width: "22%",
+        width: "16%",
         sortable: true,
         render: (c) =>
           c.category ? (
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700">
-              {c.category}
-            </span>
+            <Chip label={c.category} tone="slate" />
           ) : (
             <span className="text-xs text-slate-300">—</span>
           ),
@@ -155,24 +150,23 @@ export default function TermsLibraryPage() {
       {
         key: "is_active",
         header: "Status",
-        width: "16%",
+        width: "12%",
         sortable: true,
         render: (c) => (
-          <span
-            className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
-              c.is_active
-                ? "bg-green-50 text-green-700 border border-green-200"
-                : "bg-slate-100 text-slate-500 border border-slate-200"
-            }`}
-          >
-            {c.is_active ? "Active" : "Inactive"}
-          </span>
+          <StatusPill label={c.is_active ? "Active" : "Inactive"} tone={c.is_active ? "green" : "slate"} />
         ),
       },
       {
+        key: "updated_at",
+        header: "Last Updated",
+        width: "14%",
+        sortable: true,
+        render: (c) => <UpdatedCell created_at={c.created_at} updated_at={c.updated_at} />,
+      },
+      {
         key: "actions",
-        header: "Actions",
-        width: "22%",
+        header: "",
+        width: "14%",
         align: "right",
         render: (c) => (
           <div className="flex items-center justify-end gap-1.5">

@@ -9,6 +9,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Headline, StatusPill, Chip, UpdatedCell } from "@/components/ui/list-cells";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Toast } from "@/components/ui/Toast";
 import {
@@ -108,6 +109,8 @@ export default function PrintLibraryPage() {
           return PRICE_AT_LABELS[item.price_at];
         case "is_active":
           return item.is_active ? 1 : 0;
+        case "updated_at":
+          return item.updated_at || item.created_at || "";
         default:
           return null;
       }
@@ -121,56 +124,47 @@ export default function PrintLibraryPage() {
     () => [
       {
         key: "name",
-        header: "Name",
+        header: "Format",
         width: "34%",
         sortable: true,
         render: (f) => (
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-slate-800">
-                {f.name}
-              </span>
-              {f.is_default && (
-                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                  <StarIcon className="w-3 h-3" />
-                  Default
-                </span>
-              )}
-              {f.cover_enabled && f.cover_image_path && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                  Cover
-                </span>
-              )}
-            </div>
-            {f.description && (
-              <p className="text-xs text-slate-500 mt-0.5 truncate">
-                {f.description}
-              </p>
-            )}
-          </div>
+          <Headline
+            title={f.name}
+            chips={
+              <>
+                {f.is_default && <Chip label="Default" tone="amber" />}
+                {f.cover_enabled && f.cover_image_path && <Chip label="Cover" tone="slate" />}
+              </>
+            }
+            line1={`${ITEMISE_LEVEL_LABELS[f.itemise_to]} · priced ${PRICE_AT_LABELS[f.price_at].toLowerCase()}`}
+            line2={f.description || undefined}
+          />
         ),
       },
       {
         key: "itemise_to",
-        header: "Detail",
-        width: "23%",
+        header: "Shows",
+        width: "28%",
         sortable: true,
-        render: (f) => (
-          <span className="text-xs text-slate-600">
-            {ITEMISE_LEVEL_LABELS[f.itemise_to]}
-          </span>
-        ),
-      },
-      {
-        key: "price_at",
-        header: "Pricing",
-        width: "23%",
-        sortable: true,
-        render: (f) => (
-          <span className="text-xs text-slate-600">
-            {PRICE_AT_LABELS[f.price_at]}
-          </span>
-        ),
+        // What the document carries, said as a list - the switches behind it
+        // are the format's, and a reader wants the outcome, not the flags.
+        render: (f) => {
+          const shows = [
+            f.show_descriptions && "descriptions",
+            f.show_specifications && "specifications",
+            f.show_dimensions && "dimensions",
+            f.show_quantities && "quantities",
+            f.show_company_details && "company details",
+            f.show_bank_details && "bank details",
+            f.show_payment_terms && "payment terms",
+            f.show_terms && "terms",
+          ].filter(Boolean) as string[];
+          return (
+            <p className="text-xs text-slate-600 whitespace-normal leading-snug" title={shows.join(", ")}>
+              {shows.length ? shows.join(" · ") : "figures only"}
+            </p>
+          );
+        },
       },
       {
         key: "is_active",
@@ -178,21 +172,20 @@ export default function PrintLibraryPage() {
         width: "10%",
         sortable: true,
         render: (f) => (
-          <span
-            className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
-              f.is_active
-                ? "bg-green-50 text-green-700 border border-green-200"
-                : "bg-slate-100 text-slate-500 border border-slate-200"
-            }`}
-          >
-            {f.is_active ? "Active" : "Inactive"}
-          </span>
+          <StatusPill label={f.is_active ? "Active" : "Inactive"} tone={f.is_active ? "green" : "slate"} />
         ),
       },
       {
+        key: "updated_at",
+        header: "Last Updated",
+        width: "14%",
+        sortable: true,
+        render: (f) => <UpdatedCell created_at={f.created_at} updated_at={f.updated_at} />,
+      },
+      {
         key: "actions",
-        header: "Actions",
-        width: "10%",
+        header: "",
+        width: "14%",
         align: "right",
         render: (f) => (
           <div className="flex items-center justify-end gap-1.5">

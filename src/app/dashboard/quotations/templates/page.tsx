@@ -6,6 +6,7 @@ import { Toast } from "@/components/ui/Toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TEMPLATE_LEVELS } from "@/types/quotations";
+import { Headline, StatusPill, Chip, UpdatedCell } from "@/components/ui/list-cells";
 import {
   PageLayout,
   PageHeader,
@@ -44,6 +45,8 @@ interface QuotationTemplate {
   description: string;
   usage_count: number;
   status: TemplateStatus;
+  is_active?: boolean;
+  is_featured?: boolean;
   spaces_count: number;
   components_count: number;
   created_at: string;
@@ -147,6 +150,8 @@ export default function QuotationTemplatesPage() {
           return item.spaces_count || 0;
         case "components_count":
           return item.components_count || 0;
+        case "is_active":
+          return item.is_active === false ? 0 : 1;
         case "usage_count":
           return item.usage_count || 0;
         case "updated_at":
@@ -320,102 +325,111 @@ export default function QuotationTemplatesPage() {
     });
   };
 
-  // Define table columns
+  // The same shape as every other list: the name in bold, what it is on the
+  // line beneath, its status as a pill, and when it was last touched drawn
+  // by the shared activity cell.
   const columns: ColumnDef<QuotationTemplate>[] = [
     {
       key: "name",
-      header: "Template Name",
-      width: "25%",
+      header: "Template",
+      width: "30%",
       sortable: true,
       render: (template) => {
-        // The level is shown beside the name rather than as a column of its
-        // own: it changes what the row *is*, and a reader needs it before the
-        // property type or tier make any sense.
+        // The level changes what the row IS - a whole quotation, one space,
+        // one component - so it sits beside the name, not in a column.
         const level = (template as { level?: string }).level || "quotation";
-        const levelLabel =
-          TEMPLATE_LEVELS.find((l) => l.key === level)?.label || level;
+        const levelLabel = TEMPLATE_LEVELS.find((l) => l.key === level)?.label || level;
+        const line1 = [
+          template.property_type
+            ? PROPERTY_TYPE_LABELS[template.property_type] || template.property_type
+            : null,
+          template.quality_tier
+            ? `${QUALITY_TIER_LABELS[template.quality_tier] || template.quality_tier} tier`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
         return (
-          <div>
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-medium text-slate-900">
-                {template.name}
-              </p>
-              {level !== "quotation" && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200">
-                  {levelLabel}
-                </span>
-              )}
-            </div>
-            {template.description && (
-              <p className="text-xs text-slate-500 truncate max-w-[200px]">
-                {template.description}
-              </p>
-            )}
-          </div>
+          <Headline
+            title={template.name}
+            chips={
+              <>
+                {level !== "quotation" && <Chip label={levelLabel} tone="violet" />}
+                {template.is_featured && <Chip label="Featured" tone="amber" />}
+              </>
+            }
+            line1={line1 || undefined}
+            line2={template.description || undefined}
+          />
         );
       },
     },
     {
-      key: "property_type",
-      header: "Property Type",
-      width: "15%",
+      key: "spaces_count",
+      header: "Contents",
+      width: "16%",
       sortable: true,
-      // Only a whole-quotation template has a property type; the narrower
-      // levels are one component or one bundle and carry none.
       render: (template) => (
-        <p className="text-sm text-slate-700">
-          {template.property_type
-            ? PROPERTY_TYPE_LABELS[template.property_type] ||
-              template.property_type
-            : "—"}
-        </p>
+        <div className="min-w-0">
+          <p className="text-sm text-slate-700">
+            <span className="font-medium tabular-nums">{template.spaces_count || 0}</span>
+            <span className="text-slate-500"> spaces · </span>
+            <span className="font-medium tabular-nums">{template.components_count || 0}</span>
+            <span className="text-slate-500"> components</span>
+          </p>
+          {template.base_price ? (
+            <p className="text-xs text-slate-400">
+              from ₹{new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(template.base_price)}
+            </p>
+          ) : null}
+        </div>
       ),
     },
     {
       key: "quality_tier",
       header: "Tier",
-      width: "12%",
+      width: "11%",
       sortable: true,
-      render: (template) => (
-        <span
-          className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full ${
-            QUALITY_TIER_COLORS[template.quality_tier] ||
-            "bg-slate-100 text-slate-700"
-          }`}
-        >
-          {QUALITY_TIER_LABELS[template.quality_tier] || template.quality_tier}
-        </span>
-      ),
-    },
-    {
-      key: "spaces_count",
-      header: "Spaces",
-      width: "10%",
-      sortable: true,
-      render: (template) => (
-        <p className="text-sm text-slate-700">{template.spaces_count || 0}</p>
-      ),
-    },
-    {
-      key: "components_count",
-      header: "Components",
-      width: "10%",
-      sortable: true,
-      render: (template) => (
-        <p className="text-sm text-slate-700">
-          {template.components_count || 0}
-        </p>
-      ),
+      render: (template) =>
+        template.quality_tier ? (
+          <span
+            className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full ${
+              QUALITY_TIER_COLORS[template.quality_tier] || "bg-slate-100 text-slate-700"
+            }`}
+          >
+            {QUALITY_TIER_LABELS[template.quality_tier] || template.quality_tier}
+          </span>
+        ) : (
+          <span className="text-xs text-slate-300">—</span>
+        ),
     },
     {
       key: "usage_count",
-      header: "Uses",
-      width: "8%",
+      header: "Used",
+      width: "10%",
+      sortable: true,
+      render: (template) => {
+        const n = template.usage_count || 0;
+        return (
+          <div className="min-w-0">
+            <p className={`text-sm tabular-nums ${n > 0 ? "font-medium text-slate-800" : "text-slate-400"}`}>
+              {n} {n === 1 ? "time" : "times"}
+            </p>
+            {n === 0 && <p className="text-xs text-slate-400">never applied</p>}
+          </div>
+        );
+      },
+    },
+    {
+      key: "is_active",
+      header: "Status",
+      width: "11%",
       sortable: true,
       render: (template) => (
-        <p className="text-sm font-medium text-blue-600">
-          {template.usage_count || 0}
-        </p>
+        <StatusPill
+          label={template.is_active === false ? "Inactive" : "Active"}
+          tone={template.is_active === false ? "slate" : "green"}
+        />
       ),
     },
     {
@@ -424,9 +438,7 @@ export default function QuotationTemplatesPage() {
       width: "12%",
       sortable: true,
       render: (template) => (
-        <p className="text-sm text-slate-700">
-          {formatDate(template.updated_at)}
-        </p>
+        <UpdatedCell created_at={template.created_at} updated_at={template.updated_at} />
       ),
     },
     {
