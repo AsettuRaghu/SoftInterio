@@ -277,8 +277,11 @@ export function AssigneeSelector({
 
     return (
       <div className="flex items-center gap-1.5">
-        <UserAvatar member={selectedMember} size="sm" showTooltip />
-        <span className="text-xs text-slate-700 truncate max-w-20">
+        {/* The name is printed beside the avatar; a hover tooltip repeating
+            it on every finished row read as something popping up for no
+            reason. */}
+        <UserAvatar member={selectedMember} size="sm" />
+        <span className="text-xs text-slate-700 truncate max-w-20" title={selectedMember.full_name || selectedMember.email}>
           {selectedMember.full_name || selectedMember.email}
         </span>
       </div>
