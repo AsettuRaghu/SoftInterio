@@ -1050,6 +1050,30 @@ so.
 isolated playbook: blocked at two open steps, blocked at one, allowed at none,
 accepted, and stamped with a start and an end.
 
+### A plan action paints twice: the row, then the page - never in between
+
+After Start / Pause / Complete / a dropdown change / a date or assignee edit
+on a plan row (2026-09-17):
+
+1. **The row takes the server's answer at once.** The transition and PATCH
+   routes return the task from `tasks_with_timing`, with the dates the
+   scheduler moved and the stamps the transition wrote; the table merges it
+   into the row and **pins** every settled field (`PINNED_AFTER_TRANSITION`:
+   status, dates, stamps, hold, hours) in `recentLocal`, so no sync read a
+   moment earlier can move them back.
+2. **The page re-reads everything in one batch.** `refreshPlan` awaits the
+   project, the playbook, the task list and the plan gates together and sets
+   all of them in one tick, which React renders once. It used to be three
+   functions setting state as each answer arrived: the acted-on row was
+   rebuilt from fresh stages and a stale task list for a beat (its dates and
+   early/late chips flashed back, then forward), and the gates arrived a beat
+   after the rows so the buttons changed twice. Gates are now page state
+   passed to `PlanTab`; the Tasks tab refreshes through the same batch.
+
+The timer buttons do not dim during the round trip - a second click is
+ignored while one is in flight - because the row already shows the target
+state and a 700 ms dim on every click read as a blink.
+
 ### The Plan tab only offers what the server will accept
 
 `project_plan_gates(project_id)` answers, for every task in the active run,
