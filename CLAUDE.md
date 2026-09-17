@@ -1747,6 +1747,29 @@ A batch insert through PostgREST sends an explicit NULL for a column any row
 in the batch names — the `step_key` trap again, met here on `scope_owner`.
 Name a defaulted column on every row of a batch or on none.
 
+### The Delays panel reads the holds; it never guesses
+
+`GET /api/projects/[id]/delays` (2026-09-17) is the first slice of the
+Milestone-2 delay summary. It pairs every `task_status_history` row that put a
+plan step on hold (with `hold_owner`) with the next status change of that
+task, and counts **calendar days between the two dates** - today while open.
+Totals per owner come twice: `totals` (so far) and `expected_totals` (open
+holds run to their `hold_expected_until`), because on the day a hold is
+recorded "7 days on the client" is the expected figure, not yet the elapsed
+one. Beside them, the agreed end (latest baseline) against the current
+`expected_end_date`.
+
+**A step that ran long with no hold is not in the list.** That is the
+deliberate reading: a delay nobody pressed Pause for has no owner, and the
+panel says so ("no hold recorded - the plan moved without anyone being
+named") rather than inferring one. The row's one-click Pause records owner
+and reason but not "until"; a held task therefore offers **"Set until
+when…"** beside its hold line (task page and edit modal), which opens the
+same dialog filled from the hold in effect - `PATCH /api/tasks/[id]` writes
+the change to the task and to the running history row, and the scheduler
+re-lays the plan around the date. Until that existed the details dialog was
+unreachable.
+
 ### Scope rows say who does them
 
 `property_scope_items.scope_owner` — `us` (default), `client`, `vendor`
