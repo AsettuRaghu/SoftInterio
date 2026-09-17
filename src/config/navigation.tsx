@@ -254,11 +254,6 @@ export const navigationConfig: NavigationItem[] = [
         href: "/dashboard/quotations/terms-library",
         permission: "quotations.view",
       },
-      {
-        name: "Quotation Config",
-        href: "/dashboard/quotations/config",
-        permission: "quotations.view",
-      },
     ],
   },
   {
@@ -404,6 +399,14 @@ export const navigationConfig: NavigationItem[] = [
         name: "Playbooks",
         href: "/dashboard/settings/playbooks",
         permission: "tasks.templates.view",
+      },
+      {
+        // What the business builds and sells - spaces, components,
+        // categories, cost items. Was "Quotation Config" under Quotations;
+        // it is read by quotations, the Spaces tab and the Design Library.
+        name: "Catalogue",
+        href: "/dashboard/settings/catalogue",
+        permission: "quotations.view",
       },
       {
         // The short list a hold picks "why" from, grouped by who owns the
