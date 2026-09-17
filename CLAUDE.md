@@ -2338,6 +2338,24 @@ both of its tables.
 caller and returns null for every colleague, so the column would have read
 "Unassigned" on any project managed by someone else.
 
+### Functions run next to the database, and a session is verified locally
+
+The Supabase project is in Mumbai (`ap-south-1`); Vercel's default function
+region is Washington (`iad1`). `vercel.json` pins functions to `bom1`,
+because every one of the several round trips a request makes was crossing
+two oceans (2026-09-17: "every request through the Vercel site is slow").
+
+`lib/auth/verify-session.ts` `getVerifiedUser()` is what the API guard and
+the middleware call instead of `supabase.auth.getUser()`, which was a trip
+to the Auth server on every API call and every navigation before a single
+row was read. It verifies the token against the project's JWKS, cached per
+server instance for ten minutes. **It is only faster once the project has
+migrated to asymmetric JWT signing keys** (Supabase → Project Settings → JWT
+Keys); with the legacy shared secret the key set is empty and supabase-js
+falls back to the Auth server, so the change is safe either way. The other
+eighteen `getUser()` calls (client hooks, settings pages, a few routes) are
+not on the hot path and were left alone.
+
 ## Traps that have already cost time
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it
