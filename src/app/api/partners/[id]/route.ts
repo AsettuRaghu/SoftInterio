@@ -42,7 +42,7 @@ async function load(supabase: Awaited<ReturnType<typeof createClient>>, id: stri
 }
 
 export async function GET(request: NextRequest, { params }: Params) {
-  const guard = await protectApiRoute(request, { requiredPermissions: ["clients.view"] });
+  const guard = await protectApiRoute(request, { requiredPermissions: ["partners.view"] });
   if (!guard.success) return createErrorResponse(guard.error!, guard.statusCode!);
   const { id } = await params;
   const supabase = await createClient();
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
-  const guard = await protectApiRoute(request, { requiredPermissions: ["clients.edit"] });
+  const guard = await protectApiRoute(request, { requiredPermissions: ["partners.edit"] });
   if (!guard.success) return createErrorResponse(guard.error!, guard.statusCode!);
   const { id } = await params;
   const supabase = await createClient();
@@ -120,7 +120,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(request: NextRequest, { params }: Params) {
-  const guard = await protectApiRoute(request, { requiredPermissions: ["clients.delete"] });
+  const guard = await protectApiRoute(request, { requiredPermissions: ["partners.delete"] });
   if (!guard.success) return createErrorResponse(guard.error!, guard.statusCode!);
   const { id } = await params;
   const supabase = await createClient();

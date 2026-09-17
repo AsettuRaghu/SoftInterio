@@ -14,7 +14,12 @@ import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { identifiersOf } from "@/lib/partners/identity";
 
 export async function GET(request: NextRequest) {
-  const guard = await protectApiRoute(request, { requiredPermissions: ["clients.view"] });
+  // Asked by the new-lead form and the standalone-quotation dialog as much
+  // as by Partners itself, so anyone who may create either may ask.
+  const guard = await protectApiRoute(request, {
+    requiredPermissions: ["partners.view", "leads.create", "quotations.create"],
+    requireAllPermissions: false,
+  });
   if (!guard.success) return createErrorResponse(guard.error!, guard.statusCode!);
   const params = request.nextUrl.searchParams;
   const ids = identifiersOf({ phone: params.get("phone"), email: params.get("email") });

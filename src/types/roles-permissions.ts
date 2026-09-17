@@ -11,7 +11,7 @@
  * flat: a person can do what their granted permissions say, and nothing is
  * inherited. roles.hierarchy_level still exists in the schema and is not used.
  *
- * Generated from 254 permissions and 21 system roles.
+ * Generated from 258 permissions and 21 system roles.
  */
 
 // =====================================================
@@ -29,6 +29,7 @@ export type PermissionModule =
   | 'leads'
   | 'library'
   | 'ownership'
+  | 'partners'
   | 'procurement'
   | 'projects'
   | 'quotations'
@@ -153,6 +154,10 @@ export type PermissionKey =
   | 'mr.edit'
   | 'mr.view'
   | 'ownership.transfer'
+  | 'partners.create'
+  | 'partners.delete'
+  | 'partners.edit'
+  | 'partners.view'
   | 'po.approve'
   | 'po.create'
   | 'po.delete'
@@ -419,6 +424,10 @@ export const PERMISSION_CATALOGUE: readonly PermissionDefinition[] = [
   { key: 'mr.edit', module: 'stock', description: 'Edit material requirements' },
   { key: 'mr.view', module: 'stock', description: 'View material requirements' },
   { key: 'ownership.transfer', module: 'ownership', description: 'Transfer company ownership' },
+  { key: 'partners.create', module: 'partners', description: 'Add a partner' },
+  { key: 'partners.delete', module: 'partners', description: 'Delete a partner with no records against it' },
+  { key: 'partners.edit', module: 'partners', description: 'Edit a partner and its contacts' },
+  { key: 'partners.view', module: 'partners', description: 'See the partners this business works with' },
   { key: 'po.approve', module: 'stock', description: 'Approve purchase orders' },
   { key: 'po.create', module: 'stock', description: 'Create purchase orders' },
   { key: 'po.delete', module: 'stock', description: 'Delete purchase orders' },

@@ -19,7 +19,7 @@ import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { normalisePhone } from "@/lib/partners/identity";
 
 export async function GET(request: NextRequest) {
-  const guard = await protectApiRoute(request, { requiredPermissions: ["clients.view"] });
+  const guard = await protectApiRoute(request, { requiredPermissions: ["partners.view"] });
   if (!guard.success) return createErrorResponse(guard.error!, guard.statusCode!);
   const supabase = await createClient();
   const params = request.nextUrl.searchParams;
@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const guard = await protectApiRoute(request, { requiredPermissions: ["clients.create"] });
+  const guard = await protectApiRoute(request, { requiredPermissions: ["partners.create"] });
   if (!guard.success) return createErrorResponse(guard.error!, guard.statusCode!);
   const { user } = guard;
   const supabase = await createClient();

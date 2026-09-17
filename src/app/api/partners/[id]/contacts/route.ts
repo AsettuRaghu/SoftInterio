@@ -13,7 +13,7 @@ import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { normalisePhone } from "@/lib/partners/identity";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await protectApiRoute(request, { requiredPermissions: ["clients.edit"] });
+  const guard = await protectApiRoute(request, { requiredPermissions: ["partners.edit"] });
   if (!guard.success) return createErrorResponse(guard.error!, guard.statusCode!);
   const { id } = await params;
   const supabase = await createClient();

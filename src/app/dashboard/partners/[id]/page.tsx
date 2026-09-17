@@ -83,7 +83,7 @@ function PartnerDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { hasPermission } = useUserPermissions();
-  const canEdit = hasPermission("clients.edit");
+  const canEdit = hasPermission("partners.edit");
   const { confirm, confirmDialog } = useConfirm();
 
   const [partner, setPartner] = useState<Partner | null>(null);

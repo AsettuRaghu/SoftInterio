@@ -512,8 +512,14 @@ source of truth for the party's identity; the ecosystem (portal, ratings,
 add-on services) hangs off the platform side later. Do not put anything the
 party owns onto `partners`.
 
-Gated on the existing `clients.*` keys; menu **Partners** with one entry per
-*enabled* type (`lib/partners/enabled-types.ts` - customer and architect
+Gated on **`partners.view/create/edit/delete`** (`20260917120000`) - held by
+Owner and Admin only, by decision; eight roles hold the old `clients.*`
+keys and would otherwise have seen the whole relationship book. A business
+grants it further per user or on its own role copy. The one exception is
+`GET /api/partners/match` ("do we know this person?"), which anyone with
+`leads.create` or `quotations.create` may ask, because the new-lead form and
+the standalone-quotation dialog depend on it. Menu **Partners** with one
+entry per *enabled* type (`lib/partners/enabled-types.ts` - customer and architect
 today; the rest wait for their integrations) at
 `/dashboard/partners/t/<code>`. The old `/dashboard/clients` page, the
 `/api/clients` routes and `ClientSelector` were retired with it. A partner

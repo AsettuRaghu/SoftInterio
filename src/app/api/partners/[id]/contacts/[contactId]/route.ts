@@ -11,7 +11,7 @@ import { normalisePhone } from "@/lib/partners/identity";
 type Params = { params: Promise<{ id: string; contactId: string }> };
 
 export async function PATCH(request: NextRequest, { params }: Params) {
-  const guard = await protectApiRoute(request, { requiredPermissions: ["clients.edit"] });
+  const guard = await protectApiRoute(request, { requiredPermissions: ["partners.edit"] });
   if (!guard.success) return createErrorResponse(guard.error!, guard.statusCode!);
   const { id, contactId } = await params;
   const supabase = await createClient();
@@ -42,7 +42,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(request: NextRequest, { params }: Params) {
-  const guard = await protectApiRoute(request, { requiredPermissions: ["clients.edit"] });
+  const guard = await protectApiRoute(request, { requiredPermissions: ["partners.edit"] });
   if (!guard.success) return createErrorResponse(guard.error!, guard.statusCode!);
   const { id, contactId } = await params;
   const supabase = await createClient();

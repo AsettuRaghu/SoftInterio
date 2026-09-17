@@ -330,12 +330,12 @@ export const routePermissions: RoutePermission[] = [
   // ============================================
   {
     pattern: "/dashboard/partners/*",
-    permissions: ["clients.view"],
+    permissions: ["partners.view"],
     description: "Partner detail and typed lists",
   },
   {
     pattern: "/dashboard/partners",
-    permissions: ["clients.view"],
+    permissions: ["partners.view"],
     description: "Partners",
   },
 ];

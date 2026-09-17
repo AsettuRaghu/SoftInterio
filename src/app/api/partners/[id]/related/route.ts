@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await protectApiRoute(request, { requiredPermissions: ["clients.view"] });
+  const guard = await protectApiRoute(request, { requiredPermissions: ["partners.view"] });
   if (!guard.success) return createErrorResponse(guard.error!, guard.statusCode!);
   const { id } = await params;
   const supabase = await createClient();

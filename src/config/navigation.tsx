@@ -353,10 +353,10 @@ export const navigationConfig: NavigationItem[] = [
     name: "Partners",
     href: "/dashboard/partners/t/customer",
     icon: Icons.partners,
-    permission: "clients.view",
+    permission: "partners.view",
     subItems: [
-      { name: "Customers", href: "/dashboard/partners/t/customer", permission: "clients.view" },
-      { name: "Architects", href: "/dashboard/partners/t/architect", permission: "clients.view" },
+      { name: "Customers", href: "/dashboard/partners/t/customer", permission: "partners.view" },
+      { name: "Architects", href: "/dashboard/partners/t/architect", permission: "partners.view" },
     ],
   },
   {

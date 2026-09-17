@@ -213,7 +213,7 @@ export function PartnersList({ type = "" }: { type?: string }) {
         icon={<UserGroupIcon className="w-5 h-5 text-white" />}
         iconBgClass="from-blue-500 to-blue-600"
         actions={
-          hasPermission("clients.create") ? (
+          hasPermission("partners.create") ? (
             <button
               type="button"
               onClick={() => setAdding(true)}
