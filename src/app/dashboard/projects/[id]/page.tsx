@@ -48,6 +48,7 @@ import { usePrompt } from "@/components/ui/PromptDialog";
 import { PlaybooksPanel } from "@/components/playbooks";
 import { KickoffChecklist } from "@/components/projects/KickoffChecklist";
 import { WaitingOnPanel } from "@/components/projects/WaitingOnPanel";
+import { DelayLogPanel } from "@/components/projects/DelayLogPanel";
 import { ProjectStatusAction } from "@/components/projects/ProjectStatusAction";
 import { defaultTaskOrder } from "@/lib/tasks/order";
 import { EditTaskModal } from "@/components/tasks";
@@ -851,6 +852,12 @@ export default function ProjectDetailPage({ params }: PageProps) {
                   onChanged={() => void fetchCounts()}
                   onError={(message) => setNotice({ message, variant: "error" })}
                 />
+              )}
+
+              {/* What the waiting has cost so far: every hold, whose it was,
+                  the days - against the agreed end. */}
+              {playbook && !awaitingKickoff && (
+                <DelayLogPanel projectId={project.id} refreshKey={planVersion} />
               )}
 
               {/* A plan IS the tasks table, scoped to the run. */}
