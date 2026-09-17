@@ -378,6 +378,10 @@ export function TaskStatusControls({
   };
 
   const handleAction = (action: ActionConfig) => {
+    // One transition at a time. Guarded here rather than by disabling the
+    // buttons: the row already shows the target state, and dimming both
+    // buttons for the round trip read as a blink on every click.
+    if (isSaving) return;
     // In a table row a plan step pauses the moment you press it - the same
     // feel as the tasks page - and asks who we are waiting on AFTERWARDS,
     // only when the playbook has not already said. A client or vendor step
@@ -656,7 +660,7 @@ export function TaskStatusControls({
               <Tooltip label={startBlocked ? startBlockedReason! : primaryLabel}>
                 <button
                   type="button"
-                  disabled={isSaving || disabled || startBlocked}
+                  disabled={disabled || startBlocked}
                   aria-label={primaryLabel}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -670,7 +674,7 @@ export function TaskStatusControls({
               <Tooltip label={completeGate ? `Cannot complete yet - ${completeGate}` : "Complete"}>
                 <button
                   type="button"
-                  disabled={isSaving || disabled || !!completeGate}
+                  disabled={disabled || !!completeGate}
                   aria-label="Complete"
                   onClick={(e) => {
                     e.stopPropagation();
