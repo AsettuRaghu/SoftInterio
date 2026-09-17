@@ -331,7 +331,7 @@ export const navigationConfig: NavigationItem[] = [
     permission: "documents.view",
   },
   {
-    name: "Library",
+    name: "Design Library",
     href: "/dashboard/library",
     icon: Icons.library,
     permission: "library.view",

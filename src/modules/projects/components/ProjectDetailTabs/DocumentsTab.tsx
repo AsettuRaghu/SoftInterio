@@ -12,6 +12,7 @@ interface DocumentsTabProps {
   onAddDocumentClick?: () => void;
   onRefresh?: () => void;
   onCountChange?: (count: number) => void;
+  onAddToLibrary?: (doc: Document) => void;
 }
 
 export default function DocumentsTab({
@@ -23,6 +24,7 @@ export default function DocumentsTab({
   onAddDocumentClick,
   onRefresh,
   onCountChange,
+  onAddToLibrary,
 }: DocumentsTabProps) {
   return (
     <DocumentTableReusable
@@ -41,6 +43,7 @@ export default function DocumentsTab({
       externalDocuments={documents}
       onRefresh={onRefresh}
       onCountChange={onCountChange}
+      onAddToLibrary={onAddToLibrary}
     />
   );
 }

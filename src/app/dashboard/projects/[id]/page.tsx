@@ -1003,6 +1003,21 @@ export default function ProjectDetailPage({ params }: PageProps) {
               projectClosed={project.status === "completed"}
               onCountChange={(count) => setDocumentsCount(count)}
               onRefresh={fetchCounts}
+              // A site photo becomes "our work" in the Design Library - a
+              // reference to this file, remembering this project.
+              onAddToLibrary={async (doc) => {
+                const res = await fetch("/api/library/promote", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ document_id: doc.id }),
+                });
+                const json = await res.json().catch(() => ({}));
+                setNotice(
+                  res.ok
+                    ? { message: `Added to the Design Library as "${json.data?.title ?? doc.original_name}". Open the Library to tag it.`, variant: "success" }
+                    : { message: json.error || "Could not add to the library", variant: "error" }
+                );
+              }}
             />
           ) : null}
 

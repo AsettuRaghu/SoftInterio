@@ -1,473 +1,557 @@
 "use client";
 
-import React, { useState } from "react";
+/**
+ * The Design Library: what this business makes, sells and admires, as
+ * pictures - organised so a designer finds it sitting with a customer.
+ *
+ * Full-viewport, like Calendar and Documents: a facet rail on the left
+ * (kind, space, style, tags, collections - counts on everything, each a
+ * filter), an image grid that scrolls on its own, and a lightbox for one
+ * entry with its details and actions. "Customer view" hides everything a
+ * customer should not see: internal-only entries, notes, the edit tools -
+ * it is the mode to switch on before turning the screen around.
+ */
 
-interface LibraryItem {
-  id: number;
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { Toast } from "@/components/ui/Toast";
+import { Chip } from "@/components/ui/list-cells";
+import { tagColour } from "@/components/ui/TagInput";
+import { fetchConfigOnce } from "@/lib/quotations/config-cache";
+import { useUserPermissions } from "@/hooks/useUserPermissions";
+import { cn } from "@/utils/cn";
+import {
+  MagnifyingGlassIcon,
+  PlusIcon,
+  XMarkIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  PencilSquareIcon,
+  TrashIcon,
+  BookmarkIcon,
+  ArrowTopRightOnSquareIcon,
+  SwatchIcon,
+} from "@heroicons/react/24/outline";
+import { LIBRARY_KIND_LABELS, type LibraryEntryShape, type LibraryKind } from "@/lib/library/shape";
+import { LibraryEntryModal, type SpaceTypeOption, type StyleOption } from "@/components/library/LibraryEntryModal";
+
+interface Collection {
+  id: string;
   name: string;
-  category: "Furniture" | "Lighting" | "Flooring" | "Wall Finishes" | "Fabrics" | "Decor" | "Fixtures" | "Hardware";
-  brand?: string;
-  supplier?: string;
-  price?: string;
-  image?: string;
-  colors?: string[];
-  dimensions?: string;
-  material?: string;
-  style: "Modern" | "Contemporary" | "Traditional" | "Minimalist" | "Industrial" | "Scandinavian" | "Luxury";
-  savedBy: string;
-  savedAt: string;
-  projects?: string[];
+  description: string | null;
+  lead: { id: string; lead_number: string; client_name: string | null } | null;
+  entry_ids: string[];
 }
 
+const KIND_TONE: Record<LibraryKind, string> = {
+  our_work: "bg-emerald-600",
+  product: "bg-blue-600",
+  inspiration: "bg-violet-600",
+};
+
 export default function LibraryPage() {
-  const [viewType, setViewType] = useState<"grid" | "list">("grid");
-  const [filterCategory, setFilterCategory] = useState("All");
-  const [filterStyle, setFilterStyle] = useState("All");
+  const { hasPermission } = useUserPermissions();
+  const canEdit = hasPermission("library.edit");
+  const canCreate = hasPermission("library.create");
+  const canDelete = hasPermission("library.delete");
+  const { confirm, confirmDialog } = useConfirm();
 
-  const libraryItems: LibraryItem[] = [
-    {
-      id: 1,
-      name: "Eames Lounge Chair",
-      category: "Furniture",
-      brand: "Herman Miller",
-      supplier: "Design Within Reach",
-      price: "$5,495",
-      colors: ["#2C2C2C", "#8B4513", "#F5DEB3"],
-      dimensions: "33\"W x 33\"D x 33\"H",
-      material: "Leather, Molded Plywood",
-      style: "Modern",
-      savedBy: "Sarah Williams",
-      savedAt: "2025-01-25",
-      projects: ["Executive Penthouse", "Modern Villa"],
-    },
-    {
-      id: 2,
-      name: "Sputnik Chandelier",
-      category: "Lighting",
-      brand: "Jonathan Adler",
-      supplier: "Lumens",
-      price: "$1,895",
-      colors: ["#FFD700", "#C0C0C0"],
-      dimensions: "30\"W x 30\"H",
-      material: "Brass, Glass",
-      style: "Contemporary",
-      savedBy: "Emily Chen",
-      savedAt: "2025-01-24",
-      projects: ["Art Gallery Space"],
-    },
-    {
-      id: 3,
-      name: "Calacatta Gold Marble",
-      category: "Flooring",
-      brand: "ABC Stone",
-      supplier: "Luxury Stone Imports",
-      price: "$85/sq ft",
-      colors: ["#FFFFFF", "#D4AF37"],
-      material: "Natural Marble",
-      style: "Luxury",
-      savedBy: "David Park",
-      savedAt: "2025-01-23",
-      projects: ["Wellness Spa Center", "Executive Penthouse"],
-    },
-    {
-      id: 4,
-      name: "Venetian Plaster - Pearl",
-      category: "Wall Finishes",
-      brand: "Venetian Plaster Art",
-      supplier: "Specialty Coatings Inc",
-      price: "$12/sq ft",
-      colors: ["#F8F8FF", "#E8E4C9"],
-      material: "Lime-based Plaster",
-      style: "Traditional",
-      savedBy: "Sarah Williams",
-      savedAt: "2025-01-22",
-      projects: ["Modern Villa Renovation"],
-    },
-    {
-      id: 5,
-      name: "Velvet Performance Fabric",
-      category: "Fabrics",
-      brand: "Kravet",
-      supplier: "Designer Fabrics Direct",
-      price: "$125/yard",
-      colors: ["#1E3A5F", "#8B0000", "#2E8B57", "#4B0082"],
-      material: "Performance Velvet",
-      style: "Luxury",
-      savedBy: "Jessica Lee",
-      savedAt: "2025-01-21",
-      projects: ["Downtown Bistro Redesign"],
-    },
-    {
-      id: 6,
-      name: "Ceramic Sculptural Vase Set",
-      category: "Decor",
-      brand: "West Elm",
-      supplier: "West Elm Pro",
-      price: "$350",
-      colors: ["#F5F5DC", "#D2691E"],
-      dimensions: "Various sizes",
-      material: "Handmade Ceramic",
-      style: "Contemporary",
-      savedBy: "Emily Chen",
-      savedAt: "2025-01-20",
-      projects: ["Medical Clinic Interior"],
-    },
-    {
-      id: 7,
-      name: "Rainfall Shower System",
-      category: "Fixtures",
-      brand: "Kohler",
-      supplier: "Ferguson",
-      price: "$2,450",
-      colors: ["#C0C0C0", "#1C1C1C", "#B87333"],
-      dimensions: "12\" head",
-      material: "Brushed Nickel",
-      style: "Modern",
-      savedBy: "David Park",
-      savedAt: "2025-01-19",
-      projects: ["Wellness Spa Center"],
-    },
-    {
-      id: 8,
-      name: "Leather Pull Handles",
-      category: "Hardware",
-      brand: "Turnstyle Designs",
-      supplier: "Hardware Renaissance",
-      price: "$85 each",
-      colors: ["#8B4513", "#000000", "#C4A484"],
-      dimensions: "6\" length",
-      material: "Brass & Leather",
-      style: "Scandinavian",
-      savedBy: "Sarah Williams",
-      savedAt: "2025-01-18",
-      projects: ["Modern Villa Renovation"],
-    },
-    {
-      id: 9,
-      name: "Noguchi Coffee Table",
-      category: "Furniture",
-      brand: "Herman Miller",
-      supplier: "Design Within Reach",
-      price: "$2,195",
-      colors: ["#8B4513", "#2C2C2C"],
-      dimensions: "50\"W x 36\"D x 15.75\"H",
-      material: "Walnut, Glass",
-      style: "Modern",
-      savedBy: "Michael Roberts",
-      savedAt: "2025-01-17",
-      projects: ["Executive Penthouse"],
-    },
-    {
-      id: 10,
-      name: "Herringbone Oak Flooring",
-      category: "Flooring",
-      brand: "Havwoods",
-      supplier: "Elite Hardwoods",
-      price: "$28/sq ft",
-      colors: ["#DEB887", "#A0522D"],
-      material: "Engineered Oak",
-      style: "Traditional",
-      savedBy: "David Park",
-      savedAt: "2025-01-16",
-      projects: ["Modern Villa Renovation", "Art Gallery Space"],
-    },
-    {
-      id: 11,
-      name: "Arc Floor Lamp",
-      category: "Lighting",
-      brand: "FLOS",
-      supplier: "Lumens",
-      price: "$2,795",
-      colors: ["#C0C0C0", "#1C1C1C"],
-      dimensions: "82\"H",
-      material: "Marble Base, Steel",
-      style: "Minimalist",
-      savedBy: "Emily Chen",
-      savedAt: "2025-01-15",
-      projects: ["Executive Penthouse"],
-    },
-    {
-      id: 12,
-      name: "Industrial Pendant Light",
-      category: "Lighting",
-      brand: "Restoration Hardware",
-      supplier: "RH Trade",
-      price: "$695",
-      colors: ["#4A4A4A", "#B87333"],
-      dimensions: "18\" diameter",
-      material: "Iron, Brass",
-      style: "Industrial",
-      savedBy: "Michael Roberts",
-      savedAt: "2025-01-14",
-      projects: ["Downtown Bistro Redesign"],
-    },
-  ];
+  const [entries, setEntries] = useState<LibraryEntryShape[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [spaceTypes, setSpaceTypes] = useState<SpaceTypeOption[]>([]);
+  const [styles, setStyles] = useState<StyleOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<{ message: string; variant: "success" | "error" } | null>(null);
 
-  const filteredItems = libraryItems.filter(item => 
-    (filterCategory === "All" || item.category === filterCategory) &&
-    (filterStyle === "All" || item.style === filterStyle)
-  );
+  const [query, setQuery] = useState("");
+  const [kind, setKind] = useState<LibraryKind | "all">("all");
+  const [space, setSpace] = useState("all");
+  const [style, setStyle] = useState("all");
+  const [tag, setTag] = useState<string | null>(null);
+  const [collectionId, setCollectionId] = useState<string | null>(null);
+  const [customerView, setCustomerView] = useState(false);
 
-  const categoryColors: Record<string, string> = {
-    "Furniture": "bg-amber-100 text-amber-700",
-    "Lighting": "bg-yellow-100 text-yellow-700",
-    "Flooring": "bg-stone-100 text-stone-700",
-    "Wall Finishes": "bg-purple-100 text-purple-700",
-    "Fabrics": "bg-pink-100 text-pink-700",
-    "Decor": "bg-teal-100 text-teal-700",
-    "Fixtures": "bg-blue-100 text-blue-700",
-    "Hardware": "bg-slate-100 text-slate-700",
+  const [open, setOpen] = useState<LibraryEntryShape | null>(null);
+  const [imageIndex, setImageIndex] = useState(0);
+  const [editing, setEditing] = useState<LibraryEntryShape | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [newCollection, setNewCollection] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [e, c, s, st] = await Promise.all([
+        fetch("/api/library/entries"),
+        fetch("/api/library/collections"),
+        fetchConfigOnce<{ data?: SpaceTypeOption[] }>("/api/quotations/config/space-types").catch(() => null),
+        fetch("/api/library/styles"),
+      ]);
+      const ej = await e.json().catch(() => ({}));
+      const cj = await c.json().catch(() => ({}));
+      const sj = await st.json().catch(() => ({}));
+      if (e.ok) setEntries(ej.data ?? []);
+      else setNotice({ message: ej.error || "Could not load the library", variant: "error" });
+      if (c.ok) setCollections(cj.data ?? []);
+      if (st.ok) setStyles(sj.data ?? []);
+      setSpaceTypes(s?.data ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const styleLabel = useMemo(() => new Map(styles.map((s) => [s.code, s.label])), [styles]);
+
+  const tagCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const e of entries) for (const t of e.tags) m.set(t, (m.get(t) ?? 0) + 1);
+    return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [entries]);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const inCollection = collectionId ? new Set(collections.find((c) => c.id === collectionId)?.entry_ids ?? []) : null;
+    return entries.filter(
+      (e) =>
+        (!customerView || e.visible_to_customer) &&
+        (kind === "all" || e.kind === kind) &&
+        (space === "all" || e.space_type_id === space) &&
+        (style === "all" || e.style_code === style) &&
+        (!tag || e.tags.includes(tag)) &&
+        (!inCollection || inCollection.has(e.id)) &&
+        (!q || [e.title, e.description, e.space_type?.name, styleLabel.get(e.style_code ?? ""), ...e.tags, e.project?.name].filter(Boolean).some((v) => String(v).toLowerCase().includes(q)))
+    );
+  }, [entries, query, kind, space, style, tag, collectionId, collections, customerView, styleLabel]);
+
+  const count = (pred: (e: LibraryEntryShape) => boolean) => entries.filter((e) => (!customerView || e.visible_to_customer) && pred(e)).length;
+  const anyFilter = kind !== "all" || space !== "all" || style !== "all" || tag || collectionId || query;
+  const clearAll = () => {
+    setKind("all");
+    setSpace("all");
+    setStyle("all");
+    setTag(null);
+    setCollectionId(null);
+    setQuery("");
   };
 
-  const styleColors: Record<string, string> = {
-    "Modern": "bg-blue-50 text-blue-600 border border-blue-200",
-    "Contemporary": "bg-purple-50 text-purple-600 border border-purple-200",
-    "Traditional": "bg-amber-50 text-amber-600 border border-amber-200",
-    "Minimalist": "bg-slate-50 text-slate-600 border border-slate-200",
-    "Industrial": "bg-stone-50 text-stone-600 border border-stone-200",
-    "Scandinavian": "bg-green-50 text-green-600 border border-green-200",
-    "Luxury": "bg-yellow-50 text-yellow-700 border border-yellow-200",
+  const openEntry = (e: LibraryEntryShape) => {
+    setOpen(e);
+    setImageIndex(0);
+  };
+  const upsert = (e: LibraryEntryShape) => {
+    setEntries((prev) => (prev.some((x) => x.id === e.id) ? prev.map((x) => (x.id === e.id ? e : x)) : [e, ...prev]));
+    if (open?.id === e.id) setOpen(e);
   };
 
-  const stats = {
-    total: libraryItems.length,
-    furniture: libraryItems.filter(i => i.category === "Furniture").length,
-    lighting: libraryItems.filter(i => i.category === "Lighting").length,
-    materials: libraryItems.filter(i => ["Flooring", "Wall Finishes", "Fabrics"].includes(i.category)).length,
+  const remove = async (e: LibraryEntryShape) => {
+    if (!(await confirm({ title: `Remove "${e.title}" from the library?`, message: e.images.some((i) => i.document_id) ? "The project's photo stays in its Documents." : "Its pictures are deleted.", confirmLabel: "Remove", tone: "danger" }))) return;
+    const res = await fetch(`/api/library/entries/${e.id}`, { method: "DELETE" });
+    if (!res.ok) return setNotice({ message: "Could not remove the entry", variant: "error" });
+    setEntries((prev) => prev.filter((x) => x.id !== e.id));
+    setOpen(null);
+    setNotice({ message: "Removed.", variant: "success" });
   };
+
+  const toggleInCollection = async (c: Collection, e: LibraryEntryShape) => {
+    const has = c.entry_ids.includes(e.id);
+    const res = await fetch(`/api/library/collections/${c.id}/entries${has ? `?entry_id=${e.id}` : ""}`, {
+      method: has ? "DELETE" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: has ? undefined : JSON.stringify({ entry_id: e.id }),
+    });
+    if (!res.ok) return setNotice({ message: "Could not update the collection", variant: "error" });
+    setCollections((prev) => prev.map((x) => (x.id === c.id ? { ...x, entry_ids: has ? x.entry_ids.filter((id) => id !== e.id) : [...x.entry_ids, e.id] } : x)));
+  };
+
+  const createCollection = async (name: string) => {
+    const res = await fetch("/api/library/collections", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) return setNotice({ message: json.error || "Could not create the collection", variant: "error" });
+    setCollections((prev) => [json.data, ...prev]);
+    setNewCollection(null);
+  };
+
+  const deleteCollection = async (c: Collection) => {
+    if (!(await confirm({ title: `Delete the collection "${c.name}"?`, message: "The entries stay in the library.", confirmLabel: "Delete", tone: "danger" }))) return;
+    const res = await fetch(`/api/library/collections/${c.id}`, { method: "DELETE" });
+    if (!res.ok) return setNotice({ message: "Could not delete the collection", variant: "error" });
+    setCollections((prev) => prev.filter((x) => x.id !== c.id));
+    if (collectionId === c.id) setCollectionId(null);
+  };
+
+  const rail = "px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5";
+  const facetBtn = (on: boolean) =>
+    cn("w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors", on ? "bg-blue-50 text-blue-800 font-medium" : "text-slate-600 hover:bg-slate-100");
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between bg-white rounded-lg border border-slate-200 p-6 shadow-sm">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Design Library</h1>
-          <p className="text-slate-600">Curated collection of materials, furniture, and finishes</p>
-        </div>
-        <div className="flex gap-3">
-          <div className="flex border border-slate-200 rounded-lg overflow-hidden">
-            <button
-              onClick={() => setViewType("grid")}
-              className={`p-2.5 transition-colors ${viewType === "grid" ? "bg-blue-50 text-blue-600" : "text-slate-400 hover:bg-slate-50"}`}
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-              </svg>
-            </button>
-            <button
-              onClick={() => setViewType("list")}
-              className={`p-2.5 transition-colors ${viewType === "list" ? "bg-blue-50 text-blue-600" : "text-slate-400 hover:bg-slate-50"}`}
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-          </div>
-          <button className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md font-medium flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add to Library
-          </button>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <p className="text-2xl font-bold text-slate-900">{stats.total}</p>
-          <p className="text-sm text-slate-600">Total Items</p>
-        </div>
-        <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <p className="text-2xl font-bold text-amber-600">{stats.furniture}</p>
-          <p className="text-sm text-slate-600">Furniture</p>
-        </div>
-        <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <p className="text-2xl font-bold text-yellow-600">{stats.lighting}</p>
-          <p className="text-sm text-slate-600">Lighting</p>
-        </div>
-        <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <p className="text-2xl font-bold text-stone-600">{stats.materials}</p>
-          <p className="text-sm text-slate-600">Materials & Finishes</p>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-white rounded-lg border border-slate-200 p-4">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-slate-600 mb-2">Category</label>
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              {["All", "Furniture", "Lighting", "Flooring", "Wall Finishes", "Fabrics", "Decor", "Fixtures", "Hardware"].map((category) => (
-                <button
-                  key={category}
-                  onClick={() => setFilterCategory(category)}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${
-                    filterCategory === category
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="md:w-64">
-            <label className="block text-sm font-medium text-slate-600 mb-2">Style</label>
-            <select
-              value={filterStyle}
-              onChange={(e) => setFilterStyle(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="All">All Styles</option>
-              <option value="Modern">Modern</option>
-              <option value="Contemporary">Contemporary</option>
-              <option value="Traditional">Traditional</option>
-              <option value="Minimalist">Minimalist</option>
-              <option value="Industrial">Industrial</option>
-              <option value="Scandinavian">Scandinavian</option>
-              <option value="Luxury">Luxury</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Grid View */}
-      {viewType === "grid" ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredItems.map((item) => (
-            <div key={item.id} className="bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-lg transition-all cursor-pointer group">
-              {/* Placeholder Image Area */}
-              <div className="h-40 bg-linear-to-br from-slate-100 to-slate-50 flex items-center justify-center relative overflow-hidden">
-                <div className="text-center">
-                  <svg className="w-12 h-12 text-slate-300 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  <p className="text-xs text-slate-400">Image Preview</p>
-                </div>
-                {/* Color Swatches */}
-                {item.colors && (
-                  <div className="absolute bottom-2 right-2 flex gap-1">
-                    {item.colors.slice(0, 4).map((color, idx) => (
-                      <div
-                        key={idx}
-                        className="w-5 h-5 rounded-full border-2 border-white shadow-sm"
-                        style={{ backgroundColor: color }}
-                      />
-                    ))}
-                  </div>
-                )}
+    <div className={cn("h-[calc(100vh-104px)] flex flex-col min-h-0", customerView && "bg-white")}>
+      <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[230px_1fr] gap-6">
+        {/* Facet rail */}
+        {!customerView && (
+          <aside className="min-h-0 overflow-y-auto pr-1 space-y-5">
+            <div className="flex items-center gap-2 px-1">
+              <div className="w-9 h-9 rounded-lg bg-linear-to-br from-rose-500 to-orange-500 text-white flex items-center justify-center shrink-0">
+                <SwatchIcon className="w-5 h-5" />
               </div>
-              
-              <div className="p-4">
-                <div className="flex items-start justify-between mb-2">
-                  <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${categoryColors[item.category]}`}>
-                    {item.category}
-                  </span>
-                  <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded ${styleColors[item.style]}`}>
-                    {item.style}
-                  </span>
-                </div>
-                
-                <h3 className="font-semibold text-slate-900 mb-1">{item.name}</h3>
-                <p className="text-sm text-slate-500 mb-2">{item.brand}</p>
-                
-                {item.price && (
-                  <p className="text-lg font-bold text-blue-600 mb-2">{item.price}</p>
-                )}
-                
-                <div className="text-xs text-slate-500 space-y-1">
-                  {item.material && <p>Material: {item.material}</p>}
-                  {item.dimensions && <p>Size: {item.dimensions}</p>}
-                </div>
-                
-                {item.projects && item.projects.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-slate-100">
-                    <p className="text-xs text-slate-400 mb-1">Used in:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {item.projects.slice(0, 2).map((project) => (
-                        <span key={project} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded">
-                          {project}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              <div className="min-w-0">
+                <h1 className="text-base font-bold text-slate-900 leading-tight">Design Library</h1>
+                <p className="text-[11px] text-slate-500 tabular-nums">{entries.length} entries</p>
               </div>
             </div>
-          ))}
-        </div>
-      ) : (
-        /* List View */
-        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase">Item</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase">Category</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase">Brand/Supplier</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase">Price</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase">Style</th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-slate-600 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredItems.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center">
-                          <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                        </div>
-                        <div>
-                          <p className="font-semibold text-slate-900">{item.name}</p>
-                          <p className="text-xs text-slate-500">{item.material}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${categoryColors[item.category]}`}>
-                        {item.category}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="text-sm text-slate-900">{item.brand}</p>
-                      <p className="text-xs text-slate-500">{item.supplier}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="font-semibold text-blue-600">{item.price}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded ${styleColors[item.style]}`}>
-                        {item.style}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                        </button>
-                        <button className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+
+            <div>
+              <p className={rail}>Kind</p>
+              <ul className="space-y-0.5">
+                <li><button type="button" onClick={() => setKind("all")} className={facetBtn(kind === "all")}><span>Everything</span><span className="text-xs tabular-nums text-slate-400">{count(() => true)}</span></button></li>
+                {(Object.keys(LIBRARY_KIND_LABELS) as LibraryKind[]).map((k) => (
+                  <li key={k}>
+                    <button type="button" onClick={() => setKind(k)} className={facetBtn(kind === k)}>
+                      <span className="flex items-center gap-2"><span className={cn("w-2 h-2 rounded-full", KIND_TONE[k])} />{LIBRARY_KIND_LABELS[k]}</span>
+                      <span className="text-xs tabular-nums text-slate-400">{count((e) => e.kind === k)}</span>
+                    </button>
+                  </li>
                 ))}
-              </tbody>
-            </table>
+              </ul>
+            </div>
+
+            {spaceTypes.length > 0 && (
+              <div>
+                <p className={rail}>Space</p>
+                <ul className="space-y-0.5">
+                  <li><button type="button" onClick={() => setSpace("all")} className={facetBtn(space === "all")}><span>Any space</span></button></li>
+                  {spaceTypes.filter((s) => count((e) => e.space_type_id === s.id) > 0).map((s) => (
+                    <li key={s.id}>
+                      <button type="button" onClick={() => setSpace(s.id)} className={facetBtn(space === s.id)}>
+                        <span className="truncate">{s.name}</span>
+                        <span className="text-xs tabular-nums text-slate-400">{count((e) => e.space_type_id === s.id)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {styles.some((s) => count((e) => e.style_code === s.code) > 0) && (
+              <div>
+                <p className={rail}>Style</p>
+                <div className="flex flex-wrap gap-1 px-1">
+                  {styles.filter((s) => count((e) => e.style_code === s.code) > 0).map((s) => (
+                    <button
+                      key={s.code}
+                      type="button"
+                      onClick={() => setStyle(style === s.code ? "all" : s.code)}
+                      className={cn("px-2 py-0.5 rounded-full text-[11px] border", style === s.code ? "bg-slate-800 text-white border-slate-800" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50")}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {tagCounts.length > 0 && (
+              <div>
+                <p className={rail}>Tags</p>
+                <div className="flex flex-wrap gap-1 px-1">
+                  {tagCounts.slice(0, 30).map(([t, n]) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setTag(tag === t ? null : t)}
+                      className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border", tag === t ? "bg-slate-800 text-white border-slate-800" : tagColour(t) + " border-transparent hover:brightness-95")}
+                    >
+                      {t}<span className="opacity-60 tabular-nums">{n}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <div className="flex items-center justify-between px-1 mb-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Collections</p>
+                {canCreate && newCollection === null && (
+                  <button type="button" onClick={() => setNewCollection("")} className="text-[11px] text-blue-600 hover:underline">New</button>
+                )}
+              </div>
+              {newCollection !== null && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (newCollection.trim()) void createCollection(newCollection.trim());
+                  }}
+                  className="px-1 mb-1.5"
+                >
+                  <input
+                    autoFocus
+                    value={newCollection}
+                    onChange={(e) => setNewCollection(e.target.value)}
+                    onKeyDown={(e) => e.key === "Escape" && setNewCollection(null)}
+                    placeholder="e.g. Amulya - shortlist"
+                    className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </form>
+              )}
+              <ul className="space-y-0.5">
+                {collections.map((c) => (
+                  <li key={c.id} className="group flex items-center">
+                    <button type="button" onClick={() => setCollectionId(collectionId === c.id ? null : c.id)} className={facetBtn(collectionId === c.id) + " flex-1"}>
+                      <span className="min-w-0">
+                        <span className="block truncate">{c.name}</span>
+                        {c.lead && <span className="block text-[10px] text-slate-400 truncate">{c.lead.client_name || c.lead.lead_number}</span>}
+                      </span>
+                      <span className="text-xs tabular-nums text-slate-400">{c.entry_ids.length}</span>
+                    </button>
+                    {canDelete && (
+                      <button type="button" onClick={() => void deleteCollection(c)} title="Delete collection" className="p-1 text-slate-300 hover:text-red-600 opacity-0 group-hover:opacity-100">
+                        <TrashIcon className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </li>
+                ))}
+                {collections.length === 0 && newCollection === null && <li className="px-2 text-xs text-slate-400">None yet - a named set, like a shortlist for a customer.</li>}
+              </ul>
+            </div>
+          </aside>
+        )}
+
+        {/* Grid */}
+        <div className="min-w-0 min-h-0 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {customerView && (
+              <div className="flex items-center gap-2 mr-2">
+                <div className="w-9 h-9 rounded-lg bg-linear-to-br from-rose-500 to-orange-500 text-white flex items-center justify-center">
+                  <SwatchIcon className="w-5 h-5" />
+                </div>
+                <h1 className="text-base font-bold text-slate-900">Design Library</h1>
+              </div>
+            )}
+            <div className="relative flex-1 min-w-[220px]">
+              <MagnifyingGlassIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search titles, tags, spaces, styles..."
+                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setCustomerView((v) => !v)}
+              title={customerView ? "Back to the working view" : "Hide internal entries, notes and tools - for showing a customer"}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors",
+                customerView ? "bg-slate-800 text-white border-slate-800" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+              )}
+            >
+              {customerView ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+              {customerView ? "Exit customer view" : "Customer view"}
+            </button>
+            {!customerView && canCreate && (
+              <button type="button" onClick={() => setAdding(true)} className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                <PlusIcon className="w-4 h-4" />
+                Add
+              </button>
+            )}
           </div>
+
+          {anyFilter && !customerView && (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 shrink-0">
+              <span>{visible.length} of {entries.length}</span>
+              {kind !== "all" && <Pill label={LIBRARY_KIND_LABELS[kind]} onClear={() => setKind("all")} />}
+              {space !== "all" && <Pill label={spaceTypes.find((s) => s.id === space)?.name ?? "Space"} onClear={() => setSpace("all")} />}
+              {style !== "all" && <Pill label={styleLabel.get(style) ?? style} onClear={() => setStyle("all")} />}
+              {tag && <Pill label={`#${tag}`} onClear={() => setTag(null)} />}
+              {collectionId && <Pill label={collections.find((c) => c.id === collectionId)?.name ?? "Collection"} onClear={() => setCollectionId(null)} />}
+              {query && <Pill label={`"${query}"`} onClear={() => setQuery("")} />}
+              <button type="button" onClick={clearAll} className="text-blue-600 hover:underline">Clear all</button>
+            </div>
+          )}
+
+          <div className="flex-1 min-h-0 overflow-y-auto pr-0.5">
+            {loading ? (
+              <p className="text-sm text-slate-400 px-1">Loading the library…</p>
+            ) : visible.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center rounded-lg border border-dashed border-slate-300 bg-white/60 py-16">
+                <SwatchIcon className="w-10 h-10 text-slate-300 mb-2" />
+                <p className="text-sm font-medium text-slate-700">{entries.length === 0 ? "The library is empty" : "Nothing matches"}</p>
+                <p className="text-xs text-slate-500 mt-1 max-w-xs">
+                  {entries.length === 0
+                    ? "Add what you make, what you sell and what inspires you - or promote a photo from a project's Documents tab."
+                    : "Try another search, or clear the filters."}
+                </p>
+              </div>
+            ) : (
+              <div className="columns-2 md:columns-3 xl:columns-4 2xl:columns-5 gap-3 [column-fill:_balance]">
+                {visible.map((e) => (
+                  <button
+                    key={e.id}
+                    type="button"
+                    onClick={() => openEntry(e)}
+                    className="group relative block w-full mb-3 break-inside-avoid rounded-lg overflow-hidden bg-slate-100 text-left focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {e.cover_url ? (
+                      <img src={e.cover_url} alt={e.title} loading="lazy" className="w-full h-auto block transition-transform duration-300 group-hover:scale-[1.02]" />
+                    ) : (
+                      <div className="aspect-[4/3] flex items-center justify-center text-slate-300"><SwatchIcon className="w-8 h-8" /></div>
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/70 via-black/30 to-transparent px-3 pt-8 pb-2.5">
+                      <p className="text-sm font-semibold text-white truncate">{e.title}</p>
+                      <p className="text-[11px] text-white/80 truncate">
+                        {[e.space_type?.name, styleLabel.get(e.style_code ?? "")].filter(Boolean).join(" · ")}
+                      </p>
+                    </div>
+                    <span className={cn("absolute top-2 left-2 px-1.5 py-0.5 rounded text-[10px] font-medium text-white", KIND_TONE[e.kind])}>
+                      {LIBRARY_KIND_LABELS[e.kind]}
+                    </span>
+                    {!e.visible_to_customer && !customerView && (
+                      <span className="absolute top-2 right-2 rounded bg-white/90 p-1 text-slate-600" title="Not shown to customers">
+                        <EyeSlashIcon className="w-3.5 h-3.5" />
+                      </span>
+                    )}
+                    {e.images.length > 1 && (
+                      <span className="absolute top-2 right-2 rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-white tabular-nums">{e.images.length}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Lightbox */}
+      {open && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex" onClick={() => setOpen(null)}>
+          <div className="flex-1 flex items-center justify-center relative p-6" onClick={(e) => e.stopPropagation()}>
+            {open.images[imageIndex]?.url ? (
+              <img src={open.images[imageIndex].url!} alt={open.title} className="max-h-full max-w-full object-contain rounded-lg shadow-2xl" />
+            ) : (
+              <div className="text-white/60">No image</div>
+            )}
+            {open.images.length > 1 && (
+              <>
+                <button type="button" onClick={() => setImageIndex((i) => (i - 1 + open.images.length) % open.images.length)} className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/90 p-2 text-slate-700 hover:bg-white"><ChevronLeftIcon className="w-5 h-5" /></button>
+                <button type="button" onClick={() => setImageIndex((i) => (i + 1) % open.images.length)} className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/90 p-2 text-slate-700 hover:bg-white"><ChevronRightIcon className="w-5 h-5" /></button>
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+                  {open.images.map((_, i) => (
+                    <button key={i} type="button" onClick={() => setImageIndex(i)} className={cn("w-2 h-2 rounded-full", i === imageIndex ? "bg-white" : "bg-white/40")} aria-label={`Image ${i + 1}`} />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          <aside className="w-full max-w-sm bg-white h-full overflow-y-auto flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-slate-100 flex items-start gap-3">
+              <div className="flex-1 min-w-0">
+                <span className={cn("inline-block px-1.5 py-0.5 rounded text-[10px] font-medium text-white mb-1.5", KIND_TONE[open.kind])}>{LIBRARY_KIND_LABELS[open.kind]}</span>
+                <h2 className="text-lg font-bold text-slate-900 leading-tight">{open.title}</h2>
+                <p className="text-sm text-slate-500">{[open.space_type?.name, styleLabel.get(open.style_code ?? "")].filter(Boolean).join(" · ")}</p>
+              </div>
+              <button type="button" onClick={() => setOpen(null)} className="p-1 text-slate-400 hover:text-slate-700 rounded"><XMarkIcon className="w-5 h-5" /></button>
+            </div>
+            <div className="p-5 space-y-4 flex-1">
+              {open.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {open.tags.map((t) => (
+                    <button key={t} type="button" onClick={() => { setTag(t); setOpen(null); }} className={cn("px-2 py-0.5 rounded-full text-[11px]", tagColour(t))}>{t}</button>
+                  ))}
+                </div>
+              )}
+              {open.description && <p className="text-sm text-slate-700 whitespace-pre-wrap">{open.description}</p>}
+              {open.project && (
+                <p className="text-xs text-slate-500">
+                  Executed at{" "}
+                  {customerView ? <span className="font-medium text-slate-700">{open.project.name}</span> : <Link href={`/dashboard/projects/${open.project.id}`} className="font-medium text-blue-600 hover:underline">{open.project.name}</Link>}
+                </p>
+              )}
+              {open.source_url && !customerView && (
+                <a href={open.source_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                  <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" /> Source
+                </a>
+              )}
+              {!customerView && (
+                <p className="text-xs text-slate-400">
+                  {open.visible_to_customer ? "Shown to customers" : "Team only"} · added {new Date(open.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                </p>
+              )}
+
+              {!customerView && canEdit && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Collections</p>
+                  {collections.length === 0 ? (
+                    <p className="text-xs text-slate-400">Create one from the rail to start a shortlist.</p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {collections.map((c) => {
+                        const has = c.entry_ids.includes(open.id);
+                        return (
+                          <li key={c.id}>
+                            <button type="button" onClick={() => void toggleInCollection(c, open)} className={cn("w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm border", has ? "border-blue-200 bg-blue-50 text-blue-800" : "border-slate-200 text-slate-700 hover:bg-slate-50")}>
+                              <BookmarkIcon className={cn("w-4 h-4", has ? "fill-blue-600 text-blue-600" : "text-slate-400")} />
+                              <span className="flex-1 text-left truncate">{c.name}</span>
+                              {c.lead && <Chip label={c.lead.client_name || c.lead.lead_number} tone="slate" />}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+            {!customerView && (canEdit || canDelete) && (
+              <div className="p-4 border-t border-slate-100 flex items-center gap-2">
+                {canEdit && (
+                  <button type="button" onClick={() => setEditing(open)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50">
+                    <PencilSquareIcon className="w-4 h-4" /> Edit
+                  </button>
+                )}
+                {canDelete && (
+                  <button type="button" onClick={() => void remove(open)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg text-red-600 hover:bg-red-50">
+                    <TrashIcon className="w-4 h-4" /> Remove
+                  </button>
+                )}
+              </div>
+            )}
+          </aside>
         </div>
       )}
+
+      <LibraryEntryModal
+        isOpen={adding || !!editing}
+        onClose={() => {
+          setAdding(false);
+          setEditing(null);
+        }}
+        spaceTypes={spaceTypes}
+        styles={styles}
+        tagSuggestions={tagCounts.map(([t]) => t)}
+        entry={editing}
+        defaultKind={kind === "all" ? "inspiration" : kind}
+        onSaved={(e) => {
+          upsert(e);
+          setNotice({ message: editing ? "Saved." : "Added to the library.", variant: "success" });
+        }}
+      />
+      {confirmDialog}
+      <Toast message={notice?.message ?? null} variant={notice?.variant ?? "error"} onDismiss={() => setNotice(null)} />
     </div>
+  );
+}
+
+function Pill({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-slate-100 text-slate-700">
+      {label}
+      <button type="button" onClick={onClear} className="p-0.5 rounded-full hover:bg-slate-200" aria-label={`Clear ${label}`}>
+        <XMarkIcon className="w-3 h-3" />
+      </button>
+    </span>
   );
 }

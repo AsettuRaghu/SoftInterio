@@ -527,6 +527,41 @@ with records against it cannot be deleted - mark it inactive. The list and
 the detail page show whether the party is **on SoftInterio** (their
 `platform_identity_id` is set) - "Subscriber" or "Not yet"; nobody is yet.
 
+### The Design Library references pictures; it is not a second file store
+
+Built 2026-09-17 (`20260917130000`), replacing a hard-coded mock. An entry
+is one of three **kinds** - `our_work`, `product`, `inspiration` - with a
+space type (the tenant's own `space_types`), a style (shipped +
+tenant-added, `library_styles`), tags, and `visible_to_customer`. The kind
+labels exist so someone else's work is never shown as ours; the flag is what
+the customer portal will read. **Collections** are named sets, optionally
+tied to a lead - the shortlist for a conversation.
+
+Images are `library_entry_images` rows pointing at storage. A picture
+uploaded in the library is the library's to delete; a photo **promoted from
+a project's Documents tab** (the swatch button on an image row,
+`POST /api/library/promote`) keeps `document_id` and remains the project's
+file - removing the entry leaves the document alone, deleting the document
+takes the image with it. `lib/library/shape.ts` is the one place rows
+become what the page renders, signed URLs included.
+
+The page is full-viewport like Calendar and Documents: a facet rail (kind,
+space, style, tags, collections), a masonry image grid, a lightbox with the
+entry's details and its collections. **Customer view** hides internal-only
+entries, notes, source links and every tool - the mode to switch on before
+turning the screen to a customer. Gated on the `library.*` keys that
+already existed (view: nearly everyone; create/edit: Owner, Admin, Design
+Manager, Stock Manager; delete: Owner, Admin, Senior Designer).
+
+### Calendar and Documents fill the viewport, and have no page header
+
+Both use `h-[calc(100vh-104px)]` - the shell's `pt-20` plus its `p-3` above
+and below - and let only their own inner areas scroll (2026-09-17: "we do
+not need the header section here"). The calendar's month is six equal rows
+of that height; its week columns and side panels scroll on their own. The
+documents page's facet rail carries the title and count. Change the shell's
+padding and this constant has to follow.
+
 ### Every list page is built the same way - do not ask, copy
 
 The leads and projects pages are the reference, and a new list page copies

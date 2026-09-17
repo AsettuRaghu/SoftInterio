@@ -30,6 +30,7 @@ import {
   TrashIcon,
   EyeIcon,
   FunnelIcon,
+  SwatchIcon,
 } from "@heroicons/react/24/outline";
 
 // Types
@@ -55,6 +56,8 @@ export interface DocumentTableProps {
   onDelete?: (document: Document) => void;
   onUpload?: () => void;
   onCountChange?: (count: number) => void;
+  /** Offered on image rows: promote the photo into the Design Library. */
+  onAddToLibrary?: (document: DocumentWithUrl) => void;
 
   // Optional: External state control
   externalDocuments?: DocumentWithUrl[];
@@ -76,6 +79,7 @@ export default function DocumentTable({
   onPreview,
   onDownload,
   onDelete,
+  onAddToLibrary,
   onUpload,
   externalDocuments,
   onRefresh,
@@ -707,6 +711,15 @@ export default function DocumentTable({
                       >
                         <ArrowDownTrayIcon className="w-3.5 h-3.5" />
                       </button>
+                      {onAddToLibrary && !readOnly && (doc.file_type || "").startsWith("image/") && (
+                        <button
+                          onClick={() => onAddToLibrary(doc)}
+                          className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:border-rose-300 transition-all"
+                          title="Add to the Design Library"
+                        >
+                          <SwatchIcon className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       {!readOnly && (
                         <button
                           onClick={() => setEditingDoc(doc)}
