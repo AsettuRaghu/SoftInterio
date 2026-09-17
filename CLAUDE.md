@@ -427,32 +427,66 @@ project could be edited at all.** Keep one dialog.
 Primary buttons come from `buttonVariants` in `@/components/ui/Button`; cards
 are `rounded-lg`, which is the app-wide majority.
 
-### A lead has one approved quotation
-Enforced by a partial unique index, and by the status route superseding
-whatever was approved before — so the constraint is never the thing a user
-meets; they get a sentence saying which quotation was replaced.
+### One approved version per quotation number - on leads and projects alike
 
-The old one becomes **`superseded`**, not cancelled. Nobody withdrew it and it
-may have been the right price at the time; it is simply not the agreed one any
-more, and that difference is what someone needs when they ask a year later why
-a quotation was dropped. `superseded` is deliberately **not** in the status
-route's `validStatuses` — it is a consequence of approving something else, not
-a state anyone picks — and a superseded quotation is locked from editing, like
-an approved or rejected one, because it records what was once offered.
+Decided 2026-09-17, replacing "one approved quotation per lead". A lead or a
+project can carry **several quotations for different things** - the kitchen,
+the false ceiling the client added later, the accessories - each its own
+number, each with its own versions. Approving `QT-0004 v3` supersedes the
+approved `QT-0004 v2` and nothing else; `QT-0011` on the same lead is
+independent. Enforced by `quotations_one_approved_per_number` (unique on
+`tenant_id, quotation_number` where approved) and done by the status route
+and the client portal's approve, so the constraint is never what a user
+meets - they get a sentence naming the version replaced.
 
-**Baseline copies are excluded.** Converting a lead copies its quotation onto
-the project as a frozen baseline, and that copy is approved too — it carries
-`baseline_quotation_id`, which a lead's own quotation never does. Counting it
-would make the rule unsatisfiable for every converted lead.
+The old one becomes **`superseded`**, not withdrawn: it may have been the
+right price at the time; it is simply not the agreed one any more.
+`superseded` is system-only, never picked.
 
-**Approving needs `quotations.approve`** (Admin, Owner, Manager, Sales Manager,
-Finance Manager, Project Manager, Senior Designer). It is the moment a price
-becomes the agreed price and was open to anyone signed in.
+**A new quotation always gets a new number.** `getQuotationNumberAndVersion`
+used to reuse the lead's or project's existing number and bump the version,
+so a second quotation for the same project came out as v3 of the first and
+approving it superseded the first. A new *version* comes only from Revise.
+Same split as playbooks: save is a save, revise is a version.
 
-The action lives on the quotation page, offering only the next sensible move —
-draft → *Mark as sent*, sent/viewed/negotiating → *Approve*. It used to exist
-only as a menu on the list, which meant deciding about a price from a row
-without the price in front of you.
+**Six statuses**: draft · sent · approved · rejected · cancelled (shown
+"Withdrawn") · superseded, with a CHECK on the column. `viewed`,
+`negotiating` and `expired` were facts, not statuses - client views are
+counted in `client_view_count` (a view stamps `viewed_at` and leaves the
+status at `sent`), validity is read from `valid_until`, and nothing ever
+set expired automatically. `linked_to_project` / `project_baseline` died
+with the handover copy.
+
+**A lead is won on all its approved quotations.** No picker, no typed
+amount: the transition route reads every approved quotation on the lead,
+`won_amount` (and so the project's `contract_value`) is their sum, all of
+them are attached to the project and locked, and `projects.quotation_id`
+points at the largest. The value a project carries after that - the sum of
+its approved quotations across numbers, never the superseded ones - is
+agreed but **not yet derived live**; `contract_value` is still the figure
+frozen at handover. Standalone quotations count nowhere.
+
+**Approving needs `quotations.approve`** (Admin, Owner, Manager, Sales
+Manager, Finance Manager, Project Manager, Senior Designer). A draft can be
+approved without first being marked sent - a price is often agreed on a
+call before anything is formally issued.
+
+**A standalone quotation is addressed to a customer typed in the dialog** -
+name required, phone/email/address optional - and `POST /api/quotations`
+creates the `clients` row and links it, as a directly created project does.
+A quotation holds only `client_id`; there was nowhere else for a name.
+
+### Every list is built from the same cells
+
+`components/ui/list-cells` - `Headline` (name in bold, then one or two
+quieter lines: what it is, then where or what about; chips beside the name
+for a fact that changes what the row is), `StatusPill`, `Chip`,
+`UpdatedCell` (the leads list's `LastActivityCell` with `urgency={false}`,
+because silence means nothing for a template). The quotations list, the
+templates, terms and print libraries all use them (2026-09-17); the leads
+and projects lists are where the shape was settled. `LastActivityCell`'s
+staleness colouring is right for a lead or a project and wrong for a
+quotation, which is expected to sit once sent - pass `urgency={false}`.
 
 ### Charges are ordinary line items
 Delivery, cleanup and site protection are cost items in a category marked
