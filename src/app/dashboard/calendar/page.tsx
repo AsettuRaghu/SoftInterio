@@ -153,7 +153,6 @@ export default function CalendarPage() {
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   // "+N more" on a month cell opens that day over the grid.
   const [dayPopover, setDayPopover] = useState<{ date: Date; anchor: { top: number; left: number; width: number } } | null>(null);
-  const [railOpen, setRailOpen] = useState(true);
   // Kinds switched off from the legend. Empty means everything.
   const [hiddenKinds, setHiddenKinds] = useState<Set<string>>(new Set());
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(
@@ -347,29 +346,35 @@ export default function CalendarPage() {
         <div className="shrink-0 mb-2 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">{error}</div>
       )}
 
-      {/* Top bar, the way Google Calendar has it: a menu toggle for the rail,
-          Today, the arrows, the month as the title; the view on the right. */}
-      <div className="shrink-0 flex items-center gap-2 pb-3">
-        <button type="button" onClick={() => setRailOpen((v) => !v)} className="p-2 rounded-full text-slate-600 hover:bg-slate-100" aria-label="Toggle the side rail">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
-        </button>
-        <div className="flex items-center gap-2 mr-2">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center text-sm font-bold tabular-nums">{new Date().getDate()}</div>
-          <span className="text-lg text-slate-800">Calendar</span>
+      {/* The toolbar, in the app's own dress: the calendar mark and title on
+          the left as Documents and the Library have them, then Today, the
+          arrows and the period; the segmented view switch and the primary
+          action on the right. */}
+      <div className="shrink-0 flex flex-wrap items-center gap-3 pb-3">
+        <div className="flex items-center gap-2 mr-1">
+          <div className="w-9 h-9 rounded-lg bg-linear-to-br from-indigo-500 to-indigo-600 text-white flex items-center justify-center shrink-0">
+            <CalendarIcon className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-base font-bold text-slate-900 leading-tight">Calendar</h1>
+            <p className="text-[11px] text-slate-500 tabular-nums">{visibleEvents.length} booked this period</p>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            goToToday();
-            setSelectedDay(null);
-          }}
-          className="px-4 py-1.5 text-sm font-medium text-slate-700 border border-slate-300 rounded-full hover:bg-slate-50"
-        >
-          Today
-        </button>
-        <button onClick={goToPreviousMonth} className="p-1.5 rounded-full text-slate-600 hover:bg-slate-100" aria-label="Previous"><ChevronLeftIcon className="w-5 h-5" /></button>
-        <button onClick={goToNextMonth} className="p-1.5 rounded-full text-slate-600 hover:bg-slate-100" aria-label="Next"><ChevronRightIcon className="w-5 h-5" /></button>
-        <h2 className="text-xl text-slate-900 ml-1 tabular-nums">
+        <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-0.5">
+          <button
+            type="button"
+            onClick={() => {
+              goToToday();
+              setSelectedDay(null);
+            }}
+            className="px-3 py-1.5 text-sm font-medium text-slate-700 rounded-md hover:bg-slate-100"
+          >
+            Today
+          </button>
+          <button onClick={goToPreviousMonth} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100" aria-label="Previous"><ChevronLeftIcon className="w-4 h-4" /></button>
+          <button onClick={goToNextMonth} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100" aria-label="Next"><ChevronRightIcon className="w-4 h-4" /></button>
+        </div>
+        <h2 className="text-lg font-semibold text-slate-900 tabular-nums">
           {viewMode === "week"
             ? (() => {
                 const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() - currentDate.getDay());
@@ -380,31 +385,32 @@ export default function CalendarPage() {
             : `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`}
         </h2>
         <span className="flex-1" />
-        <select
-          value={viewMode}
-          onChange={(e) => setViewMode(e.target.value as ViewMode)}
-          className="px-3 py-1.5 text-sm font-medium text-slate-700 border border-slate-300 rounded-full bg-white hover:bg-slate-50"
+        <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
+          {(["month", "week", "agenda"] as ViewMode[]).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                viewMode === mode ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              {mode.charAt(0).toUpperCase() + mode.slice(1)}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => setIsCreateModalOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
         >
-          <option value="month">Month</option>
-          <option value="week">Week</option>
-          <option value="agenda">Agenda</option>
-        </select>
+          <PlusIcon className="w-4 h-4" />
+          New Event
+        </button>
       </div>
 
       <div className="flex-1 min-h-0 flex gap-4">
         {/* Left rail: Create, the mini month, the calendars (one per kind,
             each a checkbox), and what is overdue. */}
-        {railOpen && (
-          <aside className="w-60 shrink-0 min-h-0 overflow-y-auto pr-1 space-y-5">
-            <button
-              type="button"
-              onClick={() => setIsCreateModalOpen(true)}
-              className="inline-flex items-center gap-2 pl-4 pr-5 py-3 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md text-sm font-medium text-slate-800 transition-shadow"
-            >
-              <PlusIcon className="w-5 h-5" />
-              Create
-            </button>
-
+        <aside className="w-56 shrink-0 min-h-0 overflow-y-auto pr-1 space-y-5">
             <MiniMonth
               cursor={currentDate}
               onCursor={(d) => setCurrentDate(d)}
@@ -416,7 +422,7 @@ export default function CalendarPage() {
             />
 
             <div>
-              <p className="text-sm font-medium text-slate-800 mb-1">My calendars</p>
+              <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Show</p>
               <ul className="space-y-0.5">
                 {Object.entries(KIND_STYLES)
                   .filter(([k]) => events.some((e) => kindOf(e as CalendarEventLite) === k))
@@ -454,7 +460,7 @@ export default function CalendarPage() {
 
             {overdueEvents.length > 0 && (
               <div>
-                <p className="text-sm font-medium text-red-700 mb-1">Overdue <span className="text-red-400 font-normal">{overdueEvents.length}</span></p>
+                <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-red-600 mb-1.5">Overdue · {overdueEvents.length}</p>
                 <div className="space-y-1">
                   {(overdueEvents as CalendarEventLite[]).slice(0, 6).map((e) => (
                     <AgendaRow key={e.id} event={e} onOpen={() => setSelectedEvent(e as CalendarEvent)} showDate />
@@ -462,8 +468,7 @@ export default function CalendarPage() {
                 </div>
               </div>
             )}
-          </aside>
-        )}
+        </aside>
 
         {/* The grid */}
         <div className="flex-1 min-w-0 min-h-0 bg-white rounded-lg border border-slate-200 overflow-hidden flex flex-col">

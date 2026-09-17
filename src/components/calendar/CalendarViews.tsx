@@ -116,13 +116,15 @@ export function EventChip({ event, onClick, dense = false }: { event: CalendarEv
       }}
       title={title}
       className={cn(
-        "w-full text-left rounded px-1 leading-tight truncate transition-colors hover:bg-slate-100",
+        "w-full text-left rounded-md border px-1.5 leading-tight truncate transition-colors hover:brightness-95",
         dense ? "py-0.5 text-[11px]" : "py-1 text-xs",
+        s.bg,
+        s.border,
         event.is_completed && "opacity-50 line-through"
       )}
     >
-      <span className={cn("inline-block w-2 h-2 rounded-full mr-1.5 align-middle", s.dot)} />
-      <span className="text-slate-600 tabular-nums">{timeOf(event.scheduled_at)}</span>{" "}
+      <span className={cn("inline-block w-1.5 h-1.5 rounded-full mr-1 align-middle", s.dot)} />
+      <span className={cn("tabular-nums", s.text)}>{timeOf(event.scheduled_at)}</span>{" "}
       <span className="font-medium text-slate-800">{event.title}</span>
     </button>
   );
@@ -204,8 +206,8 @@ export function MonthView({
   return (
     <div className="h-full flex flex-col min-h-0">
       <div className="grid grid-cols-7 shrink-0 border-b border-slate-200">
-        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-          <div key={d} className="py-2 text-center text-[11px] font-medium uppercase tracking-wider text-slate-500">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, i) => (
+          <div key={d} className={cn("py-2 text-center text-[10px] font-semibold uppercase tracking-wider", i === 0 || i === 6 ? "text-slate-400" : "text-slate-500")}>
             {d}
           </div>
         ))}
@@ -215,17 +217,19 @@ export function MonthView({
           const isToday = sameDay(date, today);
           const isSel = selected ? sameDay(date, selected) : false;
           const firstOfMonth = date.getDate() === 1;
+          const weekend = date.getDay() === 0 || date.getDay() === 6;
           return (
             <div
               key={dayKey(date)}
               onClick={() => onSelectDay(date)}
               className={cn(
-                "min-h-0 overflow-hidden px-1 pt-1 pb-0.5 cursor-pointer transition-colors border-b border-r border-slate-200",
+                "min-h-0 overflow-hidden px-1 pt-1 pb-0.5 cursor-pointer transition-colors border-b border-r border-slate-100",
                 i % 7 === 0 && "border-l",
-                isSel ? "bg-blue-50/60" : "bg-white hover:bg-slate-50/70"
+                !inMonth ? "bg-slate-50" : weekend ? "bg-slate-50/60" : "bg-white",
+                isSel ? "bg-blue-50/60" : "hover:bg-blue-50/30"
               )}
             >
-              <div className="flex justify-center mb-0.5">
+              <div className="flex items-center justify-between mb-0.5 px-0.5">
                 <span
                   className={cn(
                     "text-xs tabular-nums h-6 min-w-6 px-1.5 flex items-center justify-center rounded-full",
@@ -234,6 +238,7 @@ export function MonthView({
                 >
                   {firstOfMonth ? date.toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : date.getDate()}
                 </span>
+                {list.length > 0 && <span className="text-[10px] text-slate-400 tabular-nums">{list.length}</span>}
               </div>
               <div className="space-y-px">
                 {list.slice(0, visibleRows).map((e) => (
