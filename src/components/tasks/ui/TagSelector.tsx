@@ -48,7 +48,20 @@ export function TagSelector({
   const [search, setSearch] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [position, setPosition] = useState({ top: 0, left: 0, width: 0, ready: false });
+  /**
+   * Where the portal sits. Anchored by its top edge below the field, or by
+   * its BOTTOM edge above it when there is no room - the flip used to place
+   * the dropdown's top at "anchor minus an estimated 280px", so a short list
+   * floated a long way above the field, which read as "it opened at the top
+   * of the modal".
+   */
+  const [position, setPosition] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    ready: boolean;
+  }>({ left: 0, width: 0, ready: false });
 
   const anchorRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -78,22 +91,40 @@ export function TagSelector({
     if (!providedTags) void fetchTags();
   }, [providedTags, fetchTags]);
 
-  // Position the portal under the anchor, flipping up if there is no room.
+  // Position the portal under the anchor, flipping above it if there is no
+  // room below.
+  const place = useCallback(() => {
+    const rect = anchorRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const estimatedHeight = 300;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const below = spaceBelow > estimatedHeight || spaceBelow >= rect.top;
+    setPosition({
+      top: below ? rect.bottom + 4 : undefined,
+      bottom: below ? undefined : window.innerHeight - rect.top + 4,
+      left: rect.left,
+      width: rect.width,
+      ready: true,
+    });
+  }, []);
+
   const open = () => {
     if (disabled) return;
-    const rect = anchorRef.current?.getBoundingClientRect();
-    if (rect) {
-      const estimatedHeight = 280;
-      const spaceBelow = window.innerHeight - rect.bottom;
-      setPosition({
-        top: spaceBelow > estimatedHeight ? rect.bottom + 4 : rect.top - estimatedHeight - 4,
-        left: rect.left,
-        width: rect.width,
-        ready: true,
-      });
-    }
+    place();
     setIsOpen(true);
   };
+
+  // The field can move while the list is open - the dialog body scrolls, the
+  // window resizes - and a fixed portal does not follow it on its own.
+  useEffect(() => {
+    if (!isOpen) return;
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [isOpen, place]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -175,7 +206,12 @@ export function TagSelector({
           <div
             ref={dropdownRef}
             className="fixed z-9999 bg-white rounded-lg shadow-xl border border-slate-200 py-1 flex flex-col"
-            style={{ top: position.top, left: position.left, width: Math.max(position.width, 240) }}
+            style={{
+              top: position.top,
+              bottom: position.bottom,
+              left: position.left,
+              width: Math.max(position.width, 240),
+            }}
           >
             <div className="px-2 py-1.5 border-b border-slate-100">
               <input
