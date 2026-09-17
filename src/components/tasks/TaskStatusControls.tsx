@@ -793,6 +793,31 @@ export function TaskStatusControls({
               : null}
             {task.hold_reason_code && task.hold_reason ? " — " : ""}
             {task.hold_reason}
+            {!disabled && (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Opens the same who/why/until dialog the pause used,
+                    // filled from the hold in effect. A row's Pause records
+                    // owner and reason at once but never asks "until when";
+                    // this is where that date - the one the plan re-lays
+                    // around - gets set.
+                    setHoldOwner((task.hold_owner as DelayOwner | null) ?? "");
+                    setHoldCode(task.hold_reason_code ?? "");
+                    setHoldUntil(task.hold_expected_until ?? "");
+                    setHoldWho(task.hold_counterpart ?? "");
+                    setReason(task.hold_reason ?? "");
+                    setError(null);
+                    setDetailsOpen(true);
+                  }}
+                  className="text-blue-600 hover:underline"
+                >
+                  {task.hold_expected_until ? "Edit" : "Set until when…"}
+                </button>
+              </>
+            )}
           </p>
         )}
 
