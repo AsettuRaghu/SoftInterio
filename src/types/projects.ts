@@ -737,7 +737,7 @@ export type ProjectDetailTab =
   | "project-mgmt"
   // Replaced "rooms", which showed quotation_spaces - what was priced. A
   // project needs what is to be built, which is the property's Spaces.
-  | "spaces"
+  | "scope"
   | "overview"
   | "documents"
   | "tasks"

@@ -25,7 +25,7 @@ import {
   PageContent,
 } from "@/components/ui/PageLayout";
 import { UserGroupIcon } from "@heroicons/react/24/outline";
-import { SpacesTab } from "@/components/property/SpacesTab";
+import { ScopeTab } from "@/components/property/ScopeTab";
 import { AddNoteModal, EditNoteModal } from "@/modules/sales/components";
 import { EditLeadModal, type EditFormData } from "@/modules/sales/components";
 import { StageTransitionModal } from "@/modules/sales/components";
@@ -366,14 +366,16 @@ export default function LeadDetailPage() {
         )}
 
         {/* Timeline Tab */}
-        {/* The rooms and areas the client wants work in, and what goes in
-            them. Named Spaces rather than Property because the property facts
-            on Overview - address, type, carpet area - are a different thing,
-            and because these rows outlive the sale: the quotation is generated
-            from them, and the project is later executed against them. */}
-        {activeTab === "spaces" && (
-          <SpacesTab
+        {/* What we are doing for this customer: the brief (floor plan,
+            services wanted), then the rooms and what goes in them. Distinct
+            from the property facts on Overview - address, type, carpet area -
+            and these rows outlive the sale: the quotation starts from them and
+            the project is executed against them. */}
+        {activeTab === "scope" && (
+          <ScopeTab
             propertyId={lead.property?.id || lead.property_id || null}
+            linkedType="lead"
+            linkedId={lead.id}
             readOnly={leadClosed}
           />
         )}

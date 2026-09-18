@@ -66,6 +66,30 @@ Terms are the opposite case. A format names the clause it prints
 different terms; null falls back to the tenant default. Only one clause prints
 - rendering every active clause put V1 and V2 of the same terms back to back.
 
+### Scope is the tab; a space is a row in it
+
+Renamed from "Spaces" on 2026-09-18 (`docs/plans/scope.md` is the plan and
+the decisions). **Scope** is what we are doing for this customer: the brief
+(floor plan, services wanted, the first conversation's notes - one
+`property_scope_brief` row per property) above the rows, and the rows are
+still spaces and components in `property_scope_items`. `ScopeTab` takes the
+lead or project it is viewed from, because the floor plan is an ordinary
+Document (category `floor_plan`) filed on that entity.
+
+**Presets** (`scope_presets`, Settings → Catalogue → Presets) replaced the
+quick starts that were hard-coded by slug. A preset is spaces × counts,
+each optionally naming its components (null = whatever declares it belongs
+in that space type - the add dialog's own default). Curated, never saved
+from a lead. The empty scope shows them as cards that open the add dialog
+filled in; the dialog's chips offer them too. Five were seeded per tenant
+from the old quick starts.
+
+Settled with the user, not to be reopened casually: no price on a scope
+row; the quotation **pulls** from the scope on demand and only adds what is
+missing (rows owned by client/vendor/excluded are never brought in); after
+kick-off anyone with project edit may change the scope and every change is
+logged; nothing here is customer-facing.
+
 ### A project's Spaces are the lead's Spaces
 Scope lives on `property_scope_items`, which hangs off the property, and a
 project shares its lead's `property_id`. So the project's Spaces tab renders the

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import Link from "next/link";
 import {
   MagnifyingGlassIcon,
   PlusIcon,
@@ -13,6 +14,7 @@ import {
   ChevronDownIcon,
   TagIcon,
   CurrencyDollarIcon,
+  RectangleStackIcon,
 } from "@heroicons/react/24/outline";
 import {
   SettingsPageLayout,
@@ -1343,7 +1345,7 @@ export default function QuotationsConfigPage() {
     <SettingsPageLayout isLoading={isLoading} isSaving={isSaving}>
       <SettingsPageHeader
         title="Catalogue"
-        subtitle="What this business builds and sells: spaces, components, categories and cost items. The quotation, the Spaces tab and the Design Library all read from here."
+        subtitle="What this business builds and sells: spaces, components, categories and cost items. The quotation, the Scope tab and the Design Library all read from here."
         breadcrumbs={[{ label: "Catalogue" }]}
         icon={<Squares2X2Icon className="w-4 h-4 text-white" />}
         iconBgClass="from-blue-500 to-blue-600"
@@ -1393,6 +1395,16 @@ export default function QuotationsConfigPage() {
                     </button>
                   );
                 })}
+                {/* Presets are a page of their own - a different shape of
+                    thing (a list of spaces with components), not a fifth
+                    table - but they belong in this row. */}
+                <Link
+                  href="/dashboard/settings/catalogue/presets"
+                  className="relative flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                >
+                  <RectangleStackIcon className="w-4 h-4" />
+                  Presets
+                </Link>
               </div>
 
               {/* Status applies to every tab; the pills match the notes and

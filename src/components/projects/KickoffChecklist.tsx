@@ -307,7 +307,7 @@ export function KickoffChecklist({
             value={`${formatDate(data.expected.start)} → ${formatDate(data.expected.end)}`}
             sub="Kept as the sales commitment once you confirm"
           />
-          <Fact label="Also handed over" value={`${data.handover.space_count} space(s), ${data.handover.note_count} note(s)`} sub="On the Spaces and Notes tabs" />
+          <Fact label="Also handed over" value={`${data.handover.space_count} space(s), ${data.handover.note_count} note(s)`} sub="On the Scope and Notes tabs" />
         </dl>
         {!data.handover_reviewed_at && canEdit && (
           <button

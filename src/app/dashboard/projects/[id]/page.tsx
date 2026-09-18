@@ -26,7 +26,7 @@ import {
   QuotationsTab,
 } from "@/modules/projects/components";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
-import { SpacesTab } from "@/components/property/SpacesTab";
+import { ScopeTab } from "@/components/property/ScopeTab";
 import { buttonVariants } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
 import { ProcurementTab } from "@/components/projects/ProcurementTab";
@@ -620,7 +620,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
    */
   const tabs: { key: TabKey; label: string }[] = [
     { key: "overview", label: "Overview" },
-    { key: "spaces", label: "Spaces" },
+    { key: "scope", label: "Scope" },
     { key: "project-mgmt", label: "Plan" },
     { key: "quotations", label: "Quotations" },
     { key: "tasks", label: "Tasks" },
@@ -917,8 +917,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
               Replaces a Rooms tab that read quotation_spaces - a read-only view
               of what was priced, which the linked quotation already shows. What
               a project needs is what is to be built. */}
-          {activeTab === "spaces" && (
-            <SpacesTab propertyId={project.property_id || null} />
+          {activeTab === "scope" && (
+            <ScopeTab propertyId={project.property_id || null} linkedType="project" linkedId={project.id} />
           )}
 
           {activeTab === "overview" && awaitingKickoff && (

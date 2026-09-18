@@ -113,14 +113,6 @@ export interface PropertyScopeItem {
 }
 
 /** One line of the bulk add grid: a space type and how many of them. */
-/** Labels for the quick-start chips, in the order they should appear. */
-export const SCOPE_QUICK_START_LABELS: { key: string; label: string }[] = [
-  { key: "1bhk", label: "1 BHK" },
-  { key: "2bhk", label: "2 BHK" },
-  { key: "3bhk", label: "3 BHK" },
-  { key: "4bhk", label: "4 BHK" },
-  { key: "villa", label: "Villa" },
-];
 
 /**
  * One line of the bulk add grid.
@@ -136,52 +128,31 @@ export interface ScopeBulkEntry {
 }
 
 /**
- * Starting room sets, chosen by the seller rather than derived.
- *
- * There is deliberately no lookup from properties.property_type: that column
- * holds apartment / villa / independent_house and carries no bedroom count.
- * BHK exists only on quotation_templates.property_type, which is a different
- * meaning of the same column name. Rather than guess, the modal offers these
- * as one-click starting points - the seller knows the configuration from the
- * conversation even when nothing has recorded it.
- *
- * Matched on space type slug, so a tenant missing one simply gets fewer
- * suggestions rather than an error.
+ * A curated starting point for a scope - "2 BHK", "Kitchen only" - kept
+ * under Settings → Catalogue. `component_type_ids` null means "whatever
+ * components declare they belong in that space type", which is what the add
+ * dialog already defaults to.
  */
-export const SCOPE_QUICK_STARTS: Record<
-  string,
-  Record<string, number>
-> = {
-  "1bhk": { bedroom: 1, "living-room": 1, kitchen: 1, bathroom: 1, balcony: 1 },
-  "2bhk": { bedroom: 2, "living-room": 1, kitchen: 1, bathroom: 2, balcony: 1 },
-  "3bhk": {
-    bedroom: 3,
-    "living-room": 1,
-    dining: 1,
-    kitchen: 1,
-    bathroom: 3,
-    balcony: 2,
-    "pooja-room": 1,
-  },
-  "4bhk": {
-    bedroom: 4,
-    "living-room": 1,
-    dining: 1,
-    kitchen: 1,
-    bathroom: 4,
-    balcony: 2,
-    "pooja-room": 1,
-    utility: 1,
-  },
-  villa: {
-    bedroom: 4,
-    "living-room": 1,
-    dining: 1,
-    kitchen: 1,
-    bathroom: 4,
-    balcony: 2,
-    "pooja-room": 1,
-    utility: 1,
-    foyer: 1,
-  },
-};
+export interface ScopePresetItem {
+  space_type_id: string;
+  count: number;
+  component_type_ids: string[] | null;
+}
+
+export interface ScopePreset {
+  id: string;
+  name: string;
+  description: string | null;
+  items: ScopePresetItem[];
+  display_order: number;
+  is_active: boolean;
+}
+
+/** What the customer asked for, beside the scope rows. */
+export interface ScopeBrief {
+  property_id: string;
+  /** quotation_cost_item_categories ids. */
+  services_wanted: string[];
+  brief_notes: string | null;
+  updated_at: string | null;
+}

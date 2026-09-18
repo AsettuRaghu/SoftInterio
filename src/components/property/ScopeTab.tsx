@@ -1,7 +1,10 @@
 "use client";
 
 /**
- * The Spaces tab: what rooms and areas the client wants work in.
+ * The Scope tab: what we are doing for this customer - the rooms and areas,
+ * what goes in them, and (in ScopeBrief above the list) what they asked for.
+ *
+ * Was "Spaces" until 2026-09-18; see docs/plans/scope.md.
  *
  * Written during the sales conversation and stored against the property, so
  * the same rows serve the quotation and later the project. Distinct from the
@@ -17,6 +20,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { fetchConfigOnce } from "@/lib/quotations/config-cache";
 import { AddSpacesModal } from "./AddSpacesModal";
+import { ScopeBrief } from "./ScopeBrief";
 import {
   PlusIcon,
   TrashIcon,
@@ -35,6 +39,7 @@ import {
   type ScopeBulkEntry,
   type ScopeMeasurementUnit,
   type QualityTier,
+  type ScopePreset,
 } from "@/types/property-scope";
 
 /**
@@ -64,8 +69,12 @@ interface SpaceTypeOption {
   applicable_space_types?: string[] | null;
 }
 
-interface SpacesTabProps {
+interface ScopeTabProps {
   propertyId: string | null;
+  /** The lead or project this scope is being viewed from - where the floor
+   *  plan is uploaded and filed. */
+  linkedType: "lead" | "project";
+  linkedId: string;
   readOnly?: boolean;
   /**
    * Called after a space or component is added or removed - never on a field
@@ -76,11 +85,13 @@ interface SpacesTabProps {
   onChanged?: () => void;
 }
 
-export function SpacesTab({
+export function ScopeTab({
   propertyId,
+  linkedType,
+  linkedId,
   readOnly = false,
   onChanged,
-}: SpacesTabProps) {
+}: ScopeTabProps) {
   const { confirmDialog } = useConfirm();
   const [items, setItems] = useState<PropertyScopeItem[]>([]);
   const [spaceTypes, setSpaceTypes] = useState<SpaceTypeOption[]>([]);
@@ -88,6 +99,9 @@ export function SpacesTab({
   // Read from the cost item catalogue, so a tier chosen here always matches
   // something that can actually be priced.
   const [qualityTiers, setQualityTiers] = useState<string[]>([]);
+  const [presets, setPresets] = useState<ScopePreset[]>([]);
+  // A preset card on the empty state opens the add dialog already filled.
+  const [presetToOpen, setPresetToOpen] = useState<ScopePreset | null>(null);
   // Which space is having components added, if any.
   const [addTarget, setAddTarget] = useState<
     { kind: "space" } | { kind: "component"; spaceId: string; spaceName: string }
@@ -128,7 +142,7 @@ export function SpacesTab({
        * fixed cost (an Auth-server round trip plus a users lookup, ~650ms
        * together) before reading a row. See lib/quotations/config-cache.
        */
-      const [scopeRes, types, comps, tiers] = await Promise.all([
+      const [scopeRes, types, comps, tiers, presetList] = await Promise.all([
         fetch(`/api/properties/${propertyId}/scope`),
         fetchConfigOnce<{ data?: SpaceTypeOption[] }>(
           "/api/quotations/config/space-types"
@@ -139,6 +153,7 @@ export function SpacesTab({
         fetchConfigOnce<{ tiers?: { name: string }[] }>(
           "/api/quotations/config/quality-tiers"
         ).catch(() => null),
+        fetchConfigOnce<{ data?: ScopePreset[] }>("/api/scope-presets").catch(() => null),
       ]);
       if (!scopeRes.ok) throw new Error("Failed to load property scope");
       const scope = await scopeRes.json();
@@ -151,6 +166,7 @@ export function SpacesTab({
       if (tiers) {
         setQualityTiers((tiers.tiers || []).map((x) => x.name));
       }
+      if (presetList) setPresets(presetList.data || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
     } finally {
@@ -726,16 +742,20 @@ export function SpacesTab({
   };
 
   return (
+    <div className="space-y-4">
+    {propertyId && (
+      <ScopeBrief propertyId={propertyId} linkedType={linkedType} linkedId={linkedId} readOnly={readOnly} />
+    )}
     <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-900">
-            Spaces in this property
+            Spaces and what goes in them
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
             {items.length
-              ? `${items.length} space${items.length === 1 ? "" : "s"} — used to build the quotation`
-              : "What the client wants work in, room by room"}
+              ? `${items.length} row${items.length === 1 ? "" : "s"} — the quotation starts from these`
+              : "Room by room, then the components inside each"}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -782,7 +802,7 @@ export function SpacesTab({
       )}
 
       {items.length === 0 ? (
-        <div className="p-10 text-center">
+        <div className="p-8 text-center">
           <HomeModernIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />
           <p className="text-sm font-medium text-slate-700 mb-1">
             No spaces listed yet
@@ -792,6 +812,32 @@ export function SpacesTab({
             through to the quotation and the project, so they only get entered
             once.
           </p>
+          {!readOnly && presets.length > 0 && (
+            <div className="mt-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Start from a preset</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {presets.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      setAddTarget({ kind: "space" });
+                      setPresetToOpen(p);
+                      setShowAdd(true);
+                    }}
+                    title={p.description ?? undefined}
+                    className="px-3 py-2 text-left rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors min-w-[8rem]"
+                  >
+                    <span className="block text-sm font-semibold text-blue-800">{p.name}</span>
+                    <span className="block text-[11px] text-blue-700/80">
+                      {p.items.reduce((n, i) => n + i.count, 0)} spaces
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-slate-400">Opens the add dialog filled in — adjust, then add.</p>
+            </div>
+          )}
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -848,17 +894,21 @@ export function SpacesTab({
         onClose={() => {
           setShowAdd(false);
           setAddTarget({ kind: "space" });
+          setPresetToOpen(null);
         }}
         target={addTarget}
         spaceTypes={spaceTypes}
         componentTypes={componentTypesForTarget}
         containers={containers}
+        presets={presets}
         showQuickStarts={items.length === 0}
+        initialPreset={presetToOpen}
         onAdd={addSpaces}
       />
       {confirmDialog}
     </div>
+    </div>
   );
 }
 
-export default SpacesTab;
+export default ScopeTab;

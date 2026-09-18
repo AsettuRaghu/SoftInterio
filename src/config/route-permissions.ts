@@ -133,6 +133,11 @@ export const routePermissions: RoutePermission[] = [
   // QUOTATIONS ROUTES
   // ============================================
   {
+    pattern: "/dashboard/settings/catalogue/presets",
+    permissions: ["quotations.view"],
+    description: "Scope presets",
+  },
+  {
     pattern: "/dashboard/settings/catalogue",
     permissions: ["quotations.view"],
     description: "Catalogue (spaces, components, categories, cost items)",

@@ -12,13 +12,12 @@
  * screen only collects counts.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { XMarkIcon, MinusIcon, PlusIcon } from "@heroicons/react/24/outline";
 import {
-  SCOPE_QUICK_STARTS,
-  SCOPE_QUICK_START_LABELS,
   type ScopeBulkEntry,
+  type ScopePreset,
 } from "@/types/property-scope";
 
 interface SpaceTypeOption {
@@ -44,8 +43,11 @@ interface AddSpacesModalProps {
 
   /** Containers already in the scope, so a room can be put on a floor. */
   containers?: { id: string; name: string }[];
-  /** Quick-start chips are only offered while the scope is still empty. */
+  /** The tenant's presets; chips are offered only while the scope is empty. */
+  presets?: ScopePreset[];
   showQuickStarts?: boolean;
+  /** Open already filled from this preset (the empty state's cards). */
+  initialPreset?: ScopePreset | null;
   onAdd: (
     entries: ScopeBulkEntry[],
     componentsBySpaceType: Record<string, string[]>
@@ -59,7 +61,9 @@ export function AddSpacesModal({
   spaceTypes,
   componentTypes = [],
   containers = [],
+  presets = [],
   showQuickStarts = false,
+  initialPreset = null,
   onAdd,
 }: AddSpacesModalProps) {
   const addingComponents = target.kind === "component";
@@ -81,17 +85,13 @@ export function AddSpacesModal({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const bySlug = useMemo(
-    () => new Map(options.map((t) => [t.slug, t.id])),
-    [options]
-  );
-
   useEffect(() => {
     if (!isOpen) return;
     setError(null);
     setParentId("");
     setCounts({});
     setComponentPicks({});
+    setPresetId(null);
   }, [isOpen]);
 
   /** Components that declare they belong in this space type. */
@@ -119,19 +119,33 @@ export function AddSpacesModal({
   }, [counts, applicableTo, addingComponents]);
 
   /**
-   * Fills the grid from a configuration the seller picks. Replaces rather than
-   * adds, so clicking 3 BHK after 4 BHK gives three bedrooms instead of seven.
+   * Fills the grid from a preset. Replaces rather than adds, so clicking
+   * 3 BHK after 4 BHK gives three bedrooms instead of seven. A preset item
+   * that names its components sets them; null leaves the default (whatever
+   * declares it belongs in that space type), which the effect below fills.
    */
-  const applyQuickStart = (key: string) => {
-    const preset = SCOPE_QUICK_STARTS[key];
-    if (!preset) return;
-    const seeded: Record<string, number> = {};
-    for (const [slug, n] of Object.entries(preset)) {
-      const id = bySlug.get(slug);
-      if (id) seeded[id] = n;
-    }
-    setCounts(seeded);
-  };
+  const [presetId, setPresetId] = useState<string | null>(null);
+  const applyPreset = useCallback(
+    (preset: ScopePreset) => {
+      const known = new Set(spaceTypes.map((t) => t.id));
+      const seeded: Record<string, number> = {};
+      const picks: Record<string, string[]> = {};
+      for (const item of preset.items) {
+        if (!known.has(item.space_type_id)) continue;
+        seeded[item.space_type_id] = item.count;
+        if (item.component_type_ids) picks[item.space_type_id] = item.component_type_ids;
+      }
+      setCounts(seeded);
+      setComponentPicks(picks);
+      setPresetId(preset.id);
+    },
+    [spaceTypes],
+  );
+
+  // Opened from a preset card: arrive filled in.
+  useEffect(() => {
+    if (isOpen && initialPreset) applyPreset(initialPreset);
+  }, [isOpen, initialPreset, applyPreset]);
 
   if (!isOpen) return null;
 
@@ -232,25 +246,30 @@ export function AddSpacesModal({
             </div>
           )}
 
-          {showQuickStarts && !addingComponents && (
+          {showQuickStarts && !addingComponents && presets.length > 0 && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                Start from a configuration
+                Start from a preset
               </label>
               <div className="flex flex-wrap gap-1.5">
-                {SCOPE_QUICK_START_LABELS.map((q) => (
+                {presets.map((q) => (
                   <button
-                    key={q.key}
+                    key={q.id}
                     type="button"
-                    onClick={() => applyQuickStart(q.key)}
-                    className="px-2.5 py-1 text-xs font-medium rounded-md border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors"
+                    onClick={() => applyPreset(q)}
+                    title={q.description ?? undefined}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors ${
+                      presetId === q.id
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                    }`}
                   >
-                    {q.label}
+                    {q.name}
                   </button>
                 ))}
               </div>
               <p className="mt-1 text-[11px] text-slate-400">
-                Fills the counts below — adjust anything before adding.
+                Fills the counts below — adjust anything before adding. Presets are kept under Settings → Catalogue.
               </p>
             </div>
           )}
