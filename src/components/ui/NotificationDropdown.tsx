@@ -2,9 +2,10 @@
 
 /**
  * The bell in the header: unread count on the icon, and a panel of the
- * latest notifications grouped Today / Earlier. Reads everything from
- * NotificationsProvider, which holds the one live subscription per tab -
- * this component fetches nothing of its own.
+ * latest notifications grouped Today / Earlier. This is the whole surface -
+ * there is no separate notifications page; the bell is reachable everywhere.
+ * Reads everything from NotificationsProvider, which holds the one live
+ * subscription per tab - this component fetches nothing of its own.
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -23,7 +24,7 @@ const startOfToday = () => {
 export function NotificationDropdown() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const { items, unreadCount, loaded, markAllRead } = useNotifications();
+  const { items, unreadCount, loaded, markAllRead, clearRead } = useNotifications();
 
   useEffect(() => {
     if (!open) return;
@@ -111,11 +112,13 @@ export function NotificationDropdown() {
             )}
           </div>
 
-          <div className="border-t border-slate-100 px-4 py-2 text-center">
-            <Link href="/dashboard/notifications" onClick={() => setOpen(false)} className="text-xs font-medium text-slate-600 hover:text-blue-600">
-              See all notifications
-            </Link>
-          </div>
+          {items.some((n) => n.is_read) && (
+            <div className="border-t border-slate-100 px-4 py-2 text-center">
+              <button type="button" onClick={() => void clearRead()} className="text-xs font-medium text-slate-500 hover:text-slate-800">
+                Clear the ones you have read
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

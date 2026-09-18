@@ -317,11 +317,11 @@ export function Dashboard() {
 
   if (permsLoading || loading) {
     return (
-      <div className="p-4 space-y-4 animate-pulse">
-        <div className="h-24 bg-slate-100 rounded-lg" />
+      <div className="-m-3 min-h-[calc(100vh-80px)] bg-linear-to-br from-indigo-50 via-white to-amber-50 p-6 space-y-5 animate-pulse">
+        <div className="h-24 bg-white/60 rounded-xl" />
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          <div className="xl:col-span-2 h-72 bg-slate-100 rounded-lg" />
-          <div className="h-72 bg-slate-100 rounded-lg" />
+          <div className="xl:col-span-2 h-72 bg-white/60 rounded-xl" />
+          <div className="h-72 bg-white/60 rounded-xl" />
         </div>
       </div>
     );
@@ -330,18 +330,25 @@ export function Dashboard() {
   const nothingToday = focusTasks.length === 0 && asides.length === 0;
 
   return (
-    <div className="p-4 space-y-4">
+    // The whole page is the canvas: a soft gradient with a few colour washes
+    // behind everything, cards sitting on it as frosted glass. The shell
+    // pads content by p-3, so the wrapper pulls out to the edges first.
+    <div className="relative -m-3 min-h-[calc(100vh-80px)] overflow-hidden bg-linear-to-br from-indigo-50 via-white to-amber-50">
+      <div className="pointer-events-none absolute -top-24 -left-24 w-[28rem] h-[28rem] rounded-full bg-violet-200/50 blur-3xl" />
+      <div className="pointer-events-none absolute top-40 -right-32 w-[30rem] h-[30rem] rounded-full bg-sky-200/50 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 left-1/3 w-[26rem] h-[26rem] rounded-full bg-amber-200/50 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 right-1/4 w-[22rem] h-[22rem] rounded-full bg-emerald-200/40 blur-3xl" />
+
+      <div className="relative p-6 space-y-5">
       {/* ------------------------------------------------------- hero */}
-      <section className="rounded-lg border border-slate-200 bg-white overflow-hidden">
-        <div className="relative px-6 py-5 bg-linear-to-r from-indigo-50 via-white to-amber-50">
-          {/* A little colour behind the greeting, none of it over text. */}
-          <div className="pointer-events-none absolute -top-12 -right-12 w-56 h-56 rounded-full bg-indigo-100/70 blur-2xl" />
-          <div className="pointer-events-none absolute -bottom-16 left-1/3 w-48 h-48 rounded-full bg-amber-100/70 blur-2xl" />
-          <div className="relative flex flex-wrap items-center gap-6">
+      {/* No box: the greeting floats on the page, the ring and the streak as
+          glass chips beside it, the week line under them. */}
+      <section className="space-y-4">
+          <div className="flex flex-wrap items-center gap-6">
             <div className="flex-1 min-w-[260px]">
-              <p className="text-sm text-slate-500">{dateLine}</p>
-              <h1 className="text-3xl font-bold tracking-tight text-slate-900">{greeting(name)}.</h1>
-              <p className="text-sm text-slate-600 mt-1">
+              <p className="text-sm font-medium text-indigo-600/80">{dateLine}</p>
+              <h1 className="text-4xl font-bold tracking-tight text-slate-900">{greeting(name)}.</h1>
+              <p className="text-sm text-slate-600 mt-1.5">
                 {nothingToday
                   ? "Nothing is due and nothing is overdue. A clean slate - make something of it."
                   : [
@@ -355,7 +362,7 @@ export function Dashboard() {
               </p>
             </div>
 
-            <div className="flex items-center gap-4 rounded-lg bg-white/80 border border-slate-200 px-4 py-3">
+            <div className="flex items-center gap-4 rounded-2xl bg-white/70 backdrop-blur-md shadow-lg shadow-indigo-100/60 ring-1 ring-white/70 px-5 py-3.5">
               <Ring pct={ringPct} label={`${doneToday}/${todayTotal || 0}`} dark={false} />
               <div className="text-sm">
                 <p className="font-semibold text-slate-900">Today</p>
@@ -364,7 +371,7 @@ export function Dashboard() {
               </div>
             </div>
 
-            <div className="flex items-center gap-4 rounded-lg bg-white/80 border border-slate-200 px-4 py-3">
+            <div className="flex items-center gap-4 rounded-2xl bg-white/70 backdrop-blur-md shadow-lg shadow-amber-100/60 ring-1 ring-white/70 px-5 py-3.5">
               <div className="flex items-end gap-1">
                 {week.map(({ d, n }) => (
                   <div key={dayKey(d)} className="flex flex-col items-center gap-1" title={`${d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric" })} · ${n} done`}>
@@ -382,10 +389,9 @@ export function Dashboard() {
               </div>
             </div>
           </div>
-        </div>
 
-        {/* This week - the summary that earns its place. */}
-        <div className="px-6 py-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-slate-700 border-t border-slate-100">
+        {/* This week - the summary that earns its place, as a line of text. */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-slate-700">
           <span className="inline-flex items-center gap-1.5 font-semibold text-slate-900"><SparklesIcon className="w-4 h-4 text-amber-500" /> This week</span>
           {wins.steps + wins.meetings + wins.leadsWon + wins.approved === 0 ? (
             <span className="text-slate-500">nothing closed yet - the week is young</span>
@@ -403,7 +409,7 @@ export function Dashboard() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         {/* --------------------------------------------------- focus */}
         <section className="xl:col-span-2 space-y-4">
-          <div className="rounded-lg border border-slate-200 bg-white">
+          <div className="rounded-xl bg-white/80 backdrop-blur-md shadow-sm ring-1 ring-white/80">
             <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
               <BoltIcon className="w-5 h-5 text-indigo-600" />
               <h2 className="text-sm font-semibold text-slate-900">Your steps today</h2>
@@ -439,7 +445,7 @@ export function Dashboard() {
           </div>
 
           {asides.length > 0 && (
-            <div className="rounded-lg border border-slate-200 bg-white">
+            <div className="rounded-xl bg-white/80 backdrop-blur-md shadow-sm ring-1 ring-white/80">
               <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
                 <h2 className="text-sm font-semibold text-slate-900">Also today</h2>
                 <span className="text-xs text-slate-500">meetings, follow-ups and quotations that need a hand</span>
@@ -467,7 +473,7 @@ export function Dashboard() {
 
         {/* --------------------------------------------------- side */}
         <div className="space-y-4">
-          <section className="rounded-lg border border-slate-200 bg-white">
+          <section className="rounded-xl bg-white/80 backdrop-blur-md shadow-sm ring-1 ring-white/80">
             <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
               <CalendarDaysIcon className="w-5 h-5 text-indigo-600" />
               <h2 className="text-sm font-semibold text-slate-900">Today’s schedule</h2>
@@ -502,7 +508,7 @@ export function Dashboard() {
           </section>
 
           {canQuotations && (awaitingApproval.length > 0 || myDrafts.length > 0) && (
-            <section className="rounded-lg border border-slate-200 bg-white">
+            <section className="rounded-xl bg-white/80 backdrop-blur-md shadow-sm ring-1 ring-white/80">
               <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
                 <DocumentTextIcon className="w-5 h-5 text-indigo-600" />
                 <h2 className="text-sm font-semibold text-slate-900">Quotations</h2>
@@ -537,7 +543,7 @@ export function Dashboard() {
           )}
 
           {canLeads && coldLeads.length > 0 && (
-            <section className="rounded-lg border border-slate-200 bg-white">
+            <section className="rounded-xl bg-white/80 backdrop-blur-md shadow-sm ring-1 ring-white/80">
               <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
                 <PhoneIcon className="w-5 h-5 text-indigo-600" />
                 <h2 className="text-sm font-semibold text-slate-900">Going cold</h2>
@@ -565,7 +571,7 @@ export function Dashboard() {
       {(canProjects && myProjects.length > 0) || (canLeads && leads.length > 0) ? (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           {canProjects && myProjects.length > 0 && (
-            <section className="xl:col-span-2 rounded-lg border border-slate-200 bg-white">
+            <section className="xl:col-span-2 rounded-xl bg-white/80 backdrop-blur-md shadow-sm ring-1 ring-white/80">
               <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
                 <BuildingOffice2Icon className="w-5 h-5 text-indigo-600" />
                 <h2 className="text-sm font-semibold text-slate-900">Projects under way</h2>
@@ -601,7 +607,7 @@ export function Dashboard() {
           )}
 
           {canLeads && leads.length > 0 && (
-            <section className="rounded-lg border border-slate-200 bg-white">
+            <section className="rounded-xl bg-white/80 backdrop-blur-md shadow-sm ring-1 ring-white/80">
               <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
                 <h2 className="text-sm font-semibold text-slate-900">Pipeline</h2>
                 <span className="text-xs text-slate-500">open leads by stage</span>
@@ -642,6 +648,7 @@ export function Dashboard() {
         }}
       />
       <Toast message={notice?.message ?? null} variant={notice?.variant ?? "error"} onDismiss={() => setNotice(null)} />
+      </div>
     </div>
   );
 }

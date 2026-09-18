@@ -11,6 +11,7 @@
 import React, { useEffect, useState } from "react";
 import { PageLayout, PageHeader, PageContent } from "@/components/ui/PageLayout";
 import { Toast } from "@/components/ui/Toast";
+import { BellIcon } from "@heroicons/react/24/outline";
 import { cn } from "@/utils/cn";
 import {
   NOTIFICATION_GROUPS,
@@ -62,6 +63,8 @@ export default function NotificationSettingsPage() {
         subtitle="What reaches you in the app. Everything is on unless you switch it off here; these are yours alone."
         basePath={{ label: "Settings", href: "/dashboard/settings" }}
         breadcrumbs={[{ label: "Notifications" }]}
+        icon={<BellIcon className="w-4 h-4 text-white" />}
+        iconBgClass="from-slate-600 to-slate-700"
       />
       <PageContent>
         <div className="max-w-2xl space-y-4">

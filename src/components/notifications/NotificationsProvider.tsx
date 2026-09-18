@@ -39,6 +39,8 @@ interface Ctx {
   markRead: (ids: string[]) => Promise<void>;
   markAllRead: () => Promise<void>;
   remove: (id: string) => Promise<void>;
+  /** Deletes everything already read. */
+  clearRead: () => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -170,9 +172,14 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     await fetch(`/api/notifications?id=${id}`, { method: "DELETE" }).catch(() => undefined);
   }, []);
 
+  const clearRead = useCallback(async () => {
+    setItems((prev) => prev.filter((n) => !n.is_read));
+    await fetch("/api/notifications?read=true", { method: "DELETE" }).catch(() => undefined);
+  }, []);
+
   const value = useMemo<Ctx>(
-    () => ({ items, unreadCount, loaded, incoming, dismissIncoming, markRead, markAllRead, remove, refresh }),
-    [items, unreadCount, loaded, incoming, dismissIncoming, markRead, markAllRead, remove, refresh],
+    () => ({ items, unreadCount, loaded, incoming, dismissIncoming, markRead, markAllRead, remove, clearRead, refresh }),
+    [items, unreadCount, loaded, incoming, dismissIncoming, markRead, markAllRead, remove, clearRead, refresh],
   );
 
   return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;
