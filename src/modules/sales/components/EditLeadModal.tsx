@@ -246,7 +246,7 @@ export function EditLeadModal({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Assigned to
+                  Assigned to <RequiredStar show={lead.stage !== "new"} />
                 </label>
                 <select
                   value={editForm.assigned_to || ""}
@@ -259,10 +259,14 @@ export function EditLeadModal({
                   }
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white"
                 >
-                  {/* A lead past New has an owner; only a new lead may sit unassigned. */}
-                  <option value="" disabled={lead.stage !== "new"}>
-                    {lead.stage === "new" ? "Unassigned" : "Choose an owner"}
-                  </option>
+                  {/* A lead past New has an owner; only a new lead may sit
+                      unassigned. Past New the placeholder is hidden from the
+                      list, so "Unassigned" is not a choice at all. */}
+                  {lead.stage === "new" ? (
+                    <option value="">Unassigned</option>
+                  ) : (
+                    <option value="" hidden>Choose an owner</option>
+                  )}
                   {assignableUsers.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name || u.email}
