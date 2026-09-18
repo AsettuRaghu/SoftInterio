@@ -38,6 +38,7 @@ export function ConfigurationField({
   value: string;
   onChange: (v: string) => void;
   required?: boolean;
+  /** The edit dialog's smaller controls; the create form and stage dialog use the larger. */
   compact?: boolean;
 }) {
   return (
@@ -45,24 +46,22 @@ export function ConfigurationField({
       <label className="block text-sm font-medium text-slate-700 mb-1">
         Configuration {required && <span className="text-red-500">*</span>}
       </label>
-      <div className="inline-flex flex-wrap rounded-lg border border-slate-200 overflow-hidden">
+      <select
+        value={value}
+        required={required}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(
+          "w-full border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white",
+          compact ? "px-3 py-2 text-sm" : "px-4 py-2.5",
+        )}
+      >
+        <option value="">Select configuration</option>
         {CONFIGURATIONS.map((c) => (
-          <button
-            key={c}
-            type="button"
-            onClick={() => onChange(value === c ? "" : c)}
-            className={cn(
-              "font-medium border-r border-slate-200 last:border-r-0",
-              compact ? "px-2.5 py-1.5 text-xs" : "px-3 py-2 text-sm",
-              value === c ? "bg-slate-800 text-white" : "bg-white text-slate-700 hover:bg-slate-50",
-            )}
-          >
+          <option key={c} value={c}>
             {CONFIGURATION_LABELS[c]}
-          </button>
+          </option>
         ))}
-      </div>
-      {/* The native form check: a hidden required input carrying the value. */}
-      {required && <input tabIndex={-1} required value={value} onChange={() => undefined} className="sr-only" aria-hidden />}
+      </select>
     </div>
   );
 }
