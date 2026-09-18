@@ -106,7 +106,7 @@ export function LastActivityCell({
           than none. The icon says what kind of thing it was. */}
       {(detail || type) && (
         <p
-          className="flex items-start gap-1.5 text-xs text-slate-500 break-words whitespace-normal leading-snug"
+          className="flex items-start gap-1.5 text-xs text-slate-500 wrap-break-word whitespace-normal leading-snug"
           title={detail ? `${typeLabel(type) || "Activity"} — ${detail}` : undefined}
         >
           <ActivityGlyph icon={iconForActivity(type)} className="mt-0.5" />
@@ -179,7 +179,7 @@ export function FollowUpCell({
     <div>
       <p className={`text-sm font-medium ${toneFor(next.at)}`}>{labelFor(next.at)}</p>
       <p
-        className="flex items-start gap-1.5 text-xs text-slate-500 break-words whitespace-normal leading-snug"
+        className="flex items-start gap-1.5 text-xs text-slate-500 wrap-break-word whitespace-normal leading-snug"
         title={`${iconForUpcoming(next.kind).name}: ${next.label}`}
       >
         <ActivityGlyph icon={iconForUpcoming(next.kind)} className="mt-0.5" />

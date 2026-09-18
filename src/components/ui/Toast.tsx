@@ -77,7 +77,7 @@ export function Toast({
         <Icon className={`w-6 h-6 shrink-0 ${look.icon}`} />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-slate-900 leading-5">{look.headline}</p>
-          <p className="text-sm text-slate-700 leading-5 mt-0.5 break-words">{message}</p>
+          <p className="text-sm text-slate-700 leading-5 mt-0.5 wrap-break-word">{message}</p>
         </div>
         <button
           type="button"
