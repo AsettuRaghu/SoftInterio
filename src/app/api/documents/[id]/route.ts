@@ -114,6 +114,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (body.title !== undefined) {
       updateData.title = body.title;
     }
+    if (typeof body.is_starred === "boolean") {
+      (updateData as Record<string, unknown>).is_starred = body.is_starred;
+    }
     if (body.description !== undefined) {
       updateData.description = body.description;
     }

@@ -7,18 +7,29 @@ type RouteParams = { params: Promise<{ id: string; itemId: string }> };
 
 /**
  * Library entries pinned to a scope row - "they liked this one".
- * GET -> shaped entries · POST { library_entry_id } · DELETE ?entry=
+ * GET -> shaped entries, starred first · POST { library_entry_id } ·
+ * PATCH { library_entry_id, is_starred } · DELETE ?entry=
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const guard = await protectApiRoute(request, { requiredPermissions: ["leads.view"] });
   if (!guard.success) return createErrorResponse(guard.error!, guard.statusCode!);
   const { itemId } = await params;
   const supabase = await createClient();
-  const { data: pins } = await supabase.from("scope_item_library_pins").select("library_entry_id").eq("scope_item_id", itemId);
+  const { data: pins } = await supabase
+    .from("scope_item_library_pins")
+    .select("library_entry_id, is_starred, created_at")
+    .eq("scope_item_id", itemId)
+    .order("is_starred", { ascending: false })
+    .order("created_at", { ascending: true });
   const ids = (pins ?? []).map((p) => p.library_entry_id);
   if (ids.length === 0) return NextResponse.json({ data: [] });
   const { data } = await supabase.from("library_entries").select(ENTRY_SELECT).in("id", ids);
-  return NextResponse.json({ data: await shapeEntries(data ?? []) });
+  const shaped = await shapeEntries(data ?? []);
+  const byId = new Map(shaped.map((e) => [e.id, e]));
+  // Starred first, then as pinned.
+  return NextResponse.json({
+    data: (pins ?? []).map((p) => byId.get(p.library_entry_id)).filter(Boolean).map((e) => ({ ...e, is_starred: !!pins?.find((p) => p.library_entry_id === e!.id)?.is_starred })),
+  });
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
@@ -35,6 +46,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     { onConflict: "scope_item_id,library_entry_id", ignoreDuplicates: true },
   );
   if (error) return NextResponse.json({ error: "Could not pin" }, { status: 500 });
+  return NextResponse.json({ success: true });
+}
+
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const guard = await protectApiRoute(request, { requiredPermissions: ["leads.edit"] });
+  if (!guard.success) return createErrorResponse(guard.error!, guard.statusCode!);
+  const { itemId } = await params;
+  const supabase = await createClient();
+  const body = await request.json().catch(() => ({}));
+  if (!body.library_entry_id || typeof body.is_starred !== "boolean") {
+    return NextResponse.json({ error: "library_entry_id and is_starred are required" }, { status: 400 });
+  }
+  const { error } = await supabase
+    .from("scope_item_library_pins")
+    .update({ is_starred: body.is_starred })
+    .eq("scope_item_id", itemId)
+    .eq("library_entry_id", body.library_entry_id);
+  if (error) return NextResponse.json({ error: "Could not save" }, { status: 500 });
   return NextResponse.json({ success: true });
 }
 

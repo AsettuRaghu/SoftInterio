@@ -29,9 +29,11 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   PhotoIcon,
+  StarIcon,
   TrashIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
+import { StarIcon as StarSolidIcon } from "@heroicons/react/24/solid";
 import { cn } from "@/utils/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { COMMON_FINISHES, scopeOwnerLabel, type PropertyScopeItem } from "@/types/property-scope";
@@ -396,8 +398,8 @@ function References({
       fetch(`/api/documents?linked_type=scope_item&linked_id=${item.id}`).then((r) => r.json()).catch(() => null),
       fetch(`/api/properties/${propertyId}/scope/${item.id}/pins`).then((r) => r.json()).catch(() => null),
     ]);
-    setDocs(d?.documents ?? []);
-    setPins(p?.data ?? []);
+    setDocs(starredFirst(d?.documents ?? []));
+    setPins(starredFirst(p?.data ?? []));
   }, [item.id, propertyId]);
 
   useEffect(() => {
@@ -436,6 +438,22 @@ function References({
     if (!(await confirm({ title: `Remove ${d.title || d.file_name}?`, message: "It is removed from this space and from Documents.", confirmLabel: "Remove", tone: "danger" }))) return;
     await fetch(`/api/documents/${d.id}`, { method: "DELETE" });
     await load();
+  };
+
+  // A star moves the picture to the front - the one the customer pointed at.
+  const starDoc = async (d: RefDoc) => {
+    const next = !d.is_starred;
+    setDocs((list) => starredFirst(list.map((x) => (x.id === d.id ? { ...x, is_starred: next } : x))));
+    await fetch(`/api/documents/${d.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_starred: next }) });
+  };
+  const starPin = async (p: LibraryEntryLite) => {
+    const next = !p.is_starred;
+    setPins((list) => starredFirst(list.map((x) => (x.id === p.id ? { ...x, is_starred: next } : x))));
+    await fetch(`/api/properties/${propertyId}/scope/${item.id}/pins`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ library_entry_id: p.id, is_starred: next }),
+    });
   };
 
   const openPicker = async () => {
@@ -489,6 +507,16 @@ function References({
                     </div>
                   )}
                 </button>
+                {(d.is_starred || !readOnly) && (
+                  <button
+                    type="button"
+                    onClick={() => !readOnly && void starDoc(d)}
+                    title={d.is_starred ? "Starred - shown first" : "Star - show first"}
+                    className={cn("absolute top-0.5 left-0.5 w-5 h-5 items-center justify-center rounded bg-white/90", d.is_starred ? "flex text-amber-500" : "hidden group-hover:flex text-slate-400 hover:text-amber-500")}
+                  >
+                    {d.is_starred ? <StarSolidIcon className="w-3 h-3" /> : <StarIcon className="w-3 h-3" />}
+                  </button>
+                )}
                 {!readOnly && (
                   <button type="button" onClick={() => void removeDoc(d)} title="Remove" className="absolute top-0.5 right-0.5 hidden group-hover:flex w-5 h-5 items-center justify-center rounded bg-white/90 text-slate-500 hover:text-red-600">
                     <TrashIcon className="w-3 h-3" />
@@ -519,6 +547,16 @@ function References({
                 <button type="button" onClick={() => setViewing(docs.length + pins.indexOf(p))} className="block w-full h-full text-left" title={p.title}>
                   {p.images[0]?.url ? <img src={p.images[0].url} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-300"><PhotoIcon className="w-6 h-6" /></div>}
                 </button>
+                {(p.is_starred || !readOnly) && (
+                  <button
+                    type="button"
+                    onClick={() => !readOnly && void starPin(p)}
+                    title={p.is_starred ? "Starred - shown first" : "Star - show first"}
+                    className={cn("absolute top-0.5 left-0.5 w-5 h-5 items-center justify-center rounded bg-white/90", p.is_starred ? "flex text-amber-500" : "hidden group-hover:flex text-slate-400 hover:text-amber-500")}
+                  >
+                    {p.is_starred ? <StarSolidIcon className="w-3 h-3" /> : <StarIcon className="w-3 h-3" />}
+                  </button>
+                )}
                 {!readOnly && (
                   <button type="button" onClick={() => void unpin(p.id)} title="Unpin" className="absolute top-0.5 right-0.5 hidden group-hover:flex w-5 h-5 items-center justify-center rounded bg-white/90 text-slate-500 hover:text-red-600">
                     <XMarkIcon className="w-3 h-3" />
