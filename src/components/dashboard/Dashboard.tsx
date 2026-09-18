@@ -26,12 +26,14 @@ import { useUserPermissions } from "@/hooks/useUserPermissions";
 import { cn } from "@/utils/cn";
 import { StatusPill, Chip } from "@/components/ui/list-cells";
 import { Toast } from "@/components/ui/Toast";
+import TaskTableReusable from "@/components/tasks/TaskTableReusable";
+import { EditTaskModal } from "@/components/tasks/EditTaskModal";
+import type { Task } from "@/types/tasks";
 import { QuotationStatusLabels, type QuotationStatus } from "@/types/quotations";
 import { LeadStageLabels, type LeadStage } from "@/types/leads";
 import {
   CalendarDaysIcon,
   CheckCircleIcon,
-  ClipboardDocumentCheckIcon,
   FireIcon,
   MapPinIcon,
   PhoneIcon,
@@ -157,6 +159,9 @@ export function Dashboard() {
   const [quotations, setQuotations] = useState<QuotationLite[]>([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<{ message: string; variant: "success" | "error" } | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
+  const reload = () => setReloadTick((n) => n + 1);
 
   useEffect(() => {
     if (permsLoading) return;
@@ -199,7 +204,7 @@ export function Dashboard() {
     return () => {
       alive = false;
     };
-  }, [permsLoading, canTasks, canLeads, canProjects, canQuotations]);
+  }, [permsLoading, canTasks, canLeads, canProjects, canQuotations, reloadTick]);
 
   const me = user?.id ?? "";
   const today = todayKey();
@@ -268,24 +273,30 @@ export function Dashboard() {
   );
 
   /* --------------------------------------------------------- the focus list */
-  type Focus = { key: string; kind: "task" | "event" | "followup" | "quote"; title: string; context: string; when: string; tone: "red" | "amber" | "blue" | "slate"; href: string; task?: TaskLite };
-  const focus = useMemo<Focus[]>(() => {
-    const out: Focus[] = [];
-    for (const t of overdueTasks) out.push({ key: `t${t.id}`, kind: "task", title: t.title, context: [t.related_name, t.stage_title].filter(Boolean).join(" · "), when: `${-daysUntil(t.due_date!)}d overdue`, tone: "red", href: `/dashboard/tasks/${t.id}`, task: t });
+  // The steps for today, in the order they bite: overdue first, then running,
+  // then due today. Drawn by the same task table as the Plan tab and the
+  // Tasks page, so a step behaves here exactly as it does there.
+  const focusTasks = useMemo<Task[]>(() => {
+    const seen = new Set<string>();
+    const out: TaskLite[] = [];
+    for (const t of [...overdueTasks, ...running, ...dueToday]) {
+      if (seen.has(t.id)) continue;
+      seen.add(t.id);
+      out.push(t);
+    }
+    return out as unknown as Task[];
+  }, [overdueTasks, running, dueToday]);
+
+  // What else today asks for, besides steps: meetings, follow-ups, and
+  // quotations whose validity is ending.
+  type Aside = { key: string; kind: "event" | "followup" | "quote"; title: string; context: string; when: string; tone: "red" | "amber" | "blue"; href: string };
+  const asides = useMemo<Aside[]>(() => {
+    const out: Aside[] = [];
     for (const f of followUps) out.push({ key: `f${f.lead.id}${f.at}`, kind: "followup", title: f.label || "Follow up", context: `${f.lead.client?.name ?? f.lead.lead_number} · ${LeadStageLabels[f.lead.stage as LeadStage] ?? f.lead.stage}`, when: daysUntil(f.at) < 0 ? `${-daysUntil(f.at)}d overdue` : "today", tone: daysUntil(f.at) < 0 ? "red" : "amber", href: `/dashboard/sales/leads/${f.lead.id}` });
     for (const e of todaysEvents) out.push({ key: `e${e.id}`, kind: "event", title: e.title, context: [e.source_name, e.location].filter(Boolean).join(" · "), when: e.is_all_day ? "all day" : timeOf(e.scheduled_at), tone: "blue", href: "/dashboard/calendar" });
-    for (const t of dueToday) out.push({ key: `t${t.id}`, kind: "task", title: t.title, context: [t.related_name, t.stage_title].filter(Boolean).join(" · "), when: t.status === "in_progress" ? "running" : "due today", tone: t.status === "in_progress" ? "blue" : "amber", href: `/dashboard/tasks/${t.id}`, task: t });
     for (const q of expiringQuotes) out.push({ key: `q${q.id}`, kind: "quote", title: `${q.quotation_number} v${q.version}${q.client_name ? ` · ${q.client_name}` : ""}`, context: `${QuotationStatusLabels[q.status]} · ${money(q.grand_total)}`, when: daysUntil(q.valid_until!) < 0 ? "validity over" : daysUntil(q.valid_until!) === 0 ? "valid till today" : `valid ${daysUntil(q.valid_until!)}d more`, tone: daysUntil(q.valid_until!) <= 0 ? "red" : "amber", href: `/dashboard/quotations/${q.id}` });
     return out;
-  }, [overdueTasks, followUps, todaysEvents, dueToday, expiringQuotes]);
-
-  const completeTask = async (t: TaskLite) => {
-    const res = await fetch(`/api/tasks/${t.id}/transition`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "completed" }) });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) return setNotice({ message: json.error || "Could not complete it", variant: "error" });
-    setTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, status: "completed", completed_at: new Date().toISOString() } : x)));
-    setNotice({ message: `"${t.title}" done. ${doneToday + 1 === 1 ? "First of the day." : `${doneToday + 1} today.`}`, variant: "success" });
-  };
+  }, [followUps, todaysEvents, expiringQuotes]);
 
   /* ------------------------------------------------------------ projects */
   const myProjects = useMemo(
@@ -316,122 +327,141 @@ export function Dashboard() {
     );
   }
 
-  const nothingToday = focus.length === 0;
+  const nothingToday = focusTasks.length === 0 && asides.length === 0;
 
   return (
     <div className="p-4 space-y-4">
       {/* ------------------------------------------------------- hero */}
       <section className="rounded-lg border border-slate-200 bg-white overflow-hidden">
-        <div className="bg-linear-to-r from-slate-900 via-slate-800 to-indigo-900 text-white px-6 py-5 flex flex-wrap items-center gap-6">
-          <div className="flex-1 min-w-[240px]">
-            <p className="text-sm text-slate-300">{dateLine}</p>
-            <h1 className="text-2xl font-bold tracking-tight">{greeting(name)}</h1>
-            <p className="text-sm text-slate-300 mt-1">
-              {nothingToday
-                ? "Nothing is due and nothing is overdue. A clean slate - make something of it."
-                : [
-                    overdueTasks.length ? `${overdueTasks.length} overdue` : null,
-                    dueToday.length ? `${dueToday.length} due today` : null,
-                    todaysEvents.length ? `${todaysEvents.length} meeting${todaysEvents.length === 1 ? "" : "s"}` : null,
-                    followUps.length ? `${followUps.length} follow-up${followUps.length === 1 ? "" : "s"}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-            </p>
-          </div>
-
-          {/* The ring: today's steps, done over due. */}
-          <div className="flex items-center gap-4">
-            <Ring pct={ringPct} label={`${doneToday}/${todayTotal || 0}`} />
-            <div className="text-sm">
-              <p className="font-semibold">Today</p>
-              <p className="text-slate-300">{todayTotal === 0 ? "no steps on the clock" : `${doneToday} done of ${todayTotal}`}</p>
-              {doneYesterday > 0 && <p className="text-slate-400 text-xs mt-0.5">yesterday you closed {doneYesterday}</p>}
-            </div>
-          </div>
-
-          {/* Streak dots: seven days, lit where something got finished. */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-end gap-1">
-              {week.map(({ d, n }) => (
-                <div key={dayKey(d)} className="flex flex-col items-center gap-1" title={`${d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric" })} · ${n} done`}>
-                  <span className={cn("w-3 rounded-sm transition-all", n === 0 ? "h-1.5 bg-white/20" : n < 3 ? "h-4 bg-emerald-400/80" : "h-6 bg-emerald-400")} />
-                  <span className="text-[9px] text-slate-400">{d.toLocaleDateString("en-IN", { weekday: "narrow" })}</span>
-                </div>
-              ))}
-            </div>
-            <div className="text-sm">
-              <p className="font-semibold flex items-center gap-1">
-                <FireIcon className={cn("w-4 h-4", streak > 0 ? "text-orange-400" : "text-slate-500")} />
-                {streak > 0 ? `${streak}-day streak` : "Start a streak"}
+        <div className="relative px-6 py-5 bg-linear-to-r from-indigo-50 via-white to-amber-50">
+          {/* A little colour behind the greeting, none of it over text. */}
+          <div className="pointer-events-none absolute -top-12 -right-12 w-56 h-56 rounded-full bg-indigo-100/70 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-16 left-1/3 w-48 h-48 rounded-full bg-amber-100/70 blur-2xl" />
+          <div className="relative flex flex-wrap items-center gap-6">
+            <div className="flex-1 min-w-[260px]">
+              <p className="text-sm text-slate-500">{dateLine}</p>
+              <h1 className="text-3xl font-bold tracking-tight text-slate-900">{greeting(name)}.</h1>
+              <p className="text-sm text-slate-600 mt-1">
+                {nothingToday
+                  ? "Nothing is due and nothing is overdue. A clean slate - make something of it."
+                  : [
+                      overdueTasks.length ? `${overdueTasks.length} overdue` : null,
+                      dueToday.length ? `${dueToday.length} due today` : null,
+                      todaysEvents.length ? `${todaysEvents.length} meeting${todaysEvents.length === 1 ? "" : "s"}` : null,
+                      followUps.length ? `${followUps.length} follow-up${followUps.length === 1 ? "" : "s"}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
               </p>
-              <p className="text-slate-300 text-xs">{streak > 0 ? "finish one thing today to keep it" : "finish one thing today"}</p>
+            </div>
+
+            <div className="flex items-center gap-4 rounded-lg bg-white/80 border border-slate-200 px-4 py-3">
+              <Ring pct={ringPct} label={`${doneToday}/${todayTotal || 0}`} dark={false} />
+              <div className="text-sm">
+                <p className="font-semibold text-slate-900">Today</p>
+                <p className="text-slate-600">{todayTotal === 0 ? "no steps on the clock" : `${doneToday} done of ${todayTotal}`}</p>
+                {doneYesterday > 0 && <p className="text-slate-400 text-xs mt-0.5">yesterday you closed {doneYesterday}</p>}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4 rounded-lg bg-white/80 border border-slate-200 px-4 py-3">
+              <div className="flex items-end gap-1">
+                {week.map(({ d, n }) => (
+                  <div key={dayKey(d)} className="flex flex-col items-center gap-1" title={`${d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric" })} · ${n} done`}>
+                    <span className={cn("w-3 rounded-sm transition-all", n === 0 ? "h-1.5 bg-slate-200" : n < 3 ? "h-4 bg-emerald-400" : "h-6 bg-emerald-500")} />
+                    <span className="text-[9px] text-slate-400">{d.toLocaleDateString("en-IN", { weekday: "narrow" })}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="text-sm">
+                <p className="font-semibold text-slate-900 flex items-center gap-1">
+                  <FireIcon className={cn("w-4 h-4", streak > 0 ? "text-orange-500" : "text-slate-400")} />
+                  {streak > 0 ? `${streak}-day streak` : "Start a streak"}
+                </p>
+                <p className="text-slate-500 text-xs">{streak > 0 ? "finish one thing today to keep it" : "finish one thing today"}</p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Wins this week */}
-        {(wins.steps || wins.leadsWon || wins.approved || wins.meetings) ? (
-          <div className="px-6 py-2.5 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-slate-700 border-t border-slate-100 bg-slate-50/60">
-            <span className="inline-flex items-center gap-1.5 font-medium text-slate-900"><SparklesIcon className="w-4 h-4 text-amber-500" /> This week</span>
-            {wins.steps > 0 && <span><b className="tabular-nums">{wins.steps}</b> step{wins.steps === 1 ? "" : "s"} finished</span>}
-            {wins.meetings > 0 && <span><b className="tabular-nums">{wins.meetings}</b> meeting{wins.meetings === 1 ? "" : "s"} held</span>}
-            {wins.leadsWon > 0 && <span><b className="tabular-nums">{wins.leadsWon}</b> lead{wins.leadsWon === 1 ? "" : "s"} won{wins.wonValue ? ` · ${money(wins.wonValue)}` : ""}</span>}
-            {wins.approved > 0 && <span><b className="tabular-nums">{wins.approved}</b> quotation{wins.approved === 1 ? "" : "s"} approved</span>}
-          </div>
-        ) : null}
+        {/* This week - the summary that earns its place. */}
+        <div className="px-6 py-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-slate-700 border-t border-slate-100">
+          <span className="inline-flex items-center gap-1.5 font-semibold text-slate-900"><SparklesIcon className="w-4 h-4 text-amber-500" /> This week</span>
+          {wins.steps + wins.meetings + wins.leadsWon + wins.approved === 0 ? (
+            <span className="text-slate-500">nothing closed yet - the week is young</span>
+          ) : (
+            <>
+              {wins.steps > 0 && <span><b className="tabular-nums">{wins.steps}</b> step{wins.steps === 1 ? "" : "s"} finished</span>}
+              {wins.meetings > 0 && <span><b className="tabular-nums">{wins.meetings}</b> meeting{wins.meetings === 1 ? "" : "s"} held</span>}
+              {wins.leadsWon > 0 && <span><b className="tabular-nums">{wins.leadsWon}</b> lead{wins.leadsWon === 1 ? "" : "s"} won{wins.wonValue ? ` · ${money(wins.wonValue)}` : ""}</span>}
+              {wins.approved > 0 && <span><b className="tabular-nums">{wins.approved}</b> quotation{wins.approved === 1 ? "" : "s"} approved</span>}
+            </>
+          )}
+        </div>
       </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         {/* --------------------------------------------------- focus */}
-        <section className="xl:col-span-2 rounded-lg border border-slate-200 bg-white">
-          <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
-            <BoltIcon className="w-5 h-5 text-indigo-600" />
-            <h2 className="text-sm font-semibold text-slate-900">Focus for today</h2>
-            <span className="text-xs text-slate-500">worst first</span>
-            <span className="flex-1" />
-            {running.length > 0 && <span className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">{running.length} running</span>}
-          </div>
-          {nothingToday ? (
-            <div className="px-6 py-12 text-center">
-              <CheckCircleIcon className="w-10 h-10 mx-auto text-emerald-500 mb-2" />
-              <p className="text-sm font-medium text-slate-800">Nothing owed today.</p>
-              <p className="text-xs text-slate-500 mt-1">Pick something up early - the plan is on the Projects tab, the pipeline under Sales.</p>
+        <section className="xl:col-span-2 space-y-4">
+          <div className="rounded-lg border border-slate-200 bg-white">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
+              <BoltIcon className="w-5 h-5 text-indigo-600" />
+              <h2 className="text-sm font-semibold text-slate-900">Your steps today</h2>
+              <span className="text-xs text-slate-500">overdue first, then running, then due</span>
+              <span className="flex-1" />
+              {running.length > 0 && <span className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">{running.length} running</span>}
+              <Link href="/dashboard/tasks" className="text-xs text-blue-600 hover:underline">All tasks</Link>
             </div>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {focus.slice(0, 14).map((f) => (
-                <li key={f.key} className="px-4 py-2.5 flex items-center gap-3 hover:bg-slate-50 group">
-                  <span
-                    className={cn(
-                      "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
-                      f.tone === "red" ? "bg-red-50 text-red-600" : f.tone === "amber" ? "bg-amber-50 text-amber-600" : f.tone === "blue" ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-500"
-                    )}
-                  >
-                    {f.kind === "task" ? <ClipboardDocumentCheckIcon className="w-4 h-4" /> : f.kind === "event" ? <CalendarDaysIcon className="w-4 h-4" /> : f.kind === "followup" ? <PhoneIcon className="w-4 h-4" /> : <DocumentTextIcon className="w-4 h-4" />}
-                  </span>
-                  <button type="button" onClick={() => router.push(f.href)} className="flex-1 min-w-0 text-left">
-                    <p className="text-sm font-medium text-slate-900 truncate">{f.title}</p>
-                    {f.context && <p className="text-xs text-slate-500 truncate">{f.context}</p>}
-                  </button>
-                  <span className={cn("text-xs tabular-nums whitespace-nowrap", f.tone === "red" ? "text-red-600 font-medium" : f.tone === "amber" ? "text-amber-700" : "text-slate-500")}>{f.when}</span>
-                  {f.task && f.task.status !== "on_hold" && (
-                    <button
-                      type="button"
-                      onClick={() => void completeTask(f.task!)}
-                      title="Mark done"
-                      className="w-7 h-7 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-600 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-emerald-100 transition-opacity"
-                    >
-                      <CheckCircleIcon className="w-4 h-4" />
+            {focusTasks.length === 0 ? (
+              <div className="px-6 py-10 text-center">
+                <CheckCircleIcon className="w-10 h-10 mx-auto text-emerald-500 mb-2" />
+                <p className="text-sm font-medium text-slate-800">No steps owed today.</p>
+                <p className="text-xs text-slate-500 mt-1">Pick something up early - the plan is on each project, your list under Tasks.</p>
+              </div>
+            ) : user ? (
+              // The same table as the Plan tab and the Tasks page: the timer
+              // buttons, the status, the assignee, the dates, Edit - nothing
+              // different to learn here.
+              <TaskTableReusable
+                currentUserId={user.id}
+                externalTasks={focusTasks as never[]}
+                showHeader={false}
+                compact
+                showTabs={false}
+                showCreateButton={false}
+                showLinkedColumn
+                preserveOrder
+                initialPageSize={50}
+                onTaskClick={(t) => setEditingTask(t as unknown as Task)}
+                onRefresh={reload}
+              />
+            ) : null}
+          </div>
+
+          {asides.length > 0 && (
+            <div className="rounded-lg border border-slate-200 bg-white">
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-slate-900">Also today</h2>
+                <span className="text-xs text-slate-500">meetings, follow-ups and quotations that need a hand</span>
+              </div>
+              <ul className="divide-y divide-slate-100">
+                {asides.map((f) => (
+                  <li key={f.key}>
+                    <button type="button" onClick={() => router.push(f.href)} className="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-slate-50 text-left group">
+                      <span className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", f.tone === "red" ? "bg-red-50 text-red-600" : f.tone === "amber" ? "bg-amber-50 text-amber-600" : "bg-blue-50 text-blue-600")}>
+                        {f.kind === "event" ? <CalendarDaysIcon className="w-4 h-4" /> : f.kind === "followup" ? <PhoneIcon className="w-4 h-4" /> : <DocumentTextIcon className="w-4 h-4" />}
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-medium text-slate-900 truncate">{f.title}</span>
+                        {f.context && <span className="block text-xs text-slate-500 truncate">{f.context}</span>}
+                      </span>
+                      <span className={cn("text-xs tabular-nums whitespace-nowrap", f.tone === "red" ? "text-red-600 font-medium" : f.tone === "amber" ? "text-amber-700" : "text-slate-500")}>{f.when}</span>
+                      <ArrowRightIcon className="w-4 h-4 text-slate-300 group-hover:text-slate-500" />
                     </button>
-                  )}
-                  <ArrowRightIcon className="w-4 h-4 text-slate-300 group-hover:text-slate-500" />
-                </li>
-              ))}
-              {focus.length > 14 && (
-                <li className="px-4 py-2 text-xs text-slate-500">and {focus.length - 14} more - <Link href="/dashboard/tasks" className="text-blue-600 hover:underline">open the task list</Link></li>
-              )}
-            </ul>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </section>
 
@@ -599,6 +629,18 @@ export function Dashboard() {
         </div>
       ) : null}
 
+      <EditTaskModal
+        task={editingTask}
+        isOpen={!!editingTask}
+        onClose={() => {
+          setEditingTask(null);
+          reload();
+        }}
+        onUpdate={() => {
+          setEditingTask(null);
+          reload();
+        }}
+      />
       <Toast message={notice?.message ?? null} variant={notice?.variant ?? "error"} onDismiss={() => setNotice(null)} />
     </div>
   );
