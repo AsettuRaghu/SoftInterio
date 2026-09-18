@@ -85,7 +85,7 @@ function Thread({
   const summary = counts
     ? [counts.decisions ? `${counts.decisions} decision${counts.decisions === 1 ? "" : "s"}` : null, counts.notes ? `${counts.notes} note${counts.notes === 1 ? "" : "s"}` : null]
         .filter(Boolean)
-        .join(" · ") || "nothing yet"
+        .join(" · ") || "no entries yet"
     : "";
   return (
     <div className="rounded-lg border border-slate-200 overflow-hidden">
@@ -181,11 +181,11 @@ function ComponentCard({
               </div>
             </div>
           ) : c.scope_owner === "excluded" ? (
-            <p className="text-xs text-slate-500">Not in scope - named so &ldquo;that was never included&rdquo; has an answer later.</p>
+            <p className="text-xs text-slate-500">Not part of this scope.</p>
           ) : (
             <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-700 mb-1.5">
-                Arriving from {c.scope_owner === "vendor" ? c.scope_vendor_name || "the vendor" : "the client"}
+                Provided by {c.scope_owner === "vendor" ? c.scope_vendor_name || "the vendor" : "the client"}
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-[1fr_11rem] gap-2">
                 <input
@@ -195,7 +195,7 @@ function ComponentCard({
                   onBlur={() => {
                     if (supplied.trim() !== (c.supplied_detail ?? "")) void onPatch(c, { supplied_detail: supplied.trim() || null });
                   }}
-                  placeholder="What exactly - Faber 90cm hood, model X · 6×6.5 ft bed, existing"
+                  placeholder="Item and details - make, model, size"
                   className="px-3 py-1.5 text-sm border border-slate-200 rounded-md bg-white outline-none focus:border-amber-400"
                 />
                 <input
@@ -274,7 +274,7 @@ export function ScopeItemPanel({
   return createPortal(
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-slate-900/30" onClick={onClose} />
-      <aside className="relative h-full w-full max-w-2xl bg-white shadow-2xl flex flex-col animate-[slide-in-right_.2s_ease-out]">
+      <aside className="relative h-full w-full lg:w-1/2 lg:max-w-none max-w-2xl bg-white shadow-2xl flex flex-col animate-[slide-in-right_.2s_ease-out]">
         <div className="px-5 pt-4 pb-3 border-b border-slate-200 flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-[11px] uppercase tracking-wider text-slate-400">
@@ -327,7 +327,7 @@ export function ScopeItemPanel({
               )}
             </div>
             {components.length === 0 ? (
-              <p className="text-xs text-slate-400">None listed in this space yet - add them from the list.</p>
+              <p className="text-xs text-slate-400">No components in this space yet.</p>
             ) : (
               <ul className="space-y-2">
                 {components.map((c) => (
@@ -475,7 +475,7 @@ function References({
           <input ref={fileInput} type="file" multiple accept="image/*,.pdf,.dwg,.dxf" className="hidden" onChange={(e) => e.target.files && void upload(e.target.files)} />
         </div>
         {docs.length === 0 ? (
-          <p className="text-xs text-slate-400">None yet - their screenshots, a drawing, a photo of what they have.</p>
+          <p className="text-xs text-slate-400">No references added yet.</p>
         ) : (
           <div className={cn("grid gap-2", compact ? "grid-cols-4" : "grid-cols-3")}>
             {docs.map((d) => (
@@ -512,7 +512,7 @@ function References({
           )}
         </div>
         {pins.length === 0 && !picking ? (
-          <p className="text-xs text-slate-400">Nothing pinned from the library.</p>
+          <p className="text-xs text-slate-400">Nothing from the Design Library yet.</p>
         ) : (
           <div className={cn("grid gap-2", compact ? "grid-cols-4" : "grid-cols-3")}>
             {pins.map((p) => (

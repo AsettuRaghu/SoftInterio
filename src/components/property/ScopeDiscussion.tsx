@@ -104,7 +104,7 @@ export function ScopeDiscussion({
     <div className="flex flex-col">
       <div className="p-3 space-y-2">
         {rows.length === 0 ? (
-          <p className="text-xs text-slate-400">No discussion yet. What was said, what was agreed - it goes here and stays with the record into the project.</p>
+          <p className="text-xs text-slate-400">No discussion yet.</p>
         ) : (
           rows.map((c) => (
             <div key={c.id} className={cn("group rounded-lg border px-3 py-2", c.is_decision ? "border-emerald-200 bg-emerald-50/50" : "border-slate-200 bg-white")}>
@@ -145,7 +145,7 @@ export function ScopeDiscussion({
               if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void post();
             }}
             rows={2}
-            placeholder="What was said or agreed… (⌘↵ to post)"
+            placeholder="Add a note or a decision… (⌘↵ to post)"
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-400 resize-none"
           />
           <div className="flex items-center gap-3">
