@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { FollowUpsWidget } from "@/components/dashboard/FollowUpsWidget";
+import { Dashboard } from "@/components/dashboard/Dashboard";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   XMarkIcon,
@@ -64,22 +64,11 @@ function AccessDeniedBanner() {
 
 export default function DashboardPage() {
   return (
-    <div className="p-4 space-y-4">
+    <>
       <Suspense fallback={null}>
         <AccessDeniedBanner />
       </Suspense>
-
-      <div>
-        <h1 className="text-xl font-semibold text-slate-800">Dashboard</h1>
-        <p className="text-sm text-slate-500">
-          What needs your attention today
-        </p>
-      </div>
-
-      {/* The first thing a salesperson should see each morning. */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <FollowUpsWidget />
-      </div>
-    </div>
+      <Dashboard />
+    </>
   );
 }
