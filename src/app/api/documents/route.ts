@@ -241,6 +241,10 @@ export async function POST(request: NextRequest) {
     const title = formData.get("title") as string | null;
     const description = formData.get("description") as string | null;
     const tagsStr = formData.get("tags") as string | null;
+    // A file on a scope row also belongs to the lead or project it sits
+    // under, the way a task's file does - so it shows in that Documents tab.
+    const parentLinkedType = (formData.get("parent_linked_type") as DocumentLinkedType | null) || null;
+    const parentLinkedId = (formData.get("parent_linked_id") as string | null) || null;
 
     if (!file) {
       return NextResponse.json({ error: "File is required" }, { status: 400 });
@@ -319,6 +323,9 @@ export async function POST(request: NextRequest) {
       description: description || null,
       tags: tags,
       uploaded_by: user.id,
+      ...(parentLinkedType && parentLinkedId && ["lead", "project"].includes(parentLinkedType)
+        ? { parent_linked_type: parentLinkedType, parent_linked_id: parentLinkedId }
+        : {}),
     };
 
     const { data: document, error: dbError } = await supabaseAdmin

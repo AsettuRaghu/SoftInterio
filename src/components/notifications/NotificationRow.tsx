@@ -15,6 +15,7 @@ import {
   CheckCircleIcon,
   ClipboardDocumentListIcon,
   DocumentCheckIcon,
+  HomeModernIcon,
   PauseCircleIcon,
   PlayCircleIcon,
   RocketLaunchIcon,
@@ -36,6 +37,7 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   project_assigned: BriefcaseIcon,
   project_held: PauseCircleIcon,
   project_resumed: PlayCircleIcon,
+  scope_changed: HomeModernIcon,
 };
 
 const TONES: Record<string, string> = {

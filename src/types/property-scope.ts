@@ -71,6 +71,11 @@ export const SCOPE_OWNER_LABELS: Record<ScopeOwner, string> = {
 };
 
 export interface PropertyScopeItem {
+  /** The finish they want here, when it differs from the brief. */
+  preferred_finish?: string | null;
+  /** For a client/vendor row: what is arriving from them, and by when. */
+  supplied_detail?: string | null;
+  supplied_expected_by?: string | null;
   id: string;
   tenant_id: string;
   property_id: string;
@@ -154,5 +159,52 @@ export interface ScopeBrief {
   /** quotation_cost_item_categories ids. */
   services_wanted: string[];
   brief_notes: string | null;
+  /** library_styles codes. */
+  style_codes: string[];
+  preferred_finishes: string[];
+  budget_band: BudgetBand | null;
+  open_to_carpentry: boolean | null;
+  timeline_notes: string | null;
   updated_at: string | null;
+}
+
+export type BudgetBand = "under_5l" | "5_10l" | "10_20l" | "20_40l" | "above_40l";
+export const BUDGET_BAND_LABELS: Record<BudgetBand, string> = {
+  under_5l: "Under ₹5L",
+  "5_10l": "₹5–10L",
+  "10_20l": "₹10–20L",
+  "20_40l": "₹20–40L",
+  above_40l: "Above ₹40L",
+};
+
+/** Offered as chips; anything else can be typed. The tenant's catalogue is
+ *  the real vocabulary and will replace this list when finishes live there. */
+export const COMMON_FINISHES = ["Laminate", "Acrylic", "PU", "Veneer", "Membrane", "Glass", "Leather", "Solid wood"];
+
+/** One entry in a scope row's discussion. */
+export interface ScopeComment {
+  id: string;
+  property_id: string;
+  scope_item_id: string | null;
+  body: string;
+  is_decision: boolean;
+  needs_rework: boolean;
+  task_id: string | null;
+  created_by: string | null;
+  author_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** One line of a scope row's change log. */
+export interface ScopeHistoryEntry {
+  id: string;
+  scope_item_id: string;
+  item_name: string;
+  action: "added" | "changed" | "removed";
+  changes: Record<string, { from: unknown; to: unknown }>;
+  reason: string | null;
+  changed_by: string | null;
+  changed_by_name: string;
+  changed_at: string;
 }

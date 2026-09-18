@@ -58,6 +58,11 @@ export const NOTIFICATION_KINDS = {
     group: "Projects",
     tone: "emerald",
   },
+  scope_changed: {
+    label: "The scope of my project changes after kick-off",
+    group: "Projects",
+    tone: "amber",
+  },
 } as const;
 
 export type NotificationKind = keyof typeof NOTIFICATION_KINDS;

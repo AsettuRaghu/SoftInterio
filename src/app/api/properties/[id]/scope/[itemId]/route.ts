@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { afterScopeChange } from "@/lib/scope/after-change";
 import { logLeadActivity } from "@/lib/activity/log";
 
 /** Rename, measure or remove a single scope item. */
@@ -24,6 +25,11 @@ const WRITABLE = [
   // for; an excluded row is named so nobody assumes it later.
   "scope_owner",
   "scope_vendor_name",
+  // The register: what finish they want, and for a client/vendor row what
+  // is arriving from them and by when.
+  "preferred_finish",
+  "supplied_detail",
+  "supplied_expected_by",
 ] as const;
 
 const SCOPE_OWNERS = new Set(["us", "client", "vendor", "excluded"]);
@@ -96,6 +102,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
     if (typeof updates.name === "string") updates.name = updates.name.trim();
 
+    // The history trigger records what changed; the reason, when given, is
+    // added to that row afterwards - see below.
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+
     const { data, error } = await supabase
       .from("property_scope_items")
       .update(updates)
@@ -109,6 +119,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         { error: "Failed to update space" },
         { status: 500 }
       );
+    }
+
+    // Attach the reason to the change the trigger just logged (the newest
+    // row for this item by this person), and tell the project manager when
+    // the scope moves under a project that has been kicked off.
+    if (Object.keys(updates).length) {
+      void afterScopeChange(supabase, {
+        propertyId,
+        itemId,
+        itemName: String(data?.name ?? existing.name),
+        reason,
+        actor: guard.user.id,
+        tenantId: guard.user.tenantId,
+        changed: Object.keys(updates),
+      });
     }
 
     return NextResponse.json({ item: data });

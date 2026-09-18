@@ -21,9 +21,12 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { fetchConfigOnce } from "@/lib/quotations/config-cache";
 import { AddSpacesModal } from "./AddSpacesModal";
 import { ScopeBrief } from "./ScopeBrief";
+import { ScopeItemPanel } from "./ScopeItemPanel";
 import {
   PlusIcon,
   TrashIcon,
+  ChatBubbleLeftRightIcon,
+  PresentationChartBarIcon,
   HomeModernIcon,
   ChevronRightIcon,
   ChevronDownIcon,
@@ -102,6 +105,8 @@ export function ScopeTab({
   const [presets, setPresets] = useState<ScopePreset[]>([]);
   // A preset card on the empty state opens the add dialog already filled.
   const [presetToOpen, setPresetToOpen] = useState<ScopePreset | null>(null);
+  // The row opened out in the side panel; the walkthrough starts at the first.
+  const [openItemId, setOpenItemId] = useState<string | null>(null);
   // Which space is having components added, if any.
   const [addTarget, setAddTarget] = useState<
     { kind: "space" } | { kind: "component"; spaceId: string; spaceName: string }
@@ -232,9 +237,11 @@ export function ScopeTab({
    */
   const patchItem = async (
     item: PropertyScopeItem,
-    updates: Partial<PropertyScopeItem>
+    updatesWithReason: Partial<PropertyScopeItem> & { reason?: string }
   ) => {
     if (!propertyId) return;
+    // The reason goes to the change log, not onto the row.
+    const { reason, ...updates } = updatesWithReason;
     setItems((prev) =>
       prev.map((i) => (i.id === item.id ? { ...i, ...updates } : i))
     );
@@ -245,7 +252,7 @@ export function ScopeTab({
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updates),
+          body: JSON.stringify(reason ? { ...updates, reason } : updates),
         }
       );
       if (!response.ok) {
@@ -722,8 +729,16 @@ export function ScopeTab({
           </select>
         </td>
         <td className="px-3 py-2 text-right">
+          <span className="inline-flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setOpenItemId(item.id)}
+              title="Open: finish, what the client supplies, references, discussion, changes"
+              className="w-6.5 h-6.5 inline-flex items-center justify-center rounded-md border bg-white text-slate-500 border-slate-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-all"
+            >
+              <ChatBubbleLeftRightIcon className="w-3.5 h-3.5" />
+            </button>
           {!readOnly && (
-            <span className="inline-flex items-center gap-1.5">
             <button
               onClick={() => void removeItem(item)}
               disabled={savingId === item.id}
@@ -732,8 +747,8 @@ export function ScopeTab({
             >
               <TrashIcon className="w-3.5 h-3.5" />
             </button>
-            </span>
           )}
+          </span>
         </td>
       </tr>
       {!isCollapsed && kids.map((child) => renderRow(child, depth + 1))}
@@ -759,6 +774,17 @@ export function ScopeTab({
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+        {roots.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setOpenItemId(roots[0].id)}
+            title="Go through the scope space by space - for sitting with the customer"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+          >
+            <PresentationChartBarIcon className="w-3.5 h-3.5" />
+            Walkthrough
+          </button>
+        )}
         {/* One control rather than two: in a mixed state the useful action is
             to collapse whatever is still open. */}
         {collapsibleIds.length > 0 && (
@@ -907,6 +933,23 @@ export function ScopeTab({
       />
       {confirmDialog}
     </div>
+    {openItemId && propertyId && (() => {
+      const current = items.find((i) => i.id === openItemId);
+      if (!current) return null;
+      return (
+        <ScopeItemPanel
+          item={current}
+          items={items}
+          propertyId={propertyId}
+          linkedType={linkedType}
+          linkedId={linkedId}
+          readOnly={readOnly}
+          onClose={() => setOpenItemId(null)}
+          onNavigate={(i) => setOpenItemId(i.id)}
+          onPatch={patchItem}
+        />
+      );
+    })()}
     </div>
   );
 }

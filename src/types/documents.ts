@@ -13,7 +13,8 @@ export type DocumentLinkedType =
   | "property"
   | "purchase_order"
   | "vendor"
-  | "expense";
+  | "expense"
+  | "scope_item";
 
 // Document categories
 export type DocumentCategory =

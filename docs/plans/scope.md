@@ -76,5 +76,10 @@ off the property so a lead and its project share one set of rows.
 ## Build order
 1. ~~Rename · presets · services wanted · floor plan first.~~ Done 2026-09-18.
 2. ~~Quotation starts from scope every time · "Bring in from scope".~~ Done 2026-09-18.
-3. Preferences · references · discussion with decisions.
-4. Client-supplied detail · walkthrough · change log · rework → task.
+3. ~~Preferences · references · discussion with decisions.~~ Done 2026-09-18.
+4. ~~Client-supplied detail · walkthrough · change log · rework → task.~~ Done 2026-09-18.
+
+Still open after the four slices: finishes as catalogue vocabulary (today
+a common list plus free text); a task made from a comment lands on the
+lead or project, not on a specific playbook step; the PM's after-kick-off
+notice is once a day per project, not per change.

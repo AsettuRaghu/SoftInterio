@@ -4,13 +4,30 @@ import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
+const BRIEF_COLUMNS =
+  "property_id, services_wanted, brief_notes, style_codes, preferred_finishes, budget_band, open_to_carpentry, timeline_notes, updated_at";
+const emptyBrief = (id: string) => ({
+  property_id: id,
+  services_wanted: [],
+  brief_notes: null,
+  style_codes: [],
+  preferred_finishes: [],
+  budget_band: null,
+  open_to_carpentry: null,
+  timeline_notes: null,
+  updated_at: null,
+});
+const BUDGET_BANDS = new Set(["under_5l", "5_10l", "10_20l", "20_40l", "above_40l"]);
+
 /**
  * The brief beside a property's scope: services wanted and the notes of
  * the first conversation. Same permissions as the scope rows themselves;
  * RLS keeps it to the tenant. One row per property, created on first save.
  *
- * GET -> { data: { property_id, services_wanted, brief_notes, updated_at } }
- * PUT { services_wanted?: uuid[], brief_notes?: string }
+ * GET -> { data: { property_id, services_wanted, brief_notes, style_codes,
+ *                  preferred_finishes, budget_band, open_to_carpentry,
+ *                  timeline_notes, updated_at } }
+ * PUT any subset of those (not property_id / updated_at)
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const guard = await protectApiRoute(request, { requiredPermissions: ["leads.view"] });
@@ -19,12 +36,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("property_scope_brief")
-    .select("property_id, services_wanted, brief_notes, updated_at")
+    .select(BRIEF_COLUMNS)
     .eq("property_id", id)
     .maybeSingle();
-  return NextResponse.json({
-    data: data ?? { property_id: id, services_wanted: [], brief_notes: null, updated_at: null },
-  });
+  return NextResponse.json({ data: data ?? emptyBrief(id) });
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
@@ -54,11 +69,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     row.services_wanted = ids;
   }
   if ("brief_notes" in body) row.brief_notes = String(body.brief_notes ?? "").trim() || null;
+  if (Array.isArray(body.style_codes)) row.style_codes = [...new Set(body.style_codes.map(String))].slice(0, 20);
+  if (Array.isArray(body.preferred_finishes)) {
+    row.preferred_finishes = [...new Set(body.preferred_finishes.map((x: unknown) => String(x).trim()).filter(Boolean))].slice(0, 30);
+  }
+  if ("budget_band" in body) row.budget_band = body.budget_band && BUDGET_BANDS.has(String(body.budget_band)) ? String(body.budget_band) : null;
+  if ("open_to_carpentry" in body) row.open_to_carpentry = typeof body.open_to_carpentry === "boolean" ? body.open_to_carpentry : null;
+  if ("timeline_notes" in body) row.timeline_notes = String(body.timeline_notes ?? "").trim() || null;
 
   const { data, error } = await supabase
     .from("property_scope_brief")
     .upsert(row, { onConflict: "property_id" })
-    .select("property_id, services_wanted, brief_notes, updated_at")
+    .select(BRIEF_COLUMNS)
     .single();
   if (error) {
     console.error("[scope brief] save failed", error.message);

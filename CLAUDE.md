@@ -98,6 +98,22 @@ from a lead. The empty scope shows them as cards that open the add dialog
 filled in; the dialog's chips offer them too. Five were seeded per tenant
 from the old quick starts.
 
+**Each row opens out** (`ScopeItemPanel`, the speech-bubble on the row, or
+**Walkthrough** from the header to go space by space with ←/→): the finish
+they want; for a client/vendor row what is arriving from them and by when
+(`supplied_detail`, `supplied_expected_by` - never priced); references
+(Documents with `linked_type = scope_item`, parent-linked to the lead or
+project so they sit in its Documents tab too, tagged `space: …`; and
+Design Library entries pinned via `scope_item_library_pins`); a
+discussion (`scope_item_comments`, each entry a note or a decision, "make a
+task" creates one on the lead or project and keeps `task_id`); and the
+change log. **The log is a trigger** (`trg_property_scope_items_history` →
+`property_scope_item_history`, `changed_by = auth.uid()`), so no route can
+skip it; the PATCH adds the person's `reason` to the row the trigger just
+wrote, and after kick-off tells the project manager (`scope_changed`, once
+a day per project). Preferences (style codes from `library_styles`,
+finishes, budget band, open to carpentry, timeline) live on the brief.
+
 Settled with the user, not to be reopened casually: no price on a scope
 row; the quotation **pulls** from the scope on demand and only adds what is
 missing (rows owned by client/vendor/excluded are never brought in); after
