@@ -17,8 +17,6 @@ interface BuilderSidebarProps {
   total?: number;
   taxPercent?: number;
   onTaxPercentChange?: (percent: number) => void;
-  /** From the scope's brief; each ticks off once a line in that category exists. */
-  servicesWanted?: { id: string; name: string }[];
   /**
    * Whether this user may see internal costs. Comes from the quotation API,
    * which strips the underlying figures for anyone without cost_items.pricing
@@ -36,7 +34,6 @@ export function BuilderSidebar({
   total = 0,
   taxPercent = 18,
   onTaxPercentChange,
-  servicesWanted = [],
   canViewCosts = false,
 }: BuilderSidebarProps) {
   const totalSpaces = spaces.length;
@@ -295,38 +292,6 @@ export function BuilderSidebar({
           </span>
         </div>
       </div>
-
-      {/* Asked for / quoted.
-          The services the customer ticked on the Scope tab, each green once a
-          line in that category exists - so "they asked for false ceiling and
-          nothing was quoted" is visible here, not after the PDF went out. */}
-      {servicesWanted.length > 0 && (() => {
-        const quoted = new Set(
-          spaces.flatMap((sp) => sp.components.flatMap((c) => c.lineItems.map((li) => li.categoryName.toLowerCase()))),
-        );
-        const missing = servicesWanted.filter((sv) => !quoted.has(sv.name.toLowerCase()));
-        return (
-          <div className={`mt-6 p-4 rounded-lg border ${missing.length ? "bg-amber-50 border-amber-200" : "bg-emerald-50 border-emerald-200"}`}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">Asked for</span>
-              <span className={`text-xs font-medium ${missing.length ? "text-amber-700" : "text-emerald-700"}`}>
-                {missing.length ? `${missing.length} not quoted yet` : "all quoted"}
-              </span>
-            </div>
-            <ul className="space-y-1">
-              {servicesWanted.map((sv) => {
-                const ok = quoted.has(sv.name.toLowerCase());
-                return (
-                  <li key={sv.id} className={`flex items-center gap-2 text-sm ${ok ? "text-emerald-800" : "text-amber-800"}`}>
-                    <span className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] ${ok ? "bg-emerald-600 border-emerald-600 text-white" : "border-amber-400 text-amber-600"}`}>{ok ? "✓" : "·"}</span>
-                    {sv.name}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        );
-      })()}
 
       {/* Profitability.
           Only rendered for users allowed to see costs, and only once some

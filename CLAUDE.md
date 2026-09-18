@@ -98,15 +98,22 @@ from a lead. The empty scope shows them as cards that open the add dialog
 filled in; the dialog's chips offer them too. Five were seeded per tenant
 from the old quick starts.
 
-**The tab has three sections** - Requirements, Spaces, Conversation - under
-a readiness strip, and **the sale cannot advance past the scope**
-(`lib/scope/readiness.ts`): moving to Requirement discussion needs a floor
-plan, a space and a service wanted; moving to Proposal (which creates the
-quotation) needs a rough size on every space of ours, a component, a style
-and a finish. The transition route refuses with `SCOPE_NOT_READY` and the
-list; the strip shows the same list beforehand. Requirements asks nothing
-the lead form asks - service type, budget, target dates and carpet area
-are shown there and saved **to the lead** through `onSaveFacts`.
+**Qualifying a lead needs the configuration and the floor plan**, and lays
+the scope down (2026-09-18, third round). `properties.configuration`
+(studio · 1bhk … 5bhk_plus · other) is a property fact the lead form never
+held - its "subtype" is gated/non-gated. The stage dialog asks both when
+moving to `qualified` (the plan can be uploaded right there), the
+transition route refuses without them, and on success
+`applyPresetForConfiguration` lays the matching preset onto an **empty**
+scope so Requirement discussion opens on rooms. The tab is **Spaces |
+Conversation** under a readiness strip; the header line carries the floor
+plan, the configuration and a Saved indicator (everything saves as you go).
+Moving to `proposal_discussion` needs every space of ours to have a rough
+size **and at least one component** - no empty rooms; mark one
+client/excluded if nothing there is ours (`lib/scope/readiness.ts`,
+`SCOPE_NOT_READY`). There is no brief any more: services wanted are what
+the spaces contain, finishes live on the space or component, budget and
+timeline are the lead's.
 
 **Each space opens out** (`ScopeItemPanel`, the speech-bubble on the row, or
 **Walkthrough** from the header to go space by space with ←/→; its components

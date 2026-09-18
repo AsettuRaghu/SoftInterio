@@ -527,19 +527,12 @@ function ReferencesTab({
     await load();
   };
 
-  // The brief's styles float matching entries to the top of the picker.
   const openPicker = async () => {
     setPicking(true);
     if (library === null) {
-      const [res, b] = await Promise.all([
-        fetch("/api/library/entries"),
-        fetch(`/api/properties/${propertyId}/brief`).then((r) => r.json()).catch(() => null),
-      ]);
+      const res = await fetch("/api/library/entries");
       const json = await res.json().catch(() => ({}));
-      const styles = new Set<string>(b?.data?.style_codes ?? []);
-      const list: LibraryEntryLite[] = res.ok ? json.data ?? [] : [];
-      if (styles.size) list.sort((a, b2) => Number(!!b2.style_code && styles.has(b2.style_code)) - Number(!!a.style_code && styles.has(a.style_code)));
-      setLibrary(list);
+      setLibrary(res.ok ? json.data ?? [] : []);
     }
   };
   const pin = async (entryId: string) => {

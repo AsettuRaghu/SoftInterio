@@ -9,9 +9,9 @@ interface AddCostItemModalProps {
   onAdd: (costItem: CostItem) => void;
   costItems: CostItem[];
   categories: CostItemCategory[];
-  /** Finishes the customer leans to (the space's, else the brief's): items
-   *  whose name carries one are listed first and marked. A name match for
-   *  now - finish is not a catalogue attribute yet. */
+  /** The finish named on the space or component being filled: items whose
+   *  name carries it are listed first and marked. A name match for now -
+   *  finish is not a catalogue attribute yet. */
   preferredFinishes?: string[];
 }
 

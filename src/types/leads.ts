@@ -373,6 +373,8 @@ export interface Property {
   ownership: string | null;
   status: string | null;
   carpet_area: number | null;
+  /** studio · 1bhk … 5bhk_plus · other - required to qualify a lead. */
+  configuration?: string | null;
   built_up_area: number | null;
   super_built_up_area: number | null;
   area_unit: string;
@@ -520,6 +522,7 @@ export interface CreateLeadInput {
   property_type?: PropertyType;
   property_subtype?: PropertySubtype;
   carpet_area?: number;
+  configuration?: string | null;
   property_address?: string;
   property_city?: string;
   property_pincode?: string;
@@ -549,6 +552,7 @@ export interface UpdateLeadInput {
   property_type?: PropertyType;
   property_subtype?: PropertySubtype;
   carpet_area?: number;
+  configuration?: string | null;
   property_address?: string;
   property_city?: string;
   property_pincode?: string;
@@ -582,6 +586,7 @@ export interface StageTransitionInput {
   property_type?: PropertyType;
   property_subtype?: PropertySubtype;
   carpet_area?: number;
+  configuration?: string | null;
   property_address?: string;
   property_city?: string;
 

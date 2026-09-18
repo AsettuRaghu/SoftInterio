@@ -13,6 +13,8 @@ import { requestLogger } from "@/lib/logger/request";
 import { leadAccess, canWriteLead } from "@/lib/leads/access";
 import { namesOf, notify } from "@/lib/notifications/notify";
 import { scopeReadiness } from "@/lib/scope/readiness";
+import { isConfiguration } from "@/lib/scope/configuration";
+import { applyPresetForConfiguration } from "@/lib/scope/apply-preset";
 import {
   getPendingLeadWork,
   cancelPendingLeadWork,
@@ -55,7 +57,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .from("leads")
       .select(`
         *,
-        property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, city)
+        property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, city, configuration)
       `)
       .eq("id", id)
       .single();
@@ -151,6 +153,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
       if (!body.target_end_date && !lead.target_end_date) {
         missingFields.push("Target End Date");
+      }
+      // The two facts the scope rests on (decided 2026-09-18): the
+      // configuration picks the preset the scope is laid down from, and the
+      // plan is what sizes are read off. The floor plan is a document, so it
+      // is checked below, after the synchronous fields.
+      if (!isConfiguration(body.configuration) && !isConfiguration(lead.property?.configuration)) {
+        missingFields.push("Configuration (2 BHK, 3 BHK…)");
       }
     };
 
@@ -261,6 +270,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    if (["qualified", "requirement_discussion", "proposal_discussion"].includes(to_stage)) {
+      const { count } = await supabase
+        .from("documents")
+        .select("id", { count: "exact", head: true })
+        .eq("linked_type", "lead")
+        .eq("linked_id", id)
+        .eq("category", "floor_plan");
+      if (!count) missingFields.push("Floor plan");
+    }
+
     if (missingFields.length > 0) {
       return NextResponse.json(
         {
@@ -352,7 +371,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // STEP 1: Update or Create Property record if property fields provided
     const propertyFields = [
       "property_name", "unit_number", "property_category", "property_type",
-      "property_subtype", "carpet_area"
+      "property_subtype", "carpet_area", "configuration"
     ];
     const hasPropertyUpdates = propertyFields.some((f) => f in body && body[f as keyof StageTransitionInput]);
     
@@ -366,6 +385,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (body.property_type) propertyData.property_type = body.property_type;
       if (body.property_subtype) propertyData.property_subtype = body.property_subtype;
       if (body.carpet_area) propertyData.carpet_area = body.carpet_area;
+      if (isConfiguration(body.configuration)) propertyData.configuration = body.configuration;
       
       if (Object.keys(propertyData).length > 0) {
         if (lead.property_id) {
@@ -471,6 +491,37 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { error: "Failed to update lead stage" },
         { status: 500 }
       );
+    }
+
+    // Qualifying lays the scope down from the configuration's preset, so the
+    // requirement discussion opens on rooms rather than a blank list. Only
+    // on an empty scope; never overwrites what someone has listed by hand.
+    let scopeLaidDown: { applied: string | null; spaces: number; components: number } | null = null;
+    if (to_stage === "qualified" && propertyId) {
+      const configuration = isConfiguration(body.configuration) ? body.configuration : lead.property?.configuration;
+      if (isConfiguration(configuration)) {
+        try {
+          scopeLaidDown = await applyPresetForConfiguration(supabase, {
+            tenantId: lead.tenant_id,
+            userId: user.id,
+            propertyId,
+            configuration,
+            propertyType: body.property_type || lead.property?.property_type || null,
+          });
+          if (scopeLaidDown.applied) {
+            await logLeadActivity(supabase, {
+              leadId: id,
+              tenantId: lead.tenant_id,
+              userId: user.id,
+              type: "lead_updated",
+              title: "Scope laid down",
+              description: `From the "${scopeLaidDown.applied}" preset: ${scopeLaidDown.spaces} space(s), ${scopeLaidDown.components} component(s). Adjust on the Scope tab.`,
+            });
+          }
+        } catch (e) {
+          log.error("Scope preset on qualification failed", e);
+        }
+      }
     }
 
     // A dead lead's tasks are not still to do. Cancelling them with the reason
@@ -969,6 +1020,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       lead: updatedLead,
       project_id: projectId,
       project_created: projectId !== null,
+      scope_laid_down: scopeLaidDown?.applied ? scopeLaidDown : null,
     });
   } catch (error) {
     log.error("Stage transition API error", error);

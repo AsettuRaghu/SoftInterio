@@ -20,7 +20,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { fetchConfigOnce } from "@/lib/quotations/config-cache";
 import { AddSpacesModal } from "./AddSpacesModal";
-import { ScopeBrief, type LeadFacts } from "./ScopeBrief";
+import { ScopeHeaderLine, type SaveState } from "./ScopeHeaderLine";
+import type { Configuration } from "@/lib/scope/configuration";
 import { ScopeItemPanel } from "./ScopeItemPanel";
 import { ScopeConversation } from "./ScopeConversation";
 import type { ScopeReadiness } from "@/lib/scope/readiness";
@@ -82,9 +83,10 @@ interface ScopeTabProps {
   linkedType: "lead" | "project";
   linkedId: string;
   readOnly?: boolean;
-  /** The lead's facts shown under Requirements; edits go back to the lead. */
-  facts?: LeadFacts | null;
-  onSaveFacts?: (patch: Partial<LeadFacts>) => Promise<void>;
+  /** The property's configuration (2 BHK…); edits save to the property
+   *  through the lead. Absent on a project. */
+  configuration?: string | null;
+  onSaveConfiguration?: (value: Configuration | null) => Promise<void>;
   /** The lead's stage, to say which gate is next. Absent on a project. */
   stage?: string | null;
   /**
@@ -101,15 +103,22 @@ export function ScopeTab({
   linkedType,
   linkedId,
   readOnly = false,
-  facts,
-  onSaveFacts,
+  configuration = null,
+  onSaveConfiguration,
   stage,
   onChanged,
 }: ScopeTabProps) {
   const { confirm, confirmDialog } = useConfirm();
-  // Requirements → Spaces → Conversation. Opens on Spaces once there are
-  // any; on Requirements before that, because that is where a sale starts.
-  const [section, setSection] = useState<"requirements" | "spaces" | "conversation" | null>(null);
+  // Spaces | Conversation.
+  const [section, setSection] = useState<"spaces" | "conversation">("spaces");
+  // Every edit saves as it happens; this is the reassurance in the header.
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flash = (state: SaveState) => {
+    setSaveState(state);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    if (state === "saved") saveTimer.current = setTimeout(() => setSaveState("idle"), 2500);
+  };
   const [readiness, setReadiness] = useState<ScopeReadiness | null>(null);
   const loadReadiness = useCallback(async () => {
     if (!propertyId) return;
@@ -193,7 +202,6 @@ export function ScopeTab({
       const scope = await scopeRes.json();
       setItems(scope.items || []);
       loadedRef.current = true;
-      setSection((cur) => cur ?? ((scope.items || []).length > 0 ? "spaces" : "requirements"));
       void loadReadiness();
       // Config is best-effort: a failure there leaves the pickers empty rather
       // than hiding the scope this tab exists to show.
@@ -279,6 +287,7 @@ export function ScopeTab({
     );
     try {
       setSavingId(item.id);
+      flash("saving");
       const response = await fetch(
         `/api/properties/${propertyId}/scope/${item.id}`,
         {
@@ -291,7 +300,9 @@ export function ScopeTab({
         const data = await response.json().catch(() => ({}));
         throw new Error(data.error || "Failed to save");
       }
+      flash("saved");
     } catch (err) {
+      flash("failed");
       // Put the row back the way it was rather than leaving a value on screen
       // that was never stored. Only this row is restored - reloading the whole
       // list would throw away anything else being edited.
@@ -819,7 +830,6 @@ export function ScopeTab({
     <div className="flex items-center gap-1 border-b border-slate-200">
       {(
         [
-          ["requirements", "Requirements"],
           ["spaces", `Spaces${items.length ? ` (${items.filter((i) => !i.component_type_id).length})` : ""}`],
           ["conversation", "Conversation"],
         ] as const
@@ -837,18 +847,6 @@ export function ScopeTab({
       ))}
     </div>
 
-    {section === "requirements" && propertyId && (
-      <ScopeBrief
-        propertyId={propertyId}
-        linkedType={linkedType}
-        linkedId={linkedId}
-        readOnly={readOnly}
-        facts={facts}
-        onSaveFacts={onSaveFacts}
-        onChanged={() => void loadReadiness()}
-      />
-    )}
-
     {section === "conversation" && propertyId && (
       <ScopeConversation
         propertyId={propertyId}
@@ -862,6 +860,28 @@ export function ScopeTab({
     )}
 
     <div className={section === "spaces" ? "bg-white rounded-lg border border-slate-200 overflow-hidden" : "hidden"}>
+      <ScopeHeaderLine
+        linkedType={linkedType}
+        linkedId={linkedId}
+        readOnly={readOnly}
+        configuration={configuration}
+        onSaveConfiguration={
+          onSaveConfiguration
+            ? async (v) => {
+                flash("saving");
+                try {
+                  await onSaveConfiguration(v);
+                  flash("saved");
+                  void loadReadiness();
+                } catch {
+                  flash("failed");
+                }
+              }
+            : undefined
+        }
+        saveState={saveState}
+        onChanged={() => void loadReadiness()}
+      />
       <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-900">

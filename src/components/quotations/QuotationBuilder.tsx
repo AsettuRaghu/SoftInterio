@@ -102,8 +102,8 @@ export function QuotationBuilder({
   // "Bring in from scope": pull on demand, adds only what is missing. Local
   // edits are saved first so the re-read after it cannot lose them.
   const [bringingScope, setBringingScope] = useState(false);
-  // What the customer asked for - services to tick off, finishes to prefer.
-  const [brief, setBrief] = useState<{ services: { id: string; name: string }[]; finishes: string[]; rowFinishes: Record<string, string> }>({ services: [], finishes: [], rowFinishes: {} });
+  // The finish named on each scope row, so matching cost items come first.
+  const [rowFinishes, setRowFinishes] = useState<Record<string, string>>({});
   const [scopeNotice, setScopeNotice] = useState<{ message: string; variant: "success" | "info" | "error" } | null>(null);
   const [quotationName, setQuotationName] = useState("");
   const [version, setVersion] = useState(1);
@@ -256,9 +256,9 @@ export function QuotationBuilder({
         setLoadError(null);
 
         if (q.lead_id || q.project_id) {
-          fetch(`/api/quotations/${quotationId}/brief`)
+          fetch(`/api/quotations/${quotationId}/scope-finishes`)
             .then((r) => (r.ok ? r.json() : null))
-            .then((b) => b?.data && setBrief(b.data))
+            .then((b) => b?.data && setRowFinishes(b.data))
             .catch(() => undefined);
         }
       } catch (error) {
@@ -2427,7 +2427,6 @@ export function QuotationBuilder({
             setHasUnsavedChanges(true);
           }}
           canViewCosts={canViewCosts}
-          servicesWanted={brief.services}
         />
       </div>
 
@@ -2469,8 +2468,8 @@ export function QuotationBuilder({
           preferredFinishes={(() => {
             const sp = spaces.find((x) => x.id === showAddCostItemModal.spaceId);
             const comp = sp?.components.find((c) => c.id === showAddCostItemModal.componentId);
-            const own = [comp?.scopeItemId, sp?.scopeItemId].map((k) => (k ? brief.rowFinishes[k] : null)).find(Boolean);
-            return own ? [own] : brief.finishes;
+            const own = [comp?.scopeItemId, sp?.scopeItemId].map((k) => (k ? rowFinishes[k] : null)).find(Boolean);
+            return own ? [own] : [];
           })()}
           categories={
             masterData.quotation_cost_item_categories ||

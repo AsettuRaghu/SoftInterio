@@ -922,13 +922,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
               propertyId={project.property_id || null}
               linkedType="project"
               linkedId={project.id}
-              facts={{
-                service_type: project.project_category ?? null,
-                budget_range: (project as { lead?: { budget_range?: string | null } }).lead?.budget_range ?? null,
-                target_start_date: project.expected_start_date ?? null,
-                target_end_date: project.expected_end_date ?? null,
-                carpet_area: (project as { property?: { carpet_area?: number | null } }).property?.carpet_area ?? null,
-              }}
+              configuration={(project as { property?: { configuration?: string | null } }).property?.configuration ?? null}
             />
           )}
 

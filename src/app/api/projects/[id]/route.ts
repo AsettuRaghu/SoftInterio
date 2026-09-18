@@ -42,7 +42,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         *,
         project_manager:users!project_manager_id(id, name, email, avatar_url),
         client:clients!client_id(id, name, email, phone),
-        property:properties!property_id(id, property_name, property_type, property_subtype, category, unit_number, address_line1, city, pincode, carpet_area),
+        property:properties!property_id(id, property_name, property_type, property_subtype, category, unit_number, address_line1, city, pincode, carpet_area, configuration),
         lead:leads!lead_id(id, lead_number, service_type, lead_source, budget_range, won_amount)
       `
       )
@@ -122,7 +122,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           address_line1,
           city,
           pincode,
-          carpet_area
+          carpet_area,
+          configuration
         `)
         .eq("id", fullProject.property_id)
         .single();

@@ -63,7 +63,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         `
         *,
         client:clients!leads_client_id_fkey(id, name, phone, email, city, address_line1, pincode),
-        property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, address_line1, city, pincode),
+        property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, address_line1, city, pincode, configuration),
         assigned_user:users!leads_assigned_to_fkey(id, name, avatar_url, email),
         created_user:users!leads_created_by_fkey(id, name, avatar_url, email)
       `
@@ -362,7 +362,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
          client:clients!leads_client_id_fkey(name, phone, email),
          property:properties!leads_property_id_fkey(
            property_name, unit_number, category, property_type,
-           property_subtype, carpet_area, address_line1, city, pincode)`
+           property_subtype, carpet_area, address_line1, city, pincode, configuration)`
       )
       .eq("id", id)
       .single();
@@ -481,7 +481,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // STEP 2: Update Property record if property fields provided
     const propertyFields = [
       "property_name", "unit_number", "property_category", "property_type",
-      "property_subtype", "carpet_area", "property_address", "property_city", "property_pincode"
+      "property_subtype", "carpet_area", "property_address", "property_city", "property_pincode",
+      "configuration"
     ];
     const hasPropertyUpdates = propertyFields.some((f) => f in body);
     
@@ -496,6 +497,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if ("property_address" in body) propertyUpdateData.address_line1 = body.property_address;
       if ("property_city" in body) propertyUpdateData.city = body.property_city;
       if ("property_pincode" in body) propertyUpdateData.pincode = body.property_pincode;
+      if ("configuration" in body) propertyUpdateData.configuration = body.configuration || null;
       
       if (Object.keys(propertyUpdateData).length > 0) {
         if (existingLead.property_id) {
@@ -664,7 +666,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         `
         *,
         client:clients!leads_client_id_fkey(id, name, phone, email, city),
-        property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, address_line1, city, pincode),
+        property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, address_line1, city, pincode, configuration),
         assigned_user:users!leads_assigned_to_fkey(id, name, avatar_url),
         created_user:users!leads_created_by_fkey(id, name, avatar_url)
       `
