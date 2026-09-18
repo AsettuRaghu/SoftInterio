@@ -42,11 +42,11 @@ off the property so a lead and its project share one set of rows.
    follow discussion points may come later; nothing is designed
    customer-facing now, and there is no "internal" toggle to maintain.
 
-## The tab has two sections
-**Spaces** (header line: floor plan, configuration, Saved; presets; the
-list; walkthrough) · **Conversation** (the scope-level thread, every
-decision across all spaces, the change log). Walkthrough goes space by
-space; a space's components open inside it, each with its own details,
+## The tab is the spaces list
+Presets, the list, walkthrough, a Saved indicator. No sections: a row's
+own thread is the conversation (removed 2026-09-18 as unnecessary beside
+them); the lead's Notes tab is for anything not about a space. Walkthrough
+goes space by space; a space's components open inside it, each with its own details,
 references, discussion and changes.
 
 ## How the scope is used downstream

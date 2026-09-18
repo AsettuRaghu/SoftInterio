@@ -1,8 +1,10 @@
 "use client";
 
 /**
- * The Scope tab: what we are doing for this customer - the rooms and areas,
- * what goes in them, and (in ScopeBrief above the list) what they asked for.
+ * The Scope tab: what we are doing for this customer - the rooms and areas
+ * and what goes in them. Each row opens out to its own details, references,
+ * discussion and change log; there is no scope-level thread - the lead's
+ * Notes tab is for anything not about a particular space.
  *
  * Was "Spaces" until 2026-09-18; see docs/plans/scope.md.
  *
@@ -22,7 +24,6 @@ import { fetchConfigOnce } from "@/lib/quotations/config-cache";
 import { AddSpacesModal } from "./AddSpacesModal";
 import { CheckIcon } from "@heroicons/react/24/outline";
 import { ScopeItemPanel } from "./ScopeItemPanel";
-import { ScopeConversation } from "./ScopeConversation";
 import {
   PlusIcon,
   TrashIcon,
@@ -119,8 +120,6 @@ export function ScopeTab({
       : null;
   };
   const { confirm, confirmDialog } = useConfirm();
-  // Spaces | Conversation.
-  const [section, setSection] = useState<"spaces" | "conversation">("spaces");
   // Every edit saves as it happens; this is the reassurance in the header.
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -809,39 +808,7 @@ export function ScopeTab({
 
   return (
     <div className="space-y-4">
-    <div className="flex items-center gap-1 border-b border-slate-200">
-      {(
-        [
-          ["spaces", `Spaces${items.length ? ` (${items.filter((i) => !i.component_type_id).length})` : ""}`],
-          ["conversation", "Conversation"],
-        ] as const
-      ).map(([key, label]) => (
-        <button
-          key={key}
-          type="button"
-          onClick={() => setSection(key)}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-            section === key ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-
-    {section === "conversation" && propertyId && (
-      <ScopeConversation
-        propertyId={propertyId}
-        linkedType={linkedType}
-        linkedId={linkedId}
-        items={items}
-        readOnly={readOnly}
-        confirm={confirm}
-        onOpenItem={(id) => openItem(id)}
-      />
-    )}
-
-    <div className={section === "spaces" ? "bg-white rounded-lg border border-slate-200 overflow-hidden" : "hidden"}>
+    <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-900">

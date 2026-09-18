@@ -107,9 +107,10 @@ create form, starred from Qualified on the edit dialog, asked by the stage
 dialog when moving to `qualified` - the plan uploads right there - and the
 transition route refuses without them, and on success
 `applyPresetForConfiguration` lays the matching preset onto an **empty**
-scope so Requirement discussion opens on rooms. The tab is **Spaces |
-Conversation** with a Saved indicator in the header (everything saves as
-you go); the floor plan and configuration are edited on the lead's edit
+scope so Requirement discussion opens on rooms. The tab is the spaces
+list with a Saved indicator in the header (everything saves as you go) -
+no sections: each row's own thread is the conversation, and the lead's
+Notes tab is for anything not about a particular space; the floor plan and configuration are edited on the lead's edit
 dialog, not here. Moving to `proposal_discussion` needs every space of
 ours to have a rough size **and at least one component**
 (`lib/scope/readiness.ts`, `SCOPE_NOT_READY` - shown only when the move is
