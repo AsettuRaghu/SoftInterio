@@ -29,10 +29,11 @@ import { calculateSqft, convertToFeet, getMeasurementInfo, type MeasurementUnit 
  *    row's "length" is its second face dimension.
  *  - `metadata.measurement_status` is carried so the builder can say a size
  *    is still rough.
- *  - A component's CHOSEN cost items (the third level of the scope) become
- *    its line items, at the catalogue's rate and sized from the component;
- *    items merely being considered do not come across. A line already
- *    present for that cost item is left alone.
+ *  - A component's FIRST-PREFERENCE cost items (the third level of the
+ *    scope) become its line items, at the catalogue's rate and sized from
+ *    the component; second preferences stay behind (an alternative
+ *    quotation is a later feature), and so does any item the client keeps
+ *    for themselves. A line already present for that cost item is left alone.
  */
 
 type Row = Record<string, unknown> & {
@@ -234,9 +235,10 @@ export async function copyScopeToQuotation(
       }
     }
 
-    // The third level: chosen cost items become line items, sized from the
-    // component at the catalogue's rate. Considering-only items stay behind.
-    const chosen = scope.filter((r) => r.cost_item_id && r.choice_status === "chosen" && r.parent_id && targetByScopeComp.has(r.parent_id));
+    // The third level: first-preference cost items become line items, sized
+    // from the component at the catalogue's rate. Second preferences and
+    // items the client keeps stay behind.
+    const chosen = scope.filter((r) => r.cost_item_id && r.choice_status === "p1" && OURS(r.scope_owner) && r.parent_id && targetByScopeComp.has(r.parent_id));
     const wantedIds = [...new Set(chosen.map((r) => r.cost_item_id as string))];
     if (wantedIds.length) {
       const { data: costItems } = await supabase

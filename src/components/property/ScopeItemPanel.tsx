@@ -115,14 +115,19 @@ function Thread({
 
 /**
  * What a component can carry - the cost items the business's quotation
- * templates list for its type, grouped by category - and what has been
- * picked. One tap: considering (outlined). Second: chosen (filled). Third:
- * clear. No prices here: this sheet is shown with the customer; the builder
- * prices what was chosen.
+ * templates list for its type, grouped by category - and what the customer
+ * prefers. One tap: preference ① (filled). Second: preference ② (outlined).
+ * Third: clear. The tier (Basic / Standard / Premium…) shows as a word so
+ * the seller can steer to the budget; no prices here - this sheet is shown
+ * with the customer, and the builder prices preference ①.
+ *
+ * On a project the item also carries who does it (Us / Client): the hob in
+ * "Appliances" is the customer's, the chimney is ours. The column exists on
+ * every row; it is shown here only where it is used.
  */
 interface OptionGroup {
   category: { id: string; name: string };
-  items: { cost_item_id: string; name: string; status: "considering" | "chosen" | null; row_id: string | null }[];
+  items: { cost_item_id: string; name: string; tier: string | null; status: "p1" | "p2" | null; row_id: string | null; scope_owner: string | null }[];
 }
 
 function Options({
@@ -130,12 +135,15 @@ function Options({
   propertyId,
   readOnly,
   onChanged,
+  showOwner,
 }: {
   item: PropertyScopeItem;
   propertyId: string;
   readOnly: boolean;
   /** The list behind the sheet mirrors the chosen items on the row. */
   onChanged: () => void;
+  /** Done-by per item - shown on a project, where it is decided. */
+  showOwner: boolean;
 }) {
   const [groups, setGroups] = useState<OptionGroup[] | null>(null);
   const [fromTemplates, setFromTemplates] = useState(true);
@@ -156,22 +164,26 @@ function Options({
     void load();
   }, [load]);
 
-  const cycle = async (g: OptionGroup, o: OptionGroup["items"][number]) => {
-    if (readOnly) return;
-    const next: "considering" | "chosen" | null = o.status === null ? "considering" : o.status === "considering" ? "chosen" : null;
+  const save = async (g: OptionGroup, o: OptionGroup["items"][number], patch: { status: "p1" | "p2" | null; scope_owner?: string }) => {
     const mine = ++seq.current;
     setGroups((prev) =>
-      (prev ?? []).map((gg) => (gg.category.id !== g.category.id ? gg : { ...gg, items: gg.items.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, status: next } : x)) })),
+      (prev ?? []).map((gg) => (gg.category.id !== g.category.id ? gg : { ...gg, items: gg.items.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, status: patch.status, scope_owner: patch.scope_owner ?? x.scope_owner } : x)) })),
     );
     const res = await fetch(`/api/properties/${propertyId}/scope/${item.id}/options`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cost_item_id: o.cost_item_id, status: next }),
+      body: JSON.stringify({ cost_item_id: o.cost_item_id, ...patch }),
     });
     if (mine !== seq.current) return;
     if (res.ok) onChanged();
     else void load();
   };
+  const cycle = (g: OptionGroup, o: OptionGroup["items"][number]) => {
+    if (readOnly) return;
+    const next: "p1" | "p2" | null = o.status === null ? "p1" : o.status === "p1" ? "p2" : null;
+    void save(g, o, { status: next });
+  };
+  const TIER: Record<string, string> = { basic: "Basic", standard: "Standard", premium: "Premium", luxury: "Luxury" };
 
   if (groups === null) return <p className="text-xs text-slate-400">Loading options…</p>;
   if (groups.length === 0) {
@@ -188,28 +200,50 @@ function Options({
           <span className="text-[11px] font-medium text-slate-500 pt-1 truncate" title={g.category.name}>{g.category.name}</span>
           <div className="flex flex-wrap gap-1.5">
             {g.items.map((o) => (
-              <button
-                key={o.cost_item_id}
-                type="button"
-                disabled={readOnly}
-                onClick={() => void cycle(g, o)}
-                title={o.status === "chosen" ? "Chosen - tap to clear" : o.status === "considering" ? "Considering - tap to choose" : "Tap to consider"}
-                className={cn(
-                  "px-2 py-0.5 text-[11px] font-medium rounded-full border transition-colors disabled:cursor-default",
-                  o.status === "chosen"
-                    ? "bg-emerald-600 text-white border-emerald-600"
-                    : o.status === "considering"
-                      ? "bg-white text-emerald-700 border-emerald-500 border-dashed"
-                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-400",
+              <span key={o.cost_item_id} className="inline-flex items-center">
+                <button
+                  type="button"
+                  disabled={readOnly}
+                  onClick={() => cycle(g, o)}
+                  title={o.status === "p1" ? "First preference - tap for second" : o.status === "p2" ? "Second preference - tap to clear" : "Tap to mark as first preference"}
+                  className={cn(
+                    "inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full border transition-colors disabled:cursor-default",
+                    o.status === "p1"
+                      ? "bg-emerald-600 text-white border-emerald-600"
+                      : o.status === "p2"
+                        ? "bg-white text-emerald-700 border-emerald-500"
+                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-400",
+                  )}
+                >
+                  {o.status === "p1" && <span className="text-[10px]">①</span>}
+                  {o.status === "p2" && <span className="text-[10px]">②</span>}
+                  {o.name}
+                  {o.tier && TIER[o.tier.toLowerCase()] && (
+                    <span className={cn("text-[9px] uppercase tracking-wider", o.status === "p1" ? "text-emerald-100" : "text-slate-400")}>{TIER[o.tier.toLowerCase()]}</span>
+                  )}
+                </button>
+                {showOwner && o.status && !readOnly && (
+                  <select
+                    value={o.scope_owner ?? "us"}
+                    onChange={(e) => void save(g, o, { status: o.status, scope_owner: e.target.value })}
+                    title="Who does this item"
+                    className="ml-0.5 text-[10px] border border-slate-200 rounded px-1 py-0.5 bg-white text-slate-600"
+                  >
+                    <option value="us">Us</option>
+                    <option value="client">Client</option>
+                    <option value="vendor">Vendor</option>
+                    <option value="excluded">Not in scope</option>
+                  </select>
                 )}
-              >
-                {o.name}
-              </button>
+                {showOwner && o.status && readOnly && o.scope_owner && o.scope_owner !== "us" && (
+                  <span className="ml-1 text-[10px] text-amber-700">{scopeOwnerLabel(o.scope_owner as "client")}</span>
+                )}
+              </span>
             ))}
           </div>
         </div>
       ))}
-      <p className="text-[10px] text-slate-400">Tap once to consider, again to choose, again to clear.</p>
+      <p className="text-[10px] text-slate-400">Tap once for first preference ①, again for second ②, again to clear.</p>
     </div>
   );
 }
@@ -265,7 +299,7 @@ function ComponentCard({
           {ours ? (
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Options</p>
-              <Options item={c} propertyId={propertyId} readOnly={readOnly} onChanged={onChoicesChanged} />
+              <Options item={c} propertyId={propertyId} readOnly={readOnly} onChanged={onChoicesChanged} showOwner={linkedType === "project"} />
             </div>
           ) : c.scope_owner === "excluded" ? (
             <p className="text-xs text-slate-500">Not part of this scope.</p>
@@ -340,7 +374,7 @@ export function ScopeItemPanel({
   const byOrder = (a: PropertyScopeItem, b: PropertyScopeItem) => a.display_order - b.display_order;
   const spaces = useMemo(() => items.filter((i) => !i.parent_id && !i.component_type_id).sort(byOrder), [items]);
   const components = useMemo(() => items.filter((i) => i.parent_id === item.id && !i.cost_item_id).sort(byOrder), [items, item.id]);
-  const chosenOf = (id: string) => items.filter((i) => i.parent_id === id && i.cost_item_id && i.choice_status === "chosen").map((i) => i.name);
+  const chosenOf = (id: string) => items.filter((i) => i.parent_id === id && i.cost_item_id && i.choice_status === "p1").map((i) => i.name);
   const idx = spaces.findIndex((i) => i.id === item.id);
   const prev = idx > 0 ? spaces[idx - 1] : null;
   const next = idx >= 0 && idx < spaces.length - 1 ? spaces[idx + 1] : null;

@@ -75,9 +75,9 @@ export const scopeOwnerLabel = (owner: ScopeOwner | null | undefined) => SCOPE_O
 
 export interface PropertyScopeItem {
   /** Set on a cost-item row under a component: which catalogue item, and
-   *  whether it is being considered or has been chosen. Never a price. */
+   *  whether it is the customer's first or second preference. Never a price. */
   cost_item_id?: string | null;
-  choice_status?: "considering" | "chosen" | null;
+  choice_status?: "p1" | "p2" | null;
   /** The finish they want here, when it differs from the brief. */
   preferred_finish?: string | null;
   /** For a client/vendor row: what is arriving from them, and by when. */

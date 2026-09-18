@@ -301,7 +301,7 @@ export function ScopeTab({
     items.filter((i) => i.parent_id === id && !i.cost_item_id).sort(byOrder);
   /** The chosen items of a component, for its row's one-line summary. */
   const chosenOf = (id: string) =>
-    items.filter((i) => i.parent_id === id && i.cost_item_id && i.choice_status === "chosen").map((i) => i.name);
+    items.filter((i) => i.parent_id === id && i.cost_item_id && i.choice_status === "p1").map((i) => i.name);
 
   /**
    * Saves one field. Edits are sent on blur rather than on every keystroke -

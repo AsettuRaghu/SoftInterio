@@ -124,15 +124,19 @@ timeline are the lead's.
 **The scope is the quotation's tree: Space → Component → Cost item**
 (2026-09-18, decided with the user). A cost item is a third kind of row in
 `property_scope_items` - `cost_item_id` set, hanging off its component,
-`choice_status` `considering | chosen`, one row per item per component -
+`choice_status` `p1 | p2` (first / second preference), one row per item per
+component -
 holding WHICH items, never a rate, a quantity or a total; the quotation
 holds how much. The options a component offers are the cost items the
 tenant's quotation templates list for its component type
 (`…/scope/[itemId]/options`), grouped by cost category - nothing new to
-configure. `copyScopeToQuotation` turns **chosen** items into line items
-under the matched component, sized from it at the catalogue's rate (the
-builder's own arithmetic, from `components/quotations/types`); considering
-items stay behind. The list shows the chosen items as a chip on the
+configure. `copyScopeToQuotation` turns **first-preference** items (that the client
+does not keep) into line items under the matched component, sized from it at the catalogue's rate (the
+builder's own arithmetic, from `components/quotations/types`); second
+preferences stay behind for the alternative quotation that comes later.
+The tier shows on each option as a word so the seller can steer to the
+budget. Done-by per item (`scope_owner` on the row) is shown on a project
+only - it is decided there, kept from the sale. The list shows the chosen items as a chip on the
 component row and never lists cost-item rows themselves. The finish chips
 and the "preferred finish" ordering in the builder went with this; a finish
 is now one option category among the others.

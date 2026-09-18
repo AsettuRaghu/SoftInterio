@@ -14,9 +14,12 @@ type RouteParams = { params: Promise<{ id: string; itemId: string }> };
  * picked here that no template lists (added in the builder, say) still
  * shows, under its category.
  *
- * GET  -> { groups: [{ category, items: [{ cost_item_id, name, status, row_id }] }], from_templates }
- * PUT  { cost_item_id, status: "considering" | "chosen" | null }
- *      null removes the row. Prices never come through here.
+ * GET  -> { groups: [{ category, items: [{ cost_item_id, name, tier, status, row_id, scope_owner }] }], from_templates }
+ * PUT  { cost_item_id, status: "p1" | "p2" | null, scope_owner? }
+ *      p1 = first preference (what a quotation starts from), p2 = second;
+ *      null removes the row. scope_owner (us / client / vendor / excluded)
+ *      is who does that item - used on the project, kept for the sale.
+ *      Prices never come through here; the tier is a word.
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const guard = await protectApiRoute(request, { requiredPermissions: ["leads.view"] });
@@ -38,7 +41,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .select("cost_item_id, template:quotation_templates!inner(is_active)")
       .eq("component_type_id", component.component_type_id)
       .not("cost_item_id", "is", null),
-    supabase.from("property_scope_items").select("id, cost_item_id, choice_status").eq("parent_id", itemId).not("cost_item_id", "is", null),
+    supabase.from("property_scope_items").select("id, cost_item_id, choice_status, scope_owner").eq("parent_id", itemId).not("cost_item_id", "is", null),
   ]);
 
   const templateIds = new Set(
@@ -52,18 +55,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   const { data: costItems } = await supabase
     .from("quotation_cost_items")
-    .select("id, name, category_id, display_order, category:quotation_cost_item_categories(id, name, display_order)")
+    .select("id, name, category_id, quality_tier, display_order, category:quotation_cost_item_categories(id, name, display_order)")
     .in("id", ids)
     .eq("is_active", true)
     .order("display_order")
     .order("name");
 
-  const groups = new Map<string, { category: { id: string; name: string; order: number }; items: { cost_item_id: string; name: string; status: string | null; row_id: string | null }[] }>();
+  const groups = new Map<string, { category: { id: string; name: string; order: number }; items: { cost_item_id: string; name: string; tier: string | null; status: string | null; row_id: string | null; scope_owner: string | null }[] }>();
   for (const c of costItems ?? []) {
     const cat = (c.category as unknown as { id: string; name: string; display_order: number | null } | null) ?? { id: "other", name: "Other", display_order: 999 };
     const g = groups.get(cat.id) ?? { category: { id: cat.id, name: cat.name, order: cat.display_order ?? 999 }, items: [] };
     const p = pickedByItem.get(c.id);
-    g.items.push({ cost_item_id: c.id, name: c.name, status: p?.choice_status ?? null, row_id: p?.id ?? null });
+    g.items.push({ cost_item_id: c.id, name: c.name, tier: (c.quality_tier as string | null) ?? null, status: p?.choice_status ?? null, row_id: p?.id ?? null, scope_owner: p?.scope_owner ?? null });
     groups.set(cat.id, g);
   }
   return NextResponse.json({
@@ -81,7 +84,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   const { id, itemId } = await params;
   const supabase = await createClient();
   const body = await request.json().catch(() => ({}));
-  const status = body.status === "considering" || body.status === "chosen" ? body.status : null;
+  const status = body.status === "p1" || body.status === "p2" ? body.status : null;
+  const OWNERS = new Set(["us", "client", "vendor", "excluded"]);
+  const owner = typeof body.scope_owner === "string" && OWNERS.has(body.scope_owner) ? body.scope_owner : undefined;
   if (!body.cost_item_id) return NextResponse.json({ error: "cost_item_id is required" }, { status: 400 });
 
   const { data: component } = await supabase
@@ -104,7 +109,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ data: { row_id: null, status: null } });
   }
   if (existing) {
-    const { error } = await supabase.from("property_scope_items").update({ choice_status: status }).eq("id", existing.id);
+    const { error } = await supabase
+      .from("property_scope_items")
+      .update({ choice_status: status, ...(owner ? { scope_owner: owner } : {}) })
+      .eq("id", existing.id);
     if (error) return NextResponse.json({ error: "Could not save" }, { status: 500 });
     return NextResponse.json({ data: { row_id: existing.id, status } });
   }
@@ -118,6 +126,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       parent_id: itemId,
       cost_item_id: costItem.id,
       choice_status: status,
+      ...(owner ? { scope_owner: owner } : {}),
       name: costItem.name,
       display_order: 0,
       created_by: user.id,
