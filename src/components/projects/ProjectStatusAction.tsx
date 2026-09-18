@@ -130,7 +130,7 @@ export function ProjectStatusAction({ projectId, status, canEdit, onChanged }: P
         <button
           type="button"
           onClick={() => start(CANCEL)}
-          className={cn(buttonVariants({ variant: "ghost" }), "text-red-600 hover:bg-red-50 hover:text-red-700")}
+          className={cn(buttonVariants(), "bg-red-600 hover:bg-red-700 text-white")}
         >
           Cancel project
         </button>
