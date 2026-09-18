@@ -81,6 +81,7 @@ export default function LeadDetailPage() {
     updateLeadFromStageTransition,
     handleRevise,
     handleDocumentDelete,
+    fetchLead,
   } = useLeadDetail();
 
   // Local UI state
@@ -377,6 +378,28 @@ export default function LeadDetailPage() {
             linkedType="lead"
             linkedId={lead.id}
             readOnly={leadClosed}
+            stage={lead.stage}
+            facts={{
+              service_type: lead.service_type ?? null,
+              budget_range: lead.budget_range ?? null,
+              target_start_date: lead.target_start_date ?? null,
+              target_end_date: lead.target_end_date ?? null,
+              carpet_area: lead.property?.carpet_area ?? null,
+            }}
+            // The lead's own facts, edited from the scope: one PATCH to the
+            // lead, then a quiet re-read so the header and Overview agree.
+            onSaveFacts={async (patch) => {
+              const res = await fetch(`/api/sales/leads/${lead.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(patch),
+              });
+              if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error || "Could not save");
+              }
+              await fetchLead({ quiet: true });
+            }}
           />
         )}
 

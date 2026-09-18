@@ -102,6 +102,8 @@ export function QuotationBuilder({
   // "Bring in from scope": pull on demand, adds only what is missing. Local
   // edits are saved first so the re-read after it cannot lose them.
   const [bringingScope, setBringingScope] = useState(false);
+  // What the customer asked for - services to tick off, finishes to prefer.
+  const [brief, setBrief] = useState<{ services: { id: string; name: string }[]; finishes: string[]; rowFinishes: Record<string, string> }>({ services: [], finishes: [], rowFinishes: {} });
   const [scopeNotice, setScopeNotice] = useState<{ message: string; variant: "success" | "info" | "error" } | null>(null);
   const [quotationName, setQuotationName] = useState("");
   const [version, setVersion] = useState(1);
@@ -252,6 +254,13 @@ export function QuotationBuilder({
         setSpaces(transformedSpaces);
         setCanViewCosts(!!data.can_view_costs);
         setLoadError(null);
+
+        if (q.lead_id || q.project_id) {
+          fetch(`/api/quotations/${quotationId}/brief`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((b) => b?.data && setBrief(b.data))
+            .catch(() => undefined);
+        }
       } catch (error) {
         console.error("Error loading quotation:", error);
         setLoadError(
@@ -2418,6 +2427,7 @@ export function QuotationBuilder({
             setHasUnsavedChanges(true);
           }}
           canViewCosts={canViewCosts}
+          servicesWanted={brief.services}
         />
       </div>
 
@@ -2456,6 +2466,12 @@ export function QuotationBuilder({
           costItems={
             masterData.quotation_cost_items || masterData.cost_items || []
           }
+          preferredFinishes={(() => {
+            const sp = spaces.find((x) => x.id === showAddCostItemModal.spaceId);
+            const comp = sp?.components.find((c) => c.id === showAddCostItemModal.componentId);
+            const own = [comp?.scopeItemId, sp?.scopeItemId].map((k) => (k ? brief.rowFinishes[k] : null)).find(Boolean);
+            return own ? [own] : brief.finishes;
+          })()}
           categories={
             masterData.quotation_cost_item_categories ||
             masterData.cost_item_categories ||

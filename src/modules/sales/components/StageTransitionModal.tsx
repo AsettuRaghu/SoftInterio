@@ -79,6 +79,8 @@ export function StageTransitionModal({
   const [selectedStage, setSelectedStage] = useState<LeadStage | "">("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // What the Scope tab still needs before this stage; the server's list.
+  const [scopeMissing, setScopeMissing] = useState<string[] | null>(null);
   /** Set when the API refuses a win because work is still open on the lead. */
   const [pendingWork, setPendingWork] = useState<{
     tasks: Array<{ id: string; title: string; status: string; due_date?: string | null }>;
@@ -245,6 +247,7 @@ export function StageTransitionModal({
 
     setIsSubmitting(true);
     setError(null);
+    setScopeMissing(null);
     setPendingWork(null);
     setSuccessMessage(null);
 
@@ -270,6 +273,11 @@ export function StageTransitionModal({
       if (!response.ok) {
         // Outstanding work gets its own treatment: the seller needs the list,
         // not a sentence saying a list exists.
+        if (data.code === "SCOPE_NOT_READY") {
+          setScopeMissing(data.scope_missing || []);
+          setIsSubmitting(false);
+          return;
+        }
         if (data.code === "LEAD_HAS_PENDING_WORK") {
           setPendingWork({
             tasks: data.pending_tasks || [],
@@ -352,6 +360,21 @@ export function StageTransitionModal({
 
           {/* Names what is outstanding. A seller told "there is pending work"
               has to go and find it; a seller shown the list can act on it. */}
+          {scopeMissing && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-sm font-medium text-amber-900">
+                The Scope tab needs a little more before this stage
+              </p>
+              <ul className="mt-2 space-y-1 text-sm text-amber-800 list-disc pl-5">
+                {scopeMissing.map((m) => (
+                  <li key={m}>{m}</li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-amber-700">
+                Close this, fill those in on the Scope tab, and come back.
+              </p>
+            </div>
+          )}
           {pendingWork && (
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
               <p className="text-sm font-medium text-amber-900">

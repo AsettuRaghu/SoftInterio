@@ -5,19 +5,15 @@ import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 type RouteParams = { params: Promise<{ id: string }> };
 
 const BRIEF_COLUMNS =
-  "property_id, services_wanted, brief_notes, style_codes, preferred_finishes, budget_band, open_to_carpentry, timeline_notes, updated_at";
+  "property_id, services_wanted, brief_notes, style_codes, preferred_finishes, updated_at";
 const emptyBrief = (id: string) => ({
   property_id: id,
   services_wanted: [],
   brief_notes: null,
   style_codes: [],
   preferred_finishes: [],
-  budget_band: null,
-  open_to_carpentry: null,
-  timeline_notes: null,
   updated_at: null,
 });
-const BUDGET_BANDS = new Set(["under_5l", "5_10l", "10_20l", "20_40l", "above_40l"]);
 
 /**
  * The brief beside a property's scope: services wanted and the notes of
@@ -25,8 +21,9 @@ const BUDGET_BANDS = new Set(["under_5l", "5_10l", "10_20l", "20_40l", "above_40
  * RLS keeps it to the tenant. One row per property, created on first save.
  *
  * GET -> { data: { property_id, services_wanted, brief_notes, style_codes,
- *                  preferred_finishes, budget_band, open_to_carpentry,
- *                  timeline_notes, updated_at } }
+ *                  preferred_finishes, updated_at } }
+ * Budget, timeline and service type are the lead's; the Scope tab edits
+ * them on the lead, not here.
  * PUT any subset of those (not property_id / updated_at)
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -73,9 +70,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   if (Array.isArray(body.preferred_finishes)) {
     row.preferred_finishes = [...new Set(body.preferred_finishes.map((x: unknown) => String(x).trim()).filter(Boolean))].slice(0, 30);
   }
-  if ("budget_band" in body) row.budget_band = body.budget_band && BUDGET_BANDS.has(String(body.budget_band)) ? String(body.budget_band) : null;
-  if ("open_to_carpentry" in body) row.open_to_carpentry = typeof body.open_to_carpentry === "boolean" ? body.open_to_carpentry : null;
-  if ("timeline_notes" in body) row.timeline_notes = String(body.timeline_notes ?? "").trim() || null;
 
   const { data, error } = await supabase
     .from("property_scope_brief")

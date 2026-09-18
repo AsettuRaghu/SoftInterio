@@ -162,20 +162,8 @@ export interface ScopeBrief {
   /** library_styles codes. */
   style_codes: string[];
   preferred_finishes: string[];
-  budget_band: BudgetBand | null;
-  open_to_carpentry: boolean | null;
-  timeline_notes: string | null;
   updated_at: string | null;
 }
-
-export type BudgetBand = "under_5l" | "5_10l" | "10_20l" | "20_40l" | "above_40l";
-export const BUDGET_BAND_LABELS: Record<BudgetBand, string> = {
-  under_5l: "Under ₹5L",
-  "5_10l": "₹5–10L",
-  "10_20l": "₹10–20L",
-  "20_40l": "₹20–40L",
-  above_40l: "Above ₹40L",
-};
 
 /** Offered as chips; anything else can be typed. The tenant's catalogue is
  *  the real vocabulary and will replace this list when finishes live there. */

@@ -12,6 +12,17 @@ off the property so a lead and its project share one set of rows.
 
 ## Decisions
 
+0. **The scope is mandated by stage, and asks nothing the lead form asks.**
+   (2026-09-18, second round.) Two gates, shown on the Scope tab as a
+   readiness strip and refused by the stage transition with the same list:
+   - to *Requirement discussion*: floor plan · at least one space · a
+     service wanted;
+   - to *Proposal discussion* (the quotation is created here): every space
+     of ours has a rough size · at least one component · a style · a
+     finish.
+   Budget, timeline and service type are the lead's fields; the scope shows
+   and edits them there (Requirements section), saving to the lead.
+
 1. **Scope says what; the quotation says how much.** No price ever lives
    on a scope row.
 2. **The quotation pulls from the scope on demand and never syncs.** Every
@@ -32,6 +43,22 @@ off the property so a lead and its project share one set of rows.
    discussion are the tenant team's. A read-only view for a customer to
    follow discussion points may come later; nothing is designed
    customer-facing now, and there is no "internal" toggle to maintain.
+
+## The tab has three sections
+**Requirements** (floor plan, the lead's facts, services wanted, style,
+finishes, first-conversation notes) · **Spaces** (the list, presets,
+walkthrough) · **Conversation** (the scope-level thread, every decision
+across all spaces in one list, the change log). Walkthrough goes space by
+space; a space's components open inside it, each with its own details,
+references, discussion and changes.
+
+## How the preferences are used
+- services wanted → the builder's sidebar ticks each off once a line in
+  that category exists ("Asked for / quoted");
+- style → floats matching Design Library entries to the top when pinning;
+- finishes → cost items whose name carries the preferred finish (the
+  space's, else the brief's) are listed first and marked *preferred* in the
+  builder. A name match until finish is a catalogue attribute.
 
 ## The journey, and what each stage needs
 

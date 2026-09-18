@@ -918,7 +918,18 @@ export default function ProjectDetailPage({ params }: PageProps) {
               of what was priced, which the linked quotation already shows. What
               a project needs is what is to be built. */}
           {activeTab === "scope" && (
-            <ScopeTab propertyId={project.property_id || null} linkedType="project" linkedId={project.id} />
+            <ScopeTab
+              propertyId={project.property_id || null}
+              linkedType="project"
+              linkedId={project.id}
+              facts={{
+                service_type: project.project_category ?? null,
+                budget_range: (project as { lead?: { budget_range?: string | null } }).lead?.budget_range ?? null,
+                target_start_date: project.expected_start_date ?? null,
+                target_end_date: project.expected_end_date ?? null,
+                carpet_area: (project as { property?: { carpet_area?: number | null } }).property?.carpet_area ?? null,
+              }}
+            />
           )}
 
           {activeTab === "overview" && awaitingKickoff && (

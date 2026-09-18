@@ -20,8 +20,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { fetchConfigOnce } from "@/lib/quotations/config-cache";
 import { AddSpacesModal } from "./AddSpacesModal";
-import { ScopeBrief } from "./ScopeBrief";
+import { ScopeBrief, type LeadFacts } from "./ScopeBrief";
 import { ScopeItemPanel } from "./ScopeItemPanel";
+import { ScopeConversation } from "./ScopeConversation";
+import type { ScopeReadiness } from "@/lib/scope/readiness";
+import { CheckCircleIcon, ExclamationCircleIcon } from "@heroicons/react/24/solid";
 import {
   PlusIcon,
   TrashIcon,
@@ -79,6 +82,11 @@ interface ScopeTabProps {
   linkedType: "lead" | "project";
   linkedId: string;
   readOnly?: boolean;
+  /** The lead's facts shown under Requirements; edits go back to the lead. */
+  facts?: LeadFacts | null;
+  onSaveFacts?: (patch: Partial<LeadFacts>) => Promise<void>;
+  /** The lead's stage, to say which gate is next. Absent on a project. */
+  stage?: string | null;
   /**
    * Called after a space or component is added or removed - never on a field
    * edit. The lead page deliberately does not pass it: reloading the whole
@@ -93,9 +101,23 @@ export function ScopeTab({
   linkedType,
   linkedId,
   readOnly = false,
+  facts,
+  onSaveFacts,
+  stage,
   onChanged,
 }: ScopeTabProps) {
-  const { confirmDialog } = useConfirm();
+  const { confirm, confirmDialog } = useConfirm();
+  // Requirements → Spaces → Conversation. Opens on Spaces once there are
+  // any; on Requirements before that, because that is where a sale starts.
+  const [section, setSection] = useState<"requirements" | "spaces" | "conversation" | null>(null);
+  const [readiness, setReadiness] = useState<ScopeReadiness | null>(null);
+  const loadReadiness = useCallback(async () => {
+    if (!propertyId) return;
+    const q = linkedType === "lead" ? `lead_id=${linkedId}` : `project_id=${linkedId}`;
+    const res = await fetch(`/api/properties/${propertyId}/scope/readiness?${q}`);
+    const json = await res.json().catch(() => ({}));
+    if (res.ok) setReadiness(json.data);
+  }, [propertyId, linkedType, linkedId]);
   const [items, setItems] = useState<PropertyScopeItem[]>([]);
   const [spaceTypes, setSpaceTypes] = useState<SpaceTypeOption[]>([]);
   const [componentTypes, setComponentTypes] = useState<SpaceTypeOption[]>([]);
@@ -105,8 +127,15 @@ export function ScopeTab({
   const [presets, setPresets] = useState<ScopePreset[]>([]);
   // A preset card on the empty state opens the add dialog already filled.
   const [presetToOpen, setPresetToOpen] = useState<ScopePreset | null>(null);
-  // The row opened out in the side panel; the walkthrough starts at the first.
-  const [openItemId, setOpenItemId] = useState<string | null>(null);
+  // The space opened out in the side panel (and the component to expand in
+  // it, when a component row was clicked); the walkthrough starts at the first.
+  const [openTarget, setOpenTarget] = useState<{ spaceId: string; componentId: string | null } | null>(null);
+  const openItem = (id: string) => {
+    const row = items.find((i) => i.id === id);
+    if (!row) return;
+    if (row.component_type_id && row.parent_id) setOpenTarget({ spaceId: row.parent_id, componentId: row.id });
+    else setOpenTarget({ spaceId: row.id, componentId: null });
+  };
   // Which space is having components added, if any.
   const [addTarget, setAddTarget] = useState<
     { kind: "space" } | { kind: "component"; spaceId: string; spaceName: string }
@@ -164,6 +193,8 @@ export function ScopeTab({
       const scope = await scopeRes.json();
       setItems(scope.items || []);
       loadedRef.current = true;
+      setSection((cur) => cur ?? ((scope.items || []).length > 0 ? "spaces" : "requirements"));
+      void loadReadiness();
       // Config is best-effort: a failure there leaves the pickers empty rather
       // than hiding the scope this tab exists to show.
       if (types) setSpaceTypes(types.data || []);
@@ -177,7 +208,7 @@ export function ScopeTab({
     } finally {
       setIsLoading(false);
     }
-  }, [propertyId]);
+  }, [propertyId, loadReadiness]);
 
   useEffect(() => {
     void load();
@@ -191,8 +222,9 @@ export function ScopeTab({
   useEffect(() => {
     if (propertyId && loadedRef.current) {
       scopeCache.set(propertyId, items);
+      void loadReadiness();
     }
-  }, [propertyId, items]);
+  }, [propertyId, items, loadReadiness]);
 
   /**
    * Only the components that suit the space being added to.
@@ -732,7 +764,7 @@ export function ScopeTab({
           <span className="inline-flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => setOpenItemId(item.id)}
+              onClick={() => openItem(item.id)}
               title="Open: finish, what the client supplies, references, discussion, changes"
               className="w-6.5 h-6.5 inline-flex items-center justify-center rounded-md border bg-white text-slate-500 border-slate-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-all"
             >
@@ -756,12 +788,80 @@ export function ScopeTab({
     );
   };
 
+  const gateNext: "requirement_discussion" | "proposal_discussion" | null =
+    linkedType !== "lead" || !stage ? null
+    : ["new", "qualified"].includes(stage) ? "requirement_discussion"
+    : stage === "requirement_discussion" ? "proposal_discussion"
+    : null;
+  const gate = readiness && gateNext ? readiness[gateNext] : null;
+
   return (
     <div className="space-y-4">
-    {propertyId && (
-      <ScopeBrief propertyId={propertyId} linkedType={linkedType} linkedId={linkedId} readOnly={readOnly} />
+    {/* Readiness: what the next stage of the sale still needs from here. */}
+    {gate && (
+      <div className={`rounded-lg border px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm ${gate.ok ? "border-emerald-200 bg-emerald-50/60" : "border-amber-200 bg-amber-50/60"}`}>
+        {gate.ok ? <CheckCircleIcon className="w-5 h-5 text-emerald-600" /> : <ExclamationCircleIcon className="w-5 h-5 text-amber-600" />}
+        <span className="font-medium text-slate-900">
+          {gate.ok
+            ? `Ready for ${gateNext === "requirement_discussion" ? "Requirement discussion" : "Proposal"}`
+            : `Before ${gateNext === "requirement_discussion" ? "Requirement discussion" : "Proposal"}: ${gate.missing.length} thing${gate.missing.length === 1 ? "" : "s"}`}
+        </span>
+        {!gate.ok && (
+          <ul className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-amber-800">
+            {gate.missing.map((m) => (
+              <li key={m}>· {m}</li>
+            ))}
+          </ul>
+        )}
+      </div>
     )}
-    <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+
+    <div className="flex items-center gap-1 border-b border-slate-200">
+      {(
+        [
+          ["requirements", "Requirements"],
+          ["spaces", `Spaces${items.length ? ` (${items.filter((i) => !i.component_type_id).length})` : ""}`],
+          ["conversation", "Conversation"],
+        ] as const
+      ).map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => setSection(key)}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            section === key ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+
+    {section === "requirements" && propertyId && (
+      <ScopeBrief
+        propertyId={propertyId}
+        linkedType={linkedType}
+        linkedId={linkedId}
+        readOnly={readOnly}
+        facts={facts}
+        onSaveFacts={onSaveFacts}
+        onChanged={() => void loadReadiness()}
+      />
+    )}
+
+    {section === "conversation" && propertyId && (
+      <ScopeConversation
+        propertyId={propertyId}
+        linkedType={linkedType}
+        linkedId={linkedId}
+        items={items}
+        readOnly={readOnly}
+        confirm={confirm}
+        onOpenItem={(id) => openItem(id)}
+      />
+    )}
+
+    <div className={section === "spaces" ? "bg-white rounded-lg border border-slate-200 overflow-hidden" : "hidden"}>
       <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-900">
@@ -777,7 +877,7 @@ export function ScopeTab({
         {roots.length > 0 && (
           <button
             type="button"
-            onClick={() => setOpenItemId(roots[0].id)}
+            onClick={() => setOpenTarget({ spaceId: roots[0].id, componentId: null })}
             title="Go through the scope space by space - for sitting with the customer"
             className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
           >
@@ -933,19 +1033,21 @@ export function ScopeTab({
       />
       {confirmDialog}
     </div>
-    {openItemId && propertyId && (() => {
-      const current = items.find((i) => i.id === openItemId);
+    {openTarget && propertyId && (() => {
+      const current = items.find((i) => i.id === openTarget.spaceId);
       if (!current) return null;
       return (
         <ScopeItemPanel
+          key={`${openTarget.spaceId}:${openTarget.componentId ?? ""}`}
           item={current}
           items={items}
           propertyId={propertyId}
           linkedType={linkedType}
           linkedId={linkedId}
           readOnly={readOnly}
-          onClose={() => setOpenItemId(null)}
-          onNavigate={(i) => setOpenItemId(i.id)}
+          focusComponentId={openTarget.componentId}
+          onClose={() => setOpenTarget(null)}
+          onNavigate={(i) => setOpenTarget({ spaceId: i.id, componentId: null })}
           onPatch={patchItem}
         />
       );

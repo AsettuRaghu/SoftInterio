@@ -20,11 +20,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import {
-  ArrowTopRightOnSquareIcon,
   ArrowUpTrayIcon,
   BookmarkIcon,
   ChatBubbleLeftRightIcon,
-  CheckBadgeIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ClockIcon,
@@ -35,8 +33,9 @@ import {
 } from "@heroicons/react/24/outline";
 import { cn } from "@/utils/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { SCOPE_OWNER_LABELS, type PropertyScopeItem, type ScopeComment, type ScopeHistoryEntry } from "@/types/property-scope";
+import { SCOPE_OWNER_LABELS, type PropertyScopeItem, type ScopeHistoryEntry } from "@/types/property-scope";
 import { COMMON_FINISHES } from "@/types/property-scope";
+import { ScopeDiscussion } from "./ScopeDiscussion";
 
 type Tab = "details" | "references" | "discussion" | "changes";
 
@@ -53,6 +52,7 @@ interface LibraryEntryLite {
   id: string;
   title: string;
   kind?: string;
+  style_code?: string | null;
   images: { url: string | null }[];
 }
 
@@ -76,6 +76,67 @@ const FIELD_LABELS: Record<string, string> = {
 
 const show = (v: unknown) => (v === null || v === undefined || v === "" ? "—" : String(v));
 
+/** The four tabs for one row - a space's own, or a component's inside it. */
+function ItemBody({
+  item,
+  propertyId,
+  linkedType,
+  linkedId,
+  readOnly,
+  confirm,
+  onPatch,
+  compact = false,
+}: {
+  item: PropertyScopeItem;
+  propertyId: string;
+  linkedType: "lead" | "project";
+  linkedId: string;
+  readOnly: boolean;
+  confirm: ReturnType<typeof useConfirm>["confirm"];
+  onPatch: (item: PropertyScopeItem, patch: Partial<PropertyScopeItem> & { reason?: string }) => Promise<void>;
+  compact?: boolean;
+}) {
+  const [tab, setTab] = useState<Tab>("details");
+  return (
+    <div>
+      <div className={cn("flex gap-1", compact ? "px-3 pt-2" : "px-5 pt-3")}>
+        {(
+          [
+            ["details", "Details", WrenchScrewdriverIcon],
+            ["references", "References", PhotoIcon],
+            ["discussion", "Discussion", ChatBubbleLeftRightIcon],
+            ["changes", "Changes", ClockIcon],
+          ] as const
+        ).map(([key, label, Icon]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setTab(key)}
+            className={cn(
+              "inline-flex items-center gap-1.5 font-medium rounded-md transition-colors",
+              compact ? "px-2 py-1 text-[11px]" : "px-3 py-1.5 text-xs",
+              tab === key ? "bg-slate-800 text-white" : "text-slate-600 hover:bg-slate-100",
+            )}
+          >
+            <Icon className="w-3.5 h-3.5" />
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className={compact ? "[&>div]:p-3 [&>ol]:p-3 [&>p]:p-3" : ""}>
+        {tab === "details" && <DetailsTab key={item.id} item={item} readOnly={readOnly} onPatch={onPatch} />}
+        {tab === "references" && (
+          <ReferencesTab key={item.id} item={item} propertyId={propertyId} linkedType={linkedType} linkedId={linkedId} readOnly={readOnly} confirm={confirm} />
+        )}
+        {tab === "discussion" && (
+          <ScopeDiscussion key={item.id} scopeItemId={item.id} propertyId={propertyId} linkedType={linkedType} linkedId={linkedId} readOnly={readOnly} confirm={confirm} />
+        )}
+        {tab === "changes" && <ChangesTab key={item.id} item={item} propertyId={propertyId} />}
+      </div>
+    </div>
+  );
+}
+
 export function ScopeItemPanel({
   item,
   items,
@@ -86,9 +147,12 @@ export function ScopeItemPanel({
   onClose,
   onNavigate,
   onPatch,
+  focusComponentId = null,
 }: {
+  /** The space being shown. Opening a component opens its space with that
+   *  component expanded - components live inside their space here. */
   item: PropertyScopeItem;
-  /** Every row, so Previous / Next can walk spaces and their components. */
+  /** Every row, so Previous / Next can walk the spaces. */
   items: PropertyScopeItem[];
   propertyId: string;
   linkedType: "lead" | "project";
@@ -98,32 +162,50 @@ export function ScopeItemPanel({
   onNavigate: (item: PropertyScopeItem) => void;
   /** Saves a field on the row - the tab's own patch, so the list updates too. */
   onPatch: (item: PropertyScopeItem, patch: Partial<PropertyScopeItem> & { reason?: string }) => Promise<void>;
+  focusComponentId?: string | null;
 }) {
-  const [tab, setTab] = useState<Tab>("details");
   const { confirm, confirmDialog } = useConfirm();
+  const [openComponents, setOpenComponents] = useState<Set<string>>(() => new Set(focusComponentId ? [focusComponentId] : []));
+  const [counts, setCounts] = useState<Map<string, { notes: number; decisions: number }>>(new Map());
 
-  // Walk order: spaces in display order, each followed by its components.
-  const order = useMemo(() => {
-    const byOrder = (a: PropertyScopeItem, b: PropertyScopeItem) => a.display_order - b.display_order;
-    const roots = items.filter((i) => !i.parent_id && !i.component_type_id).sort(byOrder);
-    const out: PropertyScopeItem[] = [];
-    for (const r of roots) {
-      out.push(r);
-      out.push(...items.filter((i) => i.parent_id === r.id).sort(byOrder));
-    }
-    return out;
-  }, [items]);
-  const idx = order.findIndex((i) => i.id === item.id);
-  const prev = idx > 0 ? order[idx - 1] : null;
-  const next = idx >= 0 && idx < order.length - 1 ? order[idx + 1] : null;
-  const parent = item.parent_id ? items.find((i) => i.id === item.parent_id) : null;
-  const isComponent = !!item.component_type_id;
+  const byOrder = (a: PropertyScopeItem, b: PropertyScopeItem) => a.display_order - b.display_order;
+  const spaces = useMemo(() => items.filter((i) => !i.parent_id && !i.component_type_id).sort(byOrder), [items]);
+  const components = useMemo(() => items.filter((i) => i.parent_id === item.id).sort(byOrder), [items, item.id]);
+  const idx = spaces.findIndex((i) => i.id === item.id);
+  const prev = idx > 0 ? spaces[idx - 1] : null;
+  const next = idx >= 0 && idx < spaces.length - 1 ? spaces[idx + 1] : null;
   const ours = !item.scope_owner || item.scope_owner === "us";
+
+  // Mounted with key={space id + focused component}, so opening from a
+  // component row starts with that component expanded - no effect needed.
+
+  // How much has been said about each component, for its row.
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      const res = await fetch(`/api/properties/${propertyId}/scope/conversation`);
+      const json = await res.json().catch(() => ({}));
+      if (!live || !res.ok) return;
+      const m = new Map<string, { notes: number; decisions: number }>();
+      for (const c of (json.data ?? []) as { scope_item_id: string | null; is_decision: boolean }[]) {
+        if (!c.scope_item_id) continue;
+        const cur = m.get(c.scope_item_id) ?? { notes: 0, decisions: 0 };
+        if (c.is_decision) cur.decisions += 1;
+        else cur.notes += 1;
+        m.set(c.scope_item_id, cur);
+      }
+      setCounts(m);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [propertyId, item.id]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
-      if ((e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.tagName === "TEXTAREA") return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if (e.key === "ArrowLeft" && prev) onNavigate(prev);
       if (e.key === "ArrowRight" && next) onNavigate(next);
     };
@@ -133,34 +215,36 @@ export function ScopeItemPanel({
 
   if (typeof document === "undefined") return null;
 
+  const size = (i: PropertyScopeItem) => (i.length || i.width ? `${i.length ?? "—"} × ${i.width ?? "—"} ${i.measurement_unit}` : null);
+
   return createPortal(
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-slate-900/30" onClick={onClose} />
-      <aside className="relative h-full w-full max-w-xl bg-white shadow-2xl flex flex-col animate-[slide-in-right_.2s_ease-out]">
+      <aside className="relative h-full w-full max-w-2xl bg-white shadow-2xl flex flex-col animate-[slide-in-right_.2s_ease-out]">
         {/* Header */}
         <div className="px-5 pt-4 pb-3 border-b border-slate-200">
           <div className="flex items-start gap-3">
             <div className="min-w-0 flex-1">
               <p className="text-[11px] uppercase tracking-wider text-slate-400">
-                {isComponent ? `${parent?.name ?? "Space"} · component` : "Space"}
-                {idx >= 0 && <span className="ml-2 text-slate-300">{idx + 1} of {order.length}</span>}
+                Space{idx >= 0 && <span className="ml-2 text-slate-300">{idx + 1} of {spaces.length}</span>}
               </p>
               <h2 className="text-lg font-semibold text-slate-900 truncate">{item.name}</h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                {item.space_type?.name || item.component_type?.name || ""}
-                {item.length || item.width ? ` · ${item.length ?? "—"} × ${item.width ?? "—"} ${item.measurement_unit}` : ""}
+                {item.space_type?.name || ""}
+                {size(item) ? ` · ${size(item)}` : ""}
                 {" · "}
                 <span className={cn(ours ? "text-slate-500" : "text-amber-700 font-medium")}>
                   {SCOPE_OWNER_LABELS[item.scope_owner ?? "us"]}
                   {item.scope_owner === "vendor" && item.scope_vendor_name ? ` (${item.scope_vendor_name})` : ""}
                 </span>
+                {components.length > 0 && ` · ${components.length} component${components.length === 1 ? "" : "s"}`}
               </p>
             </div>
             <div className="flex items-center gap-1">
-              <button type="button" disabled={!prev} onClick={() => prev && onNavigate(prev)} title="Previous (←)" className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30">
+              <button type="button" disabled={!prev} onClick={() => prev && onNavigate(prev)} title="Previous space (←)" className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30">
                 <ChevronLeftIcon className="w-5 h-5" />
               </button>
-              <button type="button" disabled={!next} onClick={() => next && onNavigate(next)} title="Next (→)" className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30">
+              <button type="button" disabled={!next} onClick={() => next && onNavigate(next)} title="Next space (→)" className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30">
                 <ChevronRightIcon className="w-5 h-5" />
               </button>
               <button type="button" onClick={onClose} title="Close (Esc)" className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100">
@@ -168,40 +252,72 @@ export function ScopeItemPanel({
               </button>
             </div>
           </div>
-          <div className="mt-3 flex gap-1">
-            {(
-              [
-                ["details", "Details", WrenchScrewdriverIcon],
-                ["references", "References", PhotoIcon],
-                ["discussion", "Discussion", ChatBubbleLeftRightIcon],
-                ["changes", "Changes", ClockIcon],
-              ] as const
-            ).map(([key, label, Icon]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setTab(key)}
-                className={cn(
-                  "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
-                  tab === key ? "bg-slate-800 text-white" : "text-slate-600 hover:bg-slate-100",
-                )}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                {label}
-              </button>
-            ))}
-          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {tab === "details" && <DetailsTab key={item.id} item={item} readOnly={readOnly} onPatch={onPatch} />}
-          {tab === "references" && (
-            <ReferencesTab key={item.id} item={item} propertyId={propertyId} linkedType={linkedType} linkedId={linkedId} readOnly={readOnly} confirm={confirm} />
-          )}
-          {tab === "discussion" && (
-            <DiscussionTab key={item.id} item={item} propertyId={propertyId} linkedType={linkedType} linkedId={linkedId} readOnly={readOnly} confirm={confirm} />
-          )}
-          {tab === "changes" && <ChangesTab key={item.id} item={item} propertyId={propertyId} />}
+          {/* The space's own */}
+          <ItemBody item={item} propertyId={propertyId} linkedType={linkedType} linkedId={linkedId} readOnly={readOnly} confirm={confirm} onPatch={onPatch} />
+
+          {/* Its components, each opening out to its own four tabs */}
+          <div className="border-t border-slate-200 mt-2">
+            <div className="px-5 py-3 flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-slate-900">Components</h3>
+              <span className="text-xs text-slate-500">{components.length}</span>
+              <span className="flex-1" />
+              {components.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setOpenComponents((o) => (o.size === components.length ? new Set() : new Set(components.map((c) => c.id))))}
+                  className="text-xs text-slate-500 hover:text-slate-800"
+                >
+                  {openComponents.size === components.length ? "Collapse all" : "Expand all"}
+                </button>
+              )}
+            </div>
+            {components.length === 0 ? (
+              <p className="px-5 pb-5 text-xs text-slate-400">No components listed in this space yet - add them from the list.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100 border-t border-slate-100">
+                {components.map((c) => {
+                  const open = openComponents.has(c.id);
+                  const n = counts.get(c.id);
+                  const cOurs = !c.scope_owner || c.scope_owner === "us";
+                  return (
+                    <li key={c.id} className={cn(open && "bg-slate-50/60")}>
+                      <button
+                        type="button"
+                        onClick={() => setOpenComponents((o) => { const s2 = new Set(o); if (s2.has(c.id)) s2.delete(c.id); else s2.add(c.id); return s2; })}
+                        className="w-full px-5 py-2.5 flex items-center gap-3 text-left hover:bg-slate-50"
+                      >
+                        <ChevronRightIcon className={cn("w-4 h-4 text-slate-400 transition-transform", open && "rotate-90")} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium text-slate-900 truncate">{c.name}</span>
+                          <span className="block text-[11px] text-slate-500">
+                            {c.component_type?.name || ""}
+                            {size(c) ? ` · ${size(c)}` : ""}
+                            {c.preferred_finish ? ` · ${c.preferred_finish}` : ""}
+                            {!cOurs && <span className="text-amber-700 font-medium"> · {SCOPE_OWNER_LABELS[c.scope_owner ?? "us"]}</span>}
+                          </span>
+                        </span>
+                        {n && (n.notes > 0 || n.decisions > 0) && (
+                          <span className="shrink-0 text-[11px] text-slate-500">
+                            {n.decisions > 0 && <span className="text-emerald-700">{n.decisions} decision{n.decisions === 1 ? "" : "s"}</span>}
+                            {n.decisions > 0 && n.notes > 0 && " · "}
+                            {n.notes > 0 && `${n.notes} note${n.notes === 1 ? "" : "s"}`}
+                          </span>
+                        )}
+                      </button>
+                      {open && (
+                        <div className="pb-2 border-t border-slate-100 bg-white mx-3 mb-3 rounded-lg border">
+                          <ItemBody item={c} propertyId={propertyId} linkedType={linkedType} linkedId={linkedId} readOnly={readOnly} confirm={confirm} onPatch={onPatch} compact />
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         </div>
       </aside>
       {confirmDialog}
@@ -411,12 +527,19 @@ function ReferencesTab({
     await load();
   };
 
+  // The brief's styles float matching entries to the top of the picker.
   const openPicker = async () => {
     setPicking(true);
     if (library === null) {
-      const res = await fetch("/api/library/entries");
+      const [res, b] = await Promise.all([
+        fetch("/api/library/entries"),
+        fetch(`/api/properties/${propertyId}/brief`).then((r) => r.json()).catch(() => null),
+      ]);
       const json = await res.json().catch(() => ({}));
-      setLibrary(res.ok ? json.data ?? [] : []);
+      const styles = new Set<string>(b?.data?.style_codes ?? []);
+      const list: LibraryEntryLite[] = res.ok ? json.data ?? [] : [];
+      if (styles.size) list.sort((a, b2) => Number(!!b2.style_code && styles.has(b2.style_code)) - Number(!!a.style_code && styles.has(a.style_code)));
+      setLibrary(list);
     }
   };
   const pin = async (entryId: string) => {
@@ -525,153 +648,6 @@ function ReferencesTab({
           </div>
         )}
       </section>
-    </div>
-  );
-}
-
-/* ---------------------------------------------------------- Discussion */
-
-function DiscussionTab({
-  item,
-  propertyId,
-  linkedType,
-  linkedId,
-  readOnly,
-  confirm,
-}: {
-  item: PropertyScopeItem;
-  propertyId: string;
-  linkedType: "lead" | "project";
-  linkedId: string;
-  readOnly: boolean;
-  confirm: ReturnType<typeof useConfirm>["confirm"];
-}) {
-  const [rows, setRows] = useState<ScopeComment[]>([]);
-  const [text, setText] = useState("");
-  const [decision, setDecision] = useState(false);
-  const [rework, setRework] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    const res = await fetch(`/api/properties/${propertyId}/scope/conversation?item=${item.id}`);
-    const json = await res.json().catch(() => ({}));
-    if (res.ok) setRows(json.data ?? []);
-  }, [item.id, propertyId]);
-
-  useEffect(() => {
-    // setState happens after the fetch resolves; the rule cannot see through `load`.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load]);
-
-  const post = async () => {
-    if (!text.trim() || busy) return;
-    setBusy(true);
-    setError(null);
-    const res = await fetch(`/api/properties/${propertyId}/scope/conversation`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scope_item_id: item.id, body: text.trim(), is_decision: decision, needs_rework: rework }),
-    });
-    const json = await res.json().catch(() => ({}));
-    setBusy(false);
-    if (!res.ok) return setError(json.error || "Could not save");
-    setRows((r) => [...r, json.data]);
-    setText("");
-    setDecision(false);
-    setRework(false);
-  };
-
-  const patch = async (c: ScopeComment, p: Partial<ScopeComment>) => {
-    setRows((r) => r.map((x) => (x.id === c.id ? { ...x, ...p } : x)));
-    await fetch(`/api/properties/${propertyId}/scope/conversation/${c.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(p),
-    });
-  };
-
-  const remove = async (c: ScopeComment) => {
-    if (!(await confirm({ title: "Delete this entry?", message: "It leaves the discussion for good.", confirmLabel: "Delete", tone: "danger" }))) return;
-    setRows((r) => r.filter((x) => x.id !== c.id));
-    await fetch(`/api/properties/${propertyId}/scope/conversation/${c.id}`, { method: "DELETE" });
-  };
-
-  const makeTask = async (c: ScopeComment) => {
-    const res = await fetch(`/api/properties/${propertyId}/scope/conversation/${c.id}/task`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ related_type: linkedType, related_id: linkedId }),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) return setError(json.error || "Could not create the task");
-    setRows((r) => r.map((x) => (x.id === c.id ? { ...x, task_id: json.data.task_id, needs_rework: true } : x)));
-  };
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto p-5 space-y-3">
-        {rows.length === 0 ? (
-          <p className="text-xs text-slate-400">No discussion yet. What was said, what was agreed - it goes here and stays with the space into the project.</p>
-        ) : (
-          rows.map((c) => (
-            <div key={c.id} className={cn("group rounded-lg border px-3 py-2", c.is_decision ? "border-emerald-200 bg-emerald-50/50" : "border-slate-200 bg-white")}>
-              <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                <span className="font-medium text-slate-700">{c.author_name}</span>
-                <span>{new Date(c.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
-                {c.is_decision && <span className="inline-flex items-center gap-1 text-emerald-700 font-medium"><CheckBadgeIcon className="w-3.5 h-3.5" /> decision</span>}
-                {c.needs_rework && !c.task_id && <span className="text-amber-700 font-medium">needs rework</span>}
-                {c.task_id && <Link href={`/dashboard/tasks/${c.task_id}`} className="text-blue-600 hover:underline inline-flex items-center gap-0.5">task <ArrowTopRightOnSquareIcon className="w-3 h-3" /></Link>}
-                <span className="flex-1" />
-                {!readOnly && (
-                  <span className="hidden group-hover:inline-flex items-center gap-1">
-                    <button type="button" onClick={() => void patch(c, { is_decision: !c.is_decision })} className="px-1.5 py-0.5 rounded hover:bg-slate-100" title={c.is_decision ? "Back to a note" : "Mark as the decision"}>
-                      {c.is_decision ? "un-decide" : "decision"}
-                    </button>
-                    {!c.task_id && (
-                      <button type="button" onClick={() => void makeTask(c)} className="px-1.5 py-0.5 rounded hover:bg-slate-100" title="Turn into a task on this record">
-                        make a task
-                      </button>
-                    )}
-                    <button type="button" onClick={() => void remove(c)} className="px-1.5 py-0.5 rounded hover:bg-red-50 text-red-600" title="Delete">
-                      <TrashIcon className="w-3.5 h-3.5" />
-                    </button>
-                  </span>
-                )}
-              </div>
-              <p className="text-sm text-slate-800 mt-1 whitespace-pre-wrap">{c.body}</p>
-            </div>
-          ))
-        )}
-      </div>
-      {!readOnly && (
-        <div className="border-t border-slate-200 p-4 space-y-2">
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void post();
-            }}
-            rows={2}
-            placeholder="What was said or agreed… (⌘↵ to post)"
-            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-400 resize-none"
-          />
-          <div className="flex items-center gap-3">
-            <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
-              <input type="checkbox" checked={decision} onChange={(e) => setDecision(e.target.checked)} className="rounded border-slate-300" /> Decision
-            </label>
-            <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
-              <input type="checkbox" checked={rework} onChange={(e) => setRework(e.target.checked)} className="rounded border-slate-300" /> Needs rework
-            </label>
-            <span className="flex-1" />
-            {error && <span className="text-xs text-red-600">{error}</span>}
-            <button type="button" onClick={() => void post()} disabled={busy || !text.trim()} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
-              Post
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

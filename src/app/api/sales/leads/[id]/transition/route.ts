@@ -12,6 +12,7 @@ import { logLeadActivity } from "@/lib/activity/log";
 import { requestLogger } from "@/lib/logger/request";
 import { leadAccess, canWriteLead } from "@/lib/leads/access";
 import { namesOf, notify } from "@/lib/notifications/notify";
+import { scopeReadiness } from "@/lib/scope/readiness";
 import {
   getPendingLeadWork,
   cancelPendingLeadWork,
@@ -268,6 +269,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         },
         { status: 400 }
       );
+    }
+
+    // The scope has to be far enough along for the stage being entered - a
+    // requirement discussion needs a plan and rooms; a proposal (which creates
+    // the quotation from the scope) needs sizes, components, a style and a
+    // finish. Same list the Scope tab shows beforehand. lib/scope/readiness.
+    if ((to_stage === "requirement_discussion" || to_stage === "proposal_discussion") && lead.property_id) {
+      const readiness = await scopeReadiness(supabase, { propertyId: lead.property_id, leadId: id });
+      const gate = readiness[to_stage as "requirement_discussion" | "proposal_discussion"];
+      if (!gate.ok) {
+        return NextResponse.json(
+          {
+            error: "The scope is not far enough along for this stage.",
+            code: "SCOPE_NOT_READY",
+            scope_missing: gate.missing,
+          },
+          { status: 409 }
+        );
+      }
     }
 
     // Winning a lead closes it, so nothing may be left hanging on it. Checked

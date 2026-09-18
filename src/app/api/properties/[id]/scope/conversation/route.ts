@@ -11,7 +11,7 @@ type RouteParams = { params: Promise<{ id: string }> };
  * as needing rework and turned into a task. Tenant team only - nothing here
  * is customer-facing (decided 2026-09-18).
  *
- * GET  ?item=<scope item id>   entries for that row; omit for the whole property
+ * GET  ?item=<scope item id> | ?item=none (scope-level) | omitted (all) · &decisions=1
  * POST { scope_item_id?, body, is_decision?, needs_rework? }
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -20,8 +20,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
   const supabase = await createClient();
   const item = request.nextUrl.searchParams.get("item");
+  const decisionsOnly = request.nextUrl.searchParams.get("decisions") === "1";
   let q = supabase.from("scope_item_comments").select(COMMENT_COLUMNS).eq("property_id", id).order("created_at", { ascending: true });
-  if (item) q = q.eq("scope_item_id", item);
+  // ?item=<id> one row's thread · ?item=none the scope-level thread · omitted: everything
+  if (item === "none") q = q.is("scope_item_id", null);
+  else if (item) q = q.eq("scope_item_id", item);
+  if (decisionsOnly) q = q.eq("is_decision", true);
   const { data, error } = await q;
   if (error) return NextResponse.json({ error: "Could not load the discussion" }, { status: 500 });
   return NextResponse.json({ data: await withAuthors(supabase, data ?? []) });

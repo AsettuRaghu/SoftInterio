@@ -98,8 +98,19 @@ from a lead. The empty scope shows them as cards that open the add dialog
 filled in; the dialog's chips offer them too. Five were seeded per tenant
 from the old quick starts.
 
-**Each row opens out** (`ScopeItemPanel`, the speech-bubble on the row, or
-**Walkthrough** from the header to go space by space with ←/→): the finish
+**The tab has three sections** - Requirements, Spaces, Conversation - under
+a readiness strip, and **the sale cannot advance past the scope**
+(`lib/scope/readiness.ts`): moving to Requirement discussion needs a floor
+plan, a space and a service wanted; moving to Proposal (which creates the
+quotation) needs a rough size on every space of ours, a component, a style
+and a finish. The transition route refuses with `SCOPE_NOT_READY` and the
+list; the strip shows the same list beforehand. Requirements asks nothing
+the lead form asks - service type, budget, target dates and carpet area
+are shown there and saved **to the lead** through `onSaveFacts`.
+
+**Each space opens out** (`ScopeItemPanel`, the speech-bubble on the row, or
+**Walkthrough** from the header to go space by space with ←/→; its components
+open inside it, each with its own four tabs): the finish
 they want; for a client/vendor row what is arriving from them and by when
 (`supplied_detail`, `supplied_expected_by` - never priced); references
 (Documents with `linked_type = scope_item`, parent-linked to the lead or

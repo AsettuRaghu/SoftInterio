@@ -9,6 +9,10 @@ interface AddCostItemModalProps {
   onAdd: (costItem: CostItem) => void;
   costItems: CostItem[];
   categories: CostItemCategory[];
+  /** Finishes the customer leans to (the space's, else the brief's): items
+   *  whose name carries one are listed first and marked. A name match for
+   *  now - finish is not a catalogue attribute yet. */
+  preferredFinishes?: string[];
 }
 
 export function AddCostItemModal({
@@ -17,6 +21,7 @@ export function AddCostItemModal({
   onAdd,
   costItems,
   categories,
+  preferredFinishes = [],
 }: AddCostItemModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -32,14 +37,24 @@ export function AddCostItemModal({
   };
 
   // Group cost items by category
+  const wanted = useMemo(() => preferredFinishes.map((f) => f.toLowerCase()).filter(Boolean), [preferredFinishes]);
+  const isPreferred = (item: CostItem) => wanted.length > 0 && wanted.some((f) => item.name.toLowerCase().includes(f));
+
   const itemsByCategory = useMemo(() => {
-    return costItems.reduce((acc, item) => {
+    const grouped = costItems.reduce((acc, item) => {
       const catId = item.category_id || "uncategorized";
       if (!acc[catId]) acc[catId] = [];
       acc[catId].push(item);
       return acc;
     }, {} as Record<string, CostItem[]>);
-  }, [costItems]);
+    if (wanted.length) {
+      for (const list of Object.values(grouped)) {
+        list.sort((a, b) => Number(isPreferred(b)) - Number(isPreferred(a)));
+      }
+    }
+    return grouped;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isPreferred closes over `wanted`, which is listed
+  }, [costItems, wanted]);
 
   // Filter items based on search query
   const filteredItemsByCategory = useMemo(() => {
@@ -296,6 +311,9 @@ export function AddCostItemModal({
                           <div className="flex items-start justify-between">
                             <div className="font-medium text-slate-900 text-sm group-hover:text-amber-700">
                               {item.name}
+                              {isPreferred(item) && (
+                                <span className="ml-1.5 align-middle text-[10px] font-semibold uppercase tracking-wider text-amber-700 bg-amber-100 rounded px-1 py-0.5">preferred</span>
+                              )}
                             </div>
                             <svg
                               className="w-4 h-4 text-slate-300 group-hover:text-amber-500 shrink-0 ml-2"
