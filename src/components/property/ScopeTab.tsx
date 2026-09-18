@@ -23,6 +23,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { fetchConfigOnce } from "@/lib/quotations/config-cache";
 import { AddSpacesModal } from "./AddSpacesModal";
 import { CheckIcon } from "@heroicons/react/24/outline";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { ScopeItemPanel } from "./ScopeItemPanel";
 import {
   PlusIcon,
@@ -45,6 +46,7 @@ import {
   type ScopeMeasurementUnit,
   type QualityTier,
   type ScopePreset,
+  scopeOwnerLabel,
 } from "@/types/property-scope";
 
 /**
@@ -120,6 +122,33 @@ export function ScopeTab({
       : null;
   };
   const { confirm, confirmDialog } = useConfirm();
+  const { user: me } = useCurrentUser();
+  const tenantName = me?.tenantName ?? null;
+
+  /**
+   * ↑ / ↓ / Enter in a name or size field move to the same field on the
+   * previous / next visible row, so a list can be filled top to bottom
+   * without the mouse. Rows are rendered in visible order, so the DOM order
+   * of the inputs is the row order. Arrow keys on a number input would
+   * otherwise step the value.
+   */
+  const navKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown" && e.key !== "Enter") return;
+    const el = e.currentTarget;
+    const col = el.dataset.navCol;
+    if (!col) return;
+    const all = Array.from(document.querySelectorAll<HTMLInputElement>(`input[data-nav-col="${col}"]`));
+    const i = all.indexOf(el);
+    if (i < 0) return;
+    const next = e.key === "ArrowUp" ? all[i - 1] : all[i + 1];
+    e.preventDefault();
+    if (next) {
+      next.focus();
+      next.select();
+    } else {
+      el.blur();
+    }
+  };
   // Every edit saves as it happens; this is the reassurance in the header.
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -551,6 +580,8 @@ export function ScopeTab({
                   )
                 )
               }
+              data-nav-col="name"
+              onKeyDown={navKey}
               onFocus={(e) => {
                 nameAtFocus.current = e.target.value;
               }}
@@ -667,7 +698,7 @@ export function ScopeTab({
             >
               {(Object.keys(SCOPE_OWNER_LABELS) as ScopeOwner[]).map((k) => (
                 <option key={k} value={k}>
-                  {SCOPE_OWNER_LABELS[k]}
+                  {scopeOwnerLabel(k, tenantName)}
                 </option>
               ))}
             </select>
@@ -705,6 +736,8 @@ export function ScopeTab({
                   value={item[field] ?? ""}
                   disabled={readOnly}
                   placeholder="—"
+                  data-nav-col={field}
+                  onKeyDown={navKey}
                   onChange={(e) =>
                     setItems((prev) =>
                       prev.map((i) =>

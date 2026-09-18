@@ -33,8 +33,8 @@ import {
 } from "@heroicons/react/24/outline";
 import { cn } from "@/utils/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { SCOPE_OWNER_LABELS, type PropertyScopeItem, type ScopeHistoryEntry } from "@/types/property-scope";
-import { COMMON_FINISHES } from "@/types/property-scope";
+import { COMMON_FINISHES, scopeOwnerLabel, type PropertyScopeItem, type ScopeHistoryEntry } from "@/types/property-scope";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { ScopeDiscussion } from "./ScopeDiscussion";
 
 type Tab = "details" | "references" | "discussion" | "changes";
@@ -165,6 +165,7 @@ export function ScopeItemPanel({
   focusComponentId?: string | null;
 }) {
   const { confirm, confirmDialog } = useConfirm();
+  const tenantName = useCurrentUser().user?.tenantName ?? null;
   const [openComponents, setOpenComponents] = useState<Set<string>>(() => new Set(focusComponentId ? [focusComponentId] : []));
   const [counts, setCounts] = useState<Map<string, { notes: number; decisions: number }>>(new Map());
 
@@ -234,7 +235,7 @@ export function ScopeItemPanel({
                 {size(item) ? ` · ${size(item)}` : ""}
                 {" · "}
                 <span className={cn(ours ? "text-slate-500" : "text-amber-700 font-medium")}>
-                  {SCOPE_OWNER_LABELS[item.scope_owner ?? "us"]}
+                  {scopeOwnerLabel(item.scope_owner, tenantName)}
                   {item.scope_owner === "vendor" && item.scope_vendor_name ? ` (${item.scope_vendor_name})` : ""}
                 </span>
                 {components.length > 0 && ` · ${components.length} component${components.length === 1 ? "" : "s"}`}
@@ -296,7 +297,7 @@ export function ScopeItemPanel({
                             {c.component_type?.name || ""}
                             {size(c) ? ` · ${size(c)}` : ""}
                             {c.preferred_finish ? ` · ${c.preferred_finish}` : ""}
-                            {!cOurs && <span className="text-amber-700 font-medium"> · {SCOPE_OWNER_LABELS[c.scope_owner ?? "us"]}</span>}
+                            {!cOurs && <span className="text-amber-700 font-medium"> · {scopeOwnerLabel(c.scope_owner, tenantName)}</span>}
                           </span>
                         </span>
                         {n && (n.notes > 0 || n.decisions > 0) && (
