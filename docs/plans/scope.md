@@ -74,7 +74,7 @@ off the property so a lead and its project share one set of rows.
   editing anything.
 
 ## Build order
-1. Rename · presets · services wanted · floor plan first.
-2. Quotation starts from scope every time · "Bring in from scope".
+1. ~~Rename · presets · services wanted · floor plan first.~~ Done 2026-09-18.
+2. ~~Quotation starts from scope every time · "Bring in from scope".~~ Done 2026-09-18.
 3. Preferences · references · discussion with decisions.
 4. Client-supplied detail · walkthrough · change log · rework → task.

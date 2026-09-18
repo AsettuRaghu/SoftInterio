@@ -92,6 +92,8 @@ export interface BuilderComponent {
   description?: string;
   lineItems: LineItem[];
   expanded: boolean;
+  scopeItemId?: string | null;
+  measurementStatus?: string | null;
   /**
    * The component's own size, entered once and pushed down to every line that
    * follows it. These columns have existed on quotation_components all along
@@ -111,6 +113,11 @@ export interface BuilderSpace {
   defaultName: string;
   components: BuilderComponent[];
   expanded: boolean;
+  /** Where the row came from when it was pulled from the Scope tab. Kept
+   *  in metadata so "Bring in from scope" knows what is already here. */
+  scopeItemId?: string | null;
+  /** "rough" until the scope row is confirmed on site. */
+  measurementStatus?: string | null;
 }
 
 export interface MasterData {

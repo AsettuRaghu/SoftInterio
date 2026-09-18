@@ -23,6 +23,7 @@ import { AddComponentModal } from "@/components/quotations/AddComponentModal";
 import { AddCostItemModal } from "@/components/quotations/AddCostItemModal";
 import { SpaceCard } from "@/components/quotations/SpaceCard";
 import { BuilderSidebar } from "@/components/quotations/BuilderSidebar";
+import { Toast } from "@/components/ui/Toast";
 import { RepriceModal } from "@/components/quotations/RepriceModal";
 import { PrintQuotationModal } from "@/components/quotations/PrintQuotationModal";
 import { TemplateModal } from "@/components/quotations/TemplateModal";
@@ -98,6 +99,10 @@ export function QuotationBuilder({
   // Quotation data
   const [quotationNumber, setQuotationNumber] = useState("");
   const [source, setSource] = useState<{ label: string; href: string } | null>(null);
+  // "Bring in from scope": pull on demand, adds only what is missing. Local
+  // edits are saved first so the re-read after it cannot lose them.
+  const [bringingScope, setBringingScope] = useState(false);
+  const [scopeNotice, setScopeNotice] = useState<{ message: string; variant: "success" | "info" | "error" } | null>(null);
   const [quotationName, setQuotationName] = useState("");
   const [version, setVersion] = useState(1);
   const [notes, setNotes] = useState("");
@@ -1378,6 +1383,11 @@ export function QuotationBuilder({
           space_type_id: space.spaceTypeId,
           name: space.defaultName,
           sort_order: spaceIndex,
+          // Provenance from the Scope tab, so "Bring in from scope" knows what
+          // is already here after a save has rewritten the rows.
+          metadata: space.scopeItemId
+            ? { scope_item_id: space.scopeItemId, measurement_status: space.measurementStatus ?? null }
+            : null,
           components: space.components.map((comp, compIndex) => ({
             id: comp.id.startsWith("new-") ? undefined : comp.id,
             component_type_id: comp.componentTypeId,
@@ -1391,6 +1401,9 @@ export function QuotationBuilder({
             metadata: {
               ...(comp as any).metadata,
               measurement_unit: comp.measurementUnit || "mm",
+              ...(comp.scopeItemId
+                ? { scope_item_id: comp.scopeItemId, measurement_status: comp.measurementStatus ?? null }
+                : {}),
             },
             lineItems: comp.lineItems.map((item, itemIndex) => {
               // Calculate amount on frontend based on measurement unit
@@ -1503,6 +1516,26 @@ export function QuotationBuilder({
   };
 
   // Auto-save function (silent save without redirect)
+  const bringInFromScope = async () => {
+    if (!quotationId || bringingScope) return;
+    setBringingScope(true);
+    try {
+      if (hasUnsavedChanges) await saveQuotation(false, false);
+      const res = await fetch(`/api/quotations/${quotationId}/from-scope`, { method: "POST" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Could not bring in the scope");
+      const fresh = await fetch(`/api/quotations/${quotationId}`);
+      const data = await fresh.json();
+      if (fresh.ok) setSpaces(toBuilderSpaces(data.spaces));
+      const added = (json.result?.spaces ?? 0) + (json.result?.components ?? 0);
+      setScopeNotice({ message: json.message, variant: added > 0 ? "success" : "info" });
+    } catch (e) {
+      setScopeNotice({ message: e instanceof Error ? e.message : "Could not bring in the scope", variant: "error" });
+    } finally {
+      setBringingScope(false);
+    }
+  };
+
   const autoSave = useCallback(async () => {
     if (!hasUnsavedChanges || isSaving || isLoading) return;
 
@@ -2185,6 +2218,16 @@ export function QuotationBuilder({
                     </svg>
                     Add Space
                   </button>
+                  {source && status === "draft" && (
+                    <button
+                      onClick={() => void bringInFromScope()}
+                      disabled={bringingScope}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 text-sm border-2 border-emerald-300 text-emerald-700 rounded-lg hover:bg-emerald-50 transition-colors font-medium disabled:opacity-60"
+                      title="Adds the rooms and components listed on the Scope tab that are not here yet"
+                    >
+                      {bringingScope ? "Bringing in…" : "Bring in from scope"}
+                    </button>
+                  )}
                   <button
                     onClick={() => openTemplateModal({ level: "quotation" })}
                     className="inline-flex items-center gap-2 px-5 py-2.5 text-sm border-2 border-purple-300 text-purple-600 rounded-lg hover:bg-purple-50 transition-colors font-medium"
@@ -2346,6 +2389,16 @@ export function QuotationBuilder({
                     </svg>
                     Add Space
                   </button>
+                  {source && status === "draft" && (
+                    <button
+                      onClick={() => void bringInFromScope()}
+                      disabled={bringingScope}
+                      className="py-4 px-5 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 rounded-xl border-2 border-dashed border-emerald-300 flex items-center justify-center gap-2 disabled:opacity-60"
+                      title="Adds the rooms and components listed on the Scope tab that are not here yet"
+                    >
+                      {bringingScope ? "Bringing in…" : "Bring in from scope"}
+                    </button>
+                  )}
                 </div>
               </>
             )}
@@ -2367,6 +2420,8 @@ export function QuotationBuilder({
           canViewCosts={canViewCosts}
         />
       </div>
+
+      <Toast message={scopeNotice?.message ?? null} variant={scopeNotice?.variant ?? "info"} onDismiss={() => setScopeNotice(null)} />
 
       {/* Modals */}
       <AddSpaceModal

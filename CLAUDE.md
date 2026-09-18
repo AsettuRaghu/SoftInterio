@@ -12,12 +12,26 @@ nothing should hard-code "rooms and wardrobes" as the only possible scope.
 These were argued about and settled. Each one has a reason that is not obvious
 from the code alone, so please read before "fixing" them.
 
-### Spaces and quotations stay independent
-The Spaces tab on a lead (`property_scope_items`) is copied **once** into a
-quotation and the two then diverge. Deliberately absent, and not to be added
-back without revisiting: no `scope_item_id` on quotation rows, no "scope
-changed, review the quotation" prompt, no deactivation tier. A quotation is a
-commercial document; it must not mutate because someone edited a room list.
+### Scope and quotations stay independent - the quotation pulls, on demand
+The Scope tab (`property_scope_items`) is read into a quotation when the
+quotation is created and whenever somebody presses **Bring in from scope**
+on a draft; the two never sync. Revisited 2026-09-18 with the user and
+sharpened rather than reversed: a quotation is a commercial document and
+must not mutate because someone edited a room list, so nothing ever changes
+or removes a quotation line - `copyScopeToQuotation` **adds only what is
+missing**, and rows whose Done-by is client, vendor or excluded are never
+brought in. Every quotation on a lead or project starts this way (the
+create dialog no longer asks); a revision copies the priced version and the
+button adds what the scope gained since.
+
+"Already there" is judged by `metadata.scope_item_id` on `quotation_spaces`
+and `quotation_components` - a provenance pointer written at copy time,
+round-tripped by the builder's save and the PATCH, and read by nothing but
+that function - and, for rows older than the pointer, by type and name. It
+is deliberately not a foreign key. `metadata.measurement_status` rides
+along so the builder can mark a space "rough size" until the scope row is
+confirmed on site. Still absent, still on purpose: no "scope changed, review
+the quotation" prompt, no deactivation tier.
 
 ### Quotations are auto-created by a database trigger
 `trg_lead_stage_change` calls `create_quotation_for_lead()` when a lead reaches

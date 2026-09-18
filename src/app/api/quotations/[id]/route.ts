@@ -843,6 +843,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             description: space.description || null,
             subtotal: space.subtotal || 0,
             display_order: space.sort_order ?? index,
+            metadata: space.metadata ?? null,
           })
         );
 

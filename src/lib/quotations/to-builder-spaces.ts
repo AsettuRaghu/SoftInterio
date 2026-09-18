@@ -50,7 +50,7 @@ interface ApiComponent {
   description?: string;
   width?: number | null;
   height?: number | null;
-  metadata?: { measurement_unit?: string } | null;
+  metadata?: { measurement_unit?: string; scope_item_id?: string; measurement_status?: string } | null;
   component_type?: { name?: string } | null;
   lineItems?: ApiLineItem[];
 }
@@ -60,6 +60,7 @@ interface ApiSpace {
   space_type_id?: string;
   name?: string;
   space_type?: { name?: string } | null;
+  metadata?: { scope_item_id?: string; measurement_status?: string } | null;
   components?: ApiComponent[];
 }
 
@@ -70,12 +71,16 @@ export function toBuilderSpaces(spaces: ApiSpace[] | null | undefined): BuilderS
     name: space.space_type?.name || "Space",
     defaultName: space.name || `Space ${idx + 1}`,
     expanded: true,
+    scopeItemId: space.metadata?.scope_item_id ?? null,
+    measurementStatus: space.metadata?.measurement_status ?? null,
     components: (space.components || []).map((comp, compIdx) => ({
       id: comp.id,
       componentTypeId: comp.component_type_id || "",
       name: comp.component_type?.name || comp.name || `Component ${compIdx + 1}`,
       description: comp.description || "",
       expanded: true,
+      scopeItemId: comp.metadata?.scope_item_id ?? null,
+      measurementStatus: comp.metadata?.measurement_status ?? null,
       width: comp.width ?? null,
       height: comp.height ?? null,
       measurementUnit: (comp.metadata?.measurement_unit ||

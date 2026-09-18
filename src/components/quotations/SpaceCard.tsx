@@ -238,6 +238,14 @@ export function SpaceCard({
                   : "hover:border-slate-300 focus:border-blue-500"
               }`}
             />
+            {space.scopeItemId && space.measurementStatus !== "confirmed" && (
+              <span
+                className="text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200"
+                title="The size came from the Scope tab and has not been confirmed on site"
+              >
+                rough size
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3">

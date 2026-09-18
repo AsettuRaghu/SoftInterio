@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { normalisePhone } from "@/lib/partners/identity";
 import { createClient } from "@/lib/supabase/server";
-import { copyScopeToQuotation } from "@/lib/quotations/scope-to-quotation";
+import { copyScopeToQuotation, type ScopeCopyResult } from "@/lib/quotations/scope-to-quotation";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { getQuotationNumberAndVersion } from "@/utils/quotation-number-generator";
 import {
@@ -533,7 +533,7 @@ export async function POST(request: NextRequest) {
     // Otherwise, build it from the property's Spaces if asked to. Templates
     // win when both are given: a template is a deliberate choice of contents,
     // while scope is the fallback structure.
-    let generated = { spaces: 0, components: 0 };
+    let generated: ScopeCopyResult = { spaces: 0, components: 0, skipped: 0, already: 0 };
     if (!template_id && from_scope && newQuotation) {
       generated = await copyScopeToQuotation(
         supabase,
@@ -551,7 +551,9 @@ export async function POST(request: NextRequest) {
       description: template_id
         ? "Created from a template"
         : from_scope
-        ? `Built from the Spaces tab - ${generated.spaces} space(s), ${generated.components} component(s)`
+        ? `Started from the scope - ${generated.spaces} space(s), ${generated.components} component(s)${
+            generated.skipped ? `; ${generated.skipped} not ours to price` : ""
+          }`
         : undefined,
       userId: user.id,
     });

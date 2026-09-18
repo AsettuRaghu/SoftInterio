@@ -88,7 +88,6 @@ export function CreateQuotationModal({
   // On by default: a lead that reached this point usually has its rooms listed,
   // and starting from them beats an empty quotation. A template overrides it,
   // since choosing one is a deliberate statement about contents.
-  const [useScope, setUseScope] = useState(true);
   // Validation belongs beside the control it is about. An alert() for "pick a
   // lead" is an OS-level interruption for a field the person is looking at.
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -121,7 +120,7 @@ export function CreateQuotationModal({
         leadId: selectedLeadId || undefined,
         projectId: selectedProjectId || undefined,
         templateId: selectedTemplateId || undefined,
-        fromScope: useScope && !selectedTemplateId,
+        fromScope: !selectedTemplateId,
         validUntil: validUntil || undefined,
         client:
           source === "standalone"
@@ -139,7 +138,6 @@ export function CreateQuotationModal({
       setSelectedLeadId("");
       setSelectedProjectId("");
       setSelectedTemplateId("");
-      setUseScope(true);
       setClient({ name: "", phone: "", email: "", address: "" });
       setKnownPartner(null);
       setValidUntil("");
@@ -410,27 +408,14 @@ export function CreateQuotationModal({
                   )}
                 </div>
 
-                {/* Only meaningful without a template, and only for a lead or
-                    project - a standalone quotation has no property to read. */}
+                {/* A quotation on a lead or project always starts from the
+                    Scope tab (decided 2026-09-18): the rooms, components and
+                    sizes already listed there. A template, when chosen, wins
+                    - it is a deliberate choice of contents. */}
                 {!selectedTemplateId && source !== "standalone" && (
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={useScope}
-                      onChange={(e) => setUseScope(e.target.checked)}
-                      className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span>
-                      <span className="block text-sm text-slate-700">
-                        Build from the Spaces tab
-                      </span>
-                      <span className="block text-[11px] text-slate-400">
-                        Creates the rooms and components already listed there,
-                        with their measurements. You can change anything
-                        afterwards without affecting the Spaces tab.
-                      </span>
-                    </span>
-                  </label>
+                  <p className="text-[11px] text-slate-500">
+                    Starts from the Scope tab - its rooms, components and sizes. Rooms marked as the client&apos;s, a vendor&apos;s or excluded are left out. Anything can be changed afterwards without touching the scope.
+                  </p>
                 )}
               </>
             )}
