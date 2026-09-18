@@ -22,6 +22,7 @@ import {
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { todayISO } from "@/lib/dates/lead-dates";
 import { uiLogger } from "@/lib/logger";
+import { ConfigurationField, FloorPlanField, uploadFloorPlan } from "@/components/leads/ConfigurationAndPlanFields";
 
 interface TeamMember {
   id: string;
@@ -42,6 +43,7 @@ export function CreateLeadModal({
   // A customer we already know, picked from the hint under the phone field.
   const [knownPartner, setKnownPartner] = useState<KnownPartner | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [floorPlan, setFloorPlan] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loadingTeamMembers, setLoadingTeamMembers] = useState(true);
@@ -62,6 +64,7 @@ export function CreateLeadModal({
     property_city: "",
     property_pincode: "",
     carpet_area: "",
+    configuration: "",
     // Lead Details
     service_type: "" as ServiceType | "",
     lead_source: "" as LeadSource | "",
@@ -193,6 +196,7 @@ export function CreateLeadModal({
           property_address: formData.property_address.trim() || undefined,
           property_city: formData.property_city.trim() || undefined,
           property_pincode: formData.property_pincode.trim() || undefined,
+          configuration: formData.configuration || undefined,
           carpet_area: formData.carpet_area
             ? Number(formData.carpet_area)
             : undefined,
@@ -204,6 +208,20 @@ export function CreateLeadModal({
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || "Failed to create lead");
+      }
+
+      // The plan could not be filed before the lead existed. A failure here
+      // is reported but does not undo the lead - it can be uploaded again.
+      if (floorPlan) {
+        const created = await response.json().catch(() => ({}));
+        const newId = created?.lead?.id;
+        if (newId) {
+          try {
+            await uploadFloorPlan(newId, floorPlan);
+          } catch (e) {
+            console.error("[create lead] floor plan upload failed", e);
+          }
+        }
       }
 
       onSuccess();
@@ -624,6 +642,13 @@ export function CreateLeadModal({
                   min="0"
                 />
               </div>
+            </div>
+
+            {/* Optional now, required to qualify - like the rest of the
+                property facts. The configuration lays the scope down. */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <ConfigurationField value={formData.configuration} onChange={(v) => updateField("configuration", v)} />
+              <FloorPlanField pendingFile={floorPlan} onPendingFile={setFloorPlan} />
             </div>
           </div>
 

@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import { todayISO } from "@/lib/dates/lead-dates";
 import { uiLogger } from "@/lib/logger";
-import { CONFIGURATIONS, CONFIGURATION_LABELS } from "@/lib/scope/configuration";
-import { ArrowUpTrayIcon, MapIcon } from "@heroicons/react/24/outline";
+import { ConfigurationField, FloorPlanField } from "@/components/leads/ConfigurationAndPlanFields";
 
 /**
  * Carries a stored date into the form only while it still makes sense.
@@ -84,46 +83,6 @@ export function StageTransitionModal({
   const [error, setError] = useState<string | null>(null);
   // What the Scope tab still needs before this stage; the server's list.
   const [scopeMissing, setScopeMissing] = useState<string[] | null>(null);
-  // Qualifying needs the floor plan on file. Checked on open; uploaded here
-  // if missing, so the seller is not sent to another tab and back.
-  const [floorPlan, setFloorPlan] = useState<{ name: string; url: string | null } | null | undefined>(undefined);
-  const [uploadingPlan, setUploadingPlan] = useState(false);
-  const planInput = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    let live = true;
-    void (async () => {
-      const res = await fetch(`/api/documents?linked_type=lead&linked_id=${lead.id}&category=floor_plan`);
-      const json = await res.json().catch(() => ({}));
-      if (!live) return;
-      const d = res.ok ? json.documents?.[0] : null;
-      setFloorPlan(d ? { name: d.file_name, url: d.signed_url ?? null } : null);
-    })();
-    return () => {
-      live = false;
-    };
-  }, [lead.id]);
-  const uploadPlan = async (file: File) => {
-    setUploadingPlan(true);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("linked_type", "lead");
-      fd.append("linked_id", lead.id);
-      fd.append("category", "floor_plan");
-      fd.append("title", "Floor plan");
-      fd.append("tags", JSON.stringify(["floor-plan"]));
-      const res = await fetch("/api/documents", { method: "POST", body: fd });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.error || "Upload failed");
-      setFloorPlan({ name: file.name, url: null });
-      setScopeMissing(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setUploadingPlan(false);
-      if (planInput.current) planInput.current.value = "";
-    }
-  };
   /** Set when the API refuses a win because work is still open on the lead. */
   const [pendingWork, setPendingWork] = useState<{
     tasks: Array<{ id: string; title: string; status: string; due_date?: string | null }>;
@@ -733,52 +692,12 @@ export function StageTransitionModal({
                         are read off. */}
                     {isQualifiedFieldRequired && (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Configuration <span className="text-red-500">*</span>
-                          </label>
-                          <div className="inline-flex flex-wrap rounded-lg border border-slate-200 overflow-hidden">
-                            {CONFIGURATIONS.map((c) => (
-                              <button
-                                key={c}
-                                type="button"
-                                onClick={() => setFormData({ ...formData, configuration: formData.configuration === c ? "" : c })}
-                                className={`px-3 py-2 text-sm font-medium border-r border-slate-200 last:border-r-0 ${
-                                  formData.configuration === c ? "bg-slate-800 text-white" : "bg-white text-slate-700 hover:bg-slate-50"
-                                }`}
-                              >
-                                {CONFIGURATION_LABELS[c]}
-                              </button>
-                            ))}
-                          </div>
-                          <p className="mt-1 text-[11px] text-slate-500">Lays the usual rooms down on the Scope tab when the lead qualifies.</p>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Floor plan <span className="text-red-500">*</span>
-                          </label>
-                          {floorPlan === undefined ? (
-                            <p className="text-xs text-slate-400 py-2">Checking…</p>
-                          ) : floorPlan ? (
-                            <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-sm text-emerald-800">
-                              <MapIcon className="w-4 h-4" />
-                              <span className="truncate max-w-[14rem]">{floorPlan.name}</span>
-                              <button type="button" onClick={() => planInput.current?.click()} className="text-xs text-emerald-700 hover:underline">replace</button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => planInput.current?.click()}
-                              disabled={uploadingPlan}
-                              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-amber-300 text-sm text-amber-800 hover:bg-amber-50 disabled:opacity-60"
-                            >
-                              <ArrowUpTrayIcon className="w-4 h-4" />
-                              {uploadingPlan ? "Uploading…" : "Upload the floor plan"}
-                            </button>
-                          )}
-                          <input ref={planInput} type="file" accept="image/*,.pdf,.dwg,.dxf" className="hidden" onChange={(e) => e.target.files?.[0] && void uploadPlan(e.target.files[0])} />
-                          <p className="mt-1 text-[11px] text-slate-500">PDF, image or CAD. Filed under the lead&rsquo;s Documents.</p>
-                        </div>
+                        <ConfigurationField
+                          value={formData.configuration}
+                          required
+                          onChange={(v) => setFormData({ ...formData, configuration: v })}
+                        />
+                        <FloorPlanField leadId={lead.id} required onUploaded={() => setScopeMissing(null)} />
                       </div>
                     )}
                   </div>

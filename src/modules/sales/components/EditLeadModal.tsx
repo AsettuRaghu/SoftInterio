@@ -13,6 +13,7 @@ import {
 } from "@/types/leads";
 import React, { useEffect, useState } from "react";
 import { todayISO } from "@/lib/dates/lead-dates";
+import { ConfigurationField, FloorPlanField } from "@/components/leads/ConfigurationAndPlanFields";
 
 /**
  * Who may own a lead. Both spellings of sales-manager exist as roles in the
@@ -46,6 +47,7 @@ export interface EditFormData {
   property_type: string;
   property_subtype: string;
   carpet_area: string;
+  configuration: string;
   property_address: string;
   property_city: string;
   property_pincode: string;
@@ -78,6 +80,8 @@ const getRequiredFieldsForStage = (stage: LeadStage): string[] => {
      * call legitimately has a name and a number and nothing else.
      */
     "property_city",
+    "configuration",
+    "floor_plan",
     "service_type",
     "target_start_date",
     "target_end_date",
@@ -549,6 +553,15 @@ export function EditLeadModal({
                   }
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                 />
+              </div>
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <ConfigurationField
+                  compact
+                  value={editForm.configuration}
+                  required={isRequired("configuration")}
+                  onChange={(v) => setEditForm({ ...editForm, configuration: v })}
+                />
+                <FloorPlanField leadId={lead.id} required={isRequired("floor_plan")} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">

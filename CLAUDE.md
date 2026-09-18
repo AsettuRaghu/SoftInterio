@@ -101,8 +101,10 @@ from the old quick starts.
 **Qualifying a lead needs the configuration and the floor plan**, and lays
 the scope down (2026-09-18, third round). `properties.configuration`
 (studio · 1bhk … 5bhk_plus · other) is a property fact the lead form never
-held - its "subtype" is gated/non-gated. The stage dialog asks both when
-moving to `qualified` (the plan can be uploaded right there), the
+held - its "subtype" is gated/non-gated. Both are ordinary lead-form
+fields (`components/leads/ConfigurationAndPlanFields`): optional on the
+create form, starred from Qualified on the edit dialog, asked by the stage
+dialog when moving to `qualified` - the plan uploads right there - and the
 transition route refuses without them, and on success
 `applyPresetForConfiguration` lays the matching preset onto an **empty**
 scope so Requirement discussion opens on rooms. The tab is **Spaces |

@@ -525,6 +525,7 @@ export async function POST(request: NextRequest) {
           property_type: body.property_type || "apartment",
           property_subtype: body.property_subtype || null,
           carpet_area: body.carpet_area || null,
+          configuration: body.configuration || null,
           address_line1: body.property_address || null,
           city: body.property_city || "Unknown",
           pincode: body.property_pincode || null,

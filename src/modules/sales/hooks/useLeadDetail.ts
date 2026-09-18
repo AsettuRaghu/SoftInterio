@@ -207,6 +207,7 @@ export function useLeadDetail() {
             carpet_area: editForm.carpet_area
               ? parseFloat(editForm.carpet_area)
               : null,
+            configuration: editForm.configuration || null,
             property_address: editForm.property_address || null,
             property_city: editForm.property_city || null,
             property_pincode: editForm.property_pincode || null,
