@@ -81,7 +81,6 @@ export default function LeadDetailPage() {
     updateLeadFromStageTransition,
     handleRevise,
     handleDocumentDelete,
-    fetchLead,
   } = useLeadDetail();
 
   // Local UI state
@@ -380,22 +379,6 @@ export default function LeadDetailPage() {
             linkedType="lead"
             linkedId={lead.id}
             readOnly={leadClosed}
-            stage={lead.stage}
-            configuration={lead.property?.configuration ?? null}
-            // A property fact, saved through the lead's PATCH; then a quiet
-            // re-read so the header agrees.
-            onSaveConfiguration={async (value) => {
-              const res = await fetch(`/api/sales/leads/${lead.id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ configuration: value }),
-              });
-              if (!res.ok) {
-                const data = await res.json().catch(() => ({}));
-                throw new Error(data.error || "Could not save");
-              }
-              await fetchLead({ quiet: true });
-            }}
           />
         )}
 

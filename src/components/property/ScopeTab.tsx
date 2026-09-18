@@ -20,12 +20,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { fetchConfigOnce } from "@/lib/quotations/config-cache";
 import { AddSpacesModal } from "./AddSpacesModal";
-import { ScopeHeaderLine, type SaveState } from "./ScopeHeaderLine";
-import type { Configuration } from "@/lib/scope/configuration";
+import { CheckIcon } from "@heroicons/react/24/outline";
 import { ScopeItemPanel } from "./ScopeItemPanel";
 import { ScopeConversation } from "./ScopeConversation";
-import type { ScopeReadiness } from "@/lib/scope/readiness";
-import { CheckCircleIcon, ExclamationCircleIcon } from "@heroicons/react/24/solid";
 import {
   PlusIcon,
   TrashIcon,
@@ -83,12 +80,6 @@ interface ScopeTabProps {
   linkedType: "lead" | "project";
   linkedId: string;
   readOnly?: boolean;
-  /** The property's configuration (2 BHK…); edits save to the property
-   *  through the lead. Absent on a project. */
-  configuration?: string | null;
-  onSaveConfiguration?: (value: Configuration | null) => Promise<void>;
-  /** The lead's stage, to say which gate is next. Absent on a project. */
-  stage?: string | null;
   /**
    * Called after a space or component is added or removed - never on a field
    * edit. The lead page deliberately does not pass it: reloading the whole
@@ -103,30 +94,19 @@ export function ScopeTab({
   linkedType,
   linkedId,
   readOnly = false,
-  configuration = null,
-  onSaveConfiguration,
-  stage,
   onChanged,
 }: ScopeTabProps) {
   const { confirm, confirmDialog } = useConfirm();
   // Spaces | Conversation.
   const [section, setSection] = useState<"spaces" | "conversation">("spaces");
   // Every edit saves as it happens; this is the reassurance in the header.
-  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const flash = (state: SaveState) => {
+  const flash = (state: "idle" | "saving" | "saved" | "failed") => {
     setSaveState(state);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     if (state === "saved") saveTimer.current = setTimeout(() => setSaveState("idle"), 2500);
   };
-  const [readiness, setReadiness] = useState<ScopeReadiness | null>(null);
-  const loadReadiness = useCallback(async () => {
-    if (!propertyId) return;
-    const q = linkedType === "lead" ? `lead_id=${linkedId}` : `project_id=${linkedId}`;
-    const res = await fetch(`/api/properties/${propertyId}/scope/readiness?${q}`);
-    const json = await res.json().catch(() => ({}));
-    if (res.ok) setReadiness(json.data);
-  }, [propertyId, linkedType, linkedId]);
   const [items, setItems] = useState<PropertyScopeItem[]>([]);
   const [spaceTypes, setSpaceTypes] = useState<SpaceTypeOption[]>([]);
   const [componentTypes, setComponentTypes] = useState<SpaceTypeOption[]>([]);
@@ -202,7 +182,6 @@ export function ScopeTab({
       const scope = await scopeRes.json();
       setItems(scope.items || []);
       loadedRef.current = true;
-      void loadReadiness();
       // Config is best-effort: a failure there leaves the pickers empty rather
       // than hiding the scope this tab exists to show.
       if (types) setSpaceTypes(types.data || []);
@@ -216,7 +195,7 @@ export function ScopeTab({
     } finally {
       setIsLoading(false);
     }
-  }, [propertyId, loadReadiness]);
+  }, [propertyId]);
 
   useEffect(() => {
     void load();
@@ -230,9 +209,8 @@ export function ScopeTab({
   useEffect(() => {
     if (propertyId && loadedRef.current) {
       scopeCache.set(propertyId, items);
-      void loadReadiness();
     }
-  }, [propertyId, items, loadReadiness]);
+  }, [propertyId, items]);
 
   /**
    * Only the components that suit the space being added to.
@@ -799,34 +777,8 @@ export function ScopeTab({
     );
   };
 
-  const gateNext: "requirement_discussion" | "proposal_discussion" | null =
-    linkedType !== "lead" || !stage ? null
-    : ["new", "qualified"].includes(stage) ? "requirement_discussion"
-    : stage === "requirement_discussion" ? "proposal_discussion"
-    : null;
-  const gate = readiness && gateNext ? readiness[gateNext] : null;
-
   return (
     <div className="space-y-4">
-    {/* Readiness: what the next stage of the sale still needs from here. */}
-    {gate && (
-      <div className={`rounded-lg border px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm ${gate.ok ? "border-emerald-200 bg-emerald-50/60" : "border-amber-200 bg-amber-50/60"}`}>
-        {gate.ok ? <CheckCircleIcon className="w-5 h-5 text-emerald-600" /> : <ExclamationCircleIcon className="w-5 h-5 text-amber-600" />}
-        <span className="font-medium text-slate-900">
-          {gate.ok
-            ? `Ready for ${gateNext === "requirement_discussion" ? "Requirement discussion" : "Proposal"}`
-            : `Before ${gateNext === "requirement_discussion" ? "Requirement discussion" : "Proposal"}: ${gate.missing.length} thing${gate.missing.length === 1 ? "" : "s"}`}
-        </span>
-        {!gate.ok && (
-          <ul className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-amber-800">
-            {gate.missing.map((m) => (
-              <li key={m}>· {m}</li>
-            ))}
-          </ul>
-        )}
-      </div>
-    )}
-
     <div className="flex items-center gap-1 border-b border-slate-200">
       {(
         [
@@ -860,28 +812,6 @@ export function ScopeTab({
     )}
 
     <div className={section === "spaces" ? "bg-white rounded-lg border border-slate-200 overflow-hidden" : "hidden"}>
-      <ScopeHeaderLine
-        linkedType={linkedType}
-        linkedId={linkedId}
-        readOnly={readOnly}
-        configuration={configuration}
-        onSaveConfiguration={
-          onSaveConfiguration
-            ? async (v) => {
-                flash("saving");
-                try {
-                  await onSaveConfiguration(v);
-                  flash("saved");
-                  void loadReadiness();
-                } catch {
-                  flash("failed");
-                }
-              }
-            : undefined
-        }
-        saveState={saveState}
-        onChanged={() => void loadReadiness()}
-      />
       <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-900">
@@ -894,6 +824,15 @@ export function ScopeTab({
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+        {/* Everything here saves as you go; this is the reassurance. */}
+        <span
+          className={`inline-flex items-center gap-1 text-[11px] transition-opacity ${saveState === "idle" ? "opacity-0" : "opacity-100"} ${
+            saveState === "failed" ? "text-red-600" : saveState === "saving" ? "text-slate-400" : "text-emerald-600"
+          }`}
+          aria-live="polite"
+        >
+          {saveState === "saving" ? "Saving…" : saveState === "failed" ? "Not saved - try again" : <><CheckIcon className="w-3 h-3" /> Saved</>}
+        </span>
         {roots.length > 0 && (
           <button
             type="button"

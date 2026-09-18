@@ -570,6 +570,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // A lead past New has an owner. Qualifying assigns one (to the qualifier
+    // when nobody is named); it cannot be taken away afterwards.
+    if ("assigned_to" in body && !body.assigned_to && existingLead.stage !== "new") {
+      return NextResponse.json(
+        { error: "A lead past New must have an owner. Choose someone else rather than unassigning." },
+        { status: 400 }
+      );
+    }
+
     // Only update lead if there are lead-specific fields to update
     if (Object.keys(leadUpdateData).length > 0) {
       const { error: updateError } = await supabase

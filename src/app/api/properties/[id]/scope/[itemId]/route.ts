@@ -161,13 +161,61 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     const { data: existing } = await supabase
       .from("property_scope_items")
-      .select("id, name")
+      .select("id, name, parent_id, component_type_id, scope_owner")
       .eq("id", itemId)
       .eq("property_id", propertyId)
       .maybeSingle();
 
     if (!existing) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    // From Requirement discussion on, the scope is what the sale rests on:
+    // the last space cannot go, and a space of ours cannot be emptied of
+    // components - mark it the client's or excluded instead (2026-09-18).
+    const leadForGate = await supabase
+      .from("leads")
+      .select("stage")
+      .eq("property_id", propertyId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const pastRequirements = ["requirement_discussion", "proposal_discussion", "won"].includes(leadForGate.data?.stage ?? "");
+    if (pastRequirements) {
+      if (!existing.component_type_id) {
+        const { count } = await supabase
+          .from("property_scope_items")
+          .select("id", { count: "exact", head: true })
+          .eq("property_id", propertyId)
+          .is("component_type_id", null)
+          .is("parent_id", null);
+        if ((count ?? 0) <= 1) {
+          return NextResponse.json(
+            { error: "The scope needs at least one space from Requirement discussion on." },
+            { status: 409 }
+          );
+        }
+      } else if (existing.parent_id) {
+        const { data: parent } = await supabase
+          .from("property_scope_items")
+          .select("scope_owner")
+          .eq("id", existing.parent_id)
+          .maybeSingle();
+        const parentOurs = !parent?.scope_owner || parent.scope_owner === "us";
+        if (parentOurs) {
+          const { count } = await supabase
+            .from("property_scope_items")
+            .select("id", { count: "exact", head: true })
+            .eq("parent_id", existing.parent_id)
+            .or("scope_owner.is.null,scope_owner.eq.us");
+          if ((count ?? 0) <= 1 && (!existing.scope_owner || existing.scope_owner === "us")) {
+            return NextResponse.json(
+              { error: "A space of ours keeps at least one component from Requirement discussion on. Mark the space as the client's or excluded if nothing there is ours." },
+              { status: 409 }
+            );
+          }
+        }
+      }
     }
 
     // Children cascade in the database, so removing a floor removes its rooms.

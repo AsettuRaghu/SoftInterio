@@ -334,7 +334,7 @@ export function StageTransitionModal({
         )}
         <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
           <h2 className="text-xl font-bold text-slate-900">
-            Change Lead Stage
+            {selectedStage ? `Move to ${LeadStageLabels[selectedStage as LeadStage] ?? selectedStage}` : "Change Lead Stage"}
           </h2>
           <button
             onClick={onClose}
@@ -690,7 +690,9 @@ export function StageTransitionModal({
                         qualify: the configuration picks the preset the
                         scope is laid down from, and the plan is what sizes
                         are read off. */}
-                    {isQualifiedFieldRequired && (
+                    {/* Asked when qualifying; a lead already past that has them
+                        (the edit dialog is where they change). */}
+                    {selectedStage === "qualified" && (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <ConfigurationField
                           value={formData.configuration}

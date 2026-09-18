@@ -922,7 +922,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
               propertyId={project.property_id || null}
               linkedType="project"
               linkedId={project.id}
-              configuration={(project as { property?: { configuration?: string | null } }).property?.configuration ?? null}
             />
           )}
 

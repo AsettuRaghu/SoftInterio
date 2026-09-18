@@ -108,12 +108,15 @@ dialog when moving to `qualified` - the plan uploads right there - and the
 transition route refuses without them, and on success
 `applyPresetForConfiguration` lays the matching preset onto an **empty**
 scope so Requirement discussion opens on rooms. The tab is **Spaces |
-Conversation** under a readiness strip; the header line carries the floor
-plan, the configuration and a Saved indicator (everything saves as you go).
-Moving to `proposal_discussion` needs every space of ours to have a rough
-size **and at least one component** - no empty rooms; mark one
-client/excluded if nothing there is ours (`lib/scope/readiness.ts`,
-`SCOPE_NOT_READY`). There is no brief any more: services wanted are what
+Conversation** with a Saved indicator in the header (everything saves as
+you go); the floor plan and configuration are edited on the lead's edit
+dialog, not here. Moving to `proposal_discussion` needs every space of
+ours to have a rough size **and at least one component**
+(`lib/scope/readiness.ts`, `SCOPE_NOT_READY` - shown only when the move is
+tried, not as a standing strip). From Requirement discussion on, the DELETE
+route refuses to remove the last space or the last component of a space
+of ours - mark the space client/excluded instead. A lead past New cannot be
+unassigned (edit dialog and PATCH). There is no brief any more: services wanted are what
 the spaces contain, finishes live on the space or component, budget and
 timeline are the lead's.
 

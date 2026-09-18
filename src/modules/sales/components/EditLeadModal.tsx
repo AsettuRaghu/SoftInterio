@@ -250,6 +250,7 @@ export function EditLeadModal({
                 </label>
                 <select
                   value={editForm.assigned_to || ""}
+                  required={lead.stage !== "new"}
                   onChange={(e) =>
                     setEditForm({
                       ...editForm,
@@ -258,7 +259,10 @@ export function EditLeadModal({
                   }
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white"
                 >
-                  <option value="">Unassigned</option>
+                  {/* A lead past New has an owner; only a new lead may sit unassigned. */}
+                  <option value="" disabled={lead.stage !== "new"}>
+                    {lead.stage === "new" ? "Unassigned" : "Choose an owner"}
+                  </option>
                   {assignableUsers.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name || u.email}

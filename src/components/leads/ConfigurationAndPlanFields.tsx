@@ -93,11 +93,17 @@ export function FloorPlanField({
     if (!leadId) return;
     let live = true;
     void (async () => {
-      const res = await fetch(`/api/documents?linked_type=lead&linked_id=${leadId}&category=floor_plan`);
-      const json = await res.json().catch(() => ({}));
-      if (!live) return;
-      const d = res.ok ? json.documents?.[0] : null;
-      setOnFile(d ? { name: d.file_name, url: d.signed_url ?? null } : null);
+      try {
+        const res = await fetch(`/api/documents?linked_type=lead&linked_id=${leadId}&category=floor_plan`);
+        const json = await res.json().catch(() => ({}));
+        if (!live) return;
+        const d = res.ok ? json.documents?.[0] : null;
+        setOnFile(d ? { name: d.file_name, url: d.signed_url ?? null } : null);
+      } catch {
+        // The check failed (a dropped request); offer the upload rather than
+        // sit on "Checking…" - the server still knows what is on file.
+        if (live) setOnFile(null);
+      }
     })();
     return () => {
       live = false;
