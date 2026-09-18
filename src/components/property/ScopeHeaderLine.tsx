@@ -71,8 +71,8 @@ export function ScopeHeaderLine({
       fd.append("linked_type", linkedType);
       fd.append("linked_id", linkedId);
       fd.append("category", "floor_plan");
-      fd.append("title", "Floor plan");
-      fd.append("tags", JSON.stringify(["floor-plan"]));
+      fd.append("title", file.name.replace(/\.[^.]+$/, ""));
+      fd.append("tags", "floor plan");
       const res = await fetch("/api/documents", { method: "POST", body: fd });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || "Upload failed");

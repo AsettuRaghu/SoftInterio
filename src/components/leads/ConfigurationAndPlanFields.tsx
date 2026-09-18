@@ -23,8 +23,9 @@ export async function uploadFloorPlan(leadId: string, file: File): Promise<void>
   fd.append("linked_type", "lead");
   fd.append("linked_id", leadId);
   fd.append("category", "floor_plan");
-  fd.append("title", "Floor plan");
-  fd.append("tags", JSON.stringify(["floor-plan"]));
+  // The file's own name as the title; the category says what it is.
+  fd.append("title", file.name.replace(/\.[^.]+$/, ""));
+  fd.append("tags", "floor plan");
   const res = await fetch("/api/documents", { method: "POST", body: fd });
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Floor plan upload failed");
 }

@@ -508,7 +508,7 @@ function ReferencesTab({
         fd.append("parent_linked_type", linkedType);
         fd.append("parent_linked_id", linkedId);
         fd.append("category", file.type.startsWith("image/") ? "photo" : "design");
-        fd.append("tags", JSON.stringify([`space: ${item.name}`, "reference"]));
+        fd.append("tags", `space: ${item.name},reference`);
         const res = await fetch("/api/documents", { method: "POST", body: fd });
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Upload failed");
       }
