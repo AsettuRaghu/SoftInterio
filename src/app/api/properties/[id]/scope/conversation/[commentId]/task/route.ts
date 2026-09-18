@@ -9,8 +9,10 @@ type RouteParams = { params: Promise<{ id: string; commentId: string }> };
  * POST { related_type: "lead" | "project", related_id, assigned_to?, due_date? }
  *
  * Turns a discussion entry into a task on the lead or project - "needs
- * rework" becomes work with an owner. The comment keeps the task id so the
- * thread shows where it went. Needs tasks.create, because it creates one.
+ * rework" becomes work with an owner: the lead's owner or the project's
+ * manager by default, who reassigns if someone else should do it. The
+ * comment keeps the task id so the thread shows where it went. Needs
+ * tasks.create, because it creates one.
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const guard = await protectApiRoute(request, { requiredPermissions: ["tasks.create"] });
@@ -32,6 +34,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   if (!comment) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (comment.task_id) return NextResponse.json({ error: "This already has a task" }, { status: 409 });
 
+  // Owned by whoever owns the record - the lead's owner or the project's
+  // manager - unless the caller names someone; they can reassign from there.
+  let owner: string | null = body.assigned_to || null;
+  if (!owner) {
+    if (body.related_type === "lead") {
+      const { data: lead } = await supabase.from("leads").select("assigned_to").eq("id", body.related_id).maybeSingle();
+      owner = lead?.assigned_to ?? null;
+    } else {
+      const { data: project } = await supabase.from("projects").select("project_manager_id").eq("id", body.related_id).maybeSingle();
+      owner = project?.project_manager_id ?? null;
+    }
+  }
+
   const itemName = (comment.item as unknown as { name?: string } | null)?.name;
   const firstLine = comment.body.split("\n")[0].trim();
   const title = `${itemName ? `${itemName}: ` : ""}${firstLine.length > 90 ? `${firstLine.slice(0, 87)}…` : firstLine}`;
@@ -46,7 +61,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       priority: "medium",
       related_type: body.related_type,
       related_id: body.related_id,
-      assigned_to: body.assigned_to || null,
+      assigned_to: owner,
       due_date: body.due_date || null,
       created_by: user.id,
       updated_by: user.id,
