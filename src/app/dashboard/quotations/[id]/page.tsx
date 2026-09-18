@@ -801,6 +801,21 @@ export default function QuotationDetailPage() {
    * own Approve does not ask either, and adding one to a single path would
    * make the two disagree. If it is wanted, it belongs on both.
    */
+  const saveValidity = async (date: string | null) => {
+    const res = await fetch(`/api/quotations/${quotation?.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ valid_until: date }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setNotice({ message: data.error || "Could not save the validity", variant: "error" });
+      return;
+    }
+    setNotice({ message: date ? `Valid until ${formatDate(date)}.` : "No expiry.", variant: "success" });
+    await fetchQuotation();
+  };
+
   const changeStatus = async (to: string) => {
     setChangingStatus(true);
     try {
@@ -1166,9 +1181,26 @@ export default function QuotationDetailPage() {
                 <label className="block text-xs font-medium text-slate-500 mb-0.5">
                   Valid Until
                 </label>
-                <p className="text-sm text-slate-900">
-                  {formatDate(quotation.valid_until)}
-                </p>
+                {/* Optional, and the person's to set: a quotation has no expiry
+                    unless one was chosen. Editable while it is a draft. */}
+                {quotation.status === "draft" && canEdit ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={quotation.valid_until ? quotation.valid_until.slice(0, 10) : ""}
+                      min={new Date().toISOString().slice(0, 10)}
+                      onChange={(e) => void saveValidity(e.target.value || null)}
+                      className="px-2 py-1 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    {quotation.valid_until && (
+                      <button type="button" onClick={() => void saveValidity(null)} className="text-xs text-slate-500 hover:text-slate-800">
+                        No expiry
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-900">{quotation.valid_until ? formatDate(quotation.valid_until) : "No expiry"}</p>
+                )}
               </div>
             </div>
           </div>

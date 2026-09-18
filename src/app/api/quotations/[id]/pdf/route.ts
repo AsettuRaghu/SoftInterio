@@ -305,16 +305,10 @@ export async function GET(
       // passed would otherwise hand the client a quotation that expired before
       // they received it - QT-20251216-001 was offering 15 January.
       valid_from: quotation.valid_from || quotation.created_at,
-      valid_until: (() => {
-        const stored = quotation.valid_until;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        if (stored && new Date(stored) >= today) return stored;
-        const days = tenantSettings?.default_validity_days ?? 15;
-        const until = new Date(today);
-        until.setDate(until.getDate() + days);
-        return until.toISOString().slice(0, 10);
-      })(),
+      // Printed only when somebody set it. It used to invent a fresh
+      // validity from a tenant default whenever the stored date had passed,
+      // which put a date on the document that nobody had agreed.
+      valid_until: quotation.valid_until || null,
 
       client_name: client?.name || undefined,
       client_email: client?.email || undefined,

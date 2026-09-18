@@ -391,6 +391,7 @@ export default function QuotationsListPage() {
     templateId?: string;
     fromScope?: boolean;
     client?: { name: string; phone?: string; email?: string; address?: string };
+    validUntil?: string;
   }) => {
     const leadId = data?.leadId || selectedLeadId;
     const projectId = data?.projectId || selectedProjectId;
@@ -399,6 +400,7 @@ export default function QuotationsListPage() {
     // Read here because `data` is shadowed further down by the response body.
     const fromScope = data?.fromScope === true;
     const typedClient = data?.client;
+    const validUntil = data?.validUntil;
 
     // For lead/project source, require selection
     if (source === "lead" && !leadId) {
@@ -429,6 +431,7 @@ export default function QuotationsListPage() {
       if (fromScope) {
         payload.from_scope = true;
       }
+      if (validUntil) payload.valid_until = validUntil;
 
       const response = await fetch("/api/quotations", {
         method: "POST",
@@ -824,7 +827,7 @@ export default function QuotationsListPage() {
          * past is red. An approved or rejected one is settled and says so.
          */
         const open = quotation.status === "draft" || quotation.status === "sent";
-        if (!quotation.valid_until) return <span className="text-xs text-slate-400">—</span>;
+        if (!quotation.valid_until) return <span className="text-xs text-slate-400">No expiry</span>;
         const days = -(daysSince(quotation.valid_until) ?? 0);
         const future = new Date(quotation.valid_until).getTime() > Date.now();
         const left = future ? Math.ceil((new Date(quotation.valid_until).getTime() - Date.now()) / 86400000) : 0;

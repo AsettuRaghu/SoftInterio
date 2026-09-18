@@ -59,6 +59,8 @@ interface CreateQuotationModalProps {
     fromScope?: boolean;
     /** A standalone quotation's customer, typed here - or a partner we already know. */
     client?: { name: string; phone?: string; email?: string; address?: string; partner_id?: string };
+    /** Optional. No expiry unless chosen. */
+    validUntil?: string;
   }) => Promise<void>;
   leads: Lead[];
   projects: Project[];
@@ -94,6 +96,7 @@ export function CreateQuotationModal({
   // client_id, so without this a standalone one had no name to print.
   const [client, setClient] = useState({ name: "", phone: "", email: "", address: "" });
   const [knownPartner, setKnownPartner] = useState<KnownPartner | null>(null);
+  const [validUntil, setValidUntil] = useState("");
 
   if (!isOpen) return null;
 
@@ -119,6 +122,7 @@ export function CreateQuotationModal({
         projectId: selectedProjectId || undefined,
         templateId: selectedTemplateId || undefined,
         fromScope: useScope && !selectedTemplateId,
+        validUntil: validUntil || undefined,
         client:
           source === "standalone"
             ? {
@@ -138,6 +142,7 @@ export function CreateQuotationModal({
       setUseScope(true);
       setClient({ name: "", phone: "", email: "", address: "" });
       setKnownPartner(null);
+      setValidUntil("");
     } catch (error) {
       console.error("Error creating quotation:", error);
     }
@@ -347,6 +352,31 @@ export function CreateQuotationModal({
                     />
                   </div>
                 )}
+
+                {/* Validity - optional. A quotation has no expiry unless the
+                    person raising it decides one. */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Valid until{" "}
+                    <span className="text-slate-400 font-normal">(optional)</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={validUntil}
+                      min={new Date().toISOString().slice(0, 10)}
+                      onChange={(e) => setValidUntil(e.target.value)}
+                      className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                    />
+                    {validUntil ? (
+                      <button type="button" onClick={() => setValidUntil("")} className="text-xs text-slate-500 hover:text-slate-800">
+                        No expiry
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-400">Leave blank for no expiry</span>
+                    )}
+                  </div>
+                </div>
 
                 {/* Template Selection (Optional) */}
                 <div>

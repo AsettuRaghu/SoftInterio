@@ -863,8 +863,8 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
               {data.quotation_number} &middot; v{data.version}
             </Text>
             <Text style={styles.quotationMeta}>
-              {formatDate(data.valid_from)} &middot; valid until{" "}
-              {formatDate(data.valid_until)}
+              {formatDate(data.valid_from)}
+              {data.valid_until ? ` \u00b7 valid until ${formatDate(data.valid_until)}` : ""}
             </Text>
 
             {(data.client_name ||

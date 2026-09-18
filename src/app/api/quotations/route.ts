@@ -519,7 +519,11 @@ export async function POST(request: NextRequest) {
         presentation_level: "space_component",
         hide_dimensions: true,
         valid_from: today.toISOString(),
-        valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        // No expiry unless the person creating it chose one. A default of
+        // 30 days was a date nobody had decided, and it only ever made the
+        // list say "expired".
+        valid_until:
+          typeof body.valid_until === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.valid_until) ? body.valid_until : null,
         created_by: user!.id,
         subtotal: 0,
         discount_value: 0,
