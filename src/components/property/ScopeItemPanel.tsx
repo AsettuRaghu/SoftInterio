@@ -48,6 +48,7 @@ interface RefDoc {
   title: string | null;
   signed_url?: string | null;
   created_at: string;
+  is_starred?: boolean;
 }
 
 interface LibraryEntryLite {
@@ -56,7 +57,12 @@ interface LibraryEntryLite {
   kind?: string;
   style_code?: string | null;
   images: { url: string | null }[];
+  is_starred?: boolean;
 }
+
+/** Starred first, then as they were. */
+const starredFirst = <T extends { is_starred?: boolean }>(list: T[]) =>
+  [...list].sort((a, b) => Number(!!b.is_starred) - Number(!!a.is_starred));
 
 
 
