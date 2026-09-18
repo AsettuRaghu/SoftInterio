@@ -121,22 +121,22 @@ unassigned (edit dialog and PATCH). There is no brief any more: services wanted 
 the spaces contain, finishes live on the space or component, budget and
 timeline are the lead's.
 
-**Each space opens out** (`ScopeItemPanel`, the speech-bubble on the row, or
-**Walkthrough** from the header to go space by space with ←/→; its components
-open inside it, each with its own four tabs): the finish
-they want; for a client/vendor row what is arriving from them and by when
-(`supplied_detail`, `supplied_expected_by` - never priced); references
-(Documents with `linked_type = scope_item`, parent-linked to the lead or
-project so they sit in its Documents tab too, tagged `space: …`; and
-Design Library entries pinned via `scope_item_library_pins`); a
-discussion (`scope_item_comments`, each entry a note or a decision, "make a
-task" creates one on the lead or project and keeps `task_id`); and the
-change log. **The log is a trigger** (`trg_property_scope_items_history` →
-`property_scope_item_history`, `changed_by = auth.uid()`), so no route can
-skip it; the PATCH adds the person's `reason` to the row the trigger just
-wrote, and after kick-off tells the project manager (`scope_changed`, once
-a day per project). Preferences (style codes from `library_styles`,
-finishes, budget band, open to carpentry, timeline) live on the brief.
+**Each space opens out as a room sheet** (`ScopeItemPanel`, the
+speech-bubble on the row, or **Walkthrough** from the header with ←/→).
+No tabs - a tabbed version with the same four headings at two depths was
+tried and read as noise (2026-09-18). The room has its pictures (Documents
+with `linked_type = scope_item`, parent-linked to the lead or project so
+they sit in its Documents tab, named `Client_Lead_Space_RefN`; library
+entries pinned via `scope_item_library_pins`) and a thread; each component
+inside it has the finish they want (a finish belongs on a wall unit, never
+on "Master Bedroom"), for a client/vendor row what is arriving and by when
+(`supplied_detail`, `supplied_expected_by` - never priced), its pictures and
+its thread. Threads (`scope_item_comments`) fold behind their counts; an
+entry can be a decision, and "make a task" creates one on the lead or
+project and keeps `task_id` - that is where rework lives. **The change log
+is a trigger** (`trg_property_scope_items_history` →
+`property_scope_item_history`, `changed_by = auth.uid()`) and is kept but
+not shown; the "reason" field it once had is gone.
 
 Settled with the user, not to be reopened casually: no price on a scope
 row; the quotation **pulls** from the scope on demand and only adds what is

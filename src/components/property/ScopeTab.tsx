@@ -123,7 +123,7 @@ export function ScopeTab({
       ? `${parent.name} keeps at least one component. Mark the space as the client's or excluded if nothing there is ours.`
       : null;
   };
-  const { confirm, confirmDialog } = useConfirm();
+  const { confirmDialog } = useConfirm();
   /**
    * ↑ / ↓ / Enter in a name or size field move to the same field on the
    * previous / next visible row, so a list can be filled top to bottom
@@ -304,11 +304,9 @@ export function ScopeTab({
    */
   const patchItem = async (
     item: PropertyScopeItem,
-    updatesWithReason: Partial<PropertyScopeItem> & { reason?: string }
+    updates: Partial<PropertyScopeItem>
   ) => {
     if (!propertyId) return;
-    // The reason goes to the change log, not onto the row.
-    const { reason, ...updates } = updatesWithReason;
     setItems((prev) =>
       prev.map((i) => (i.id === item.id ? { ...i, ...updates } : i))
     );
@@ -320,7 +318,7 @@ export function ScopeTab({
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(reason ? { ...updates, reason } : updates),
+          body: JSON.stringify(updates),
         }
       );
       if (!response.ok) {

@@ -21,6 +21,7 @@ export function ScopeDiscussion({
   linkedId,
   readOnly,
   confirm,
+  onCountChange,
 }: {
   /** null = the scope as a whole. */
   scopeItemId: string | null;
@@ -29,6 +30,8 @@ export function ScopeDiscussion({
   linkedId: string;
   readOnly: boolean;
   confirm: ReturnType<typeof useConfirm>["confirm"];
+  /** Tells the caller how much is here, for a collapsed header. */
+  onCountChange?: (counts: { notes: number; decisions: number }) => void;
 }) {
   const [rows, setRows] = useState<ScopeComment[]>([]);
   const [text, setText] = useState("");
@@ -48,6 +51,10 @@ export function ScopeDiscussion({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  useEffect(() => {
+    onCountChange?.({ notes: rows.filter((r) => !r.is_decision).length, decisions: rows.filter((r) => r.is_decision).length });
+  }, [rows, onCountChange]);
 
   const post = async () => {
     if (!text.trim() || busy) return;
@@ -94,8 +101,8 @@ export function ScopeDiscussion({
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto p-5 space-y-3">
+    <div className="flex flex-col">
+      <div className="p-3 space-y-2">
         {rows.length === 0 ? (
           <p className="text-xs text-slate-400">No discussion yet. What was said, what was agreed - it goes here and stays with the record into the project.</p>
         ) : (
@@ -130,7 +137,7 @@ export function ScopeDiscussion({
         )}
       </div>
       {!readOnly && (
-        <div className="border-t border-slate-200 p-4 space-y-2">
+        <div className="border-t border-slate-100 p-3 space-y-2">
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
