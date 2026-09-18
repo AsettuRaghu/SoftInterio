@@ -477,22 +477,21 @@ function References({
         {docs.length === 0 ? (
           <p className="text-xs text-slate-400">No references added yet.</p>
         ) : (
-          <div className={cn("grid gap-2", compact ? "grid-cols-4" : "grid-cols-3")}>
+          <div className="flex flex-wrap gap-1.5">
             {docs.map((d) => (
-              <div key={d.id} className="group relative rounded-lg border border-slate-200 overflow-hidden bg-slate-50 aspect-4/3">
+              <div key={d.id} className={cn("group relative rounded-md border border-slate-200 overflow-hidden bg-slate-50", compact ? "w-14 h-14" : "w-20 h-20")}>
                 <button type="button" onClick={() => setViewing(docs.indexOf(d))} className="block w-full h-full text-left" title={d.title || d.file_name}>
                   {d.file_type?.startsWith("image/") && d.signed_url ? (
                     <img src={d.signed_url} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 px-2">
-                      <PhotoIcon className="w-6 h-6" />
-                      <span className="text-[10px] mt-1 truncate max-w-full">{d.title || d.file_name}</span>
+                    <div className="w-full h-full flex items-center justify-center text-slate-400">
+                      <PhotoIcon className="w-5 h-5" />
                     </div>
                   )}
                 </button>
                 {!readOnly && (
-                  <button type="button" onClick={() => void removeDoc(d)} title="Remove" className="absolute top-1 right-1 hidden group-hover:flex w-6 h-6 items-center justify-center rounded-md bg-white/90 text-slate-500 hover:text-red-600">
-                    <TrashIcon className="w-3.5 h-3.5" />
+                  <button type="button" onClick={() => void removeDoc(d)} title="Remove" className="absolute top-0.5 right-0.5 hidden group-hover:flex w-5 h-5 items-center justify-center rounded bg-white/90 text-slate-500 hover:text-red-600">
+                    <TrashIcon className="w-3 h-3" />
                   </button>
                 )}
               </div>
@@ -514,16 +513,15 @@ function References({
         {pins.length === 0 && !picking ? (
           <p className="text-xs text-slate-400">Nothing from the Design Library yet.</p>
         ) : (
-          <div className={cn("grid gap-2", compact ? "grid-cols-4" : "grid-cols-3")}>
+          <div className="flex flex-wrap gap-1.5">
             {pins.map((p) => (
-              <div key={p.id} className="group relative rounded-lg border border-slate-200 overflow-hidden bg-slate-50 aspect-4/3">
+              <div key={p.id} className={cn("group relative rounded-md border border-slate-200 overflow-hidden bg-slate-50", compact ? "w-14 h-14" : "w-20 h-20")}>
                 <button type="button" onClick={() => setViewing(docs.length + pins.indexOf(p))} className="block w-full h-full text-left" title={p.title}>
                   {p.images[0]?.url ? <img src={p.images[0].url} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-300"><PhotoIcon className="w-6 h-6" /></div>}
-                  <span className="absolute bottom-0 inset-x-0 bg-linear-to-t from-black/60 to-transparent px-1.5 pb-1 pt-4 text-[10px] text-white truncate">{p.title}</span>
                 </button>
                 {!readOnly && (
-                  <button type="button" onClick={() => void unpin(p.id)} title="Unpin" className="absolute top-1 right-1 hidden group-hover:flex w-6 h-6 items-center justify-center rounded-md bg-white/90 text-slate-500 hover:text-red-600">
-                    <XMarkIcon className="w-3.5 h-3.5" />
+                  <button type="button" onClick={() => void unpin(p.id)} title="Unpin" className="absolute top-0.5 right-0.5 hidden group-hover:flex w-5 h-5 items-center justify-center rounded bg-white/90 text-slate-500 hover:text-red-600">
+                    <XMarkIcon className="w-3 h-3" />
                   </button>
                 )}
               </div>
