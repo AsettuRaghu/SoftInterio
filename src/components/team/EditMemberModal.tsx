@@ -426,7 +426,7 @@ export function EditMemberModal({
                   </li>
                   <li>Invalidate their current password</li>
                   <li>
-                    They'll need to log in with the new temporary password
+                    They’ll need to log in with the new temporary password
                   </li>
                   <li>Recommend they change it to something secure</li>
                 </ul>
@@ -434,7 +434,7 @@ export function EditMemberModal({
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <p className="text-xs text-blue-700">
-                  <strong>Note:</strong> You'll receive the temporary password
+                  <strong>Note:</strong> You’ll receive the temporary password
                   in a modal to share with {member.name}.
                 </p>
               </div>

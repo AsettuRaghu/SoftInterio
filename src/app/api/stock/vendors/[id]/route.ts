@@ -17,7 +17,6 @@ export async function GET(
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
-    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
 
@@ -85,7 +84,6 @@ export async function PATCH(
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
-    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
 
@@ -136,7 +134,6 @@ export async function DELETE(
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
-    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
 

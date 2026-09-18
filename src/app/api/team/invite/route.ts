@@ -234,7 +234,7 @@ export async function POST(request: NextRequest) {
 
     // Check if user exists in Supabase Auth
     const { data: authUsers } = await adminClient.auth.admin.listUsers();
-    let existingAuthUser = authUsers?.users?.find(
+    const existingAuthUser = authUsers?.users?.find(
       (u) => u.email?.toLowerCase() === email.toLowerCase()
     );
 
@@ -247,7 +247,7 @@ export async function POST(request: NextRequest) {
         existingAuthUser.id
       );
 
-      const { data: updatedUser, error: updateError } =
+      const { error: updateError } =
         await adminClient.auth.admin.updateUserById(existingAuthUser.id, {
           password: password,
           email_confirm: true,

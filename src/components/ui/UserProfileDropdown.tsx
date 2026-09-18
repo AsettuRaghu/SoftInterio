@@ -4,7 +4,6 @@ import React, { useState, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { uiLogger } from "@/lib/logger";
-import { getUserFriendlyMessage } from "@/lib/errors";
 
 export function UserProfileDropdown() {
   const [isOpen, setIsOpen] = useState(false);

@@ -39,24 +39,7 @@ const projectCategoryOptions = [
   { value: "other", label: "Other" },
 ];
 
-// Facing options
-const facingOptions = [
-  { value: "north", label: "North" },
-  { value: "south", label: "South" },
-  { value: "east", label: "East" },
-  { value: "west", label: "West" },
-  { value: "north_east", label: "North East" },
-  { value: "north_west", label: "North West" },
-  { value: "south_east", label: "South East" },
-  { value: "south_west", label: "South West" },
-];
 
-// Furnishing status options
-const furnishingOptions = [
-  { value: "unfurnished", label: "Unfurnished" },
-  { value: "semi_furnished", label: "Semi Furnished" },
-  { value: "fully_furnished", label: "Fully Furnished" },
-];
 
 interface EditFormData {
   // Project Details
@@ -168,6 +151,11 @@ const REQUIRED_FIELDS: Array<{ field: string; label: string }> = [
 
 const REQUIRED_SET = new Set(REQUIRED_FIELDS.map((f) => f.field));
 
+/** A red asterisk on anything REQUIRED_FIELDS names. */
+function Star({ field }: { field: string }) {
+  return REQUIRED_SET.has(field) ? <span className="text-red-500"> *</span> : null;
+}
+
 interface EditProjectDetailsModalProps {
   isOpen: boolean;
   project: Project;
@@ -266,10 +254,6 @@ export function EditProjectDetailsModal({
       setError(null);
     }
   }, [isOpen, project]);
-
-  /** A red asterisk on anything REQUIRED_FIELDS names. */
-  const Star = ({ field }: { field: string }) =>
-    REQUIRED_SET.has(field) ? <span className="text-red-500"> *</span> : null;
 
   const handleInputChange = (field: keyof EditFormData, value: string) => {
     setEditForm((prev) => ({

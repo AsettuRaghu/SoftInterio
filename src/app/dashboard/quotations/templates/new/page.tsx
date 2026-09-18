@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { Toast } from "@/components/ui/Toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -169,21 +169,6 @@ export default function NewTemplatePage() {
     (s) => !s.expanded || s.components.some((c) => !c.expanded)
   );
 
-  // Move space up/down
-  const moveSpace = (spaceId: string, direction: "up" | "down") => {
-    const index = spaces.findIndex((s) => s.id === spaceId);
-    if (index === -1) return;
-
-    const newIndex = direction === "up" ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= spaces.length) return;
-
-    const newSpaces = [...spaces];
-    [newSpaces[index], newSpaces[newIndex]] = [
-      newSpaces[newIndex],
-      newSpaces[index],
-    ];
-    setSpaces(newSpaces);
-  };
 
   // Move component up/down within a space
   const moveComponent = (
@@ -852,7 +837,7 @@ export default function NewTemplatePage() {
               </div>
             ) : (
               <>
-                {spaces.map((space, spaceIndex) => (
+                {spaces.map((space, _spaceIndex) => (
                   <SpaceCard
                     key={space.id}
                     space={space}

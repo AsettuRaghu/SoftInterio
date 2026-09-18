@@ -11,7 +11,6 @@ import {
   PageLayout,
   PageHeader,
   PageContent,
-  StatusBadge,
 } from "@/components/ui/PageLayout";
 import { uiLogger } from "@/lib/logger";
 import {
@@ -104,6 +103,7 @@ export default function CompanySettingsPage() {
 
   useEffect(() => {
     fetchCompanyDetails();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs only when the listed values change; the fetch functions are defined in this component
   }, []);
 
   const fetchCompanyDetails = async () => {

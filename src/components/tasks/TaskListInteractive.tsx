@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useRef, useMemo } from "react";
+import React, { useState, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   Task,
@@ -16,7 +16,6 @@ import {
   PriorityBadge,
   DatePicker,
   AssigneeSelector,
-  LinkedEntity,
   StatusFilterDropdown,
 } from "./ui";
 import { SearchBox } from "@/components/ui/SearchBox";
@@ -27,8 +26,6 @@ import {
   ChevronRightIcon,
   ChatBubbleLeftIcon,
   PencilSquareIcon,
-  Bars3BottomLeftIcon,
-  XMarkIcon,
 } from "@heroicons/react/24/outline";
 
 interface TeamMember {
@@ -98,10 +95,6 @@ export default function TaskListInteractive({
   onTaskClick,
   onAddClick,
   onTaskUpdate,
-  showHeader = true,
-  headerTitle = "Tasks",
-  headerSubtitle = "Manage and track your work",
-  allowEdit = true,
   allowInlineEdit = true,
 }: TaskListInteractiveProps) {
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
@@ -125,7 +118,6 @@ export default function TaskListInteractive({
 
   const titleInputRef = useRef<HTMLInputElement>(null);
   const notesInputRef = useRef<HTMLTextAreaElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const inlineSubtaskInputRef = useRef<HTMLInputElement>(null);
 
   const toggleExpand = (taskId: string) => {

@@ -53,8 +53,6 @@ export async function POST(
         .order("display_order", { ascending: true }),
     ]);
 
-    // Generate new quotation number
-    const today = new Date();
 
     // Get quotation number and version - reuses existing number if for same lead/project
     const { quotationNumber, nextVersion } = await getQuotationNumberAndVersion(

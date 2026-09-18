@@ -5,14 +5,12 @@ import React, {
   useEffect,
   useCallback,
   useMemo,
-  useRef,
 } from "react";
 import { SearchBox } from "@/components/ui/SearchBox";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Toast } from "@/components/ui/Toast";
 import {
   CalendarIcon,
-  ClockIcon,
   MapPinIcon,
   CheckIcon,
   PencilSquareIcon,
@@ -264,6 +262,7 @@ export default function CalendarTableReusable({
       if (!opts?.background) setIsLoading(false);
     }
   },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the named function is defined in this component and closes over the same values already listed
     [linkedType, linkedId, externalEvents]
   );
 
@@ -291,6 +290,7 @@ export default function CalendarTableReusable({
 
     // Genuinely nothing to show - this is the only case that earns a spinner.
     void fetchEvents();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs only when the listed values change; the fetch functions are defined in this component
   }, [fetchEvents]);
 
   // =====================================================
@@ -626,7 +626,7 @@ export default function CalendarTableReusable({
   }, [matchingEvents]);
 
   const filteredAndSortedEvents = useMemo(() => {
-    let filtered =
+    const filtered =
       filterStatus === "all"
         ? [...matchingEvents]
         : matchingEvents.filter((e) => statusOf(e) === filterStatus);

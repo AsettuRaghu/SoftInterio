@@ -17,7 +17,6 @@ interface TimelineTabProps {
 export default function TimelineTab({
   activities,
   stageHistory,
-  formatDateTime,
 }: TimelineTabProps) {
   return (
     <TimelineTableReusable

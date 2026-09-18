@@ -7,7 +7,7 @@ import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 // Status flow: draft → order_placed → order_dispatched → order_received → order_closed
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  {}: { params: Promise<{ id: string }> }
 ) {
   // Protect API route (even deprecated routes should be authenticated)
   const guard = await protectApiRoute(request, {

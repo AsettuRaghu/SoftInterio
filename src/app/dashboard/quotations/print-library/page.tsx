@@ -30,7 +30,6 @@ import {
   TrashIcon,
   DocumentDuplicateIcon,
   DocumentTextIcon,
-  StarIcon,
 } from "@heroicons/react/24/outline";
 import {
   ITEMISE_LEVEL_LABELS,

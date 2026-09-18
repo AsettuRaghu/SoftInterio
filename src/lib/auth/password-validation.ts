@@ -342,7 +342,7 @@ export function validatePassword(
  */
 function calculatePasswordStrength(
   password: string,
-  policy: PasswordPolicy
+  _policy: PasswordPolicy
 ): { strength: PasswordStrength; score: number } {
   let score = 0;
 

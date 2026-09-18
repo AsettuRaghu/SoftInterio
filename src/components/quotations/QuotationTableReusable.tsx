@@ -59,9 +59,6 @@ export default function QuotationTableReusable({
   allowView = true,
   showFilters = true,
   readOnly = false,
-  showHeader = true,
-  compact = false,
-  headerTitle = "Quotations",
   onCreateQuotation,
   onViewQuotation,
   onNavigateToQuotations,
@@ -76,22 +73,6 @@ export default function QuotationTableReusable({
   const [sortField, setSortField] = useState<SortField>("created_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
-  // Format helpers
-  const formatDateTime = (date: string | null | undefined): string => {
-    if (!date) return "—";
-    try {
-      return new Date(date).toLocaleString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      });
-    } catch {
-      return "—";
-    }
-  };
 
   // Get status badge colors
   const getStatusBadge = (status: QuotationStatus) => {
@@ -200,7 +181,9 @@ export default function QuotationTableReusable({
   };
 
   // Sort indicator component (matching other tables)
-  const SortIndicator = ({ field }: { field: SortField }) => (
+  // Called as a function, not rendered as <SortIndicator/>: a component type
+  // created inside render remounts on every render (see CLAUDE.md, TaskRow).
+  const sortIndicator = (field: SortField) => (
     <span className="ml-1 inline-flex">
       {sortField === field ? (
         sortDirection === "asc" ? (
@@ -216,10 +199,6 @@ export default function QuotationTableReusable({
     </span>
   );
 
-  // All available statuses for filter (from constants)
-  const allStatuses = useMemo(() => {
-    return QUOTATION_STATUS_OPTIONS.map((opt) => opt.value);
-  }, []);
 
   return (
     <div className="flex flex-col h-full bg-white rounded-lg border border-slate-200">
@@ -294,7 +273,7 @@ export default function QuotationTableReusable({
                   onClick={() => handleSort("quotation_number")}
                   className="group px-3 py-2 text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100"
                 >
-                  Quotation #<SortIndicator field="quotation_number" />
+                  Quotation #{sortIndicator("quotation_number")}
                 </th>
                 <th className="px-3 py-2 text-center text-[10px] font-semibold text-slate-600 uppercase tracking-wider">
                   Version
@@ -310,7 +289,7 @@ export default function QuotationTableReusable({
                   className="group px-3 py-2 text-right text-[10px] font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100"
                 >
                   Amount
-                  <SortIndicator field="grand_total" />
+                  {sortIndicator("grand_total")}
                 </th>
                 <th className="px-6"></th>
                 <th
@@ -318,21 +297,21 @@ export default function QuotationTableReusable({
                   className="group px-3 py-2 text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100"
                 >
                   Status
-                  <SortIndicator field="status" />
+                  {sortIndicator("status")}
                 </th>
                 <th
                   onClick={() => handleSort("valid_until")}
                   className="group px-3 py-2 text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100"
                 >
                   Valid Until
-                  <SortIndicator field="valid_until" />
+                  {sortIndicator("valid_until")}
                 </th>
                 <th
                   onClick={() => handleSort("created_at")}
                   className="group px-3 py-2 text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100"
                 >
                   Created At
-                  <SortIndicator field="created_at" />
+                  {sortIndicator("created_at")}
                 </th>
                 <th className="px-3 py-2 text-center text-[10px] font-semibold text-slate-600 uppercase tracking-wider">
                   Actions

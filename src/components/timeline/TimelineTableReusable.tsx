@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import { SearchBox } from "@/components/ui/SearchBox";
 import {
   ArrowPathIcon,
@@ -135,6 +135,29 @@ const DEFAULT_ACTIVITY_LABELS: Record<string, string> = {
   other: "Other",
 };
 
+/** Pure so the sort/filter memo can depend on the label maps, not a closure. */
+function activityTitle(
+  item: TimelineItem,
+  activityTypeLabels: Record<string, string>,
+  stageLabels: Record<string, string>,
+): string {
+  if (item.type === "stage") {
+    const toStageLabel = stageLabels[item.to_stage || ""] || item.to_stage || "";
+    return `Moved to ${toStageLabel}`;
+  }
+  if (item.title) return item.title;
+  const activityType = item.activity_type || "";
+  return activityTypeLabels[activityType] || activityType;
+}
+
+function activityTypeLabel(
+  activityType: string | undefined,
+  activityTypeLabels: Record<string, string>,
+): string {
+  if (!activityType) return "Activity";
+  return activityTypeLabels[activityType] || activityType;
+}
+
 const DEFAULT_STAGE_LABELS: Record<string, string> = {
   new: "New",
   qualified: "Qualified",
@@ -153,10 +176,6 @@ export default function TimelineTableReusable({
   activities = [],
   stageHistory = [],
   externalItems,
-  onRefresh,
-  showHeader = true,
-  compact = false,
-  readOnly = true,
   showFilters = true,
   onItemClick,
   activityTypeLabels = DEFAULT_ACTIVITY_LABELS,
@@ -170,7 +189,9 @@ export default function TimelineTableReusable({
   const [filterType, setFilterType] = useState<string>("all");
   const [sortField, setSortField] = useState<string>("created_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [currentPage, setCurrentPage] = useState(1);
+  // The page asked for; clamped below so a filter change that shrinks the list
+  // cannot strand the reader past the end.
+  const [requestedPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
   // =====================================================
@@ -319,25 +340,10 @@ export default function TimelineTableReusable({
     return "bg-slate-100 text-slate-600";
   };
 
-  const getActivityTitle = (item: TimelineItem): string => {
-    if (item.type === "stage") {
-      const toStageLabel =
-        stageLabels[item.to_stage || ""] || item.to_stage || "";
-      return `Moved to ${toStageLabel}`;
-    }
-
-    if (item.title) {
-      return item.title;
-    }
-
-    const activityType = item.activity_type || "";
-    return activityTypeLabels[activityType] || activityType;
-  };
-
-  const getActivityTypeLabel = (activityType: string | undefined): string => {
-    if (!activityType) return "Activity";
-    return activityTypeLabels[activityType] || activityType;
-  };
+  const getActivityTitle = (item: TimelineItem) =>
+    activityTitle(item, activityTypeLabels, stageLabels);
+  const getActivityTypeLabel = (activityType: string | undefined) =>
+    activityTypeLabel(activityType, activityTypeLabels);
 
   // =====================================================
   // SORTING
@@ -353,7 +359,9 @@ export default function TimelineTableReusable({
   };
 
   // Sort indicator component
-  const SortIndicator = ({ field }: { field: string }) => (
+  // Called as a function, not rendered as <SortIndicator/>: a component type
+  // created inside render remounts on every render (see CLAUDE.md, TaskRow).
+  const sortIndicator = (field: string) => (
     <span className="ml-1 inline-flex">
       {sortField === field ? (
         sortDirection === "asc" ? (
@@ -427,7 +435,7 @@ export default function TimelineTableReusable({
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter((item) => {
         // Search in title
-        const title = getActivityTitle(item);
+        const title = activityTitle(item, activityTypeLabels, stageLabels);
         if (title.toLowerCase().includes(query)) return true;
 
         // Search in description
@@ -444,7 +452,7 @@ export default function TimelineTableReusable({
 
         // Search in activity type
         if (item.activity_type) {
-          const typeLabel = getActivityTypeLabel(item.activity_type);
+          const typeLabel = activityTypeLabel(item.activity_type, activityTypeLabels);
           if (typeLabel.toLowerCase().includes(query)) return true;
         }
 
@@ -477,8 +485,8 @@ export default function TimelineTableReusable({
 
       switch (sortField) {
         case "activity":
-          aValue = getActivityTitle(a).toLowerCase();
-          bValue = getActivityTitle(b).toLowerCase();
+          aValue = activityTitle(a, activityTypeLabels, stageLabels).toLowerCase();
+          bValue = activityTitle(b, activityTypeLabels, stageLabels).toLowerCase();
           break;
         case "user":
           aValue = (
@@ -510,7 +518,8 @@ export default function TimelineTableReusable({
     filterType,
     sortField,
     sortDirection,
-    getActivityTitle,
+    activityTypeLabels,
+    stageLabels,
   ]);
 
   // Pagination, as in the notes, tasks and calendar tables. A timeline is the
@@ -520,6 +529,7 @@ export default function TimelineTableReusable({
     1,
     Math.ceil(filteredAndSortedItems.length / pageSize)
   );
+  const currentPage = Math.min(requestedPage, totalPages);
   const paginatedItems = useMemo(
     () =>
       filteredAndSortedItems.slice(
@@ -529,15 +539,6 @@ export default function TimelineTableReusable({
     [filteredAndSortedItems, currentPage, pageSize]
   );
 
-  // A filter change can strand the user on a page that no longer exists.
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(1);
-  }, [currentPage, totalPages]);
-
-  // Reset to the first page when the view changes underneath.
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, filterType]);
 
   // Get unique activity types for filter dropdown
   const activityTypes = useMemo(() => {
@@ -562,7 +563,10 @@ export default function TimelineTableReusable({
           <div className="flex-1">
             <SearchBox
               value={searchQuery}
-              onChange={setSearchQuery}
+              onChange={(q) => {
+                setSearchQuery(q);
+                setCurrentPage(1);
+              }}
               placeholder="Search timeline..."
             />
           </div>
@@ -570,7 +574,10 @@ export default function TimelineTableReusable({
           {/* Type Filter */}
           <select
             value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
+            onChange={(e) => {
+              setFilterType(e.target.value);
+              setCurrentPage(1);
+            }}
             className="px-3 py-1.5 text-xs border border-slate-200 rounded-md bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">All Types</option>
@@ -623,7 +630,7 @@ export default function TimelineTableReusable({
                 >
                   <div className="flex items-center">
                     Activity
-                    <SortIndicator field="activity" />
+                    {sortIndicator("activity")}
                   </div>
                 </th>
                 <th className="px-3 py-2 text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider">
@@ -635,7 +642,7 @@ export default function TimelineTableReusable({
                 >
                   <div className="flex items-center">
                     Date & Time
-                    <SortIndicator field="created_at" />
+                    {sortIndicator("created_at")}
                   </div>
                 </th>
                 <th
@@ -644,7 +651,7 @@ export default function TimelineTableReusable({
                 >
                   <div className="flex items-center">
                     User
-                    <SortIndicator field="user" />
+                    {sortIndicator("user")}
                   </div>
                 </th>
               </tr>

@@ -8,7 +8,7 @@ import {
   FormTextarea,
   FormGroup,
 } from "@/components/ui/FormControls";
-import type { CreateBrandInput, BrandQualityTier } from "@/types/stock";
+import type { CreateBrandInput } from "@/types/stock";
 
 interface CreateBrandModalProps {
   isOpen: boolean;

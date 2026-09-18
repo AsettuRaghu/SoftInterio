@@ -21,7 +21,6 @@ interface ProjectQuotationsTabProps {
 export default function QuotationsTab({
   quotations,
   projectClosed = false,
-  onCountChange,
   onViewQuotation,
   onReviseQuotation,
   revisingId,

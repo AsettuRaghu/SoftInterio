@@ -20,7 +20,6 @@ import type {
 import {
   PlusIcon,
   TrashIcon,
-  CheckBadgeIcon,
 } from "@heroicons/react/24/outline";
 import { CheckBadgeIcon as CheckBadgeIconSolid } from "@heroicons/react/24/solid";
 

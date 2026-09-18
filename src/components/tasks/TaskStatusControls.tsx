@@ -576,7 +576,7 @@ export function TaskStatusControls({
       )}
       {pendingAction?.to !== "skipped" && isPlanStep && holdUntil && (
         <p className="text-[11px] text-slate-500">
-          If this is later than the step's due date, every step that waits on it moves by the same
+          If this is later than the step’s due date, every step that waits on it moves by the same
           number of days. The agreed plan stays as it was.
         </p>
       )}

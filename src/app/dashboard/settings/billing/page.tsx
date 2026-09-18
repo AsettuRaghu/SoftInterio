@@ -13,7 +13,6 @@ import { uiLogger } from "@/lib/logger";
 import { CreditCardIcon } from "@heroicons/react/24/outline";
 import { getSubscriptionStatus } from "@/lib/billing/subscription-status";
 import type { SubscriptionStatus } from "@/lib/billing/subscription-status";
-import { subscriptionLogger, planLogger } from "@/lib/activity-logger";
 
 // Types
 interface PlanFeature {
@@ -222,7 +221,7 @@ export default function BillingSettingsPage() {
   const [isChangingPlan, setIsChangingPlan] = useState(false);
   const [changeSuccess, setChangeSuccess] = useState<string | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentSuccess, setPaymentSuccess] = useState<string | null>(null);
+  const [, setPaymentSuccess] = useState<string | null>(null);
   const [invoicePage, setInvoicePage] = useState(1);
   const [subscriptionStatus, setSubscriptionStatus] =
     useState<SubscriptionStatus | null>(null);
@@ -447,34 +446,6 @@ export default function BillingSettingsPage() {
     }
   };
 
-  // Calculate if plan is upgrade or downgrade
-  const isPlanUpgrade = (plan: Plan) => {
-    if (!subscriptionData?.plan) return true;
-    const currentPrice = subscriptionData.plan.priceMonthly;
-    return plan.priceMonthly > currentPrice;
-  };
-
-  // Get days remaining to show
-  const getDaysRemaining = () => {
-    const sub = subscriptionData?.subscription;
-    if (!sub) return null;
-
-    if (sub.isTrial && sub.trialDaysRemaining !== null) {
-      return { days: sub.trialDaysRemaining, type: "trial" };
-    }
-    if (sub.subscriptionDaysRemaining !== null) {
-      return { days: sub.subscriptionDaysRemaining, type: "subscription" };
-    }
-    return null;
-  };
-
-  // Check if should show days remaining warning
-  const shouldShowDaysWarning = () => {
-    const daysInfo = getDaysRemaining();
-    if (!daysInfo) return false;
-    const threshold = subscriptionData?.warnings?.warningDaysThreshold || 30;
-    return daysInfo.days <= threshold;
-  };
 
   if (isLoading) {
     return (
@@ -515,8 +486,6 @@ export default function BillingSettingsPage() {
     );
   }
 
-  const daysInfo = getDaysRemaining();
-  const showDaysWarning = shouldShowDaysWarning();
 
   return (
     <PageLayout>

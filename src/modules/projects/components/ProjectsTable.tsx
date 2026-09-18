@@ -16,7 +16,6 @@ import {
 import {
   ProjectStatusLabels,
   ProjectCategoryLabels,
-  ProjectPropertyTypeLabels,
   ProjectActivityTypeLabels,
 } from "@/types/projects";
 import { ServiceTypeLabels } from "@/types/leads";

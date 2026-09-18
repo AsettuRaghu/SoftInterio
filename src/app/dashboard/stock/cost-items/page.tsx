@@ -23,7 +23,6 @@ import {
   XCircleIcon,
   LinkIcon,
 } from "@heroicons/react/24/outline";
-import { QUALITY_TIER_OPTIONS } from "@/utils/stock";
 
 interface CostItemCategory {
   id: string;
@@ -83,7 +82,7 @@ export default function CostItemsPage() {
     totalPages: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
 
   // Filter states
   const [categoryFilter, setCategoryFilter] = useState<string>("");

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
-import type { TaskFilters, CreateTaskInput } from "@/types/tasks";
+import type { CreateTaskInput } from "@/types/tasks";
 
 // GET /api/tasks - List tasks with filters
 export async function GET(request: NextRequest) {
@@ -193,7 +193,7 @@ export async function GET(request: NextRequest) {
           .map((st) => st.related_id);
 
         // Fetch lead names for subtasks
-        let subtaskLeadMap = new Map<string, string>();
+        const subtaskLeadMap = new Map<string, string>();
         if (subtaskLeadIds.length > 0) {
           const { data: subtaskLeads } = await supabase
             .from("leads")

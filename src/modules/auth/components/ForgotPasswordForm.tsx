@@ -65,7 +65,7 @@ export function ForgotPasswordForm() {
               Check Your Email
             </h1>
             <p className="text-slate-600 text-sm">
-              We've sent password reset instructions to <strong>{email}</strong>
+              We’ve sent password reset instructions to <strong>{email}</strong>
             </p>
           </div>
 
@@ -76,7 +76,7 @@ export function ForgotPasswordForm() {
               </Button>
             </Link>
             <p className="text-xs text-slate-500 mt-6">
-              Didn't receive the email? Check your spam folder or{" "}
+              Didn’t receive the email? Check your spam folder or{" "}
               <button
                 onClick={() => setIsSubmitted(false)}
                 className="text-blue-600 hover:text-blue-500 underline"
@@ -98,7 +98,7 @@ export function ForgotPasswordForm() {
             Reset Password
           </h1>
           <p className="text-slate-600 text-sm">
-            Enter your email and we'll send you reset instructions
+            Enter your email and we’ll send you reset instructions
           </p>
         </div>
 

@@ -46,7 +46,7 @@ const STATUS_OPTIONS = [
 export default function VendorsPage() {
   const [allVendors, setAllVendors] = useState<Vendor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
   const [pagination, setPagination] = useState<Pagination>({

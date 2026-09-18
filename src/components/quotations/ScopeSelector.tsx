@@ -92,7 +92,8 @@ export function ScopeSelector({
   const toggleComponent = (spaceId: string, componentId: string) => {
     const next = new Set(selected);
     const k = key(spaceId, componentId);
-    next.has(k) ? next.delete(k) : next.add(k);
+    if (next.has(k)) next.delete(k);
+      else next.add(k);
     commit(next);
   };
 
@@ -107,7 +108,8 @@ export function ScopeSelector({
   const toggleExpand = (spaceId: string) =>
     setExpanded((prev) => {
       const next = new Set(prev);
-      next.has(spaceId) ? next.delete(spaceId) : next.add(spaceId);
+      if (next.has(spaceId)) next.delete(spaceId);
+      else next.add(spaceId);
       return next;
     });
 

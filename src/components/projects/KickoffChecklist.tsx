@@ -454,7 +454,7 @@ export function KickoffChecklist({
         doneText={open.length ? `${open.length} open` : "Nothing outstanding"}
       >
         <p className="text-xs text-slate-500 mb-2">
-          Everything the project waits on someone else for. Steps marked "Client" or "Vendor" in the
+          Everything the project waits on someone else for. Steps marked “Client” or “Vendor” in the
           playbook are listed automatically; add anything else. Each needs an expected date - lateness
           against it is counted against them, not us.
         </p>
@@ -536,8 +536,8 @@ export function KickoffChecklist({
           <div className="flex-1">
             <h4 className="text-sm font-medium text-slate-800">Confirm</h4>
             <p className="text-xs text-slate-500">
-              A note for the timeline - what was agreed, and with whom. This becomes "Kicked off" on the
-              project's history, and the dates above become the agreed plan.
+              A note for the timeline - what was agreed, and with whom. This becomes “Kicked off” on the
+              project’s history, and the dates above become the agreed plan.
             </p>
           </div>
         </div>

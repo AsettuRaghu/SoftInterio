@@ -17,7 +17,6 @@ import {
   Text,
   View,
   StyleSheet,
-  Font,
   Image,
 } from "@react-pdf/renderer";
 
@@ -772,7 +771,6 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
   const showComponentPrice = priceAt !== "space" && priceAt !== "none";
   // Prices below the component: on category rows, and on each cost item.
   const showCategoryPrice = priceAt === "category" || priceAt === "cost_item";
-  const showItemPrice = priceAt === "cost_item";
 
   /**
    * The Material column: what a component is actually made of, assembled from
@@ -826,6 +824,8 @@ export function QuotationPDF({ data }: { data: QuotationPDFData }) {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             {data.company?.logo_url ? (
+              // react-pdf's Image takes no alt; the a11y rule mistakes it for the DOM element.
+              // eslint-disable-next-line jsx-a11y/alt-text
               <Image src={data.company.logo_url} style={styles.logo} />
             ) : (
               <Text style={styles.companyName}>

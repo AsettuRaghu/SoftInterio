@@ -242,7 +242,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             </div>
 
             <p className="text-xs text-slate-500 text-center">
-              Click "Pay Now" to open the payment gateway
+              Click “Pay Now” to open the payment gateway
             </p>
           </div>
         </div>

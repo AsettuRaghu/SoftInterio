@@ -52,7 +52,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const stepIds = (steps || []).map((s) => s.id as string);
     // Each link carries which part of the predecessor it waits for, so the
     // editor can show and change it rather than assuming finish-to-start.
-    let depsByStep: Record<string, { id: string; waitType: string; strength: string }[]> = {};
+    const depsByStep: Record<string, { id: string; waitType: string; strength: string }[]> = {};
     if (stepIds.length > 0) {
       const { data: deps } = await supabase
         .from("procedure_step_dependencies")

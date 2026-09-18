@@ -16,7 +16,6 @@ export async function POST(
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
-    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
 

@@ -230,6 +230,6 @@ export function formatPropertyAddress(property: Property): string {
  * Calculate total room count
  * @deprecated Removed - property no longer tracks room details
  */
-export function getTotalRooms(property: Property): number {
+export function getTotalRooms(_property: Property): number {
   return 0;
 }

@@ -14,7 +14,6 @@ import {
   registerUser,
   sendVerificationEmail,
   checkExistingUser,
-  registerExistingUserToNewTenant,
   rollbackTenantCreation,
 } from "@/lib/auth/service";
 import { isAuthRateLimited, getRateLimitInfo } from "@/lib/auth/api-guard";

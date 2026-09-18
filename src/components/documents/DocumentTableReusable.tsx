@@ -24,12 +24,10 @@ import {
 } from "@/types/documents";
 import {
   PlusIcon,
-  MagnifyingGlassIcon,
   ArrowDownTrayIcon,
   PencilSquareIcon,
   TrashIcon,
   EyeIcon,
-  FunnelIcon,
   SwatchIcon,
 } from "@heroicons/react/24/outline";
 
@@ -70,8 +68,6 @@ export default function DocumentTable({
   showHeader = true,
   headerTitle = "Documents",
   headerSubtitle = "Manage your files and documents",
-  compact = false,
-  viewMode = "list",
   showCategory = true,
   allowUpload = true,
   allowDelete = true,
@@ -123,7 +119,7 @@ export default function DocumentTable({
               setIsLoading(false);
               return;
             }
-          } catch (e) {
+          } catch {
             // Ignore cache errors
           }
         }
@@ -149,7 +145,7 @@ export default function DocumentTable({
         try {
           sessionStorage.setItem(cacheKey, JSON.stringify(docs));
           lastFetchTimeRef.current = now;
-        } catch (e) {
+        } catch {
           // Ignore cache storage errors
         }
       } catch (err) {
@@ -186,7 +182,7 @@ export default function DocumentTable({
         } else {
           fetchDocuments(false);
         }
-      } catch (e) {
+      } catch {
         fetchDocuments(false);
       }
     }
@@ -199,7 +195,7 @@ export default function DocumentTable({
     } else {
       try {
         sessionStorage.removeItem(getCacheKey());
-      } catch (e) {
+      } catch {
         // Ignore
       }
       lastFetchTimeRef.current = 0;
@@ -212,7 +208,7 @@ export default function DocumentTable({
     try {
       sessionStorage.removeItem(getCacheKey());
       lastFetchTimeRef.current = 0;
-    } catch (e) {
+    } catch {
       // Ignore
     }
   }, [getCacheKey]);

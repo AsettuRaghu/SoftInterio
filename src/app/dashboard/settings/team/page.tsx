@@ -188,6 +188,7 @@ export default function TeamSettingsPage() {
   useEffect(() => {
     fetchData();
     fetchCurrentUser();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs only when the listed values change; the fetch functions are defined in this component
   }, []);
 
   const fetchCurrentUser = async () => {
@@ -898,19 +899,6 @@ export default function TeamSettingsPage() {
     return hierarchyLevel < memberMinHierarchy;
   };
 
-  // Check if current user can delete a member based on hierarchy
-  const canDeleteMember = (member: TeamMember): boolean => {
-    if (member.is_super_admin) return false;
-    if (member.id === currentUserId) return false;
-
-    // Get member's minimum hierarchy level
-    const memberMinHierarchy = member.roles.reduce(
-      (min, role) => Math.min(min, role.hierarchy_level),
-      999,
-    );
-
-    return hierarchyLevel < memberMinHierarchy;
-  };
 
   const SortIcon = ({ field }: { field: SortField }) => (
     <SortIconBase

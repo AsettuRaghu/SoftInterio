@@ -13,7 +13,6 @@ export async function generateUniqueLeadNumber(
   maxRetries: number = 5
 ): Promise<string> {
   const supabase = await createClient();
-  let lastError: Error | null = null;
 
   // Try to use the RPC function first
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -45,8 +44,8 @@ export async function generateUniqueLeadNumber(
         }
         // If it exists, continue to next attempt
       }
-    } catch (err) {
-      lastError = err instanceof Error ? err : new Error(String(err));
+    } catch {
+      // Retry below; the last failure is reported after the loop.
     }
 
     // Exponential backoff between retries

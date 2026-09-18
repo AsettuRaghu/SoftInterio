@@ -103,6 +103,11 @@ const getRequiredFieldsForStage = (stage: LeadStage): string[] => {
   }
 };
 
+/** A red asterisk beside a field the lead's current stage requires. */
+function RequiredStar({ show }: { show: boolean }) {
+  return show ? <span className="text-red-500">*</span> : null;
+}
+
 export function EditLeadModal({
   lead,
   editForm,
@@ -110,7 +115,6 @@ export function EditLeadModal({
   onClose,
   onSave,
   isSaving,
-  validationError,
 }: {
   lead: Lead;
   editForm: EditFormData;
@@ -148,9 +152,6 @@ export function EditLeadModal({
 
   const requiredFields = getRequiredFieldsForStage(lead.stage);
   const isRequired = (fieldName: string) => requiredFields.includes(fieldName);
-
-  const RequiredStar = ({ field }: { field: string }) =>
-    isRequired(field) ? <span className="text-red-500">*</span> : null;
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -302,7 +303,7 @@ export function EditLeadModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Client Name <RequiredStar field="client_name" />
+                  Client Name <RequiredStar show={isRequired("client_name")} />
                 </label>
                 <input
                   type="text"
@@ -316,7 +317,7 @@ export function EditLeadModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Phone <RequiredStar field="phone" />
+                  Phone <RequiredStar show={isRequired("phone")} />
                 </label>
                 <input
                   type="tel"
@@ -350,7 +351,7 @@ export function EditLeadModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Service Type <RequiredStar field="service_type" />
+                  Service Type <RequiredStar show={isRequired("service_type")} />
                 </label>
                 <select
                   required={isRequired("service_type")}
@@ -370,7 +371,7 @@ export function EditLeadModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Lead Source <RequiredStar field="lead_source" />
+                  Lead Source <RequiredStar show={isRequired("lead_source")} />
                 </label>
                 <select
                   required={isRequired("lead_source")}
@@ -397,7 +398,7 @@ export function EditLeadModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Category <RequiredStar field="property_category" />
+                  Category <RequiredStar show={isRequired("property_category")} />
                 </label>
                 <select
                   required={isRequired("property_category")}
@@ -424,7 +425,7 @@ export function EditLeadModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Property Type <RequiredStar field="property_type" />
+                  Property Type <RequiredStar show={isRequired("property_type")} />
                 </label>
                 <select
                   required={isRequired("property_type")}
@@ -455,7 +456,7 @@ export function EditLeadModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Community Type <RequiredStar field="property_subtype" />
+                  Community Type <RequiredStar show={isRequired("property_subtype")} />
                 </label>
                 <select
                   required={isRequired("property_subtype")}
@@ -486,7 +487,7 @@ export function EditLeadModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Property Name <RequiredStar field="property_name" />
+                  Property Name <RequiredStar show={isRequired("property_name")} />
                 </label>
                 <input
                   type="text"
@@ -520,7 +521,7 @@ export function EditLeadModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Flat/Unit Number <RequiredStar field="unit_number" />
+                  Flat/Unit Number <RequiredStar show={isRequired("unit_number")} />
                 </label>
                 <input
                   type="text"
@@ -534,7 +535,7 @@ export function EditLeadModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Carpet Area (sq.ft) <RequiredStar field="carpet_area" />
+                  Carpet Area (sq.ft) <RequiredStar show={isRequired("carpet_area")} />
                 </label>
                 <input
                   type="number"
@@ -551,7 +552,7 @@ export function EditLeadModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  City <RequiredStar field="property_city" />
+                  City <RequiredStar show={isRequired("property_city")} />
                 </label>
                 <input
                   type="text"
@@ -591,7 +592,7 @@ export function EditLeadModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Budget Range <RequiredStar field="budget_range" />
+                  Budget Range <RequiredStar show={isRequired("budget_range")} />
                 </label>
                 <select
                   required={isRequired("budget_range")}
@@ -618,7 +619,7 @@ export function EditLeadModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Target Start Date <RequiredStar field="target_start_date" />
+                  Target Start Date <RequiredStar show={isRequired("target_start_date")} />
                 </label>
                 <input
                   type="date"
@@ -637,7 +638,7 @@ export function EditLeadModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Target End Date <RequiredStar field="target_end_date" />
+                  Target End Date <RequiredStar show={isRequired("target_end_date")} />
                 </label>
                 <input
                   type="date"

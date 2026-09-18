@@ -16,9 +16,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { signOut } from "@/lib/auth/service";
 import { authLogger } from "@/lib/logger";
-import { createApiErrorResponse } from "@/lib/errors";
 
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   const requestId = crypto.randomUUID();
 
   authLogger.info("Sign out request received", {

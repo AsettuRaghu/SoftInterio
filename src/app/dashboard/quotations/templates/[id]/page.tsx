@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Toast } from "@/components/ui/Toast";
 import Link from "next/link";
-import { useRouter, useParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
 import {
   BuilderSpace,
@@ -38,7 +38,6 @@ const LEVEL_LABELS: Record<string, string> = {
 };
 
 export default function EditTemplatePage() {
-  const router = useRouter();
   const params = useParams();
   const templateId = params.id as string;
 
@@ -409,21 +408,6 @@ export default function EditTemplatePage() {
     (s) => !s.expanded || s.components.some((c) => !c.expanded)
   );
 
-  // Move space up/down
-  const moveSpace = (spaceId: string, direction: "up" | "down") => {
-    const index = spaces.findIndex((s) => s.id === spaceId);
-    if (index === -1) return;
-
-    const newIndex = direction === "up" ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= spaces.length) return;
-
-    const newSpaces = [...spaces];
-    [newSpaces[index], newSpaces[newIndex]] = [
-      newSpaces[newIndex],
-      newSpaces[index],
-    ];
-    setSpaces(newSpaces);
-  };
 
   // Move component up/down within a space
   const moveComponent = (
@@ -1088,7 +1072,7 @@ export default function EditTemplatePage() {
 
           {/* Spaces */}
           <div className="space-y-4">
-            {spaces.map((space, spaceIndex) => (
+            {spaces.map((space, _spaceIndex) => (
               <SpaceCard
                 key={space.id}
                 space={space}

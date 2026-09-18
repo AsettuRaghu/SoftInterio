@@ -137,7 +137,8 @@ export default function RolesPage() {
   function toggle(key: string) {
     setSelectedKeys((prev) => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   }
@@ -146,7 +147,8 @@ export default function RolesPage() {
     setSelectedKeys((prev) => {
       const next = new Set(prev);
       for (const p of PERMISSIONS_BY_MODULE[mod]) {
-        on ? next.add(p.key) : next.delete(p.key);
+        if (on) next.add(p.key);
+        else next.delete(p.key);
       }
       return next;
     });

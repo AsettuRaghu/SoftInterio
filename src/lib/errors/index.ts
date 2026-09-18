@@ -532,7 +532,6 @@ export function getRetryDelay(
   error: unknown,
   attempt: number
 ): number {
-  const normalized = normalizeError(error);
 
   // Rate limit - use server-provided delay or exponential backoff
   if (error instanceof RateLimitError && error.retryAfter) {
@@ -545,7 +544,7 @@ export function getRetryDelay(
   return Math.min(baseDelay * Math.pow(2, attempt - 1), maxDelay);
 }
 
-export default {
+const errors = {
   // Error classes
   AppError,
   AuthenticationError,
@@ -566,3 +565,5 @@ export default {
   isRetryableError,
   getRetryDelay,
 };
+
+export default errors;

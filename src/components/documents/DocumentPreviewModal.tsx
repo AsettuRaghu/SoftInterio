@@ -1,8 +1,7 @@
 "use client";
 
 import React from "react";
-import { cn } from "@/utils/cn";
-import { DocumentWithUrl, isPreviewable } from "@/types/documents";
+import { DocumentWithUrl } from "@/types/documents";
 
 interface DocumentPreviewModalProps {
   document: DocumentWithUrl | null;
@@ -17,7 +16,6 @@ export function DocumentPreviewModal({
 }: DocumentPreviewModalProps) {
   if (!isOpen || !document) return null;
 
-  const canPreview = isPreviewable(document.file_type);
 
   return (
     <div

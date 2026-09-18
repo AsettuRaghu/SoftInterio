@@ -75,11 +75,6 @@ function AgreedHint({ agreed, current, version }: { agreed?: string | null; curr
   );
 }
 
-/** A finished task, against the due date planned when it began. */
-function daysEarly(task: { status: string; due_date?: string | null; planned_due_date?: string | null; completed_at?: string | null }): number | null {
-  if (task.status !== "completed") return null;
-  return daysAhead(task.planned_due_date ?? task.due_date, task.completed_at);
-}
 
 /** Whole days between a due date and today. Used only for overdue tasks. */
 function daysLate(dueDate?: string | null): number {
@@ -370,7 +365,7 @@ export default function TaskTable({
               setIsLoading(false);
               return;
             }
-          } catch (e) {
+          } catch {
             // Ignore cache errors
           }
         }
@@ -399,7 +394,7 @@ export default function TaskTable({
         try {
           sessionStorage.setItem(cacheKey, JSON.stringify(taskList));
           lastFetchTimeRef.current = now;
-        } catch (e) {
+        } catch {
           // Ignore cache storage errors (e.g., quota exceeded)
         }
       } catch (err) {
@@ -456,7 +451,7 @@ export default function TaskTable({
         } else {
           fetchTasks(false);
         }
-      } catch (e) {
+      } catch {
         // If cache fails, fetch normally
         fetchTasks(false);
       }
@@ -579,7 +574,7 @@ export default function TaskTable({
       // Force refresh and clear cache
       try {
         sessionStorage.removeItem(getCacheKey());
-      } catch (e) {
+      } catch {
         // Ignore cache errors
       }
       lastFetchTimeRef.current = 0;
@@ -592,7 +587,7 @@ export default function TaskTable({
     try {
       sessionStorage.removeItem(getCacheKey());
       lastFetchTimeRef.current = 0;
-    } catch (e) {
+    } catch {
       // Ignore cache errors
     }
   }, [getCacheKey]);
@@ -784,6 +779,7 @@ export default function TaskTable({
   // Apply filtering and sorting to each tab
   const filteredMyTasks = useMemo(
     () => getFilteredAndSortedTasks(myTasks),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the named function is defined in this component and closes over the same values already listed
     [
       myTasks,
       selectedStatuses,
@@ -796,6 +792,7 @@ export default function TaskTable({
 
   const filteredAssignedByMe = useMemo(
     () => getFilteredAndSortedTasks(assignedByMe),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the named function is defined in this component and closes over the same values already listed
     [
       assignedByMe,
       selectedStatuses,
@@ -808,6 +805,7 @@ export default function TaskTable({
 
   const filteredAllTasks = useMemo(
     () => getFilteredAndSortedTasks(allTasks),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the named function is defined in this component and closes over the same values already listed
     [
       allTasks,
       selectedStatuses,
@@ -831,6 +829,7 @@ export default function TaskTable({
       default:
         return filteredMyTasks;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the named function is defined in this component and closes over the same values already listed
   }, [
     showTabs,
     activeTab,
@@ -2234,7 +2233,8 @@ export default function TaskTable({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              allExpanded ? collapseAll() : expandAll();
+                              if (allExpanded) collapseAll();
+                  else expandAll();
                             }}
                             className="p-0.5 hover:bg-slate-200 rounded transition-colors"
                             title={

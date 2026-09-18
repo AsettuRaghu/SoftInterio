@@ -22,7 +22,6 @@ export default function NotesTab({
   onAddNoteClick,
   onEditNote,
   onDeleteNote,
-  onCountChange,
   onRefresh,
 }: NotesTabProps) {
   return (

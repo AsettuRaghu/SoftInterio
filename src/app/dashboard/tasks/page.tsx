@@ -31,7 +31,6 @@ import {
   PriorityBadge,
   DatePicker,
   LinkedEntity,
-  UserAvatar,
   AssigneeSelector,
   TaskStatus,
   TaskPriority,
@@ -43,7 +42,6 @@ import {
   ChevronRightIcon,
   ListBulletIcon,
   ChatBubbleLeftIcon,
-  XMarkIcon,
   PencilSquareIcon,
   Bars3BottomLeftIcon,
 } from "@heroicons/react/24/outline";
@@ -248,25 +246,6 @@ export default function TasksPage() {
     }
   }, []);
 
-  // Fetch full task data with subtasks when opening edit modal
-  const fetchTaskWithSubtasks = useCallback(async (taskId: string) => {
-    try {
-      const response = await fetch(`/api/tasks/${taskId}`);
-      if (response.ok) {
-        const data = await response.json();
-        // API returns { task, subtasks, ... }
-        const fullTask = {
-          ...data.task,
-          subtasks: data.subtasks || [],
-        };
-        setEditingTask(fullTask);
-      } else {
-        console.error("Failed to fetch task details");
-      }
-    } catch (err) {
-      console.error("Error fetching task with subtasks:", err);
-    }
-  }, []);
 
   useEffect(() => {
     fetchTasks();

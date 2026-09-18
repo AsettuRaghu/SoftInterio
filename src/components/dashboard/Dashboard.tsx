@@ -470,7 +470,7 @@ export function Dashboard() {
           <section className="rounded-lg border border-slate-200 bg-white">
             <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
               <CalendarDaysIcon className="w-5 h-5 text-indigo-600" />
-              <h2 className="text-sm font-semibold text-slate-900">Today's schedule</h2>
+              <h2 className="text-sm font-semibold text-slate-900">Today’s schedule</h2>
               <span className="flex-1" />
               <Link href="/dashboard/calendar" className="text-xs text-blue-600 hover:underline">Calendar</Link>
             </div>

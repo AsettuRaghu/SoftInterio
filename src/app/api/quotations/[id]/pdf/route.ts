@@ -386,7 +386,6 @@ export async function GET(
     };
 
     // Generate PDF
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pdfElement = React.createElement(QuotationPDF, { data: pdfData }) as any;
     const pdfBuffer = await renderToBuffer(pdfElement);
 

@@ -21,6 +21,95 @@ interface ProjectsFilterBarProps {
   availablePhases?: string[];
 }
 
+/** One filter dropdown. A component, not a render function, so the ref it
+ *  owns is attached by React rather than read during render. */
+function FilterDropdown({
+dropdownRef,
+show,
+setShow,
+label,
+selectedValues,
+onSelect,
+options,
+}: {
+dropdownRef: React.RefObject<HTMLDivElement | null>;
+show: boolean;
+setShow: (show: boolean) => void;
+label: string;
+selectedValues: string[];
+onSelect: (values: string[]) => void;
+options: Array<{ value: string; label: string }>;
+}) {
+return (
+  <div className="relative" ref={dropdownRef}>
+    <button
+      onClick={() => setShow(!show)}
+      className="px-3 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 text-sm font-medium text-slate-700 flex items-center gap-2 whitespace-nowrap"
+    >
+      {label}:{" "}
+      {selectedValues.length === 0
+        ? "All"
+        : selectedValues.length === 1
+          ? options.find((o) => o.value === selectedValues[0])?.label ||
+            selectedValues[0]
+          : `${selectedValues.length} selected`}
+      <ChevronDownIcon
+        className={`w-4 h-4 transition-transform ${show ? "rotate-180" : ""}`}
+      />
+    </button>
+
+    {show && (
+      <div className="absolute top-full right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-56">
+        <div className="p-2 max-h-64 overflow-y-auto">
+          {/* Select All */}
+          <button
+            onClick={() => {
+              onSelect(options.map((o) => o.value));
+            }}
+            className="w-full text-left px-3 py-2 hover:bg-slate-100 rounded text-sm font-medium text-slate-700 flex items-center gap-2"
+          >
+            <CheckIcon
+              className={`w-4 h-4 ${
+                selectedValues.length === options.length
+                  ? "text-blue-600"
+                  : "text-transparent"
+              }`}
+            />
+            All
+          </button>
+
+          <div className="h-px bg-slate-200 my-1" />
+
+          {/* Individual options */}
+          {options.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => {
+                onSelect(
+                  selectedValues.includes(option.value)
+                    ? selectedValues.filter((v) => v !== option.value)
+                    : [...selectedValues, option.value],
+                );
+              }}
+              className="w-full text-left px-3 py-2 hover:bg-slate-100 rounded text-sm text-slate-700 flex items-center gap-2"
+            >
+              <CheckIcon
+                className={`w-4 h-4 ${
+                  selectedValues.includes(option.value)
+                    ? "text-blue-600"
+                    : "text-transparent"
+                }`}
+              />
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    )}
+  </div>
+);
+}
+
 export default function ProjectsFilterBar({
   searchValue,
   onSearchChange,
@@ -31,8 +120,6 @@ export default function ProjectsFilterBar({
   availablePhases = [],
 }: ProjectsFilterBarProps) {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [showPropertyTypeDropdown, setShowPropertyTypeDropdown] =
-    useState(false);
   const [showPhaseDropdown, setShowPhaseDropdown] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const phaseDropdownRef = useRef<HTMLDivElement>(null);
@@ -63,10 +150,6 @@ export default function ProjectsFilterBar({
     };
   }, [showStatusDropdown, showPhaseDropdown]);
 
-  const getStatusLabel = (status: ProjectStatus) => {
-    const option = PROJECT_STATUS_OPTIONS.find((opt) => opt.value === status);
-    return option?.label || status;
-  };
 
   const phaseOptions =
     availablePhases.length > 0
@@ -74,83 +157,6 @@ export default function ProjectsFilterBar({
       : [];
 
   // Render filter dropdown
-  const renderFilterDropdown = (
-    ref: React.RefObject<HTMLDivElement>,
-    show: boolean,
-    setShow: (show: boolean) => void,
-    label: string,
-    selectedValues: string[],
-    onSelect: (values: string[]) => void,
-    options: Array<{ value: string; label: string }>,
-  ) => (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setShow(!show)}
-        className="px-3 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 text-sm font-medium text-slate-700 flex items-center gap-2 whitespace-nowrap"
-      >
-        {label}:{" "}
-        {selectedValues.length === 0
-          ? "All"
-          : selectedValues.length === 1
-            ? options.find((o) => o.value === selectedValues[0])?.label ||
-              selectedValues[0]
-            : `${selectedValues.length} selected`}
-        <ChevronDownIcon
-          className={`w-4 h-4 transition-transform ${show ? "rotate-180" : ""}`}
-        />
-      </button>
-
-      {show && (
-        <div className="absolute top-full right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-56">
-          <div className="p-2 max-h-64 overflow-y-auto">
-            {/* Select All */}
-            <button
-              onClick={() => {
-                onSelect(options.map((o) => o.value));
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-100 rounded text-sm font-medium text-slate-700 flex items-center gap-2"
-            >
-              <CheckIcon
-                className={`w-4 h-4 ${
-                  selectedValues.length === options.length
-                    ? "text-blue-600"
-                    : "text-transparent"
-                }`}
-              />
-              All
-            </button>
-
-            <div className="h-px bg-slate-200 my-1" />
-
-            {/* Individual options */}
-            {options.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => {
-                  onSelect(
-                    selectedValues.includes(option.value)
-                      ? selectedValues.filter((v) => v !== option.value)
-                      : [...selectedValues, option.value],
-                  );
-                }}
-                className="w-full text-left px-3 py-2 hover:bg-slate-100 rounded text-sm text-slate-700 flex items-center gap-2"
-              >
-                <CheckIcon
-                  className={`w-4 h-4 ${
-                    selectedValues.includes(option.value)
-                      ? "text-blue-600"
-                      : "text-transparent"
-                  }`}
-                />
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
   return (
     /*
      * One line, as the leads bar. Search first and flexible, the two filters
@@ -170,26 +176,27 @@ export default function ProjectsFilterBar({
         <MagnifyingGlassIcon className="absolute left-3 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
       </div>
 
-      {renderFilterDropdown(
-        statusDropdownRef as React.RefObject<HTMLDivElement>,
-        showStatusDropdown,
-        setShowStatusDropdown,
-        "Status",
-        selectedStatuses as string[],
-        (values) => onStatusChange(values as ProjectStatus[]),
-        PROJECT_STATUS_OPTIONS,
-      )}
+      <FilterDropdown
+        dropdownRef={statusDropdownRef}
+        show={showStatusDropdown}
+        setShow={setShowStatusDropdown}
+        label="Status"
+        selectedValues={selectedStatuses as string[]}
+        onSelect={(values) => onStatusChange(values as ProjectStatus[])}
+        options={PROJECT_STATUS_OPTIONS}
+      />
 
-      {phaseOptions.length > 0 &&
-        renderFilterDropdown(
-          phaseDropdownRef as React.RefObject<HTMLDivElement>,
-          showPhaseDropdown,
-          setShowPhaseDropdown,
-          "Stage",
-          selectedPhases,
-          onPhaseChange,
-          phaseOptions,
-        )}
+      {phaseOptions.length > 0 && (
+        <FilterDropdown
+          dropdownRef={phaseDropdownRef}
+          show={showPhaseDropdown}
+          setShow={setShowPhaseDropdown}
+          label="Stage"
+          selectedValues={selectedPhases}
+          onSelect={onPhaseChange}
+          options={phaseOptions}
+        />
+      )}
 
     </div>
   );

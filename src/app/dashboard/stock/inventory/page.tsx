@@ -92,10 +92,10 @@ export default function MaterialsPage() {
     total: 0,
     totalPages: 0,
   });
-  const [categories, setCategories] = useState<string[]>([]);
-  const [brands, setBrands] = useState<Brand[]>([]);
+  const [, setCategories] = useState<string[]>([]);
+  const [, setBrands] = useState<Brand[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
 
   // Filter states
   const [stockStatusFilter, setStockStatusFilter] = useState<string>("");

@@ -490,7 +490,7 @@ export async function registerUser(
 async function assignOwnerRole(
   supabase: ReturnType<typeof createAdminClient>,
   userId: string,
-  tenantId: string
+  _tenantId: string
 ) {
   console.log("[AUTH SERVICE] Assigning Owner role...");
   const { data: ownerRole, error: roleQueryError } = await supabase
@@ -527,7 +527,7 @@ async function assignOwnerRole(
  * Currently disabled for development - users are auto-confirmed after signup
  * TODO: Enable email sending when email provider is configured (SendGrid, Resend, etc.)
  */
-export async function sendVerificationEmail(email: string): Promise<void> {
+export async function sendVerificationEmail(_email: string): Promise<void> {
   console.log(
     "[AUTH SERVICE] Email verification skipped for development.",
     "User was auto-confirmed and can login immediately."

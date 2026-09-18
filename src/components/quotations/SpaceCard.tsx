@@ -96,7 +96,6 @@ export function SpaceCard({
   onDeleteComponent,
   onUpdateComponentDescription,
   onUpdateComponentName,
-  masterData,
   onAddCostItem,
   onUpdateDimensions,
   canViewCosts = false,

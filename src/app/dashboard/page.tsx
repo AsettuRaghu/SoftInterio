@@ -17,12 +17,14 @@ import {
 function AccessDeniedBanner() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [showAccessDenied, setShowAccessDenied] = useState(false);
+  // Read once on mount; the effect below then clears it from the URL so a
+  // refresh does not show the banner again.
+  const [showAccessDenied, setShowAccessDenied] = useState(
+    () => searchParams.get("error") === "access_denied",
+  );
 
   useEffect(() => {
-    const error = searchParams.get("error");
-    if (error === "access_denied") {
-      setShowAccessDenied(true);
+    if (searchParams.get("error") === "access_denied") {
       // Clear the error from URL
       const url = new URL(window.location.href);
       url.searchParams.delete("error");

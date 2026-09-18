@@ -13,7 +13,6 @@ import {
   LeadActivityTypeLabels,
 } from "@/types/leads";
 import { AppTable, type ColumnDef } from "@/components/ui/AppTable";
-import { CalendarIcon } from "@heroicons/react/24/outline";
 
 const ACTIVE_STAGES: LeadStage[] = [
   "new",
@@ -50,28 +49,6 @@ export function LeadsTable({
   emptyState,
   stickyHeader,
 }: LeadsTableProps) {
-  /**
-   * dd-mm-yy, matching the notes table. Built from the parts rather than a
-   * locale format so the padding is stable - en-IN gives "4/9/26", which does
-   * not line up in a column.
-   */
-
-  /**
-   * "8 Sep" - day and month only.
-   *
-   * A follow-up or a task due date is always within a few weeks either side of
-   * today, so the year says nothing and dd-mm-yy costs three characters in a
-   * narrow column for it.
-   */
-  const formatDate = useCallback((dateString: string | null) => {
-    if (!dateString) return "—";
-    return new Date(dateString).toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  }, []);
-
   const getInitials = useCallback((name: string) => {
     return name
       .split(" ")
@@ -298,7 +275,7 @@ export function LeadsTable({
         ),
       },
     ],
-    [formatDate, getInitials]
+    [getInitials]
   );
 
   return (

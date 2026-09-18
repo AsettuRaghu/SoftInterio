@@ -25,7 +25,7 @@ interface POItem {
 
 export default function NewPurchaseOrderPage() {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
+  const [, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);

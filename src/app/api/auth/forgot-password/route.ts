@@ -12,7 +12,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { requestPasswordReset } from "@/lib/auth/service";
 import {
   isPasswordResetRateLimited,
-  getRateLimitInfo,
 } from "@/lib/auth/api-guard";
 
 export async function POST(request: NextRequest) {
@@ -41,7 +40,6 @@ export async function POST(request: NextRequest) {
     // Rate limit by IP AND email to prevent abuse
     const rateLimitKey = `${clientIp}:${email.toLowerCase()}`;
     if (isPasswordResetRateLimited(rateLimitKey)) {
-      const rateLimitInfo = getRateLimitInfo(`pwd-reset:${rateLimitKey}`, 3);
       console.log("[FORGOT PASSWORD API] Rate limited:", rateLimitKey);
 
       // Still return generic success to prevent enumeration

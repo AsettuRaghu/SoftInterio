@@ -25,7 +25,6 @@ import {
   DocumentDuplicateIcon,
   Squares2X2Icon,
   ListBulletIcon,
-  StarIcon,
   TrashIcon,
   PencilIcon,
   EyeIcon,
@@ -64,12 +63,6 @@ const QUALITY_TIER_COLORS: Record<string, string> = {
   basic: "bg-slate-100 text-slate-700",
 };
 
-const QUALITY_TIER_DOT_COLORS: Record<string, string> = {
-  luxury: "bg-purple-500",
-  premium: "bg-blue-500",
-  standard: "bg-green-500",
-  basic: "bg-slate-400",
-};
 
 const QUALITY_TIER_LABELS: Record<string, string> = {
   luxury: "Luxury",
@@ -105,7 +98,7 @@ export default function QuotationTemplatesPage() {
   const canDeleteTemplates = hasPermission("quotations.templates.delete");
   const [templates, setTemplates] = useState<QuotationTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
   const [propertyTypeFilter, setPropertyTypeFilter] = useState<string>("");
   const [qualityTierFilter, setQualityTierFilter] = useState<string>("");
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
@@ -315,15 +308,6 @@ export default function QuotationTemplatesPage() {
     }
   };
 
-  // Format date
-  const formatDate = (dateString: string) => {
-    if (!dateString) return "—";
-    return new Date(dateString).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
 
   // The same shape as every other list: the name in bold, what it is on the
   // line beneath, its status as a pill, and when it was last touched drawn

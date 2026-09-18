@@ -357,7 +357,6 @@ export default function PurchaseOrderDetailPage({
   });
 
   // Receive Goods state
-  const [receiveMode, setReceiveMode] = useState(false);
   const [receivingItems, setReceivingItems] = useState<
     Record<
       string,
@@ -432,22 +431,6 @@ export default function PurchaseOrderDetailPage({
 
     fetchPO();
   }, [id]);
-
-  // Fetch payments (separate function for refresh after adding payment)
-  const fetchPayments = async () => {
-    try {
-      const paymentsResponse = await fetch(
-        `/api/stock/purchase-orders/${id}/payments`
-      );
-      if (paymentsResponse.ok) {
-        const paymentsData = await paymentsResponse.json();
-        setPayments(paymentsData.payments || []);
-        setPaymentSummary(paymentsData.summary || null);
-      }
-    } catch (err) {
-      console.error("Error fetching payments:", err);
-    }
-  };
 
   // Format currency
   const formatCurrency = (amount: number) => {
@@ -604,39 +587,6 @@ export default function PurchaseOrderDetailPage({
     }
   };
 
-  // Initialize receiving items from PO items
-  const initializeReceivingItems = () => {
-    if (!purchaseOrder?.items) return;
-
-    // Calculate previously received quantities
-    const previouslyReceived: Record<string, number> = {};
-    relatedGRNs.forEach((grn) => {
-      if (grn.status === "completed") {
-        (grn.items || []).forEach((item: any) => {
-          previouslyReceived[item.po_item_id] =
-            (previouslyReceived[item.po_item_id] || 0) +
-            Number(item.quantity_accepted);
-        });
-      }
-    });
-
-    const initialItems: Record<string, any> = {};
-    purchaseOrder.items.forEach((item) => {
-      const received = previouslyReceived[item.id] || 0;
-      const pending = item.quantity - received;
-      if (pending > 0) {
-        initialItems[item.id] = {
-          quantity_received: pending,
-          quantity_accepted: pending,
-          quantity_rejected: 0,
-          rejection_reason: "",
-        };
-      }
-    });
-    setReceivingItems(initialItems);
-    setReceiveMode(true);
-  };
-
   // Handle goods receipt submission
   const handleReceiveGoods = async () => {
     const validItems = Object.entries(receivingItems)
@@ -698,7 +648,6 @@ export default function PurchaseOrderDetailPage({
       }
 
       setSuccessMessage("Goods received successfully! PO status updated.");
-      setReceiveMode(false);
       setReceivingItems({});
       setDeliveryNoteNumber("");
       setVehicleNumber("");
@@ -727,7 +676,7 @@ export default function PurchaseOrderDetailPage({
         quantity_rejected: 0,
         rejection_reason: "",
       };
-      let updated = { ...current, [field]: value };
+      const updated = { ...current, [field]: value };
 
       // Enforce max pending quantity for quantity_received
       if (field === "quantity_received" && maxPending !== undefined) {
@@ -860,17 +809,6 @@ export default function PurchaseOrderDetailPage({
     ["dispatched", "acknowledged", "partially_received"].includes(
       purchaseOrder.status
     );
-
-  // Check if we should show receipt history (any status that has had goods received)
-  const showReceiptHistory =
-    purchaseOrder &&
-    [
-      "dispatched",
-      "acknowledged",
-      "partially_received",
-      "fully_received",
-      "closed",
-    ].includes(purchaseOrder.status);
 
   // Check if payments can be made
   const canMakePayment =

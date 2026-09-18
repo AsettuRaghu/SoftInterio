@@ -35,15 +35,13 @@ interface Props {
 
 export function KnownPartnerHint({ phone, email, chosen, onChoose }: Props) {
   const [matches, setMatches] = useState<KnownPartner[]>([]);
+  const digits = phone.replace(/\D/g, "");
+  const mail = email.trim();
+  // Nothing is asked - or shown - until there is a full number or an email.
+  const queryable = digits.length >= 10 || mail.includes("@");
 
   useEffect(() => {
-    if (chosen) return;
-    const digits = phone.replace(/\D/g, "");
-    const mail = email.trim();
-    if (digits.length < 10 && !mail.includes("@")) {
-      setMatches([]);
-      return;
-    }
+    if (chosen || !queryable) return;
     const t = setTimeout(async () => {
       try {
         const q = new URLSearchParams();
@@ -57,7 +55,7 @@ export function KnownPartnerHint({ phone, email, chosen, onChoose }: Props) {
       }
     }, 350);
     return () => clearTimeout(t);
-  }, [phone, email, chosen]);
+  }, [digits, mail, chosen, queryable]);
 
   if (chosen) {
     return (
@@ -73,7 +71,7 @@ export function KnownPartnerHint({ phone, email, chosen, onChoose }: Props) {
       </div>
     );
   }
-  if (matches.length === 0) return null;
+  if (!queryable || matches.length === 0) return null;
   return (
     <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs">
       <p className="font-medium text-amber-800 mb-1">We may already know this person</p>

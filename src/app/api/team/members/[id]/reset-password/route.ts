@@ -11,7 +11,6 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { generateSecurePassword } from "@/lib/auth/password-validation";
@@ -39,7 +38,6 @@ export async function PUT(
     }
 
     const { user: currentUser } = guard;
-    const supabase = await createClient();
     const adminClient = createAdminClient();
 
     // Parse request body for optional password
@@ -48,7 +46,7 @@ export async function PUT(
     try {
       const body = await request.json();
       providedPassword = body.password;
-    } catch (e) {
+    } catch {
       // Empty body is fine, will generate password
     }
 

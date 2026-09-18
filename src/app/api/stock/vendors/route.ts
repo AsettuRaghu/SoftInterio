@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
-import type { VendorFilters, CreateVendorInput } from "@/types/stock";
+import type { CreateVendorInput } from "@/types/stock";
 
 // GET /api/stock/vendors - List vendors with filters
 export async function GET(request: NextRequest) {
@@ -14,7 +14,6 @@ export async function GET(request: NextRequest) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
-    const { user } = guard;
     const supabase = await createClient();
 
     // Parse query parameters

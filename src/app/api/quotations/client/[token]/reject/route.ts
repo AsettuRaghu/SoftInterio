@@ -81,7 +81,7 @@ export async function POST(
         ip_address: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip"),
         user_agent: request.headers.get("user-agent"),
       });
-    } catch (e) {
+    } catch {
       // Ignore activity logging errors
     }
 

@@ -195,7 +195,7 @@ function outputToConsole(entry: LogEntry): void {
  * Send log to external service (placeholder for future integration)
  * Can integrate with Sentry, LogRocket, Datadog, etc.
  */
-function sendToExternalService(entry: LogEntry): void {
+function sendToExternalService(_entry: LogEntry): void {
   // TODO: Integrate with external logging service
   // Example integrations:
   //

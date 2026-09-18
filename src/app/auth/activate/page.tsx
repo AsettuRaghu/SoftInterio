@@ -54,7 +54,7 @@ export default function ActivatePage() {
             <div className="text-sm text-blue-800">
               <p className="font-medium mb-1">Important:</p>
               <p>
-                The activation link will expire in 24 hours. If you don't see
+                The activation link will expire in 24 hours. If you don’t see
                 the email, please check your spam folder.
               </p>
             </div>
@@ -62,7 +62,7 @@ export default function ActivatePage() {
         </div>
 
         <div className="space-y-3">
-          <p className="text-sm text-slate-600">Didn't receive the email?</p>
+          <p className="text-sm text-slate-600">Didn’t receive the email?</p>
 
           <Button variant="outline" className="w-full" size="lg">
             Resend Activation Email

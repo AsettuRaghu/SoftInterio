@@ -30,7 +30,6 @@ import {
   TrashIcon,
   DocumentDuplicateIcon,
   ScaleIcon,
-  CheckBadgeIcon,
 } from "@heroicons/react/24/outline";
 import type { QuotationTermsClause } from "@/types/quotations";
 

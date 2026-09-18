@@ -2,7 +2,6 @@
 
 import React from "react";
 import { Modal, ModalBody } from "@/components/ui/Modal";
-import { XMarkIcon } from "@heroicons/react/24/outline";
 
 // ============================================
 // Status Colors & Labels

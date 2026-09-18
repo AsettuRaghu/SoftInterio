@@ -473,52 +473,6 @@ export function DayPanel({
   );
 }
 
-export function UpNextPanel({ events, onOpen }: { events: CalendarEventLite[]; onOpen: (e: CalendarEventLite) => void }) {
-  const now = Date.now();
-  const next = [...events]
-    .filter((e) => !e.is_completed && new Date(e.scheduled_at).getTime() >= now)
-    .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
-  const first = next[0];
-  const groups = new Map<string, CalendarEventLite[]>();
-  for (const e of next.slice(0, 12)) {
-    const k = keyOfIso(e.scheduled_at);
-    groups.set(k, [...(groups.get(k) ?? []), e]);
-  }
-  return (
-    <section className="bg-white rounded-lg border border-slate-200">
-      <div className="px-4 py-3 border-b border-slate-100">
-        <h3 className="text-sm font-semibold text-slate-900">Up next</h3>
-        {first ? (
-          <p className="text-xs text-slate-500 truncate">
-            <span className={cn("font-medium", styleOf(first).text)}>{first.title}</span> · {relative(first.scheduled_at)}
-          </p>
-        ) : (
-          <p className="text-xs text-slate-400">Nothing coming up in this period.</p>
-        )}
-      </div>
-      {groups.size > 0 && (
-        <div className="p-3 space-y-3">
-          {[...groups.entries()].map(([k, list]) => {
-            const d = new Date(list[0].scheduled_at);
-            return (
-              <div key={k}>
-                <p className="text-[10px] uppercase tracking-wider text-slate-400 mb-1">
-                  {sameDay(d, new Date()) ? "Today" : d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
-                </p>
-                <div className="space-y-1.5">
-                  {list.map((e) => (
-                    <AgendaRow key={e.id} event={e} onOpen={() => onOpen(e)} />
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
-}
-
 export function OverduePanel({ events, onOpen }: { events: CalendarEventLite[]; onOpen: (e: CalendarEventLite) => void }) {
   if (events.length === 0) return null;
   return (

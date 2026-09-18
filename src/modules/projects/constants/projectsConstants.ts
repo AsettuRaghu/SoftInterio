@@ -3,8 +3,6 @@ import type {
   ProjectPriority,
   ProjectPaymentStatus,
   ProjectCategory,
-  ProjectType,
-  ProjectPropertyType,
 } from "@/types/projects";
 import type { FilterOption } from "@/components/ui/AppTable";
 

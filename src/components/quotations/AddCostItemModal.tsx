@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useMemo } from "react";
 import { CostItem, CostItemCategory, getMeasurementInfo } from "./types";
 
 interface AddCostItemModalProps {
@@ -23,13 +23,13 @@ export function AddCostItemModal({
   const categoryRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const listContainerRef = useRef<HTMLDivElement>(null);
 
-  // Reset state when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setSearchQuery("");
-      setActiveCategory(null);
-    }
-  }, [isOpen]);
+  // The search and the active category are cleared as the dialog closes, so
+  // it opens fresh next time.
+  const close = () => {
+    setSearchQuery("");
+    setActiveCategory(null);
+    onClose();
+  };
 
   // Group cost items by category
   const itemsByCategory = useMemo(() => {
@@ -104,7 +104,7 @@ export function AddCostItemModal({
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={close}
             className="text-slate-400 hover:text-slate-600"
           >
             <svg
@@ -242,7 +242,7 @@ export function AddCostItemModal({
                   d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
-              <p className="text-sm">No cost items found for "{searchQuery}"</p>
+              <p className="text-sm">No cost items found for “{searchQuery}”</p>
               <button
                 onClick={() => setSearchQuery("")}
                 className="text-sm text-amber-600 hover:text-amber-700 mt-2"
@@ -341,7 +341,7 @@ export function AddCostItemModal({
             Click on an item to add it to the component
           </p>
           <button
-            onClick={onClose}
+            onClick={close}
             className="px-4 py-2 text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg hover:bg-slate-50"
           >
             Done

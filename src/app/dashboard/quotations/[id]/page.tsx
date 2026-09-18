@@ -168,22 +168,6 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> =
     sent: { bg: "bg-green-100", text: "text-green-700", dot: "bg-green-500" },
   };
 
-const CATEGORY_COLORS: Record<string, string> = {
-  carcass: "bg-amber-100 text-amber-700",
-  shutter: "bg-blue-100 text-blue-700",
-  hardware: "bg-purple-100 text-purple-700",
-  finish: "bg-pink-100 text-pink-700",
-  labour: "bg-green-100 text-green-700",
-  accessories: "bg-indigo-100 text-indigo-700",
-  countertop: "bg-teal-100 text-teal-700",
-  appliances: "bg-orange-100 text-orange-700",
-  default: "bg-slate-100 text-slate-600",
-};
-
-function getCategoryColor(categorySlug?: string): string {
-  if (!categorySlug) return CATEGORY_COLORS.default;
-  return CATEGORY_COLORS[categorySlug.toLowerCase()] || CATEGORY_COLORS.default;
-}
 
 const formatCurrency = (amount: number | undefined | null) => {
   if (amount === undefined || amount === null) return "₹0";
@@ -203,57 +187,6 @@ const formatDate = (dateString: string | undefined | null) => {
   });
 };
 
-// Measurement unit conversion factors to feet
-const UNIT_TO_FEET: Record<string, number> = {
-  mm: 0.00328084,
-  cm: 0.0328084,
-  inch: 0.0833333,
-  ft: 1,
-};
-
-// Calculate sqft from length and width
-const calculateSqft = (
-  length: number | null | undefined,
-  width: number | null | undefined,
-  unit: string = "mm"
-): number => {
-  const toFeet = UNIT_TO_FEET[unit] || UNIT_TO_FEET.mm;
-  const lengthInFeet = (length || 0) * toFeet;
-  const widthInFeet = (width || 0) * toFeet;
-  return lengthInFeet * widthInFeet;
-};
-
-// Convert length to feet
-const convertToFeet = (value: number, unit: string = "mm"): number => {
-  const toFeet = UNIT_TO_FEET[unit] || UNIT_TO_FEET.mm;
-  return value * toFeet;
-};
-
-// Get display value for qty/area based on unit_code and dimensions
-const getDisplayQtyArea = (
-  item: QuotationLineItem
-): { value: string; unit: string } => {
-  const unitCode = item.unit_code?.toLowerCase() || "";
-  const measureUnit = item.measurement_unit || "mm"; // Default to mm as that's most common input
-
-  // Area-based items (sqft)
-  if (unitCode === "sqft" && item.length && item.width) {
-    const sqft = calculateSqft(item.length, item.width, measureUnit);
-    return { value: sqft.toFixed(2), unit: "sqft" };
-  }
-
-  // Length-based items (rft)
-  if (unitCode === "rft" && item.length) {
-    const rft = convertToFeet(item.length, measureUnit);
-    return { value: rft.toFixed(2), unit: "rft" };
-  }
-
-  // Quantity-based items (nos, set, etc.)
-  return {
-    value: item.quantity?.toFixed(2) || "0.00",
-    unit: item.unit_code || "",
-  };
-};
 
 // ============================================================================
 // Main Component
@@ -411,6 +344,7 @@ export default function QuotationDetailPage() {
       });
       return { id: space.id, name: space.name, total, sqft: totalSqft };
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the named function is defined in this component and closes over the same values already listed
   }, [spaces]);
 
   /**

@@ -153,7 +153,7 @@ export function InviteTeamMemberModal({
               </ul>
             </div>
             <p className="text-xs text-slate-500 mt-2">
-              You'll share this password with the user after they're added.
+              You’ll share this password with the user after they’re added.
             </p>
           </div>
 
@@ -272,7 +272,7 @@ export function InviteTeamMemberModal({
             <div className="text-xs text-blue-700">
               <p className="font-medium">What happens next?</p>
               <p className="text-blue-600 mt-0.5">
-                The user account will be created immediately. You'll receive the
+                The user account will be created immediately. You’ll receive the
                 login credentials to share with them.
               </p>
             </div>

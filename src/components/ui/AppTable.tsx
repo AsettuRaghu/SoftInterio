@@ -890,8 +890,9 @@ export function AppTable<T>({
   containerClassName,
   stickyHeader = true,
 }: AppTableProps<T>) {
-  // Ensure data is always an array
-  const safeData = data ?? [];
+  // Ensure data is always an array - memoised so the empty fallback is one
+  // value across renders and the memos below do not recompute on it.
+  const safeData = useMemo(() => data ?? [], [data]);
 
   // Selection state
   const allSelected = useMemo(
@@ -1108,18 +1109,14 @@ export function useAppTablePagination<T = unknown>(
   data: T[] = [],
   initialPageSize = 10
 ) {
-  const [page, setPageState] = useState(1);
+  const [requestedPage, setPageState] = useState(1);
   const [pageSize, setPageSizeState] = useState(initialPageSize);
 
   const total = data.length;
   const totalPages = Math.ceil(total / pageSize);
-
-  // Auto-adjust page if out of bounds
-  useEffect(() => {
-    if (page > totalPages && totalPages > 0) {
-      setPageState(totalPages);
-    }
-  }, [page, totalPages]);
+  // Clamped rather than corrected in an effect: a filter that shrinks the
+  // data must not strand the reader on a page that no longer exists.
+  const page = totalPages > 0 ? Math.min(requestedPage, totalPages) : requestedPage;
 
   const pagination: PaginationState = useMemo(
     () => ({ page, pageSize, total }),

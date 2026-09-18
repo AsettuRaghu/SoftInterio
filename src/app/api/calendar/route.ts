@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
       .eq("user_id", user.id);
 
     const tenantId = user.tenantId;
-    let allEvents: any[] = [];
+    const allEvents: any[] = [];
 
     // Lead meetings. Excluded for source="project": a project asking for its
     // calendar was previously handed EVERY lead meeting in the tenant, because

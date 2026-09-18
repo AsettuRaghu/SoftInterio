@@ -64,7 +64,7 @@ const QUALITY_TIER_OPTIONS = [
 export default function BrandsPage() {
   const [allBrands, setAllBrands] = useState<Brand[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
   const [pagination, setPagination] = useState<Pagination>({

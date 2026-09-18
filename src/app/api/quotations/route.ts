@@ -349,12 +349,6 @@ export async function POST(request: NextRequest) {
 
     // Get lead/project details for client info
     let clientName = "";
-    let clientEmail = "";
-    let clientPhone = "";
-    let propertyName = "";
-    let propertyAddress = "";
-    let propertyType = null;
-    let carpetArea = null;
     let clientId = null;
 
     if (lead_id) {
@@ -387,12 +381,6 @@ export async function POST(request: NextRequest) {
       }
 
       clientName = lead.client?.name || lead.client_name || "";
-      clientEmail = lead.client?.email || lead.client_email || "";
-      clientPhone = lead.client?.phone || lead.client_phone || "";
-      propertyName = lead.property?.name || lead.property_name || "";
-      propertyAddress = lead.property?.address || lead.property_address || "";
-      propertyType = lead.property?.property_type || lead.property_type;
-      carpetArea = lead.property?.carpet_area || lead.carpet_area;
       clientId = lead.client_id;
     }
 
@@ -409,12 +397,6 @@ export async function POST(request: NextRequest) {
 
       if (project) {
         clientName = project.client?.name || clientName;
-        clientEmail = project.client?.email || clientEmail;
-        clientPhone = project.client?.phone || clientPhone;
-        propertyName = project.property?.name || propertyName;
-        propertyAddress = project.property?.address || propertyAddress;
-        propertyType = project.property?.property_type || propertyType;
-        carpetArea = project.property?.carpet_area || carpetArea;
         clientId = project.client_id || clientId;
       }
     }
@@ -500,9 +482,6 @@ export async function POST(request: NextRequest) {
       clientName = typedClient.name;
     }
 
-    // Create the quotation
-    // Determine title based on whether it's linked or standalone
-    const isStandalone = !lead_id && !project_id;
     const quotationTitle = `Quotation for ${clientName || "New Client"}`;
 
     const { data: newQuotation, error: createError } = await supabase

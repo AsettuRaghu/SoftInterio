@@ -1,19 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, use, useCallback } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeftIcon,
   BuildingOffice2Icon,
-  PauseIcon,
-  XMarkIcon,
-  PlusIcon,
-  LinkIcon,
 } from "@heroicons/react/24/outline";
 import {
   Project,
-  ProjectNote,
   ProjectDetailTab,
   ProjectCategoryLabels,
   ProjectStatusLabels,
@@ -22,7 +15,6 @@ import {
   PageLayout,
   PageHeader,
   PageContent,
-  StatusBadge,
 } from "@/components/ui/PageLayout";
 import {
   TasksTab,
@@ -33,9 +25,7 @@ import {
   TimelineTab,
   QuotationsTab,
 } from "@/modules/projects/components";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
-import { formatCurrency as formatCurrencyUtil } from "@/modules/projects/utils";
 import { SpacesTab } from "@/components/property/SpacesTab";
 import { buttonVariants } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
@@ -63,7 +53,6 @@ type TabKey = ProjectDetailTab;
 export default function ProjectDetailPage({ params }: PageProps) {
   const { id } = use(params);
   const router = useRouter();
-  const { user } = useCurrentUser();
   const { hasAnyPermission } = useUserPermissions();
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,11 +63,11 @@ export default function ProjectDetailPage({ params }: PageProps) {
   // Project editing state
 
   // Tab counts and data
-  const [documentsCount, setDocumentsCount] = useState(0);
+  const [, setDocumentsCount] = useState(0);
   const [documents, setDocuments] = useState<any[]>([]);
-  const [tasksCount, setTasksCount] = useState(0);
+  const [, setTasksCount] = useState(0);
   const [tasks, setTasks] = useState<any[]>([]);
-  const [notesCount, setNotesCount] = useState(0);
+  const [, setNotesCount] = useState(0);
   const [notes, setNotes] = useState<any[]>([]);
   // Targeted refetch for the notes composer - reloading the whole project
   // page after saving a note would be needlessly heavy.
@@ -92,7 +81,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
       setNotesCount(list.length);
     }
   }, [id]);
-  const [calendarCount, setCalendarCount] = useState(0);
+  const [, setCalendarCount] = useState(0);
   const [activities, setActivities] = useState<any[]>([]);
   // The lead page loads these from the same endpoint and hands them to its
   // Tasks tab. The project page passed teamMembers={undefined}, so assigning a
@@ -126,7 +115,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
   const [teamMembers, setTeamMembers] = useState<
     { id: string; name: string; email: string; avatar_url?: string }[]
   >([]);
-  const [quotationsCount, setQuotationsCount] = useState(0);
+  const [, setQuotationsCount] = useState(0);
   const [quotations, setQuotations] = useState<any[]>([]);
 
   // One flag, because there is one fetch. There used to be six - tabDataLoading,
@@ -201,6 +190,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
     fetchCounts();
     void fetchTeamMembers();
     void fetchPlaybook();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs only when the listed values change; the fetch functions are defined in this component
   }, [id]);
 
 
@@ -863,7 +853,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 <div className="mb-3 rounded-lg border border-slate-200 bg-white p-4">
                   <p className="mb-3 text-xs text-slate-500">
                     This project has no plan yet. Choose the playbook it
-                    should follow; its steps become the project's tasks.
+                    should follow; its steps become the project’s tasks.
                   </p>
                   <PlaybooksPanel
                     relatedType="project"

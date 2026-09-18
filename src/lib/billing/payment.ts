@@ -476,7 +476,7 @@ export async function handleWebhookEvent(
 
     switch (event) {
       case "payment.authorized": {
-        const { order_id, id: paymentId } = payload.payment;
+        const { order_id } = payload.payment;
 
         // Update payment record
         const { error } = await adminSupabase
@@ -496,7 +496,7 @@ export async function handleWebhookEvent(
       }
 
       case "payment.failed": {
-        const { order_id, id: paymentId, error_description } = payload.payment;
+        const { order_id, error_description } = payload.payment;
 
         // Update payment record with error
         const { error } = await adminSupabase

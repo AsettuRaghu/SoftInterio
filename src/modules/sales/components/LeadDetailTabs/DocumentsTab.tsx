@@ -16,7 +16,6 @@ interface DocumentsTabProps {
 
 export default function DocumentsTab({
   documents,
-  isLoadingDocuments,
   leadId,
   leadClosed,
   onPreviewDocument,

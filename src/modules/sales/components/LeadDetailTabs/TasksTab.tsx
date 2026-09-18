@@ -2,7 +2,6 @@
 
 import React from "react";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { useUserPermissions } from "@/hooks/useUserPermissions";
 import TaskTableReusable from "@/components/tasks/TaskTableReusable";
 import type { Task } from "@/types/tasks";
 

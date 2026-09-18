@@ -4,61 +4,27 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type {
-  Lead,
   LeadActivity,
-  LeadActivityType,
   LeadNote,
-  LeadStageHistory,
-  LeadFamilyMember,
-  BudgetRange,
-  ServiceType,
-  LeadSource,
-  DisqualificationReason,
-  LostReason,
-  PropertyType,
-  PropertyCategory,
-  PropertySubtype,
 } from "@/types/leads";
-import type { Task, TaskPriority, TaskStatus } from "@/types/tasks";
-import type { DocumentWithUrl, Document } from "@/types/documents";
-import {
-  TaskPriorityColors,
-  TaskStatusColors,
-  TaskStatusLabels,
-  TaskPriorityLabels,
-} from "@/types/tasks";
+
+
 import { CreateTaskModal, EditTaskModal } from "@/components/tasks";
 import { Toast } from "@/components/ui/Toast";
 import {
   AddDocumentModal,
-  DocumentList,
   DocumentPreviewModal,
 } from "@/components/documents";
 import {
   LeadStageLabels,
   LeadStageColors,
-  PropertyTypeLabels,
-  PropertyCategoryLabels,
-  PropertySubtypeLabels,
-  PropertyTypesByCategory,
-  PropertySubtypesByCategory,
-  ServiceTypeLabels,
-  LeadSourceLabels,
-  BudgetRangeLabels,
-  LeadActivityTypeLabels,
-  DisqualificationReasonLabels,
-  LostReasonLabels,
-  ValidStageTransitions,
-  getRequiredFieldsForTransition,
 } from "@/types/leads";
 import {
   PageLayout,
   PageHeader,
   PageContent,
-  StatusBadge,
 } from "@/components/ui/PageLayout";
 import { UserGroupIcon } from "@heroicons/react/24/outline";
-import { MeetingCard } from "@/modules/sales/components";
 import { SpacesTab } from "@/components/property/SpacesTab";
 import { AddNoteModal, EditNoteModal } from "@/modules/sales/components";
 import { EditLeadModal, type EditFormData } from "@/modules/sales/components";
@@ -83,10 +49,7 @@ import {
   QuotationsTab,
 } from "@/modules/sales/components/LeadDetailTabs";
 import {
-  formatCurrency,
-  formatDate,
   formatDateTime,
-  getInitials,
 } from "@/modules/sales/utils/formatters";
 
 export default function LeadDetailPage() {
@@ -100,7 +63,6 @@ export default function LeadDetailPage() {
     stageHistory,
     tasks,
     documents,
-    familyMembers,
     quotations,
     teamMembers,
     previewDocument,
@@ -110,9 +72,7 @@ export default function LeadDetailPage() {
     isSaving,
     revisingId,
     setPreviewDocument,
-    setActivities,
     setNotes,
-    setTasks,
     fetchTasks,
     fetchNotes,
     fetchActivities,
@@ -121,7 +81,6 @@ export default function LeadDetailPage() {
     updateLeadFromStageTransition,
     handleRevise,
     handleDocumentDelete,
-    handleAssigneeChange,
   } = useLeadDetail();
 
   // Local UI state
@@ -190,16 +149,6 @@ export default function LeadDetailPage() {
     }
   };
 
-  // Handle assignee change
-  const handleAssigneeChangeWithError = async (userId: string | null) => {
-    try {
-      await handleAssigneeChange(userId);
-    } catch (err) {
-      setNotice(
-        err instanceof Error ? err.message : "Failed to update assignee"
-      );
-    }
-  };
 
   // Fetch documents when tab changes
   useEffect(() => {
@@ -208,10 +157,10 @@ export default function LeadDetailPage() {
     }
   }, [activeTab, refetchDocumentsForTab]);
 
-  // Populate edit form when modal opens and lead data is available
-  useEffect(() => {
-    if (showEditModal && lead) {
-      setEditForm({
+  // The form is filled from the lead at the moment the dialog is opened.
+  const openEditModal = () => {
+    if (!lead) return;
+    setEditForm({
         client_name: lead.client?.name || "",
         phone: lead.client?.phone || "",
         email: lead.client?.email || "",
@@ -231,9 +180,9 @@ export default function LeadDetailPage() {
         target_end_date: lead.target_end_date || "",
         priority: lead.priority || "",
         assigned_to: lead.assigned_to || "",
-      });
-    }
-  }, [showEditModal, lead]);
+    });
+    setShowEditModal(true);
+  };
 
   // Loading state
   if (isLoading) {
@@ -287,8 +236,6 @@ export default function LeadDetailPage() {
   }
 
   const stageColors = LeadStageColors[lead.stage];
-  const possibleTransitions = ValidStageTransitions[lead.stage] || [];
-  const isTerminalStage = possibleTransitions.length === 0;
   const leadClosed = isLeadClosed(lead.stage);
 
   return (
@@ -369,7 +316,7 @@ export default function LeadDetailPage() {
           !leadClosed && (
             <div className="flex gap-3">
               <button
-                onClick={() => setShowEditModal(true)}
+                onClick={openEditModal}
                 className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm"
               >
                 Edit Lead
@@ -409,7 +356,7 @@ export default function LeadDetailPage() {
             lead={lead}
             activities={activities}
             leadClosed={leadClosed}
-            onEditClick={() => setShowEditModal(true)}
+            onEditClick={openEditModal}
             onAddMeetingClick={() => {
               setEditingMeeting(null);
               setShowMeetingModal(true);

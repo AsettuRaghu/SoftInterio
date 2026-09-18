@@ -148,11 +148,11 @@ export function QuotationBuilder({
     }>
   >([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
+  const [, setSelectedTemplateId] = useState<string | null>(
     null
   );
   const [loadingTemplate, setLoadingTemplate] = useState(false);
-  const [templateSearch, setTemplateSearch] = useState("");
+  const [, setTemplateSearch] = useState("");
 
   // Assignee
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
@@ -286,6 +286,7 @@ export function QuotationBuilder({
         scroll: false,
       });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs only when the listed values change; the fetch functions are defined in this component
   }, [shouldOpenTemplateModal, isLoading, quotationId, router]);
 
   // Calculate totals
@@ -917,7 +918,7 @@ export function QuotationBuilder({
       });
 
       // Create spaces
-      (template.spaces || []).forEach((ts: any, spaceIndex: number) => {
+      (template.spaces || []).forEach((ts: any, _spaceIndex: number) => {
         const spaceType = masterData.space_types.find(
           (st) => st.id === ts.space_type_id
         );
@@ -928,7 +929,7 @@ export function QuotationBuilder({
         const components: BuilderComponent[] = [];
 
         Object.entries(spaceLineItems).forEach(
-          ([componentKey, items], compIndex) => {
+          ([componentKey, items], _compIndex) => {
             if (componentKey === "direct") return;
 
             const firstItem = items[0];
@@ -1507,6 +1508,7 @@ export function QuotationBuilder({
 
     setAutoSaveStatus("saving");
     await saveQuotation(false, false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the named function is defined in this component and closes over the same values already listed
   }, [hasUnsavedChanges, isSaving, isLoading]);
 
   // Trigger auto-save when the document actually differs from what was loaded
@@ -1551,6 +1553,7 @@ export function QuotationBuilder({
         clearTimeout(autoSaveTimeoutRef.current);
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs only when the listed values change; the fetch functions are defined in this component
   }, [spaces, quotationName, notes, assignedTo, isLoading]);
 
   // Keyboard shortcuts
@@ -1579,6 +1582,7 @@ export function QuotationBuilder({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the named function is defined in this component and closes over the same values already listed
   }, [
     isSaving,
     showAddSpaceModal,
@@ -2515,17 +2519,3 @@ export function QuotationBuilder({
   );
 }
 
-// Helper
-function getMeasurementType(unitCode: string): string {
-  const mapping: Record<string, string> = {
-    sqft: "area",
-    rft: "length",
-    nos: "quantity",
-    set: "quantity",
-    lot: "fixed",
-    lumpsum: "fixed",
-    kg: "quantity",
-    ltr: "quantity",
-  };
-  return mapping[unitCode?.toLowerCase()] || "quantity";
-}

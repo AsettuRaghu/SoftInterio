@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 
@@ -12,7 +11,6 @@ export async function GET(request: NextRequest) {
     }
 
     const { user: authUser } = guard;
-    const supabase = await createClient();
     const adminClient = createAdminClient();
 
     // Get user's tenant - use admin client to bypass RLS
@@ -107,7 +105,7 @@ export async function GET(request: NextRequest) {
     // Now get roles for each member separately - use admin client
     const memberIds = members?.map((m) => m.id) || [];
 
-    let userRolesMap: Record<string, any[]> = {};
+    const userRolesMap: Record<string, any[]> = {};
 
     if (memberIds.length > 0) {
       // Get user_roles for all members
@@ -205,7 +203,6 @@ export async function DELETE(request: NextRequest) {
     }
 
     const { user: authUser } = guard;
-    const supabase = await createClient();
     const adminClient = createAdminClient();
 
     // Get member ID from query params

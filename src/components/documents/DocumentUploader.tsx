@@ -181,6 +181,7 @@ export function DocumentUploader({
         }
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the named function is defined in this component and closes over the same values already listed
     [
       linkedType,
       linkedId,

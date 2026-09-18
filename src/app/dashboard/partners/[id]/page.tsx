@@ -81,7 +81,6 @@ export default function PartnerPage() {
 
 function PartnerDetail() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
   const { hasPermission } = useUserPermissions();
   const canEdit = hasPermission("partners.edit");
   const { confirm, confirmDialog } = useConfirm();
@@ -107,6 +106,8 @@ function PartnerDetail() {
     setLoading(false);
   }, [id]);
   useEffect(() => {
+    // setState happens after the fetch resolves, not synchronously; the rule cannot see through `load`.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 

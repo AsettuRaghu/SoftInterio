@@ -69,9 +69,6 @@ export default function TaskList({
   emptyMessage = "No tasks found",
   onTaskClick,
   onAddClick,
-  showHeader = true,
-  headerTitle = "Tasks",
-  headerSubtitle = "Manage and track your work",
   expandable = false,
   showSubtasks = false,
   allowEdit = true,
@@ -111,7 +108,7 @@ export default function TaskList({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    hasSubtasks && toggleExpand(task.id);
+                    if (hasSubtasks) toggleExpand(task.id);
                   }}
                   className={`w-5 h-5 flex items-center justify-center rounded transition-colors shrink-0 ${
                     hasSubtasks

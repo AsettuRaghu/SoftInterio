@@ -5,78 +5,47 @@ import React, {
   useEffect,
   useCallback,
   useMemo,
-  useRef,
 } from "react";
 import { useRouter } from "next/navigation";
 import type {
   Lead,
-  LeadStage,
-  PropertyType,
-  PropertyCategory,
-  PropertySubtype,
-  ServiceType,
-  LeadSource,
-  BudgetRange,
 } from "@/types/leads";
 import {
   LeadActivityTypeLabels,
   LeadStageLabels as StageLabels,
-  LeadStageColors as StageColors,
-  PropertyTypeLabels as PropLabels,
-  PropertyCategoryLabels as CatLabels,
-  PropertySubtypeLabels as SubtypeLabels,
-  PropertyTypesByCategory,
-  PropertySubtypesByCategory,
-  ServiceTypeLabels as SvcLabels,
-  LeadSourceLabels as SrcLabels,
-  BudgetRangeLabels,
 } from "@/types/leads";
 import {
   PageLayout,
   PageHeader,
   PageContent,
-  StatBadge,
 } from "@/components/ui/PageLayout";
 import {
-  AppTable,
   useAppTableSort,
   useAppTablePagination,
   useAppTableSearch,
-  type FilterOption,
 } from "@/components/ui/AppTable";
 import { uiLogger } from "@/lib/logger";
 import { LeadsFilterBar, LeadsTable } from "@/modules/sales/components";
 import {
   UserGroupIcon,
   PlusIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-  CheckIcon,
-  XMarkIcon,
-  CalendarIcon,
-  UserIcon,
 } from "@heroicons/react/24/outline";
 import {
   ACTIVE_STAGES,
-  STAGE_TABS,
-  BUDGET_OPTIONS,
   PRIORITY_ORDER,
   PRIORITY_LABELS,
   BUDGET_ORDER,
   getLeadStatusLabel,
-  getLeadStatusColor,
   type TeamMember,
 } from "@/modules/sales/constants/leadsConstants";
-import {
-  InlineDateEditor,
-  InlineBudgetEditor,
-} from "@/modules/sales/components/InlineEditors";
+
+
 import { CreateLeadModal } from "@/modules/sales/components/CreateLeadModal";
 
 export default function LeadsPage() {
   const router = useRouter();
   const [allLeads, setAllLeads] = useState<Lead[]>([]);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [, setTeamMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([
@@ -228,67 +197,6 @@ export default function LeadsPage() {
     fetchTeamMembers();
   }, [fetchLeads, fetchTeamMembers]);
 
-  // Inline update handler for editable fields
-  const handleInlineUpdate = useCallback(
-    async (leadId: string, field: string, value: string | number | null) => {
-      try {
-        uiLogger.info(`Updating lead ${leadId} field ${field}`, {
-          module: "LeadsPage",
-          action: "inline_update",
-        });
-
-        const response = await fetch(`/api/sales/leads/${leadId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ [field]: value }),
-        });
-
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || "Failed to update");
-        }
-
-        // Update local state
-        setAllLeads((prev) =>
-          prev.map((lead) => {
-            if (lead.id !== leadId) return lead;
-
-            // Special handling for assigned_to - update the user object too
-            if (field === "assigned_to") {
-              const assignedMember = value
-                ? teamMembers.find((m) => m.id === value)
-                : undefined;
-              return {
-                ...lead,
-                assigned_to: value as string | null,
-                assigned_user: assignedMember
-                  ? {
-                      id: assignedMember.id,
-                      name: assignedMember.name,
-                      avatar_url: assignedMember.avatar_url || null,
-                    }
-                  : undefined,
-              };
-            }
-
-            return { ...lead, [field]: value };
-          })
-        );
-
-        uiLogger.info(`Successfully updated lead ${leadId}`, {
-          module: "LeadsPage",
-          action: "inline_update_success",
-        });
-      } catch (err) {
-        uiLogger.error("Error updating lead inline", err as Error, {
-          module: "LeadsPage",
-        });
-        // Optionally show a toast or error message
-        throw err; // Re-throw so the inline editor can handle it
-      }
-    },
-    [teamMembers]
-  );
 
   // Process leads: filter by stage, search, sort
   const processedLeads = useMemo(() => {
@@ -367,36 +275,10 @@ export default function LeadsPage() {
   const { paginatedData, pagination, setPage, setPageSize } =
     useAppTablePagination(processedLeads, 25);
 
-  // Calculate tab counts
-  const tabsWithCounts: FilterOption[] = useMemo(() => {
-    return STAGE_TABS.map((tab) => ({
-      ...tab,
-      count:
-        tab.value === "active"
-          ? allLeads.filter((l) => ACTIVE_STAGES.includes(l.stage)).length
-          : allLeads.filter((l) => l.stage === tab.value).length,
-    }));
-  }, [allLeads]);
 
   // Format helpers - using useCallback for stable references
 
-  const formatDate = useCallback((dateString: string | null) => {
-    if (!dateString) return "—";
-    return new Date(dateString).toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  }, []);
 
-  const getInitials = useCallback((name: string) => {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  }, []);
 
   // Column definitions
   // The column definitions live in LeadsTable, which owns its own columns and

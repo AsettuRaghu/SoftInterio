@@ -6,11 +6,9 @@ import { copyScopeToQuotation } from "@/lib/quotations/scope-to-quotation";
 import type { StageTransitionInput, LeadStage } from "@/types/leads";
 import {
   isValidStageTransition,
-  getRequiredFieldsForTransition,
   LeadStageLabels,
 } from "@/types/leads";
 import { logLeadActivity } from "@/lib/activity/log";
-import { generateUniqueProjectNumber } from "@/utils/project-number-generator";
 import { requestLogger } from "@/lib/logger/request";
 import { leadAccess, canWriteLead } from "@/lib/leads/access";
 import {
@@ -117,8 +115,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Get required fields for this transition
-    const requirements = getRequiredFieldsForTransition(fromStage, to_stage);
     const missingFields: string[] = [];
 
     // Helper function to check qualified stage requirements
@@ -674,7 +670,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
           // The project points at the largest approved quotation; every
           // approved one is attached below.
-          let winningQuotationId = approvedQuotations[0]?.id || null;
+          const winningQuotationId = approvedQuotations[0]?.id || null;
 
           log.info("Creating project from won lead", {
             leadId: id,

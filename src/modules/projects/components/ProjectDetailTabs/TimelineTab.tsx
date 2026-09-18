@@ -28,11 +28,9 @@ interface TimelineTabProps {
 
 
 export default function TimelineTab({
-  projectId,
   activities,
   projectClosed = false,
   onRefresh,
-  onCountChange,
 }: TimelineTabProps) {
   // Filter activities to include only timeline-relevant items
   const timelineActivities = (activities || []).filter(

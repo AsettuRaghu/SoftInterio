@@ -36,7 +36,6 @@ import {
   DisqualificationReasonLabels,
   LostReasonLabels,
   ValidStageTransitions,
-  getRequiredFieldsForTransition,
 } from "@/types/leads";
 
 interface StageTransitionFormData {
@@ -312,10 +311,6 @@ export function StageTransitionModal({
       setIsSubmitting(false);
     }
   };
-
-  const requiredFields = selectedStage
-    ? getRequiredFieldsForTransition(lead.stage, selectedStage)
-    : { fields: [], labels: [] };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

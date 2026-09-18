@@ -29,12 +29,10 @@ interface CalendarTabProps {
 
 export default function CalendarTab({
   projectId,
-  activities,
   projectClosed = false,
   onAddEventClick,
   onEditEvent,
   onRefresh,
-  onCountChange,
 }: CalendarTabProps) {
   // Same reasoning as the lead tab: filtering activities here would show only
   // lead_activities, hiding standalone events and note follow-ups that

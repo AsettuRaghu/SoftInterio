@@ -30,7 +30,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
-    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
 
@@ -537,7 +536,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     // Update task
-    const { data: task, error: updateError } = await supabase
+    const { error: updateError } = await supabase
       .from("tasks")
       .update(updateData)
       .eq("id", id)

@@ -8,7 +8,7 @@ import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 // To cancel a PO, use DELETE /api/stock/purchase-orders/[id] or PATCH status to "cancelled"
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  {}: { params: Promise<{ id: string }> }
 ) {
   // Protect API route (even deprecated routes should be authenticated)
   const guard = await protectApiRoute(request, {

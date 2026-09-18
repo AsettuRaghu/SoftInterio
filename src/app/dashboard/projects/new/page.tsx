@@ -105,6 +105,7 @@ function NewProjectForm() {
         selectLead(lead);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs only when the listed values change; the fetch functions are defined in this component
   }, [leadIdParam, wonLeads]);
 
   const fetchTeamMembers = async () => {

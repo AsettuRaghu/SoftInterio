@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/utils/cn";
@@ -73,19 +73,16 @@ export function Sidebar({ isExpanded, setIsExpanded }: SidebarProps) {
     return null;
   };
 
-  // When sidebar expands after being collapsed, only expand the active menu
-  useEffect(() => {
-    if (isExpanded && !wasExpanded) {
-      // Sidebar just expanded - collapse all and only expand active
-      const activeMenu = getActiveParentMenu();
-      if (activeMenu) {
-        setExpandedMenus(new Set([activeMenu]));
-      } else {
-        setExpandedMenus(new Set());
-      }
-    }
+  // When the sidebar expands after being collapsed, only the active menu is
+  // open. Adjusted during render from the previous value, as React advises
+  // for state that follows a prop, rather than a beat later in an effect.
+  if (isExpanded !== wasExpanded) {
     setWasExpanded(isExpanded);
-  }, [isExpanded, pathname]);
+    if (isExpanded) {
+      const activeMenu = getActiveParentMenu();
+      setExpandedMenus(activeMenu ? new Set([activeMenu]) : new Set());
+    }
+  }
 
   // Check if a menu item is directly active (exact match only)
   const isMenuDirectlyActive = (

@@ -1,14 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   MagnifyingGlassIcon,
   XMarkIcon,
-  FunnelIcon,
   RectangleStackIcon,
   CheckCircleIcon,
   SparklesIcon,
-  CurrencyRupeeIcon,
 } from "@heroicons/react/24/outline";
 
 // Template quality tier styling

@@ -39,7 +39,6 @@ export default function TasksTab({
   onEditTask,
   onAddTaskClick,
   onRefresh,
-  onCountChange,
 }: ProjectTasksTabProps) {
   const { user } = useCurrentUser();
 

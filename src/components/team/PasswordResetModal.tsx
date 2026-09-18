@@ -53,7 +53,7 @@ export function PasswordResetModal({
                 Password Reset
               </h2>
               <p className="text-sm text-slate-500">
-                {memberName}'s password has been reset
+                {memberName}’s password has been reset
               </p>
             </div>
           </div>

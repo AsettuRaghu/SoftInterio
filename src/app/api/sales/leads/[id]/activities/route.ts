@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
-import type { LeadActivityType, MeetingType, MeetingAttendee } from "@/types/leads";
+import type { LeadActivityType } from "@/types/leads";
 import { requestLogger } from "@/lib/logger/request";
 
 interface RouteParams {

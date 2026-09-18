@@ -231,8 +231,9 @@ export async function GET(request: NextRequest) {
 
     // RLS scopes these to the caller's tenant. The four sets that grow without
     // bound are paged; the calendar is already bounded to seven days.
-    // eslint-disable-next-line prefer-const -- history, quotations and tasks are
-    // narrowed below when the caller may only see their own leads.
+    // History, quotations and tasks are narrowed below when the caller may
+    // only see their own leads.
+    // eslint-disable-next-line prefer-const
     let [leads, history, quotations, { data: users }, tasks, { data: events }] =
       await Promise.all([
         pageAll<LeadRow>((a, b) =>

@@ -13,7 +13,6 @@ export async function GET(request: NextRequest) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
-    const { user } = guard;
     const supabase = await createClient();
 
     const { data: tags, error } = await supabase

@@ -42,6 +42,7 @@ export function ProjectLeadDropdown({
     if (isOpen && items.length === 0) {
       fetchItems();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs only when the listed values change; the fetch functions are defined in this component
   }, [isOpen]);
 
   const fetchItems = async () => {

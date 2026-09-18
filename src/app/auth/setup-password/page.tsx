@@ -210,7 +210,7 @@ export default function SetupPasswordPage() {
 
     try {
       // Update the user's password
-      const { data: updateData, error: updateError } =
+      const { error: updateError } =
         await supabase.auth.updateUser({
           password: password,
           data: {

@@ -13,28 +13,18 @@ import {
   useAppTableSort,
   useAppTablePagination,
   useAppTableSearch,
-  type FilterOption,
 } from "@/components/ui/AppTable";
 import { BuildingOffice2Icon, PlusIcon } from "@heroicons/react/24/outline";
 import {
   ProjectsFilterBar,
   ProjectsTable,
 } from "@/modules/projects/components";
-import {
-  PROJECT_STATUS_COLORS,
-  PROJECT_STATUS_OPTIONS,
-  ACTIVE_STATUSES,
-} from "@/modules/projects/constants";
+
+
 import { useTenantSettings } from "@/hooks/useTenantSettings";
 import { buttonVariants } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
 
-const PROJECT_STATUS_TABS: FilterOption[] = PROJECT_STATUS_OPTIONS.map(
-  (option) => ({
-    ...option,
-    count: 0,
-  })
-);
 
 export default function ProjectsPage() {
   const { settings: tenantSettings } = useTenantSettings();
@@ -204,8 +194,6 @@ export default function ProjectsPage() {
   }, [
     allProjects,
     searchValue,
-    selectedStatuses,
-    selectedPhases,
     filterData,
     filterByStatus,
     filterByPhase,
@@ -217,18 +205,6 @@ export default function ProjectsPage() {
   const { paginatedData, pagination, setPage, setPageSize } =
     useAppTablePagination(processedProjects, 25);
 
-  // Calculate tab counts
-  const tabsWithCounts: FilterOption[] = useMemo(() => {
-    return PROJECT_STATUS_TABS.map((tab) => ({
-      ...tab,
-      count:
-        tab.value === "active"
-          ? allProjects.filter((p) =>
-              ACTIVE_STATUSES.includes(p.status as ProjectStatus)
-            ).length
-          : allProjects.filter((p) => p.status === tab.value).length,
-    }));
-  }, [allProjects]);
 
   return (
     <PageLayout isLoading={isLoading} loadingText="Loading projects...">

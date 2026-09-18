@@ -17,7 +17,6 @@ export function CredentialsModal({
   email,
   password,
   loginUrl,
-  shareMessage,
   onClose,
   onCopyAll,
 }: CredentialsModalProps) {

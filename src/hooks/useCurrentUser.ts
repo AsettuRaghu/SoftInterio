@@ -31,7 +31,7 @@ let globalUser: CurrentUser | null = null;
 let globalIsLoading = true;
 let globalError: string | null = null;
 let hasFetched = false;
-let subscribers: Set<() => void> = new Set();
+const subscribers: Set<() => void> = new Set();
 
 function notifySubscribers() {
   subscribers.forEach((callback) => callback());
@@ -80,7 +80,7 @@ export function useCurrentUser(): UseCurrentUserReturn {
         }
 
         // Get user details from users table
-        const { data: userData, error: userError } = await supabase
+        const { data: userData } = await supabase
           .from("users")
           .select(`
             id,

@@ -27,7 +27,6 @@ interface CalendarTabProps {
 }
 
 export default function CalendarTab({
-  activities,
   leadId,
   leadClosed,
   onAddEventClick,

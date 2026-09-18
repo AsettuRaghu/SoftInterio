@@ -52,7 +52,7 @@ export default function EditPurchaseOrderModal({
   onSuccess,
   purchaseOrder,
 }: EditPurchaseOrderModalProps) {
-  const [isLoading, setIsLoading] = useState(false);
+  const [, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);

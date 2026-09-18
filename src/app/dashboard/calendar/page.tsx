@@ -11,7 +11,6 @@ import {
   UserGroupIcon,
   ClockIcon,
   CheckCircleIcon,
-  ExclamationCircleIcon,
   PlusIcon,
   XMarkIcon,
   LinkIcon,
@@ -142,9 +141,9 @@ const MEETING_TYPE_LABELS: Record<string, string> = {
 
 export default function CalendarPage() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [upcomingEvents, setUpcomingEvents] = useState<CalendarEvent[]>([]);
+  const [, setUpcomingEvents] = useState<CalendarEvent[]>([]);
   const [overdueEvents, setOverdueEvents] = useState<CalendarEvent[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [currentDate, setCurrentDate] = useState(new Date());

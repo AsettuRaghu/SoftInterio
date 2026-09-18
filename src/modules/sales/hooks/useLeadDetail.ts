@@ -243,7 +243,7 @@ export function useLeadDetail() {
         setIsSaving(false);
       }
     },
-    [leadId, lead, fetchLead]
+    [leadId, lead]
   );
 
   // Update lead from stage transition (soft update)

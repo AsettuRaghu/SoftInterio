@@ -81,7 +81,7 @@ export function SpacesTab({
   readOnly = false,
   onChanged,
 }: SpacesTabProps) {
-  const { confirm, confirmDialog } = useConfirm();
+  const { confirmDialog } = useConfirm();
   const [items, setItems] = useState<PropertyScopeItem[]>([]);
   const [spaceTypes, setSpaceTypes] = useState<SpaceTypeOption[]>([]);
   const [componentTypes, setComponentTypes] = useState<SpaceTypeOption[]>([]);
@@ -328,22 +328,6 @@ export function SpacesTab({
   const removeItem = async (item: PropertyScopeItem) => {
     if (!propertyId) return;
     const kids = childrenOf(item.id);
-    const message = kids.length
-      ? `Remove "${item.name}" and the ${kids.length} component${
-          kids.length === 1 ? "" : "s"
-        } inside it?`
-      : `Remove "${item.name}"?`;
-    if (
-      !(await confirm({
-        title: kids.length ? `Remove "${item.name}" and its contents?` : `Remove "${item.name}"?`,
-        message: kids.length
-          ? `The ${kids.length} component${kids.length === 1 ? "" : "s"} inside it will be removed too.`
-          : undefined,
-        confirmLabel: "Remove",
-      }))
-    ) {
-      return;
-    }
 
     // Children go with the parent in the database, so they go here too.
     const removedIds = new Set([item.id, ...kids.map((k) => k.id)]);

@@ -25,7 +25,6 @@ export default function NotesTab({
   onDeleteNote,
   onRefresh,
   onNoteUpdated,
-  formatDateTime,
 }: NotesTabProps) {
   return (
     <NotesTableReusable

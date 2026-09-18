@@ -449,7 +449,6 @@ export function PrintFormatModal({
                 <div className="mt-3 pl-6 space-y-2">
                   {coverPreview ? (
                     <div className="relative inline-block">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={coverPreview}
                         alt="Cover page"

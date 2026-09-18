@@ -42,7 +42,7 @@ let globalState: UserPermissionsState = {
 };
 let globalFetchPromise: Promise<void> | null = null;
 let hasFetched = false;
-let subscribers: Set<() => void> = new Set();
+const subscribers: Set<() => void> = new Set();
 
 function notifySubscribers() {
   subscribers.forEach((callback) => callback());

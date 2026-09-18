@@ -7,7 +7,7 @@ import type {
   CreateTaskTemplateInput,
   CreateTaskTemplateItemInput,
 } from "@/types/tasks";
-import { TaskPriorityLabels, TaskTemplateCategoryLabels } from "@/types/tasks";
+import { TaskTemplateCategoryLabels } from "@/types/tasks";
 import { PriorityBadge } from "./ui";
 
 // Icons

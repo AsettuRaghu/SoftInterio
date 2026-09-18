@@ -117,7 +117,7 @@ function POStatusStepper({ status }: { status: POStatus }) {
       "fully_received",
     ];
     const currentIndex = statusOrder.indexOf(status);
-    let stepIndex = statusOrder.indexOf(stepKey);
+    const stepIndex = statusOrder.indexOf(stepKey);
 
     if (stepKey === "sent_to_vendor" && status === "acknowledged") {
       return "completed";
@@ -191,7 +191,7 @@ export default function PurchaseOrdersPage() {
     []
   );
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [statusUpdateId, setStatusUpdateId] = useState<string | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);

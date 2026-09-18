@@ -27,7 +27,6 @@ export function PrioritySelector({
   onChange,
   className = "",
 }: PrioritySelectorProps) {
-  const selected = priorities.find((p) => p.value === value) || priorities[2];
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>

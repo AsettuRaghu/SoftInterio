@@ -1083,7 +1083,6 @@ function DocGlyph({ doc, icon, size }: { doc: DocumentWithLinked; icon: React.Re
   const tone = GLYPH_TONE[getFileTypeIcon(doc.file_type, doc.file_extension)] ?? GLYPH_TONE.default;
   const box = size === "lg" ? "aspect-[4/3] w-full" : "w-11 h-11";
   if (isImage) {
-    // eslint-disable-next-line @next/next/no-img-element
     return <img src={doc.signed_url} alt="" className={box + " object-cover rounded-md bg-slate-100"} loading="lazy" />;
   }
   return (

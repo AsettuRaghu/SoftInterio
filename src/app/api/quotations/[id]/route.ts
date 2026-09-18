@@ -59,7 +59,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
-    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
 
@@ -270,7 +269,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 // Helper function to organize quotation data hierarchically
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function organizeQuotationData(
   spaces: any[],
   components: any[],
@@ -349,11 +347,8 @@ function organizeQuotationData(
 
 // Helper function to create a new version of a quotation
 async function createNewVersion(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   existingQuotation: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   body: any,
   userId: string,
   versionNotes?: string,

@@ -6,7 +6,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { getVerifiedUser } from "@/lib/auth/verify-session";
 import { NextResponse, type NextRequest } from "next/server";
-import { getSubscriptionStatus, hasAccessToplatform, getAccessBlockedMessage } from "@/lib/billing/subscription-status";
+import { getSubscriptionStatus } from "@/lib/billing/subscription-status";
 import type { TenantSubscriptionData } from "@/lib/billing/subscription-status";
 import { accessLogger } from "@/lib/activity-logger";
 import { mergePermissions, type RoleGrant, type UserGrant } from "@/lib/auth/permissions";
@@ -54,7 +54,7 @@ function getRoutePermissionForPath(pathname: string): RoutePermission | null {
 }
 
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
+  const supabaseResponse = NextResponse.next({
     request,
   });
 

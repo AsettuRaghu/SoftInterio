@@ -26,7 +26,6 @@ import {
   DocumentTextIcon,
   ArrowPathIcon,
   PlusIcon,
-  XMarkIcon,
   PencilIcon,
   EyeIcon,
 } from "@heroicons/react/24/outline";
@@ -36,7 +35,6 @@ import { LeadStageLabels, type LeadStage } from "@/types/leads";
 import { ProjectStatusLabels, type ProjectStatus } from "@/types/projects";
 import {
   QUOTATION_STATUS_OPTIONS,
-  ACTIVE_QUOTATION_STATUSES,
 } from "@/utils/quotations";
 
 // Types for modal
@@ -123,8 +121,6 @@ const isEditableStatus = (q: { status: string; lead_stage?: string | null }) =>
   !["sent", "approved", "rejected", "superseded"].includes(q.status) &&
   !["won", "lost", "disqualified"].includes(q.lead_stage || "");
 
-// Active statuses constant
-const ACTIVE_STATUSES = ACTIVE_QUOTATION_STATUSES;
 
 export default function QuotationsListPage() {
   const { confirm, confirmDialog } = useConfirm();
@@ -138,7 +134,7 @@ export default function QuotationsListPage() {
   const router = useRouter();
   const [allQuotations, setAllQuotations] = useState<Quotation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
   const [selectedLeadStatuses, setSelectedLeadStatuses] = useState<
     Set<"active" | "inactive">
   >(new Set(["active"] as ("active" | "inactive")[]));
@@ -466,7 +462,6 @@ export default function QuotationsListPage() {
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const shouldCreate = searchParams.get("create") === "true";
-    const leadId = searchParams.get("lead_id");
 
     if (shouldCreate && !showCreateModal) {
       setShowCreateModal(true);
@@ -519,23 +514,7 @@ export default function QuotationsListPage() {
     }).format(amount);
   };
 
-  // Format date
-  const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return "—";
-    return new Date(dateString).toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  };
 
-  // Check if quotation is expiring soon (within 7 days)
-  const isExpiringSoon = (validUntil: string | undefined) => {
-    if (!validUntil) return false;
-    const diff = new Date(validUntil).getTime() - new Date().getTime();
-    const days = diff / (1000 * 60 * 60 * 24);
-    return days > 0 && days <= 7;
-  };
 
   // Handle creating a revision
   const handleRevise = async (quotationId: string, e: React.MouseEvent) => {
@@ -561,14 +540,6 @@ export default function QuotationsListPage() {
     }
   };
 
-  // Selection handlers
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedIds(new Set(processedQuotations.map((q) => q.id)));
-    } else {
-      setSelectedIds(new Set());
-    }
-  };
 
   const handleSelectOne = (id: string, checked: boolean) => {
     const newSelected = new Set(selectedIds);

@@ -19,7 +19,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return createErrorResponse(guard.error!, guard.statusCode!);
     }
 
-    const { user } = guard;
     const { id } = await params;
     const supabase = await createClient();
 
