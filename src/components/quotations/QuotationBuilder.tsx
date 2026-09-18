@@ -106,8 +106,6 @@ export function QuotationBuilder({
   // What this business measures in (Settings → Config): every new component
   // and line starts on it; any row can still be changed.
   const defaultUnit = useDefaultMeasurementUnit();
-  // The finish named on each scope row, so matching cost items come first.
-  const [rowFinishes, setRowFinishes] = useState<Record<string, string>>({});
   const [scopeNotice, setScopeNotice] = useState<{ message: string; variant: "success" | "info" | "error" } | null>(null);
   const [quotationName, setQuotationName] = useState("");
   const [version, setVersion] = useState(1);
@@ -259,12 +257,6 @@ export function QuotationBuilder({
         setCanViewCosts(!!data.can_view_costs);
         setLoadError(null);
 
-        if (q.lead_id || q.project_id) {
-          fetch(`/api/quotations/${quotationId}/scope-finishes`)
-            .then((r) => (r.ok ? r.json() : null))
-            .then((b) => b?.data && setRowFinishes(b.data))
-            .catch(() => undefined);
-        }
       } catch (error) {
         console.error("Error loading quotation:", error);
         setLoadError(
@@ -1541,7 +1533,7 @@ export function QuotationBuilder({
       const fresh = await fetch(`/api/quotations/${quotationId}`);
       const data = await fresh.json();
       if (fresh.ok) setSpaces(toBuilderSpaces(data.spaces));
-      const added = (json.result?.spaces ?? 0) + (json.result?.components ?? 0);
+      const added = (json.result?.spaces ?? 0) + (json.result?.components ?? 0) + (json.result?.lines ?? 0);
       setScopeNotice({ message: json.message, variant: added > 0 ? "success" : "info" });
     } catch (e) {
       setScopeNotice({ message: e instanceof Error ? e.message : "Could not bring in the scope", variant: "error" });
@@ -2470,12 +2462,6 @@ export function QuotationBuilder({
           costItems={
             masterData.quotation_cost_items || masterData.cost_items || []
           }
-          preferredFinishes={(() => {
-            const sp = spaces.find((x) => x.id === showAddCostItemModal.spaceId);
-            const comp = sp?.components.find((c) => c.id === showAddCostItemModal.componentId);
-            const own = [comp?.scopeItemId, sp?.scopeItemId].map((k) => (k ? rowFinishes[k] : null)).find(Boolean);
-            return own ? [own] : [];
-          })()}
           categories={
             masterData.quotation_cost_item_categories ||
             masterData.cost_item_categories ||

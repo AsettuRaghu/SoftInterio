@@ -36,13 +36,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   const result = await copyScopeToQuotation(supabase, user.tenantId, id, quotation.lead_id, quotation.project_id);
-  const added = result.spaces + result.components;
+  const added = result.spaces + result.components + result.lines;
   const message =
     added === 0
       ? result.skipped
         ? `Nothing new to bring in; ${result.skipped} row${result.skipped === 1 ? " is" : "s are"} not ours to price.`
         : "Nothing new - the quotation already has everything in the scope."
-      : `Brought in ${result.spaces} space${result.spaces === 1 ? "" : "s"} and ${result.components} component${result.components === 1 ? "" : "s"}${
+      : `Brought in ${result.spaces} space${result.spaces === 1 ? "" : "s"}, ${result.components} component${result.components === 1 ? "" : "s"} and ${result.lines} chosen item${result.lines === 1 ? "" : "s"}${
           result.skipped ? `; ${result.skipped} left out as not ours` : ""
         }.`;
   return NextResponse.json({ success: true, result, message });

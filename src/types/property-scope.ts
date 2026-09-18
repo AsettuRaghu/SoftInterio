@@ -74,6 +74,10 @@ export const SCOPE_OWNER_LABELS: Record<ScopeOwner, string> = {
 export const scopeOwnerLabel = (owner: ScopeOwner | null | undefined) => SCOPE_OWNER_LABELS[owner ?? "us"];
 
 export interface PropertyScopeItem {
+  /** Set on a cost-item row under a component: which catalogue item, and
+   *  whether it is being considered or has been chosen. Never a price. */
+  cost_item_id?: string | null;
+  choice_status?: "considering" | "chosen" | null;
   /** The finish they want here, when it differs from the brief. */
   preferred_finish?: string | null;
   /** For a client/vendor row: what is arriving from them, and by when. */

@@ -533,7 +533,7 @@ export async function POST(request: NextRequest) {
     // Otherwise, build it from the property's Spaces if asked to. Templates
     // win when both are given: a template is a deliberate choice of contents,
     // while scope is the fallback structure.
-    let generated: ScopeCopyResult = { spaces: 0, components: 0, skipped: 0, already: 0 };
+    let generated: ScopeCopyResult = { spaces: 0, components: 0, lines: 0, skipped: 0, already: 0 };
     if (!template_id && from_scope && newQuotation) {
       generated = await copyScopeToQuotation(
         supabase,
@@ -551,7 +551,7 @@ export async function POST(request: NextRequest) {
       description: template_id
         ? "Created from a template"
         : from_scope
-        ? `Started from the scope - ${generated.spaces} space(s), ${generated.components} component(s)${
+        ? `Started from the scope - ${generated.spaces} space(s), ${generated.components} component(s), ${generated.lines} item(s)${
             generated.skipped ? `; ${generated.skipped} not ours to price` : ""
           }`
         : undefined,

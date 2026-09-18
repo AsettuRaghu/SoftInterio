@@ -295,8 +295,13 @@ export function ScopeTab({
   const roots = items
     .filter((i) => !i.parent_id && !i.component_type_id)
     .sort(byOrder);
+  // Cost-item rows (a component's chosen items) are not listed here; the
+  // room sheet shows them. They still travel in `items` for the panel.
   const childrenOf = (id: string) =>
-    items.filter((i) => i.parent_id === id).sort(byOrder);
+    items.filter((i) => i.parent_id === id && !i.cost_item_id).sort(byOrder);
+  /** The chosen items of a component, for its row's one-line summary. */
+  const chosenOf = (id: string) =>
+    items.filter((i) => i.parent_id === id && i.cost_item_id && i.choice_status === "chosen").map((i) => i.name);
 
   /**
    * Saves one field. Edits are sent on blur rather than on every keystroke -
@@ -611,6 +616,14 @@ export function ScopeTab({
             {item.space_type?.is_container && (
               <span className="shrink-0 text-[10px] font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5">
                 container
+              </span>
+            )}
+            {item.component_type_id && chosenOf(item.id).length > 0 && (
+              <span
+                className="shrink-0 max-w-[16rem] truncate text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5"
+                title={chosenOf(item.id).join(" · ")}
+              >
+                {chosenOf(item.id).join(" · ")}
               </span>
             )}
             {!item.component_type_id && !readOnly && (
@@ -1033,6 +1046,7 @@ export function ScopeTab({
           readOnly={readOnly}
           focusComponentId={openTarget.componentId}
           namePrefix={namePrefix}
+          onReload={() => void load()}
           onClose={() => setOpenTarget(null)}
           onNavigate={(i) => setOpenTarget({ spaceId: i.id, componentId: null })}
           onPatch={patchItem}

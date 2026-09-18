@@ -49,11 +49,17 @@ them); the lead's Notes tab is for anything not about a space. Walkthrough
 goes space by space; a space's components open inside it, each with its own details,
 references, discussion and changes.
 
+## The third level: cost items (2026-09-18)
+Space → Component → Cost item, the quotation's own tree. A component's
+options are the cost items the quotation templates list for its type,
+grouped by category; on the room sheet one tap = considering, two = chosen,
+three = clear. Never a price on the sheet. Chosen items become line items
+when the quotation starts from the scope or *Bring in from scope* runs.
+
 ## How the scope is used downstream
 - the quotation starts from it and *Bring in from scope* adds what is
   missing (rows not ours never come in);
-- a finish named on a space or component lists matching cost items first
-  in the builder (a name match until finish is a catalogue attribute).
+- a component's chosen cost items arrive as its line items, sized from it.
 
 ## The journey, and what each stage needs
 

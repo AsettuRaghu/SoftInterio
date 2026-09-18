@@ -121,6 +121,22 @@ unassigned (edit dialog and PATCH). There is no brief any more: services wanted 
 the spaces contain, finishes live on the space or component, budget and
 timeline are the lead's.
 
+**The scope is the quotation's tree: Space → Component → Cost item**
+(2026-09-18, decided with the user). A cost item is a third kind of row in
+`property_scope_items` - `cost_item_id` set, hanging off its component,
+`choice_status` `considering | chosen`, one row per item per component -
+holding WHICH items, never a rate, a quantity or a total; the quotation
+holds how much. The options a component offers are the cost items the
+tenant's quotation templates list for its component type
+(`…/scope/[itemId]/options`), grouped by cost category - nothing new to
+configure. `copyScopeToQuotation` turns **chosen** items into line items
+under the matched component, sized from it at the catalogue's rate (the
+builder's own arithmetic, from `components/quotations/types`); considering
+items stay behind. The list shows the chosen items as a chip on the
+component row and never lists cost-item rows themselves. The finish chips
+and the "preferred finish" ordering in the builder went with this; a finish
+is now one option category among the others.
+
 **Each space opens out as a room sheet** (`ScopeItemPanel`, the
 speech-bubble on the row, or **Walkthrough** from the header with ←/→).
 No tabs - a tabbed version with the same four headings at two depths was
@@ -128,8 +144,7 @@ tried and read as noise (2026-09-18). The room has its pictures (Documents
 with `linked_type = scope_item`, parent-linked to the lead or project so
 they sit in its Documents tab, named `Client_Lead_Space_RefN`; library
 entries pinned via `scope_item_library_pins`) and a thread; each component
-inside it has the finish they want (a finish belongs on a wall unit, never
-on "Master Bedroom"), for a client/vendor row what is arriving and by when
+inside it has its options (above), for a client/vendor row what is arriving and by when
 (`supplied_detail`, `supplied_expected_by` - never priced), its pictures and
 its thread. Threads (`scope_item_comments`) fold behind their counts; an
 entry can be a decision, and "make a task" creates one on the lead or

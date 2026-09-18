@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { calculateSqft, convertToFeet, getMeasurementInfo, type MeasurementUnit } from "@/components/quotations/types";
 
 /**
  * Brings the property's scope into a quotation - the rooms and components
@@ -28,6 +29,10 @@ import { createClient } from "@/lib/supabase/server";
  *    row's "length" is its second face dimension.
  *  - `metadata.measurement_status` is carried so the builder can say a size
  *    is still rough.
+ *  - A component's CHOSEN cost items (the third level of the scope) become
+ *    its line items, at the catalogue's rate and sized from the component;
+ *    items merely being considered do not come across. A line already
+ *    present for that cost item is left alone.
  */
 
 type Row = Record<string, unknown> & {
@@ -37,6 +42,8 @@ type Row = Record<string, unknown> & {
   component_type_id: string | null;
   name: string;
   scope_owner: string | null;
+  cost_item_id: string | null;
+  choice_status: string | null;
   measurement_status: string | null;
   measurement_unit: string | null;
   length: number | null;
@@ -48,6 +55,8 @@ type Row = Record<string, unknown> & {
 export interface ScopeCopyResult {
   spaces: number;
   components: number;
+  /** Chosen cost items copied as line items. */
+  lines: number;
   /** Rows not ours to price, left out. */
   skipped: number;
   /** Rows already in the quotation, left alone. */
@@ -63,7 +72,7 @@ export async function copyScopeToQuotation(
   leadId: string | null,
   projectId: string | null,
 ): Promise<ScopeCopyResult> {
-  const empty: ScopeCopyResult = { spaces: 0, components: 0, skipped: 0, already: 0 };
+  const empty: ScopeCopyResult = { spaces: 0, components: 0, lines: 0, skipped: 0, already: 0 };
 
   try {
     // Scope hangs off the property, which both a lead and a project point at.
@@ -88,7 +97,7 @@ export async function copyScopeToQuotation(
         .order("display_order", { ascending: true }),
       supabase
         .from("quotation_spaces")
-        .select("id, name, space_type_id, display_order, metadata, components:quotation_components(id, name, component_type_id, metadata)")
+        .select("id, name, space_type_id, display_order, metadata, components:quotation_components(id, name, component_type_id, width, height, metadata, lines:quotation_line_items(quotation_cost_item_id))")
         .eq("quotation_id", quotationId),
     ]);
     const scope = (scopeRaw ?? []) as Row[];
@@ -99,18 +108,27 @@ export async function copyScopeToQuotation(
     const spaceByTypeName = new Map<string, string>();
     const compScopeIds = new Set<string>();
     const compByTypeName = new Set<string>();
+    // Where each scope component already lives, with the cost items it holds.
+    const qcompByScopeId = new Map<string, { id: string; width: number | null; height: number | null; unit: string; lines: Set<string> }>();
+    const qcompByTypeName = new Map<string, { id: string; width: number | null; height: number | null; unit: string; lines: Set<string> }>();
     let maxOrder = -1;
     for (const qs of (existingSpaces ?? []) as Array<{
       id: string; name: string; space_type_id: string | null; display_order: number | null;
       metadata: { scope_item_id?: string } | null;
-      components: Array<{ id: string; name: string; component_type_id: string | null; metadata: { scope_item_id?: string } | null }> | null;
+      components: Array<{ id: string; name: string; component_type_id: string | null; width: number | null; height: number | null; metadata: { scope_item_id?: string; measurement_unit?: string } | null; lines: Array<{ quotation_cost_item_id: string | null }> | null }> | null;
     }>) {
       if (qs.metadata?.scope_item_id) spaceByScopeId.set(qs.metadata.scope_item_id, qs.id);
       spaceByTypeName.set(`${qs.space_type_id ?? ""}::${qs.name.trim().toLowerCase()}`, qs.id);
       maxOrder = Math.max(maxOrder, qs.display_order ?? 0);
       for (const c of qs.components ?? []) {
-        if (c.metadata?.scope_item_id) compScopeIds.add(c.metadata.scope_item_id);
-        compByTypeName.add(`${qs.id}::${c.component_type_id ?? ""}::${c.name.trim().toLowerCase()}`);
+        const info = { id: c.id, width: c.width, height: c.height, unit: c.metadata?.measurement_unit ?? "mm", lines: new Set((c.lines ?? []).map((l) => l.quotation_cost_item_id).filter(Boolean) as string[]) };
+        if (c.metadata?.scope_item_id) {
+          compScopeIds.add(c.metadata.scope_item_id);
+          qcompByScopeId.set(c.metadata.scope_item_id, info);
+        }
+        const key = `${qs.id}::${c.component_type_id ?? ""}::${c.name.trim().toLowerCase()}`;
+        compByTypeName.add(key);
+        qcompByTypeName.set(key, info);
       }
     }
 
@@ -164,15 +182,20 @@ export async function copyScopeToQuotation(
     }
 
     const compRows: Array<{ r: Row; spaceId: string }> = [];
+    // Scope component id -> quotation component (existing or new) for the lines.
+    const targetByScopeComp = new Map<string, { id: string; width: number | null; height: number | null; unit: string; lines: Set<string> }>();
     for (const r of scope) {
-      if (!r.component_type_id || !r.parent_id) continue;
+      if (!r.component_type_id || !r.parent_id || r.cost_item_id) continue;
       const spaceId = quotationSpaceByScopeId.get(r.parent_id);
       if (!spaceId) continue; // its space was not ours, or is not in the quotation
       if (!OURS(r.scope_owner)) {
         result.skipped += 1;
         continue;
       }
-      if (compScopeIds.has(r.id) || compByTypeName.has(`${spaceId}::${r.component_type_id}::${r.name.trim().toLowerCase()}`)) {
+      const key = `${spaceId}::${r.component_type_id}::${r.name.trim().toLowerCase()}`;
+      const existingComp = qcompByScopeId.get(r.id) ?? qcompByTypeName.get(key);
+      if (existingComp) {
+        targetByScopeComp.set(r.id, existingComp);
         result.already += 1;
         continue;
       }
@@ -203,7 +226,66 @@ export async function copyScopeToQuotation(
         )
         .select("id");
       if (error) console.error("Error copying scope components:", error);
-      else result.components = inserted?.length ?? 0;
+      else {
+        result.components = inserted?.length ?? 0;
+        compRows.forEach(({ r }, i) => {
+          if (inserted?.[i]) targetByScopeComp.set(r.id, { id: inserted[i].id, width: r.width, height: r.length, unit: r.measurement_unit ?? "mm", lines: new Set() });
+        });
+      }
+    }
+
+    // The third level: chosen cost items become line items, sized from the
+    // component at the catalogue's rate. Considering-only items stay behind.
+    const chosen = scope.filter((r) => r.cost_item_id && r.choice_status === "chosen" && r.parent_id && targetByScopeComp.has(r.parent_id));
+    const wantedIds = [...new Set(chosen.map((r) => r.cost_item_id as string))];
+    if (wantedIds.length) {
+      const { data: costItems } = await supabase
+        .from("quotation_cost_items")
+        .select("id, name, unit_code, default_rate, company_cost, vendor_cost")
+        .in("id", wantedIds);
+      const byId = new Map((costItems ?? []).map((c) => [c.id as string, c]));
+      const lineRows: Record<string, unknown>[] = [];
+      for (const r of chosen) {
+        const target = targetByScopeComp.get(r.parent_id as string)!;
+        const ci = byId.get(r.cost_item_id as string);
+        if (!ci || target.lines.has(ci.id)) {
+          if (ci) result.already += 1;
+          continue;
+        }
+        const unit = (target.unit || "mm") as MeasurementUnit;
+        const kind = getMeasurementInfo(ci.unit_code).type;
+        const rate = Number(ci.default_rate) || 0;
+        // The same arithmetic the builder uses; a measured line follows the
+        // component's size until somebody types its own.
+        const amount =
+          kind === "area" ? calculateSqft(target.width, target.height, unit) * rate
+          : kind === "length" ? convertToFeet(target.width || 0, unit) * rate
+          : kind === "fixed" ? rate
+          : rate;
+        lineRows.push({
+          quotation_id: quotationId,
+          quotation_component_id: target.id,
+          quotation_cost_item_id: ci.id,
+          name: ci.name,
+          length: kind === "area" || kind === "length" ? target.width : null,
+          width: kind === "area" ? target.height : null,
+          quantity: 1,
+          unit_code: ci.unit_code,
+          rate,
+          amount: Math.round(amount * 100) / 100,
+          measurement_unit: unit,
+          company_cost: ci.company_cost ?? null,
+          vendor_cost: ci.vendor_cost ?? null,
+          display_order: target.lines.size + lineRows.filter((l) => l.quotation_component_id === target.id).length,
+          metadata: { follows_component: kind === "area" || kind === "length", scope_item_id: r.id },
+        });
+        target.lines.add(ci.id);
+      }
+      if (lineRows.length) {
+        const { data: inserted, error } = await supabase.from("quotation_line_items").insert(lineRows).select("id");
+        if (error) console.error("Error copying scope cost items:", error);
+        else result.lines = inserted?.length ?? 0;
+      }
     }
 
     return result;

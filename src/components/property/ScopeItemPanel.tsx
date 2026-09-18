@@ -9,9 +9,10 @@
  *
  *   the room       pictures (Documents filed under the lead or project,
  *                  tagged `space: …`; library entries pinned) and a thread
- *   each component the finish they want - a finish belongs on a wall unit
- *                  or a wallpaper, never on "Master Bedroom"; for a client/
- *                  vendor row what is arriving and by when; pictures; thread
+ *   each component its options - the cost items the quotation templates
+ *                  list for its type, considered or chosen, never priced
+ *                  here; for a client/vendor row what is arriving and by
+ *                  when; pictures; thread
  *
  * Threads fold behind their counts. A thread entry can be a decision, and
  * "needs rework" becomes a task - that is where rework lives. The change log
@@ -36,7 +37,7 @@ import {
 import { StarIcon as StarSolidIcon } from "@heroicons/react/24/solid";
 import { cn } from "@/utils/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { COMMON_FINISHES, scopeOwnerLabel, type PropertyScopeItem } from "@/types/property-scope";
+import { scopeOwnerLabel, type PropertyScopeItem } from "@/types/property-scope";
 import { ScopeDiscussion } from "./ScopeDiscussion";
 import { MediaViewer, type MediaItem } from "@/components/ui/MediaViewer";
 
@@ -112,9 +113,111 @@ function Thread({
   );
 }
 
+/**
+ * What a component can carry - the cost items the business's quotation
+ * templates list for its type, grouped by category - and what has been
+ * picked. One tap: considering (outlined). Second: chosen (filled). Third:
+ * clear. No prices here: this sheet is shown with the customer; the builder
+ * prices what was chosen.
+ */
+interface OptionGroup {
+  category: { id: string; name: string };
+  items: { cost_item_id: string; name: string; status: "considering" | "chosen" | null; row_id: string | null }[];
+}
+
+function Options({
+  item,
+  propertyId,
+  readOnly,
+  onChanged,
+}: {
+  item: PropertyScopeItem;
+  propertyId: string;
+  readOnly: boolean;
+  /** The list behind the sheet mirrors the chosen items on the row. */
+  onChanged: () => void;
+}) {
+  const [groups, setGroups] = useState<OptionGroup[] | null>(null);
+  const [fromTemplates, setFromTemplates] = useState(true);
+  const seq = useRef(0);
+
+  const load = useCallback(async () => {
+    const res = await fetch(`/api/properties/${propertyId}/scope/${item.id}/options`);
+    const json = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setGroups(json.data?.groups ?? []);
+      setFromTemplates(json.data?.from_templates !== false);
+    } else setGroups([]);
+  }, [propertyId, item.id]);
+
+  useEffect(() => {
+    // setState happens after the fetch resolves; the rule cannot see through `load`.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
+
+  const cycle = async (g: OptionGroup, o: OptionGroup["items"][number]) => {
+    if (readOnly) return;
+    const next: "considering" | "chosen" | null = o.status === null ? "considering" : o.status === "considering" ? "chosen" : null;
+    const mine = ++seq.current;
+    setGroups((prev) =>
+      (prev ?? []).map((gg) => (gg.category.id !== g.category.id ? gg : { ...gg, items: gg.items.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, status: next } : x)) })),
+    );
+    const res = await fetch(`/api/properties/${propertyId}/scope/${item.id}/options`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cost_item_id: o.cost_item_id, status: next }),
+    });
+    if (mine !== seq.current) return;
+    if (res.ok) onChanged();
+    else void load();
+  };
+
+  if (groups === null) return <p className="text-xs text-slate-400">Loading options…</p>;
+  if (groups.length === 0) {
+    return (
+      <p className="text-xs text-slate-400">
+        {fromTemplates ? "No options for this component." : "No options set up for this kind of component yet - a quotation template that lists its items would supply them."}
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {groups.map((g) => (
+        <div key={g.category.id} className="grid grid-cols-[6rem_1fr] gap-x-2 items-start">
+          <span className="text-[11px] font-medium text-slate-500 pt-1 truncate" title={g.category.name}>{g.category.name}</span>
+          <div className="flex flex-wrap gap-1.5">
+            {g.items.map((o) => (
+              <button
+                key={o.cost_item_id}
+                type="button"
+                disabled={readOnly}
+                onClick={() => void cycle(g, o)}
+                title={o.status === "chosen" ? "Chosen - tap to clear" : o.status === "considering" ? "Considering - tap to choose" : "Tap to consider"}
+                className={cn(
+                  "px-2 py-0.5 text-[11px] font-medium rounded-full border transition-colors disabled:cursor-default",
+                  o.status === "chosen"
+                    ? "bg-emerald-600 text-white border-emerald-600"
+                    : o.status === "considering"
+                      ? "bg-white text-emerald-700 border-emerald-500 border-dashed"
+                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-400",
+                )}
+              >
+                {o.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      <p className="text-[10px] text-slate-400">Tap once to consider, again to choose, again to clear.</p>
+    </div>
+  );
+}
+
 /** One component on the room sheet: finish, what is arriving from whom, pictures, its thread. */
 function ComponentCard({
   c,
+  chosen,
   propertyId,
   linkedType,
   linkedId,
@@ -124,8 +227,11 @@ function ComponentCard({
   namePrefix,
   open,
   onToggle,
+  onChoicesChanged,
 }: {
   c: PropertyScopeItem;
+  /** Names of the items chosen for it, for the closed row. */
+  chosen: string[];
   propertyId: string;
   linkedType: "lead" | "project";
   linkedId: string;
@@ -135,8 +241,8 @@ function ComponentCard({
   namePrefix: string;
   open: boolean;
   onToggle: () => void;
+  onChoicesChanged: () => void;
 }) {
-  const [finish, setFinish] = useState(c.preferred_finish ?? "");
   const [supplied, setSupplied] = useState(c.supplied_detail ?? "");
   const ours = !c.scope_owner || c.scope_owner === "us";
   const size = c.length || c.width ? `${c.length ?? "—"} × ${c.width ?? "—"} ${c.measurement_unit}` : null;
@@ -149,7 +255,7 @@ function ComponentCard({
           <span className="block text-[11px] text-slate-500 truncate">
             {c.component_type?.name || ""}
             {size ? ` · ${size}` : ""}
-            {c.preferred_finish ? ` · ${c.preferred_finish}` : ""}
+            {chosen.length > 0 ? ` · ${chosen.join(" · ")}` : ""}
             {!ours && <span className="text-amber-700 font-medium"> · {scopeOwnerLabel(c.scope_owner)}{c.scope_owner === "vendor" && c.scope_vendor_name ? ` (${c.scope_vendor_name})` : ""}</span>}
           </span>
         </span>
@@ -158,35 +264,8 @@ function ComponentCard({
         <div className="px-4 pb-4 space-y-3 border-t border-slate-100 pt-3">
           {ours ? (
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Finish</p>
-              <div className="flex flex-wrap gap-1.5 items-center">
-                {COMMON_FINISHES.map((f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    disabled={readOnly}
-                    onClick={() => {
-                      const v = finish === f ? "" : f;
-                      setFinish(v);
-                      void onPatch(c, { preferred_finish: v || null });
-                    }}
-                    className={cn("px-2 py-0.5 text-[11px] font-medium rounded-full border", finish === f ? "bg-amber-500 text-white border-amber-500" : "bg-white text-slate-600 border-slate-200 hover:border-amber-300")}
-                  >
-                    {f}
-                  </button>
-                ))}
-                <input
-                  value={COMMON_FINISHES.includes(finish) ? "" : finish}
-                  disabled={readOnly}
-                  placeholder="other…"
-                  onChange={(e) => setFinish(e.target.value)}
-                  onBlur={(e) => {
-                    const v = e.target.value.trim();
-                    if (v && v !== (c.preferred_finish ?? "")) void onPatch(c, { preferred_finish: v });
-                  }}
-                  className="w-24 px-2 py-0.5 text-[11px] border border-dashed border-slate-300 rounded-full outline-none focus:border-amber-400"
-                />
-              </div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Options</p>
+              <Options item={c} propertyId={propertyId} readOnly={readOnly} onChanged={onChoicesChanged} />
             </div>
           ) : c.scope_owner === "excluded" ? (
             <p className="text-xs text-slate-500">Not part of this scope.</p>
@@ -237,6 +316,7 @@ export function ScopeItemPanel({
   onPatch,
   focusComponentId = null,
   namePrefix,
+  onReload,
 }: {
   /** The space being shown - one room sheet. Components sit inside it. */
   item: PropertyScopeItem;
@@ -251,13 +331,16 @@ export function ScopeItemPanel({
   focusComponentId?: string | null;
   /** ClientName_LeadNumber - what uploads here are named after. */
   namePrefix: string;
+  /** Re-reads the scope, so the list mirrors what was chosen here. */
+  onReload: () => void;
 }) {
   const { confirm, confirmDialog } = useConfirm();
   const [openComponents, setOpenComponents] = useState<Set<string>>(() => new Set(focusComponentId ? [focusComponentId] : []));
 
   const byOrder = (a: PropertyScopeItem, b: PropertyScopeItem) => a.display_order - b.display_order;
   const spaces = useMemo(() => items.filter((i) => !i.parent_id && !i.component_type_id).sort(byOrder), [items]);
-  const components = useMemo(() => items.filter((i) => i.parent_id === item.id).sort(byOrder), [items, item.id]);
+  const components = useMemo(() => items.filter((i) => i.parent_id === item.id && !i.cost_item_id).sort(byOrder), [items, item.id]);
+  const chosenOf = (id: string) => items.filter((i) => i.parent_id === id && i.cost_item_id && i.choice_status === "chosen").map((i) => i.name);
   const idx = spaces.findIndex((i) => i.id === item.id);
   const prev = idx > 0 ? spaces[idx - 1] : null;
   const next = idx >= 0 && idx < spaces.length - 1 ? spaces[idx + 1] : null;
@@ -342,6 +425,7 @@ export function ScopeItemPanel({
                   <ComponentCard
                     key={c.id}
                     c={c}
+                    chosen={chosenOf(c.id)}
                     propertyId={propertyId}
                     linkedType={linkedType}
                     linkedId={linkedId}
@@ -351,6 +435,7 @@ export function ScopeItemPanel({
                     namePrefix={namePrefix}
                     open={openComponents.has(c.id)}
                     onToggle={() => setOpenComponents((o) => { const n = new Set(o); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; })}
+                    onChoicesChanged={onReload}
                   />
                 ))}
               </ul>
