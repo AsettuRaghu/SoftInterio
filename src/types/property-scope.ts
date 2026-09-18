@@ -70,9 +70,8 @@ export const SCOPE_OWNER_LABELS: Record<ScopeOwner, string> = {
   excluded: "Not in scope",
 };
 
-/** "Us" reads as the business's own name when it is known - "Hive", not "Us". */
-export const scopeOwnerLabel = (owner: ScopeOwner | null | undefined, tenantName?: string | null) =>
-  (owner ?? "us") === "us" ? tenantName || SCOPE_OWNER_LABELS.us : SCOPE_OWNER_LABELS[owner ?? "us"];
+/** "Us" stays "Us" - the business's full name was tried and is too long for a cell. */
+export const scopeOwnerLabel = (owner: ScopeOwner | null | undefined) => SCOPE_OWNER_LABELS[owner ?? "us"];
 
 export interface PropertyScopeItem {
   /** The finish they want here, when it differs from the brief. */

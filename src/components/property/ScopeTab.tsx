@@ -23,7 +23,6 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { fetchConfigOnce } from "@/lib/quotations/config-cache";
 import { AddSpacesModal } from "./AddSpacesModal";
 import { CheckIcon } from "@heroicons/react/24/outline";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { ScopeItemPanel } from "./ScopeItemPanel";
 import {
   PlusIcon,
@@ -122,9 +121,6 @@ export function ScopeTab({
       : null;
   };
   const { confirm, confirmDialog } = useConfirm();
-  const { user: me } = useCurrentUser();
-  const tenantName = me?.tenantName ?? null;
-
   /**
    * ↑ / ↓ / Enter in a name or size field move to the same field on the
    * previous / next visible row, so a list can be filled top to bottom
@@ -698,7 +694,7 @@ export function ScopeTab({
             >
               {(Object.keys(SCOPE_OWNER_LABELS) as ScopeOwner[]).map((k) => (
                 <option key={k} value={k}>
-                  {scopeOwnerLabel(k, tenantName)}
+                  {scopeOwnerLabel(k)}
                 </option>
               ))}
             </select>
