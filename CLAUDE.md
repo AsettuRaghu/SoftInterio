@@ -580,6 +580,28 @@ of that height; its week columns and side panels scroll on their own. The
 documents page's facet rail carries the title and count. Change the shell's
 padding and this constant has to follow.
 
+### The dashboard composes the modules' own scoped APIs, and nothing else
+
+`components/dashboard/Dashboard.tsx` (2026-09-18) reads `/api/tasks`,
+`/api/calendar`, `/api/sales/leads`, `/api/projects` and `/api/quotations`
+- each of which already applies the caller's permissions and scope - and
+draws from what they answer. It adds **no data path of its own**: a block
+whose permission the caller lacks is not requested, and one whose API
+refuses is not drawn. That is the whole privacy argument, and it is why a
+"dashboard API" that joins across modules must not be written - it would be
+a second copy of every access rule, one grant away from disagreeing.
+
+What it shows, in the order a person asks: a momentum strip (today's ring
+of done-over-due, a seven-day streak of finishing something, this week's
+wins), a **focus list** worst-first across overdue steps, follow-ups due,
+today's meetings, steps due today and quotations whose validity is ending -
+with mark-done inline through `task_transition` - then today's schedule,
+quotations needing a hand (approvals only to `quotations.approve` holders),
+leads going cold, projects under way with agreed-vs-now, and the pipeline.
+"Mine" for tasks means assigned to the caller, whatever the list's scope.
+The task list returns every row in scope and nests subtasks under parents
+too, so rows are de-duplicated by id before counting.
+
 ### Every list page is built the same way - do not ask, copy
 
 The leads and projects pages are the reference, and a new list page copies
