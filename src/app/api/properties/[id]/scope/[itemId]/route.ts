@@ -18,6 +18,9 @@ const WRITABLE = [
   "measurement_unit",
   "measurement_source",
   "measurement_status",
+  // Free text, read from the catalogue's tiers - see CLAUDE.md on why it is
+  // not an enum. Was missing here, so the Quality dropdown saved nothing.
+  "quality_tier",
   "notes",
   "display_order",
   "parent_id",
@@ -101,6 +104,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (key in body) updates[key] = body[key];
     }
     if (typeof updates.name === "string") updates.name = updates.name.trim();
+    // An empty patch used to reach PostgREST, which answers "0 rows" and read
+    // as "Failed to update space" - say what actually happened instead.
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json(
+        { error: "Nothing to update: none of the fields sent can be changed here." },
+        { status: 400 }
+      );
+    }
 
     // The history trigger records what changed; the reason, when given, is
     // added to that row afterwards - see below.
