@@ -80,6 +80,9 @@ const getRequiredFieldsForStage = (stage: LeadStage): string[] => {
      * call legitimately has a name and a number and nothing else.
      */
     "property_city",
+    // With the floor plan in hand the flat's size is known, so it is asked
+    // here rather than a stage later.
+    "carpet_area",
     "configuration",
     "floor_plan",
     "service_type",
@@ -88,7 +91,6 @@ const getRequiredFieldsForStage = (stage: LeadStage): string[] => {
   ];
   const requirementFields = [
     ...qualifiedFields,
-    "carpet_area",
     "unit_number",
     "budget_range",
   ];

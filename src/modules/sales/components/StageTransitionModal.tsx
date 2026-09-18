@@ -666,13 +666,13 @@ export function StageTransitionModal({
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">
                           Carpet Area (sq.ft){" "}
-                          {isRequirementDiscussionFieldRequired && (
+                          {isQualifiedFieldRequired && (
                             <span className="text-red-500">*</span>
                           )}
                         </label>
                         <input
                           type="number"
-                          required={isRequirementDiscussionFieldRequired}
+                          required={isQualifiedFieldRequired}
                           value={formData.carpet_area}
                           onChange={(e) =>
                             setFormData({

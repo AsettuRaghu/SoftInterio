@@ -161,14 +161,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (!isConfiguration(body.configuration) && !isConfiguration(lead.property?.configuration)) {
         missingFields.push("Configuration (2 BHK, 3 BHK…)");
       }
+      // The floor plan gives the flat's size, so it is known by now.
+      if (!body.carpet_area && !lead.property?.carpet_area) {
+        missingFields.push("Carpet Area (sq.ft)");
+      }
     };
 
     // Helper function to check requirement_discussion stage requirements
     const checkRequirementDiscussionRequirements = () => {
       // Requirement Discussion requires: carpet_area, unit_number, budget_range
-      if (!body.carpet_area && !lead.property?.carpet_area) {
-        missingFields.push("Carpet Area");
-      }
       if (!body.unit_number && !lead.property?.unit_number) {
         missingFields.push("Flat/Unit Number");
       }
