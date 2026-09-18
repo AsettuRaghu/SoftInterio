@@ -379,6 +379,7 @@ export default function LeadDetailPage() {
             linkedType="lead"
             linkedId={lead.id}
             readOnly={leadClosed}
+            stage={lead.stage}
           />
         )}
 

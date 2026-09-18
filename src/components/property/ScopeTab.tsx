@@ -80,6 +80,10 @@ interface ScopeTabProps {
   linkedType: "lead" | "project";
   linkedId: string;
   readOnly?: boolean;
+  /** The lead's stage. From Requirement discussion on (and on any project)
+   *  the last space, and the last component of a space of ours, cannot be
+   *  removed - the button says so instead of the server refusing after. */
+  stage?: string | null;
   /**
    * Called after a space or component is added or removed - never on a field
    * edit. The lead page deliberately does not pass it: reloading the whole
@@ -94,8 +98,26 @@ export function ScopeTab({
   linkedType,
   linkedId,
   readOnly = false,
+  stage = null,
   onChanged,
 }: ScopeTabProps) {
+  const keepFilled =
+    linkedType === "project" || ["requirement_discussion", "proposal_discussion", "won"].includes(stage ?? "");
+  const isOurs = (i: PropertyScopeItem) => !i.scope_owner || i.scope_owner === "us";
+  /** Why this row cannot be removed right now, or null. */
+  const removeBlock = (item: PropertyScopeItem): string | null => {
+    if (!keepFilled) return null;
+    if (!item.component_type_id) {
+      const spaces = items.filter((i) => !i.parent_id && !i.component_type_id);
+      return spaces.length <= 1 ? "At least one space is mandatory from Requirement discussion on." : null;
+    }
+    const parent = items.find((i) => i.id === item.parent_id);
+    if (!parent || !isOurs(parent) || !isOurs(item)) return null;
+    const siblings = items.filter((i) => i.parent_id === parent.id && isOurs(i));
+    return siblings.length <= 1
+      ? `${parent.name} keeps at least one component. Mark the space as the client's or excluded if nothing there is ours.`
+      : null;
+  };
   const { confirm, confirmDialog } = useConfirm();
   // Spaces | Conversation.
   const [section, setSection] = useState<"spaces" | "conversation">("spaces");
@@ -371,6 +393,11 @@ export function ScopeTab({
 
   const removeItem = async (item: PropertyScopeItem) => {
     if (!propertyId) return;
+    const block = removeBlock(item);
+    if (block) {
+      setError(block);
+      return;
+    }
     const kids = childrenOf(item.id);
 
     // Children go with the parent in the database, so they go here too.
@@ -383,7 +410,10 @@ export function ScopeTab({
         `/api/properties/${propertyId}/scope/${item.id}`,
         { method: "DELETE" }
       );
-      if (!response.ok) throw new Error("Failed to remove");
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to remove");
+      }
       onChanged?.();
     } catch (err) {
       setItems(previous);
@@ -762,9 +792,9 @@ export function ScopeTab({
           {!readOnly && (
             <button
               onClick={() => void removeItem(item)}
-              disabled={savingId === item.id}
-              title="Remove space"
-              className="w-6.5 h-6.5 inline-flex items-center justify-center rounded-md border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 transition-all disabled:opacity-50"
+              disabled={savingId === item.id || !!removeBlock(item)}
+              title={removeBlock(item) ?? (item.component_type_id ? "Remove component" : "Remove space")}
+              className="w-6.5 h-6.5 inline-flex items-center justify-center rounded-md border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-red-50 disabled:hover:border-red-200"
             >
               <TrashIcon className="w-3.5 h-3.5" />
             </button>
