@@ -17,14 +17,23 @@ import { ArrowUpTrayIcon, MapIcon, XMarkIcon } from "@heroicons/react/24/outline
 import { cn } from "@/utils/cn";
 import { CONFIGURATIONS, CONFIGURATION_LABELS } from "@/lib/scope/configuration";
 
-export async function uploadFloorPlan(leadId: string, file: File): Promise<void> {
+/** What a lead's uploads are called: ClientName_LeadNumber_Tag, never the
+ *  phone's or the builder's own file name. */
+export function leadDocumentName(lead: { lead_number?: string | null; client?: { name?: string | null } | null }, tag: string): string {
+  const clean = (v: string) => v.trim().replace(/[^A-Za-z0-9]+/g, " ").trim().replace(/\s+/g, "");
+  return [clean(lead.client?.name || "Client"), clean(lead.lead_number || ""), clean(tag)].filter(Boolean).join("_");
+}
+
+export async function uploadFloorPlan(
+  lead: { id: string; lead_number?: string | null; client?: { name?: string | null } | null },
+  file: File,
+): Promise<void> {
   const fd = new FormData();
   fd.append("file", file);
   fd.append("linked_type", "lead");
-  fd.append("linked_id", leadId);
+  fd.append("linked_id", lead.id);
   fd.append("category", "floor_plan");
-  // The file's own name as the title; the category says what it is.
-  fd.append("title", file.name.replace(/\.[^.]+$/, ""));
+  fd.append("title", leadDocumentName(lead, "FloorPlan"));
   fd.append("tags", "floor plan");
   const res = await fetch("/api/documents", { method: "POST", body: fd });
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Floor plan upload failed");
@@ -72,18 +81,20 @@ export function ConfigurationField({
  * New lead (no leadId): holds the chosen file for the caller to upload.
  */
 export function FloorPlanField({
-  leadId,
+  lead,
   required = false,
   pendingFile,
   onPendingFile,
   onUploaded,
 }: {
-  leadId?: string | null;
+  /** The lead the plan belongs to; absent while the lead is being created. */
+  lead?: { id: string; lead_number?: string | null; client?: { name?: string | null } | null } | null;
   required?: boolean;
   pendingFile?: File | null;
   onPendingFile?: (f: File | null) => void;
   onUploaded?: () => void;
 }) {
+  const leadId = lead?.id ?? null;
   const [onFile, setOnFile] = useState<{ name: string; url: string | null } | null | undefined>(leadId ? undefined : null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +109,7 @@ export function FloorPlanField({
         const json = await res.json().catch(() => ({}));
         if (!live) return;
         const d = res.ok ? json.documents?.[0] : null;
-        setOnFile(d ? { name: d.file_name, url: d.signed_url ?? null } : null);
+        setOnFile(d ? { name: d.title || d.file_name, url: d.signed_url ?? null } : null);
       } catch {
         // The check failed (a dropped request); offer the upload rather than
         // sit on "Checking…" - the server still knows what is on file.
@@ -112,14 +123,14 @@ export function FloorPlanField({
 
   const choose = async (file: File) => {
     setError(null);
-    if (!leadId) {
+    if (!lead) {
       onPendingFile?.(file);
       return;
     }
     setUploading(true);
     try {
-      await uploadFloorPlan(leadId, file);
-      setOnFile({ name: file.name, url: null });
+      await uploadFloorPlan(lead, file);
+      setOnFile({ name: leadDocumentName(lead, "FloorPlan"), url: null });
       onUploaded?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");

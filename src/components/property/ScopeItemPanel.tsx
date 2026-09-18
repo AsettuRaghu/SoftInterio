@@ -85,6 +85,7 @@ function ItemBody({
   confirm,
   onPatch,
   compact = false,
+  namePrefix,
 }: {
   item: PropertyScopeItem;
   propertyId: string;
@@ -94,6 +95,7 @@ function ItemBody({
   confirm: ReturnType<typeof useConfirm>["confirm"];
   onPatch: (item: PropertyScopeItem, patch: Partial<PropertyScopeItem> & { reason?: string }) => Promise<void>;
   compact?: boolean;
+  namePrefix: string;
 }) {
   const [tab, setTab] = useState<Tab>("details");
   return (
@@ -125,7 +127,7 @@ function ItemBody({
       <div className={compact ? "[&>div]:p-3 [&>ol]:p-3 [&>p]:p-3" : ""}>
         {tab === "details" && <DetailsTab key={item.id} item={item} readOnly={readOnly} onPatch={onPatch} />}
         {tab === "references" && (
-          <ReferencesTab key={item.id} item={item} propertyId={propertyId} linkedType={linkedType} linkedId={linkedId} readOnly={readOnly} confirm={confirm} />
+          <ReferencesTab key={item.id} item={item} propertyId={propertyId} linkedType={linkedType} linkedId={linkedId} readOnly={readOnly} confirm={confirm} namePrefix={namePrefix} />
         )}
         {tab === "discussion" && (
           <ScopeDiscussion key={item.id} scopeItemId={item.id} propertyId={propertyId} linkedType={linkedType} linkedId={linkedId} readOnly={readOnly} confirm={confirm} />
@@ -147,6 +149,7 @@ export function ScopeItemPanel({
   onNavigate,
   onPatch,
   focusComponentId = null,
+  namePrefix,
 }: {
   /** The space being shown. Opening a component opens its space with that
    *  component expanded - components live inside their space here. */
@@ -162,6 +165,8 @@ export function ScopeItemPanel({
   /** Saves a field on the row - the tab's own patch, so the list updates too. */
   onPatch: (item: PropertyScopeItem, patch: Partial<PropertyScopeItem> & { reason?: string }) => Promise<void>;
   focusComponentId?: string | null;
+  /** ClientName_LeadNumber - what uploads here are named after. */
+  namePrefix: string;
 }) {
   const { confirm, confirmDialog } = useConfirm();
   const [openComponents, setOpenComponents] = useState<Set<string>>(() => new Set(focusComponentId ? [focusComponentId] : []));
@@ -255,7 +260,7 @@ export function ScopeItemPanel({
 
         <div className="flex-1 overflow-y-auto">
           {/* The space's own */}
-          <ItemBody item={item} propertyId={propertyId} linkedType={linkedType} linkedId={linkedId} readOnly={readOnly} confirm={confirm} onPatch={onPatch} />
+          <ItemBody item={item} propertyId={propertyId} linkedType={linkedType} linkedId={linkedId} readOnly={readOnly} confirm={confirm} onPatch={onPatch} namePrefix={namePrefix} />
 
           {/* Its components, each opening out to its own four tabs */}
           <div className="border-t border-slate-200 mt-2">
@@ -308,7 +313,7 @@ export function ScopeItemPanel({
                       </button>
                       {open && (
                         <div className="pb-2 border-t border-slate-100 bg-white mx-3 mb-3 rounded-lg border">
-                          <ItemBody item={c} propertyId={propertyId} linkedType={linkedType} linkedId={linkedId} readOnly={readOnly} confirm={confirm} onPatch={onPatch} compact />
+                          <ItemBody item={c} propertyId={propertyId} linkedType={linkedType} linkedId={linkedId} readOnly={readOnly} confirm={confirm} onPatch={onPatch} compact namePrefix={namePrefix} />
                         </div>
                       )}
                     </li>
@@ -463,6 +468,7 @@ function ReferencesTab({
   linkedId,
   readOnly,
   confirm,
+  namePrefix,
 }: {
   item: PropertyScopeItem;
   propertyId: string;
@@ -470,8 +476,12 @@ function ReferencesTab({
   linkedId: string;
   readOnly: boolean;
   confirm: ReturnType<typeof useConfirm>["confirm"];
+  namePrefix: string;
 }) {
   const [docs, setDocs] = useState<RefDoc[]>([]);
+  // ClientName_LeadNumber_Kitchen_Ref3 - counted on from what is already here.
+  const clean = (v: string) => v.trim().replace(/[^A-Za-z0-9]+/g, " ").trim().replace(/\s+/g, "");
+  const referenceName = (index: number) => `${namePrefix}_${clean(item.name)}_Ref${docs.length + index + 1}`;
   const [pins, setPins] = useState<LibraryEntryLite[]>([]);
   const [uploading, setUploading] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -499,7 +509,7 @@ function ReferencesTab({
     setUploading(true);
     setError(null);
     try {
-      for (const file of Array.from(files)) {
+      for (const [k, file] of Array.from(files).entries()) {
         const fd = new FormData();
         fd.append("file", file);
         fd.append("linked_type", "scope_item");
@@ -507,6 +517,7 @@ function ReferencesTab({
         fd.append("parent_linked_type", linkedType);
         fd.append("parent_linked_id", linkedId);
         fd.append("category", file.type.startsWith("image/") ? "photo" : "design");
+        fd.append("title", referenceName(k));
         fd.append("tags", `space: ${item.name},reference`);
         const res = await fetch("/api/documents", { method: "POST", body: fd });
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Upload failed");
@@ -521,7 +532,7 @@ function ReferencesTab({
   };
 
   const removeDoc = async (d: RefDoc) => {
-    if (!(await confirm({ title: `Remove ${d.file_name}?`, message: "It is removed from this space and from Documents.", confirmLabel: "Remove", tone: "danger" }))) return;
+    if (!(await confirm({ title: `Remove ${d.title || d.file_name}?`, message: "It is removed from this space and from Documents.", confirmLabel: "Remove", tone: "danger" }))) return;
     await fetch(`/api/documents/${d.id}`, { method: "DELETE" });
     await load();
   };
@@ -568,13 +579,13 @@ function ReferencesTab({
           <div className="grid grid-cols-3 gap-2">
             {docs.map((d) => (
               <div key={d.id} className="group relative rounded-lg border border-slate-200 overflow-hidden bg-slate-50 aspect-4/3">
-                <a href={d.signed_url ?? "#"} target="_blank" rel="noreferrer" className="block w-full h-full" title={d.file_name}>
+                <a href={d.signed_url ?? "#"} target="_blank" rel="noreferrer" className="block w-full h-full" title={d.title || d.file_name}>
                   {d.file_type?.startsWith("image/") && d.signed_url ? (
                     <img src={d.signed_url} alt="" className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 px-2">
                       <PhotoIcon className="w-6 h-6" />
-                      <span className="text-[10px] mt-1 truncate max-w-full">{d.file_name}</span>
+                      <span className="text-[10px] mt-1 truncate max-w-full">{d.title || d.file_name}</span>
                     </div>
                   )}
                 </a>

@@ -699,7 +699,7 @@ export function StageTransitionModal({
                           required
                           onChange={(v) => setFormData({ ...formData, configuration: v })}
                         />
-                        <FloorPlanField leadId={lead.id} required onUploaded={() => setScopeMissing(null)} />
+                        <FloorPlanField lead={lead} required onUploaded={() => setScopeMissing(null)} />
                       </div>
                     )}
                   </div>

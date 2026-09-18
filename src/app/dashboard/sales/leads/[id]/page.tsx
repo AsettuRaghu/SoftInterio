@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/PageLayout";
 import { UserGroupIcon } from "@heroicons/react/24/outline";
 import { ScopeTab } from "@/components/property/ScopeTab";
+import { leadDocumentName } from "@/components/leads/ConfigurationAndPlanFields";
 import { AddNoteModal, EditNoteModal } from "@/modules/sales/components";
 import { EditLeadModal, type EditFormData } from "@/modules/sales/components";
 import { StageTransitionModal } from "@/modules/sales/components";
@@ -380,6 +381,7 @@ export default function LeadDetailPage() {
             linkedId={lead.id}
             readOnly={leadClosed}
             stage={lead.stage}
+            namePrefix={leadDocumentName(lead, "")}
           />
         )}
 

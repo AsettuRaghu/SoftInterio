@@ -27,6 +27,7 @@ import {
 } from "@/modules/projects/components";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
 import { ScopeTab } from "@/components/property/ScopeTab";
+import { leadDocumentName } from "@/components/leads/ConfigurationAndPlanFields";
 import { buttonVariants } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
 import { ProcurementTab } from "@/components/projects/ProcurementTab";
@@ -922,6 +923,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
               propertyId={project.property_id || null}
               linkedType="project"
               linkedId={project.id}
+              namePrefix={leadDocumentName({ lead_number: project.project_number, client: project.client }, "")}
             />
           )}
 

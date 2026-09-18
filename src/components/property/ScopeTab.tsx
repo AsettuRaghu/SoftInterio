@@ -82,6 +82,8 @@ interface ScopeTabProps {
   linkedType: "lead" | "project";
   linkedId: string;
   readOnly?: boolean;
+  /** ClientName_LeadNumber (or project number) - what uploads are named after. */
+  namePrefix: string;
   /** The lead's stage. From Requirement discussion on (and on any project)
    *  the last space, and the last component of a space of ours, cannot be
    *  removed - the button says so instead of the server refusing after. */
@@ -100,6 +102,7 @@ export function ScopeTab({
   linkedType,
   linkedId,
   readOnly = false,
+  namePrefix,
   stage = null,
   onChanged,
 }: ScopeTabProps) {
@@ -1031,6 +1034,7 @@ export function ScopeTab({
           linkedId={linkedId}
           readOnly={readOnly}
           focusComponentId={openTarget.componentId}
+          namePrefix={namePrefix}
           onClose={() => setOpenTarget(null)}
           onNavigate={(i) => setOpenTarget({ spaceId: i.id, componentId: null })}
           onPatch={patchItem}

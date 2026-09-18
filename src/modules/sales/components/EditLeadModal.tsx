@@ -571,7 +571,7 @@ export function EditLeadModal({
                   required={isRequired("configuration")}
                   onChange={(v) => setEditForm({ ...editForm, configuration: v })}
                 />
-                <FloorPlanField leadId={lead.id} required={isRequired("floor_plan")} />
+                <FloorPlanField lead={lead} required={isRequired("floor_plan")} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">

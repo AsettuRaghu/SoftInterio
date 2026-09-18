@@ -214,10 +214,9 @@ export function CreateLeadModal({
       // is reported but does not undo the lead - it can be uploaded again.
       if (floorPlan) {
         const created = await response.json().catch(() => ({}));
-        const newId = created?.lead?.id;
-        if (newId) {
+        if (created?.lead?.id) {
           try {
-            await uploadFloorPlan(newId, floorPlan);
+            await uploadFloorPlan(created.lead, floorPlan);
           } catch (e) {
             console.error("[create lead] floor plan upload failed", e);
           }
