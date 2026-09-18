@@ -1081,7 +1081,7 @@ const GLYPH_TONE: Record<string, string> = {
 function DocGlyph({ doc, icon, size }: { doc: DocumentWithLinked; icon: React.ReactNode; size: "md" | "lg" }) {
   const isImage = (doc.file_type || "").startsWith("image/") && !!doc.signed_url;
   const tone = GLYPH_TONE[getFileTypeIcon(doc.file_type, doc.file_extension)] ?? GLYPH_TONE.default;
-  const box = size === "lg" ? "aspect-[4/3] w-full" : "w-11 h-11";
+  const box = size === "lg" ? "aspect-4/3 w-full" : "w-11 h-11";
   if (isImage) {
     return <img src={doc.signed_url} alt="" className={box + " object-cover rounded-md bg-slate-100"} loading="lazy" />;
   }

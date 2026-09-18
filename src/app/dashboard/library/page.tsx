@@ -575,7 +575,7 @@ export default function LibraryPage() {
                 </p>
               </div>
             ) : (
-              <div className="columns-2 md:columns-3 xl:columns-4 2xl:columns-5 gap-3 [column-fill:_balance]">
+              <div className="columns-2 md:columns-3 xl:columns-4 2xl:columns-5 gap-3 [column-fill:balance]">
                 {visible.map((e) => (
                   <button
                     key={e.id}
@@ -605,7 +605,7 @@ export default function LibraryPage() {
                     {e.cover_url ? (
                       <img src={e.cover_url} alt={e.title} loading="lazy" className="w-full h-auto block transition-transform duration-300 group-hover:scale-[1.02]" />
                     ) : (
-                      <div className="aspect-[4/3] flex items-center justify-center text-slate-300"><SwatchIcon className="w-8 h-8" /></div>
+                      <div className="aspect-4/3 flex items-center justify-center text-slate-300"><SwatchIcon className="w-8 h-8" /></div>
                     )}
                     <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/70 via-black/30 to-transparent px-3 pt-8 pb-2.5">
                       <p className="text-sm font-semibold text-white truncate">{e.title}</p>
