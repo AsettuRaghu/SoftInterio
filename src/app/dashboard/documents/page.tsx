@@ -1006,6 +1006,7 @@ export default function DocumentsPage() {
       <DocumentPreviewModal
         isOpen={!!previewDocument}
         document={previewDocument}
+        documents={filteredDocuments}
         onClose={() => setPreviewDocument(null)}
       />
       {confirmDialog}

@@ -1853,6 +1853,17 @@ entitled only to their own leads, with nothing in the code to object.
 
 The projects report already did this via `projectAccess`. Copy that shape.
 
+### One viewer for pictures and files
+
+`components/ui/MediaViewer` (2026-09-18) is how anything uploaded is looked
+at: a full-screen viewer over a dark backdrop, ← → through the set with a
+counter and a filmstrip, the name and where it came from, Open / Download,
+images inline, PDFs in a frame, anything else as a card. Give it the whole
+set and the index, never one item at a time - a room's references, a
+Documents list. `DocumentPreviewModal` is now a thin wrapper over it that
+takes the list it was opened from. Do not open a file in a new tab as the
+primary action; the new-tab link is inside the viewer for those who want it.
+
 ### The app has its own dialogs; nothing in it should call the browser's
 
 `window.alert` / `window.confirm` / `window.prompt` render as bare OS modals

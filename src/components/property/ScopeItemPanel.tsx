@@ -22,7 +22,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import Link from "next/link";
 import {
   ArrowUpTrayIcon,
   BookmarkIcon,
@@ -37,6 +36,7 @@ import { cn } from "@/utils/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { COMMON_FINISHES, scopeOwnerLabel, type PropertyScopeItem } from "@/types/property-scope";
 import { ScopeDiscussion } from "./ScopeDiscussion";
+import { MediaViewer, type MediaItem } from "@/components/ui/MediaViewer";
 
 
 interface RefDoc {
@@ -378,6 +378,8 @@ function References({
   compact?: boolean;
 }) {
   const [docs, setDocs] = useState<RefDoc[]>([]);
+  // The viewer walks uploads then pinned pictures as one set.
+  const [viewing, setViewing] = useState<number | null>(null);
   // ClientName_LeadNumber_Kitchen_Ref3 - counted on from what is already here.
   const clean = (v: string) => v.trim().replace(/[^A-Za-z0-9]+/g, " ").trim().replace(/\s+/g, "");
   const referenceName = (index: number) => `${namePrefix}_${clean(item.name)}_Ref${docs.length + index + 1}`;
@@ -467,7 +469,7 @@ function References({
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Pictures</p>
           {!readOnly && (
             <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline disabled:opacity-60">
-              <ArrowUpTrayIcon className="w-3.5 h-3.5" /> {uploading ? "Uploading…" : "Add pictures or drawings"}
+              <ArrowUpTrayIcon className="w-3.5 h-3.5" /> {uploading ? "Uploading…" : "Add references"}
             </button>
           )}
           <input ref={fileInput} type="file" multiple accept="image/*,.pdf,.dwg,.dxf" className="hidden" onChange={(e) => e.target.files && void upload(e.target.files)} />
@@ -478,7 +480,7 @@ function References({
           <div className={cn("grid gap-2", compact ? "grid-cols-4" : "grid-cols-3")}>
             {docs.map((d) => (
               <div key={d.id} className="group relative rounded-lg border border-slate-200 overflow-hidden bg-slate-50 aspect-4/3">
-                <a href={d.signed_url ?? "#"} target="_blank" rel="noreferrer" className="block w-full h-full" title={d.title || d.file_name}>
+                <button type="button" onClick={() => setViewing(docs.indexOf(d))} className="block w-full h-full text-left" title={d.title || d.file_name}>
                   {d.file_type?.startsWith("image/") && d.signed_url ? (
                     <img src={d.signed_url} alt="" className="w-full h-full object-cover" />
                   ) : (
@@ -487,7 +489,7 @@ function References({
                       <span className="text-[10px] mt-1 truncate max-w-full">{d.title || d.file_name}</span>
                     </div>
                   )}
-                </a>
+                </button>
                 {!readOnly && (
                   <button type="button" onClick={() => void removeDoc(d)} title="Remove" className="absolute top-1 right-1 hidden group-hover:flex w-6 h-6 items-center justify-center rounded-md bg-white/90 text-slate-500 hover:text-red-600">
                     <TrashIcon className="w-3.5 h-3.5" />
@@ -515,10 +517,10 @@ function References({
           <div className={cn("grid gap-2", compact ? "grid-cols-4" : "grid-cols-3")}>
             {pins.map((p) => (
               <div key={p.id} className="group relative rounded-lg border border-slate-200 overflow-hidden bg-slate-50 aspect-4/3">
-                <Link href={`/dashboard/library?entry=${p.id}`} className="block w-full h-full" title={p.title}>
+                <button type="button" onClick={() => setViewing(docs.length + pins.indexOf(p))} className="block w-full h-full text-left" title={p.title}>
                   {p.images[0]?.url ? <img src={p.images[0].url} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-300"><PhotoIcon className="w-6 h-6" /></div>}
                   <span className="absolute bottom-0 inset-x-0 bg-linear-to-t from-black/60 to-transparent px-1.5 pb-1 pt-4 text-[10px] text-white truncate">{p.title}</span>
-                </Link>
+                </button>
                 {!readOnly && (
                   <button type="button" onClick={() => void unpin(p.id)} title="Unpin" className="absolute top-1 right-1 hidden group-hover:flex w-6 h-6 items-center justify-center rounded-md bg-white/90 text-slate-500 hover:text-red-600">
                     <XMarkIcon className="w-3.5 h-3.5" />
@@ -550,6 +552,13 @@ function References({
           </div>
         )}
       </section>
+      {viewing !== null && (() => {
+        const set: MediaItem[] = [
+          ...docs.map((d) => ({ id: d.id, name: d.title || d.file_name, url: d.signed_url ?? null, type: d.file_type, caption: `Reference · ${item.name}` })),
+          ...pins.map((p) => ({ id: `pin-${p.id}`, name: p.title, url: p.images[0]?.url ?? null, type: p.images[0]?.url ? "image/*" : null, caption: "Design Library" })),
+        ];
+        return <MediaViewer items={set} index={viewing} onClose={() => setViewing(null)} />;
+      })()}
     </div>
   );
 }

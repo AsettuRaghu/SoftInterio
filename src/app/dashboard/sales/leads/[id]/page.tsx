@@ -573,6 +573,7 @@ export default function LeadDetailPage() {
         {previewDocument && (
           <DocumentPreviewModal
             document={previewDocument}
+            documents={documents}
             isOpen={!!previewDocument}
             onClose={() => setPreviewDocument(null)}
           />
