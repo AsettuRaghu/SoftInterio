@@ -24,6 +24,7 @@ import { AddCostItemModal } from "@/components/quotations/AddCostItemModal";
 import { SpaceCard } from "@/components/quotations/SpaceCard";
 import { BuilderSidebar } from "@/components/quotations/BuilderSidebar";
 import { Toast } from "@/components/ui/Toast";
+import { useDefaultMeasurementUnit } from "@/lib/settings/use-default-unit";
 import { RepriceModal } from "@/components/quotations/RepriceModal";
 import { PrintQuotationModal } from "@/components/quotations/PrintQuotationModal";
 import { TemplateModal } from "@/components/quotations/TemplateModal";
@@ -102,6 +103,9 @@ export function QuotationBuilder({
   // "Bring in from scope": pull on demand, adds only what is missing. Local
   // edits are saved first so the re-read after it cannot lose them.
   const [bringingScope, setBringingScope] = useState(false);
+  // What this business measures in (Settings → Config): every new component
+  // and line starts on it; any row can still be changed.
+  const defaultUnit = useDefaultMeasurementUnit();
   // The finish named on each scope row, so matching cost items come first.
   const [rowFinishes, setRowFinishes] = useState<Record<string, string>>({});
   const [scopeNotice, setScopeNotice] = useState<{ message: string; variant: "success" | "info" | "error" } | null>(null);
@@ -388,6 +392,7 @@ export function QuotationBuilder({
       name: componentType.name,
       lineItems: [],
       expanded: true,
+      measurementUnit: defaultUnit as MeasurementUnit,
     };
 
     setSpaces(
@@ -708,7 +713,7 @@ export function QuotationBuilder({
       vendorCost: costItem.vendor_cost || 0,
       length: null,
       width: null,
-      measurementUnit: "mm" as MeasurementUnit, // Default to mm for precision (interior industry standard)
+      measurementUnit: defaultUnit as MeasurementUnit, // the business's default (Settings → Config)
       quantity: 1,
       amount: 0,
       notes: "",
@@ -1008,7 +1013,7 @@ export function QuotationBuilder({
                     costItem?.vendor_cost || item.cost_item?.vendor_cost || 0,
                   length: null,
                   width: null,
-                  measurementUnit: "mm" as MeasurementUnit, // Default to mm for precision
+                  measurementUnit: defaultUnit as MeasurementUnit, // the business's default (Settings → Config)
                   quantity: 1,
                   amount: 0,
                   notes: "",

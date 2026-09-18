@@ -9,6 +9,8 @@ import {
 } from "@/components/ui/PageLayout";
 import { Alert } from "@/components/ui/Alert";
 import { uiLogger } from "@/lib/logger";
+import { invalidateQuotationConfig } from "@/lib/quotations/config-cache";
+import { FALLBACK_UNIT, MEASUREMENT_UNITS, MEASUREMENT_UNIT_LABELS, isMeasurementUnit, type DefaultMeasurementUnit } from "@/lib/settings/measurement-unit";
 import {
   AdjustmentsHorizontalIcon,
   PencilIcon,
@@ -63,6 +65,13 @@ const FLAGS: FlagDefinition[] = [
 
 type FlagState = Record<FlagKey, boolean>;
 
+/**
+ * Non-boolean defaults live beside the flags. The unit is the one that
+ * matters most to a business: every scope row, quotation component and
+ * line starts on it (and can be changed per row).
+ */
+const UNIT_KEY = "default_measurement_unit";
+
 const defaults = (): FlagState =>
   FLAGS.reduce((acc, f) => {
     acc[f.key] = f.fallback;
@@ -72,6 +81,8 @@ const defaults = (): FlagState =>
 export default function SettingsConfigPage() {
   const [values, setValues] = useState<FlagState>(defaults);
   const [original, setOriginal] = useState<FlagState>(defaults);
+  const [unit, setUnit] = useState<DefaultMeasurementUnit>(FALLBACK_UNIT);
+  const [originalUnit, setOriginalUnit] = useState<DefaultMeasurementUnit>(FALLBACK_UNIT);
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -80,8 +91,8 @@ export default function SettingsConfigPage() {
   const [saved, setSaved] = useState(false);
 
   const hasChanges = useMemo(
-    () => JSON.stringify(values) !== JSON.stringify(original),
-    [values, original]
+    () => FLAGS.some((f) => values[f.key] !== original[f.key]) || unit !== originalUnit,
+    [values, original, unit, originalUnit]
   );
 
   useEffect(() => {
@@ -116,7 +127,7 @@ export default function SettingsConfigPage() {
 
       const { data, error: settingsError } = await supabase
         .from("tenant_settings")
-        .select(FLAGS.map((f) => f.key).join(", "))
+        .select([...FLAGS.map((f) => f.key), UNIT_KEY].join(", "))
         .eq("tenant_id", userData.tenant_id)
         .maybeSingle();
 
@@ -138,6 +149,10 @@ export default function SettingsConfigPage() {
 
       setValues(loaded);
       setOriginal(loaded);
+      const rawUnit = (data as Record<string, unknown> | null)?.[UNIT_KEY];
+      const loadedUnit = isMeasurementUnit(rawUnit) ? rawUnit : FALLBACK_UNIT;
+      setUnit(loadedUnit);
+      setOriginalUnit(loadedUnit);
     } catch (err) {
       uiLogger.error("Unexpected error loading configuration", err, {
         action: "fetch_tenant_config",
@@ -165,6 +180,7 @@ export default function SettingsConfigPage() {
           {
             tenant_id: tenantId,
             ...values,
+            [UNIT_KEY]: unit,
             updated_at: new Date().toISOString(),
           },
           { onConflict: "tenant_id" }
@@ -182,6 +198,9 @@ export default function SettingsConfigPage() {
         action: "save_tenant_config",
       });
       setOriginal(values);
+      setOriginalUnit(unit);
+      // Screens cache the defaults with the rest of the config.
+      invalidateQuotationConfig();
       setIsEditing(false);
       setSaved(true);
       window.setTimeout(() => setSaved(false), 3000);
@@ -197,6 +216,7 @@ export default function SettingsConfigPage() {
 
   const handleCancel = () => {
     setValues(original);
+    setUnit(originalUnit);
     setIsEditing(false);
     setError(null);
   };
@@ -260,6 +280,31 @@ export default function SettingsConfigPage() {
           {saved && !error && (
             <Alert variant="success" message="Configuration saved." />
           )}
+
+          <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 bg-slate-100/50 border-b border-slate-200">
+              <h2 className="text-sm font-semibold text-slate-900">Measurement</h2>
+              <p className="text-[10px] text-slate-500">What your team measures in, everywhere a size is entered</p>
+            </div>
+            <div className="p-4 flex flex-wrap items-center gap-4">
+              <div className="min-w-0 flex-1">
+                <span className="block text-sm font-medium text-slate-900">Default unit of measurement</span>
+                <span className="block text-xs text-slate-500 mt-0.5">
+                  Every scope row, quotation component and line item starts on this unit. Any of them can still be changed on the row.
+                </span>
+              </div>
+              <select
+                value={unit}
+                disabled={!isEditing}
+                onChange={(e) => setUnit(e.target.value as DefaultMeasurementUnit)}
+                className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+              >
+                {MEASUREMENT_UNITS.map((u) => (
+                  <option key={u} value={u}>{MEASUREMENT_UNIT_LABELS[u]}</option>
+                ))}
+              </select>
+            </div>
+          </div>
 
           {groups.map(([group, flags]) => (
             <div

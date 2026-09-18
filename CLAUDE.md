@@ -423,6 +423,15 @@ It is a tenant setting rather than a `subscription_plan_features` row because
 it is a workflow choice each business makes, not something sold by tier — and
 because that table is read only to draw plan cards and enforces nothing.
 
+**The unit a business measures in is a tenant default**
+(`tenant_settings.default_measurement_unit`, mm / cm / inch / ft, Settings →
+Config → Measurement; 2026-09-18). Every new scope row (bulk add, preset on
+qualification) and every new quotation component and line item starts on
+it - `getDefaultMeasurementUnit()` server side, `useDefaultMeasurementUnit()`
+in the builder, cached with the config and dropped when Config saves. Any row
+can still be changed. Stored rows keep their own unit; the `|| "mm"`
+fallbacks on read are for rows older than units being stored at all.
+
 Every tenant-level switch is a column on `tenant_settings` and is edited on
 **Settings → Config** (`/dashboard/settings/config`, gated on
 `settings.company.update`). Add one by appending to the `FLAGS` array on that

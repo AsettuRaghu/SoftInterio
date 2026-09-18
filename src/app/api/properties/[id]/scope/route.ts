@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { logLeadActivity } from "@/lib/activity/log";
+import { getDefaultMeasurementUnit } from "@/lib/settings/measurement-unit";
 import type { ScopeBulkEntry } from "@/types/property-scope";
 
 /**
@@ -250,6 +251,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       nextOrder = Math.max(nextOrder, (row.display_order ?? 0) + 1);
     }
 
+    // Every row starts on the unit this business measures in.
+    const unit = await getDefaultMeasurementUnit(supabase, user.tenantId);
+
     const rows: Record<string, unknown>[] = [];
     for (const entry of wanted) {
       const typeId = (entry.space_type_id || entry.component_type_id) as string;
@@ -271,6 +275,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               ? typeName
               : `${typeName} ${index}`,
           display_order: nextOrder++,
+          measurement_unit: unit,
           created_by: user.id,
         });
       }
@@ -346,6 +351,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             component_type_id: componentTypeId,
             name,
             display_order: order++,
+            measurement_unit: unit,
             created_by: user.id,
           });
         }

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ScopePreset } from "@/types/property-scope";
 import { presetMatches, type Configuration } from "./configuration";
+import { getDefaultMeasurementUnit } from "@/lib/settings/measurement-unit";
 
 /**
  * Lays a preset down on an empty scope: its spaces with counts, each filled
@@ -30,6 +31,7 @@ export async function applyPresetForConfiguration(
   const comps = (componentTypes ?? []) as { id: string; name: string; applicable_space_types: string[] | null }[];
   const compById = new Map(comps.map((c) => [c.id, c]));
 
+  const unit = await getDefaultMeasurementUnit(supabase, args.tenantId);
   let order = 0;
   const spaceRows: Record<string, unknown>[] = [];
   const plan: { spaceIndex: number; componentTypeIds: string[] }[] = [];
@@ -47,6 +49,7 @@ export async function applyPresetForConfiguration(
         space_type_id: item.space_type_id,
         name: item.count === 1 ? name : `${name} ${i + 1}`,
         display_order: order++,
+        measurement_unit: unit,
         created_by: args.userId,
       });
     }
@@ -73,6 +76,7 @@ export async function applyPresetForConfiguration(
         component_type_id: cid,
         name: c.name,
         display_order: order++,
+        measurement_unit: unit,
         created_by: args.userId,
       });
     }
