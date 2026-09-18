@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { notify } from "@/lib/notifications/notify";
 
 /**
  * Client approves quotation via token
@@ -16,7 +18,7 @@ export async function POST(
     // Find quotation by token
     const { data: quotation, error: findError } = await supabase
       .from("quotations")
-      .select("id, tenant_id, status, quotation_number, client_access_expires_at")
+      .select("id, tenant_id, status, quotation_number, version, client_access_expires_at, lead_id, project_id, created_by, assigned_to")
       .eq("client_access_token", token)
       .single();
 
@@ -89,6 +91,36 @@ export async function POST(
       });
     } catch {
       // Ignore activity logging errors
+    }
+
+    // The client is not signed in, so this is the one producer that writes
+    // through the admin client. Audience: whoever owns the lead or manages
+    // the project, else whoever made the quotation.
+    try {
+      const admin = createAdminClient();
+      const owners: (string | null)[] = [];
+      if (quotation.lead_id) {
+        const { data: lead } = await admin.from("leads").select("assigned_to").eq("id", quotation.lead_id).maybeSingle();
+        owners.push(lead?.assigned_to ?? null);
+      }
+      if (quotation.project_id) {
+        const { data: project } = await admin.from("projects").select("project_manager_id").eq("id", quotation.project_id).maybeSingle();
+        owners.push(project?.project_manager_id ?? null);
+      }
+      if (!owners.some(Boolean)) owners.push(quotation.assigned_to ?? quotation.created_by ?? null);
+      await notify(admin, {
+        tenantId: quotation.tenant_id,
+        to: owners,
+        kind: "quotation_approved",
+        title: "Client approved a quotation",
+        message: `${quotation.quotation_number}${quotation.version ? ` v${quotation.version}` : ""} was approved by the client`,
+        entity: { type: "quotation", id: quotation.id },
+        actionUrl: `/dashboard/quotations/${quotation.id}`,
+        priority: "high",
+        dedupeKey: `quotation_approved:${quotation.id}`,
+      });
+    } catch (e) {
+      console.error("[client approve] notify failed", e);
     }
 
     return NextResponse.json({

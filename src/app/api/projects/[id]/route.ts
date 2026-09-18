@@ -5,6 +5,7 @@ import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { requireProjectAccess } from "@/lib/projects/guard";
 import { requestLogger } from "@/lib/logger/request";
 import { logProjectActivity } from "@/lib/activity/log";
+import { namesOf, notify } from "@/lib/notifications/notify";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -583,6 +584,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const notesChanged =
       b.notes !== undefined &&
       String(existingProject?.notes ?? "") !== String(b.notes ?? "");
+
+    // A new project manager is told; the project is theirs from here.
+    if (
+      b.project_manager_id &&
+      String(b.project_manager_id) !== String(existingProject?.project_manager_id ?? "")
+    ) {
+      const nameOf = await namesOf(supabase, [user.id]);
+      await notify(supabase, {
+        tenantId: user.tenantId,
+        to: [String(b.project_manager_id)],
+        actor: user.id,
+        kind: "project_assigned",
+        title: "You are the project manager",
+        message: `${nameOf(user.id)} made you project manager of ${existingProject?.name || "a project"}`,
+        entity: { type: "project", id },
+        actionUrl: `/dashboard/projects/${id}`,
+        priority: "high",
+      });
+    }
 
     if (changed.length > 0) {
       await logProjectActivity(supabase, {

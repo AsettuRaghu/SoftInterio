@@ -71,3 +71,16 @@
 .sidebar-scroll::-webkit-scrollbar-thumb:hover {
   background: rgb(148, 163, 184);
 }
+
+/* Notification slider: enters from the right, its bar drains over its life. */
+@keyframes slide-in-right {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes drain {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[slide-in-right_\.25s_ease-out\] { animation: none; }
+}

@@ -8,6 +8,7 @@ import type { CreateLeadInput, LeadStage } from "@/types/leads";
 import { validateLeadDates, type LeadDateFields } from "@/lib/dates/lead-dates";
 import { leadAccess } from "@/lib/leads/access";
 import { requestLogger } from "@/lib/logger/request";
+import { namesOf, notify } from "@/lib/notifications/notify";
 
 // GET /api/sales/leads - List leads with filters
 export async function GET(request: NextRequest) {
@@ -595,6 +596,21 @@ export async function POST(request: NextRequest) {
     }
 
     log.info("Lead created", { leadId: lead.id, leadNumber: lead.lead_number });
+
+    // A lead entered on somebody else's behalf is theirs to chase.
+    if (lead.assigned_to && lead.assigned_to !== user.id) {
+      const nameOf = await namesOf(supabase, [user.id]);
+      await notify(supabase, {
+        tenantId: user.tenantId,
+        to: [lead.assigned_to],
+        actor: user.id,
+        kind: "lead_assigned",
+        title: "New lead for you",
+        message: `${nameOf(user.id)} assigned you ${lead.client?.name || lead.lead_number || "a lead"}`,
+        entity: { type: "lead", id: lead.id },
+        actionUrl: `/dashboard/sales/leads/${lead.id}`,
+      });
+    }
 
     // Create initial activity
     const { error: activityError } = await supabase

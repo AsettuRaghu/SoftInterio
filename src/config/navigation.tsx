@@ -366,6 +366,13 @@ export const navigationConfig: NavigationItem[] = [
         permission: "settings.profile",
       },
       {
+        // Personal, like the profile: which kinds of in-app notification
+        // reach you. Everyone chooses for themselves, so no other gate.
+        name: "Notifications",
+        href: "/dashboard/settings/notifications",
+        permission: "settings.profile",
+      },
+      {
         name: "Company",
         href: "/dashboard/settings/company",
         permission: "settings.company.view",

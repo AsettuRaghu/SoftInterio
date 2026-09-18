@@ -79,7 +79,8 @@ export const routePermissions: RoutePermission[] = [
     permissions: ["settings.billing"],
     description: "Billing and subscription",
   },
-  // Profile is accessible to everyone - no restriction needed
+  // Profile, notification preferences and the notifications list are
+  // personal and open to every signed-in user - no restriction needed.
   // {
   //   pattern: "/dashboard/settings/profile",
   //   permissions: ["settings.profile"],

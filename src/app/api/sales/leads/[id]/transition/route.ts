@@ -11,6 +11,7 @@ import {
 import { logLeadActivity } from "@/lib/activity/log";
 import { requestLogger } from "@/lib/logger/request";
 import { leadAccess, canWriteLead } from "@/lib/leads/access";
+import { namesOf, notify } from "@/lib/notifications/notify";
 import {
   getPendingLeadWork,
   cancelPendingLeadWork,
@@ -759,6 +760,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                 ? `The won lead became ${newProject.name}.`
                 : "The won lead became a project.",
             });
+
+            // The project manager named on the conversion has work waiting:
+            // the plan is chosen at kick-off and nothing starts until then.
+            if (body.project_manager_id) {
+              const nameOf = await namesOf(supabase, [user.id]);
+              await notify(supabase, {
+                tenantId: lead.tenant_id,
+                to: [body.project_manager_id],
+                actor: user.id,
+                kind: "lead_converted",
+                title: "A project is waiting for kick-off",
+                message: `${nameOf(user.id)} won ${lead.lead_number || "a lead"} - ${newProject?.name || projectLabel} is yours to kick off`,
+                entity: { type: "project", id: createdProjectId },
+                actionUrl: `/dashboard/projects/${createdProjectId}`,
+                priority: "high",
+              });
+            }
 
             // project_activities scopes through its project and has no
             // tenant_id column, unlike lead_activities.

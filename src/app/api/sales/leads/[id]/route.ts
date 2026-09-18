@@ -11,6 +11,7 @@ import type { UpdateLeadInput } from "@/types/leads";
 import { validateLeadDates, type LeadDateFields } from "@/lib/dates/lead-dates";
 import { leadAccess, canReadLead, canWriteLead } from "@/lib/leads/access";
 import { requestLogger } from "@/lib/logger/request";
+import { notify } from "@/lib/notifications/notify";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -626,6 +627,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         title: "Lead reassigned",
         description: `${nameOf(before.assigned_to)} → ${nameOf(body.assigned_to)}`,
       });
+
+      if (body.assigned_to) {
+        const { data: who } = await supabase
+          .from("tenant_directory").select("name").eq("id", user.id).maybeSingle();
+        await notify(supabase, {
+          tenantId: existingLead.tenant_id,
+          to: [body.assigned_to],
+          actor: user.id,
+          kind: "lead_assigned",
+          title: "Lead assigned to you",
+          message: `${who?.name || "Someone"} assigned you ${beforeClient?.name || (existingLead as any).lead_number || "a lead"}`,
+          entity: { type: "lead", id },
+          actionUrl: `/dashboard/sales/leads/${id}`,
+        });
+      }
     }
 
     const summary = describeChanges(before, after, LEAD_FIELD_LABELS);

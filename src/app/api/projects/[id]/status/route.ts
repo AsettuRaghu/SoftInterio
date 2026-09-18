@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { requireProjectAccess } from "@/lib/projects/guard";
+import { namesOf, notify } from "@/lib/notifications/notify";
 import { requestLogger } from "@/lib/logger/request";
 
 const STATUSES = new Set(["in_progress", "on_hold", "completed", "cancelled"]);
@@ -72,6 +73,26 @@ export async function POST(
       return NextResponse.json({ error: result.error, reason: result.reason }, { status: 409 });
     }
     log.info("Project status changed", { projectId: id, status });
+
+    // The project manager hears when their project stops or starts again;
+    // completion and cancellation are their own act in practice.
+    if (status === "on_hold" || status === "in_progress") {
+      const nameOf = await namesOf(supabase, [user.id]);
+      const held = status === "on_hold";
+      await notify(supabase, {
+        tenantId: user.tenantId,
+        to: [gate.project.project_manager_id],
+        actor: user.id,
+        kind: held ? "project_held" : "project_resumed",
+        title: held ? "Project on hold" : "Project resumed",
+        message: `${nameOf(user.id)} ${held ? "put" : "resumed"} ${gate.project.name || "your project"}${held ? " on hold" : ""}${
+          typeof body.note === "string" && body.note.trim() ? ` - "${body.note.trim()}"` : ""
+        }`,
+        entity: { type: "project", id },
+        actionUrl: `/dashboard/projects/${id}`,
+        priority: held ? "high" : "normal",
+      });
+    }
     return NextResponse.json({ success: true, data: result });
   } catch (error) {
     log.error("Project status change failed", error);

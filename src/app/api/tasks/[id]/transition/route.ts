@@ -10,6 +10,7 @@
  * Prefer this over PATCHing tasks.status directly.
  */
 
+import { notifyTaskChange } from "@/lib/notifications/tasks";
 import { NextRequest, NextResponse } from "next/server";
 import { readHold } from "@/lib/tasks/hold";
 import { createClient } from "@/lib/supabase/server";
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // runs as the caller, but this gives a proper 404 instead of a DB error.
     const { data: existingTask, error: fetchError } = await supabase
       .from("tasks")
-      .select("id, title, status, related_type, related_id")
+      .select("id, title, status, related_type, related_id, assigned_to, created_by")
       .eq("id", id)
       .single();
 
@@ -101,6 +102,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Mirror the change onto the linked entity's timeline, matching what the
     // existing PATCH handler does.
+    if (existingTask.status !== status) {
+      await notifyTaskChange(supabase, {
+        tenantId: user!.tenantId,
+        actor: user!.id,
+        task: {
+          id: existingTask.id,
+          title: existingTask.title,
+          assigned_to: existingTask.assigned_to ?? null,
+          created_by: existingTask.created_by ?? null,
+        },
+        status: { from: existingTask.status, to: status },
+      });
+    }
     if (existingTask.status !== status && existingTask.related_id) {
       const description = `Task "${existingTask.title}": status changed to ${status}${
         reason ? ` (${reason})` : ""

@@ -2523,6 +2523,35 @@ both of its tables.
 caller and returns null for every colleague, so the column would have read
 "Unassigned" on any project managed by someone else.
 
+### Notifications are written by the route that made the change
+
+Built 2026-09-18, in-app only; `docs/plans/notifications.md` has the event
+table. The baseline's `notifications` / `notification_preferences` tables
+are reused; `type` became text (`lib/notifications/kinds.ts` is the list)
+and the one producer that existed - a trigger telling every Owner / Admin /
+Manager / Sales Manager about a won lead, an audience chosen by role slug -
+is gone.
+
+**One rule**: a person is told about something they own or were just given,
+by the route that gave it to them, through `notify()`
+(`lib/notifications/notify.ts`). The route already decided that person may
+know, so nothing here widens access - and there is no "notify a role". The
+actor is never told; a preference row saying no is honoured; a failure to
+write a notice never fails the change it describes. The client portal's
+approve is the one producer on the admin client (no session).
+
+**Delivery is Supabase Realtime** on the table, filtered to the signed-in
+person and scoped by the same own-rows RLS; `NotificationsProvider` in the
+dashboard shell holds the one subscription per tab, and the bell, the
+bottom-right slider and `/dashboard/notifications` all read from it. The
+slider shows only rows that arrive while the tab is open. Names come from
+`tenant_directory`; the old `users` embed returned null for every colleague.
+
+`dedupe_key` is unique per person and always present (random when the
+caller has none), so the reminder job that comes next can write
+`<kind>:<entity>:<date>` and never nag twice. A partial unique index was
+tried first; PostgREST's `on_conflict` cannot infer one.
+
 ### Functions run next to the database, and a session is verified locally
 
 The Supabase project is in Mumbai (`ap-south-1`); Vercel's default function

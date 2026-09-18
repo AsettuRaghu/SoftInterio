@@ -4,6 +4,8 @@ import React, { useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/SidebarNew";
 import { cn } from "@/utils/cn";
+import { NotificationsProvider } from "@/components/notifications/NotificationsProvider";
+import { NotificationSlider } from "@/components/notifications/NotificationSlider";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -13,28 +15,32 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Header */}
-      <Header />
+    <NotificationsProvider>
+      <div className="min-h-screen bg-white">
+        {/* Header */}
+        <Header />
 
-      {/* Main content area */}
-      <div className="flex">
-        {/* Sidebar */}
-        <Sidebar
-          isExpanded={isSidebarExpanded}
-          setIsExpanded={setIsSidebarExpanded}
-        />
+        {/* Main content area */}
+        <div className="flex">
+          {/* Sidebar */}
+          <Sidebar
+            isExpanded={isSidebarExpanded}
+            setIsExpanded={setIsSidebarExpanded}
+          />
 
-        {/* Content */}
-        <main
-          className={cn(
-            "flex-1 min-h-screen pt-20 transition-all duration-300 ease-in-out",
-            isSidebarExpanded ? "ml-60" : "ml-14"
-          )}
-        >
-          <div className="p-3">{children}</div>
-        </main>
+          {/* Content */}
+          <main
+            className={cn(
+              "flex-1 min-h-screen pt-20 transition-all duration-300 ease-in-out",
+              isSidebarExpanded ? "ml-60" : "ml-14",
+            )}
+          >
+            <div className="p-3">{children}</div>
+          </main>
+        </div>
+        {/* Live notifications slide in here, wherever in the app you are. */}
+        <NotificationSlider />
       </div>
-    </div>
+    </NotificationsProvider>
   );
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readHold } from "@/lib/tasks/hold";
+import { notifyTaskChange } from "@/lib/notifications/tasks";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import {
@@ -632,6 +633,26 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         });
       }
     }
+
+    // Tell the people the change concerns - whatever the task hangs off.
+    await notifyTaskChange(supabase, {
+      tenantId: user.tenantId,
+      actor: user.id,
+      task: {
+        id,
+        title: existingTask.title,
+        assigned_to: ("assigned_to" in body ? body.assigned_to : existingTask.assigned_to) ?? null,
+        created_by: existingTask.created_by ?? null,
+      },
+      assignedTo:
+        "assigned_to" in body
+          ? { from: existingTask.assigned_to ?? null, to: body.assigned_to ?? null }
+          : undefined,
+      status:
+        body.status && body.status !== existingTask.status
+          ? { from: existingTask.status, to: body.status }
+          : undefined,
+    });
 
     // Fetch updated task with details
     const { data: fullTask } = await supabase

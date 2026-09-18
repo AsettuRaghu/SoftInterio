@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import type { CreateTaskInput } from "@/types/tasks";
+import { namesOf, notify } from "@/lib/notifications/notify";
 
 // GET /api/tasks - List tasks with filters
 export async function GET(request: NextRequest) {
@@ -622,6 +623,36 @@ export async function POST(request: NextRequest) {
         if (subtaskError) {
           console.error("Error creating subtasks:", subtaskError);
           // Don't fail the entire request, just log the error
+        }
+      }
+    }
+
+    // Tell whoever was given work by someone else. Subtasks handed to a
+    // third person are theirs too; the creator is never told about their own.
+    {
+      const given = new Map<string, string[]>();
+      const add = (uid: string | null | undefined, title: string) => {
+        if (!uid || uid === user!.id) return;
+        given.set(uid, [...(given.get(uid) ?? []), title]);
+      };
+      add(task.assigned_to, task.title);
+      for (const st of body.subtasks ?? []) add(st.assigned_to, st.title || task.title);
+      if (given.size > 0) {
+        const nameOf = await namesOf(supabase, [user!.id]);
+        for (const [uid, titles] of given) {
+          await notify(supabase, {
+            tenantId: user!.tenantId,
+            to: [uid],
+            actor: user!.id,
+            kind: "task_assigned",
+            title: titles.length === 1 ? "New task for you" : `${titles.length} new tasks for you`,
+            message:
+              titles.length === 1
+                ? `${nameOf(user!.id)} assigned you "${titles[0]}"`
+                : `${nameOf(user!.id)} assigned you "${titles[0]}" and ${titles.length - 1} more`,
+            entity: { type: "task", id: task.id },
+            actionUrl: `/dashboard/tasks/${task.id}`,
+          });
         }
       }
     }
