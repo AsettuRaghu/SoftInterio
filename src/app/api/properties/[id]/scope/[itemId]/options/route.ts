@@ -17,8 +17,9 @@ type RouteParams = { params: Promise<{ id: string; itemId: string }> };
  * Alternatives: within one category, items priced per the SAME quantity
  * (two carcass grades both per front area; two hinge grades both per
  * hinges) are ways of pricing one thing, so they share a `group_key` and
- * carry at most one ① and one ② between them - choosing a new ① moves the
- * old one to ②. Counted items (drawers, trays) are independent.
+ * carry at most one ① and one ② between them. `trg_scope_choice_alternatives`
+ * keeps that on every write - here the key is computed only so the sheet
+ * can say "one of these"; the client re-reads after each save.
  *
  * GET  -> { groups: [{ category, items: [{ cost_item_id, name, tier, counted, group_key, status, row_id, scope_owner }] }], from_templates }
  * PUT  { cost_item_id, status: "p1" | "p2" | null, scope_owner?, quantity? }
@@ -110,32 +111,6 @@ async function menuLines(supabase: Db, componentTypeId: string) {
   return { lines: menu.length ? menu : rows, fromMenu: menu.length > 0 };
 }
 
-/**
- * Which picked rows under a component are alternatives to `costItemId`:
- * same category, same priced-per quantity, neither counted. Those hold at
- * most one ① and one ② between them.
- */
-async function alternativesOf(supabase: Db, componentTypeId: string, componentRowId: string, costItemId: string) {
-  const [{ lines }, { data: picked }] = await Promise.all([
-    menuLines(supabase, componentTypeId),
-    supabase.from("property_scope_items").select("id, cost_item_id, choice_status").eq("parent_id", componentRowId).not("cost_item_id", "is", null).neq("cost_item_id", costItemId),
-  ]);
-  if (!picked?.length) return [];
-  const ids = [costItemId, ...picked.map((p) => p.cost_item_id as string)];
-  const { data: items } = await supabase.from("quotation_cost_items").select("id, category_id, unit_code").in("id", ids);
-  const keyByItem = new Map<string, string | null>();
-  for (const l of lines) if (!keyByItem.has(l.cost_item_id) || l.quantity_key) keyByItem.set(l.cost_item_id, l.quantity_key);
-  const groupOf = (id: string) => {
-    const it = (items ?? []).find((x) => x.id === id);
-    if (!it) return null;
-    const counted = PER_PIECE.has(String(it.unit_code).toLowerCase()) && !keyByItem.get(id);
-    return counted ? null : `${it.category_id}:${keyByItem.get(id) ?? "face"}`;
-  };
-  const mine = groupOf(costItemId);
-  if (!mine) return [];
-  return picked.filter((p) => groupOf(p.cost_item_id as string) === mine).map((p) => ({ id: p.id as string, status: p.choice_status as "p1" | "p2" | null }));
-}
-
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   const guard = await protectApiRoute(request, { requiredPermissions: ["leads.edit"] });
   if (!guard.success) return createErrorResponse(guard.error!, guard.statusCode!);
@@ -168,19 +143,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (existing) await supabase.from("property_scope_items").delete().eq("id", existing.id);
     return NextResponse.json({ data: { row_id: null, status: null } });
   }
-  // Alternatives hold one ① and one ②. A new ① moves the old ① to ② (and
-  // clears the ② that was there); a new ② clears the old ②.
-  const rivals = await alternativesOf(supabase, component.component_type_id, itemId, body.cost_item_id);
-  if (rivals.length) {
-    const oldP1 = rivals.find((r) => r.status === "p1");
-    const oldP2 = rivals.find((r) => r.status === "p2");
-    if (status === "p1") {
-      if (oldP2 && oldP1) await supabase.from("property_scope_items").delete().eq("id", oldP2.id);
-      if (oldP1) await supabase.from("property_scope_items").update({ choice_status: "p2" }).eq("id", oldP1.id);
-    } else if (oldP2) {
-      await supabase.from("property_scope_items").delete().eq("id", oldP2.id);
-    }
-  }
   if (existing) {
     const { error } = await supabase
       .from("property_scope_items")
@@ -207,6 +169,15 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     })
     .select("id")
     .single();
+  if (error?.code === "23505") {
+    // Two taps a moment apart: the first insert landed after this request
+    // looked. It is the same row - update it.
+    const { data: again } = await supabase.from("property_scope_items").select("id").eq("parent_id", itemId).eq("cost_item_id", body.cost_item_id).maybeSingle();
+    if (again) {
+      await supabase.from("property_scope_items").update({ choice_status: status, ...(owner ? { scope_owner: owner } : {}), ...(quantity !== undefined ? { choice_quantity: quantity } : {}) }).eq("id", again.id);
+      return NextResponse.json({ data: { row_id: again.id, status } });
+    }
+  }
   if (error || !row) {
     console.error("[scope options] insert failed", error?.message);
     return NextResponse.json({ error: "Could not save" }, { status: 500 });
