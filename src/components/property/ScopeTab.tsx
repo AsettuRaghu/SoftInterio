@@ -631,13 +631,8 @@ export function ScopeTab({
                 }}
                 className="text-[11px] text-blue-600 hover:underline shrink-0"
               >
-                + components
+                + components{kidCount > 0 && <span className="text-slate-400"> ({kidCount})</span>}
               </button>
-            )}
-            {!item.component_type_id && kidCount > 0 && (
-              <span className="shrink-0 text-[10px] text-slate-400">
-                {kidCount} component{kidCount === 1 ? "" : "s"}
-              </span>
             )}
           </div>
         </td>

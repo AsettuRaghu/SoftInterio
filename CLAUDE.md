@@ -797,11 +797,16 @@ rule was seeded where such types existed; the tenant edits or replaces it.
   so a pruned menu still showed items from older templates. A type with
   no flagged template falls back to every active template. There is no
   UI for the flag yet - set it when a Templates screen asks for it.
-- **Alternatives hold one ① and one ②.** Within a category, items priced
-  per the same quantity (two carcass grades, both per front area) are ways
-  of pricing one thing: `group_key` on the option, "one of these" under the
-  category name, and the PUT moves the old ① to ② when a new ① is chosen
-  (clearing the ② that was there) and clears the old ② for a new ②. Counted
+- **Alternatives hold one ① and one ②, kept by a trigger.** Within a
+  category, items priced per the same quantity (two carcass grades, both
+  per front area) are ways of pricing one thing: `group_key` on the option,
+  "one of these" under the category name, and
+  `trg_scope_choice_alternatives` (`scope_item_group_key()`) moves the old
+  ① to ② when a new ① lands (dropping the ② that was there) and drops the
+  old ② for a new ②. It was first written in the options route and two taps
+  a second apart - two concurrent requests - left two ①s standing; a
+  read-then-write rule belongs in the database. The route also treats a
+  duplicate-key insert (the same race) as the update it meant. Counted
   items are independent - a wardrobe has drawers AND a tray.
 - **Shelves and drawers are counted options, not rule fields.** A number
   decided with the customer is a count on the option; the rule keeps only
