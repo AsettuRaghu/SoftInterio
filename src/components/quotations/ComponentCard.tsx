@@ -5,6 +5,7 @@ import {
   BuilderComponent,
   LineItem,
   MeasurementUnit,
+  MEASUREMENT_UNITS,
   calculateSqft,
   convertToFeet,
   getMeasurementInfo,
@@ -29,7 +30,7 @@ interface ComponentCardProps {
   onUpdateLineItem: (lineItemId: string, updates: Partial<LineItem>) => void;
   /** Sets the component's own size and pushes it to every following line. */
   onUpdateDimensions?: (
-    dimensions: Pick<BuilderComponent, "width" | "height" | "measurementUnit">
+    dimensions: Pick<BuilderComponent, "width" | "height" | "measurementUnit"> & { measures?: Record<string, number> | null }
   ) => void;
   /** Whether internal cost and margin may be shown on this component. */
   canViewCosts?: boolean;
@@ -362,7 +363,61 @@ export function ComponentCard({
               Only shown when the component actually holds measured lines - a
               component made purely of counted items has no size worth asking
               for. */}
-          {mode === "quotation" && onUpdateDimensions && hasMeasuredLines && (
+          {/* The tenant's own measurement of this component (Catalogue →
+              Costing): the fields they defined, and the quantities their
+              formulas give. Lines priced per one of those quantities follow
+              it. Shown whenever the type has a rule, whatever the lines. */}
+          {mode === "quotation" && onUpdateDimensions && component.costing && (
+            <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+              <div className="flex flex-wrap items-end gap-3">
+                {component.costing.fields.map((f) => (
+                  <div key={f.key}>
+                    <label className="block text-[10px] font-medium text-slate-500 mb-1" title={f.hint}>{f.label}</label>
+                    <input
+                      type="number"
+                      value={component.measures?.[f.key] ?? ""}
+                      readOnly={readOnly}
+                      placeholder={f.kind === "count" ? "0" : "—"}
+                      onChange={(e) =>
+                        onUpdateDimensions({
+                          width: component.width ?? null,
+                          height: component.height ?? null,
+                          measurementUnit: component.measurementUnit || "mm",
+                          measures: { ...(component.measures ?? {}), [f.key]: e.target.value === "" ? 0 : Number(e.target.value) },
+                        })
+                      }
+                      className="w-24 px-2 py-1.5 text-sm border border-slate-200 rounded-md focus:ring-1 focus:ring-purple-500 outline-none text-right"
+                    />
+                  </div>
+                ))}
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-500 mb-1">Unit</label>
+                  <select
+                    disabled={readOnly}
+                    value={component.measurementUnit || "mm"}
+                    onChange={(e) =>
+                      onUpdateDimensions({ width: component.width ?? null, height: component.height ?? null, measurementUnit: e.target.value as MeasurementUnit, measures: component.measures ?? null })
+                    }
+                    className="px-2 py-1.5 text-sm border border-slate-200 rounded-md bg-white focus:ring-1 focus:ring-purple-500 outline-none"
+                  >
+                    {MEASUREMENT_UNITS.map((u) => (
+                      <option key={u.value} value={u.value}>{u.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <p className="mt-1.5 text-[11px] text-slate-500">
+                {component.costing.quantities
+                  .map((q) => {
+                    const v = component.lineItems.find((li) => li.quantityKey === q.key)?.derivedQuantity;
+                    return v === undefined || v === null ? null : `${q.label}: ${Math.round(v * 100) / 100} ${q.unit_code}`;
+                  })
+                  .filter(Boolean)
+                  .join(" · ") || "Lines priced per these quantities follow the measurement."}
+              </p>
+            </div>
+          )}
+          {mode === "quotation" && onUpdateDimensions && !component.costing && hasMeasuredLines && (
             <div className="flex flex-wrap items-end gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
               <div>
                 <label className="block text-[10px] font-medium text-slate-500 mb-1">

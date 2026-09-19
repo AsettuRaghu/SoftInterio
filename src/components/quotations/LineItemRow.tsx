@@ -99,7 +99,13 @@ export function LineItemRow({
     }
   };
 
-  const amount = calculateAmount();
+  // A line priced per one of the component's quantities (the tenant's rule)
+  // follows that quantity; nothing on the line is typed by hand.
+  const ruled = !!item.quantityKey;
+  // Derived at render in the builder; on the read-only summary page the
+  // stored quantity and amount stand.
+  const ruledQuantity = item.derivedQuantity ?? item.quantity ?? 0;
+  const amount = ruled ? (item.derivedQuantity != null ? item.derivedQuantity * item.rate : item.amount ?? 0) : calculateAmount();
 
   // Handle rate input change - allow empty or positive whole numbers only
   const handleRateChange = (value: string) => {
@@ -405,6 +411,35 @@ export function LineItemRow({
 
       {/* Row 2: All input fields with consistent grid layout - 9 columns */}
       {/* Unit | Height | × | Width | Area/Value | Spacer | Base Rate | Rate | Amount */}
+      {ruled ? (
+        <div className="grid grid-cols-[1fr_120px_120px_140px] gap-3 items-end">
+          <div className="text-xs text-slate-600">
+            <span className="block text-slate-500 mb-1">Priced per</span>
+            <span className="inline-flex items-center gap-2 px-2 py-1.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800">
+              <span className="font-mono">{item.quantityKey}</span>
+              <span className="font-semibold tabular-nums">{Math.round(ruledQuantity * 100) / 100} {item.unitCode}</span>
+              <span className="text-emerald-700/70">from the component&rsquo;s measurement</span>
+            </span>
+          </div>
+          <div />
+          <div>
+            <label className={`block text-xs mb-1 ${isRateMissing ? "text-red-500 font-medium" : "text-slate-500"}`}>Rate</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={rateInput}
+              readOnly={readOnly}
+              onChange={(e) => handleRateChange(e.target.value)}
+              onBlur={handleRateBlur}
+              className={`w-full px-2 py-1.5 text-sm text-right border rounded-md outline-none ${isRateMissing ? "border-red-300 bg-red-50" : "border-slate-200 focus:ring-1 focus:ring-purple-500"}`}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Amount</label>
+            <div className="px-2 py-1.5 text-sm text-right font-semibold text-slate-900 bg-slate-50 border border-slate-200 rounded-md tabular-nums">{formatCurrency(amount)}</div>
+          </div>
+        </div>
+      ) : (
       <div className="grid grid-cols-[90px_100px_20px_100px_110px_1fr_120px_120px_140px] gap-3 items-end">
         {/* Column 1: Unit (for area/length) or Qty */}
         {measureInfo.type === "area" || measureInfo.type === "length" ? (
@@ -700,6 +735,7 @@ export function LineItemRow({
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

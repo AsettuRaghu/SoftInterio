@@ -23,6 +23,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { fetchConfigOnce } from "@/lib/quotations/config-cache";
 import { AddSpacesModal } from "./AddSpacesModal";
 import { CheckIcon } from "@heroicons/react/24/outline";
+import { hasCosting, readCosting, type ComponentCosting } from "@/lib/costing/component-costing";
 import { ScopeItemPanel } from "./ScopeItemPanel";
 import {
   PlusIcon,
@@ -73,6 +74,8 @@ interface SpaceTypeOption {
   is_container?: boolean;
   /** On component types: which space types this suits. Null means any. */
   applicable_space_types?: string[] | null;
+  /** On component types: the tenant's costing rule, when one is set. */
+  config_schema?: Record<string, unknown> | null;
 }
 
 interface ScopeTabProps {
@@ -168,6 +171,15 @@ export function ScopeTab({
   // The space opened out in the side panel (and the component to expand in
   // it, when a component row was clicked); the walkthrough starts at the first.
   const [openTarget, setOpenTarget] = useState<{ spaceId: string; componentId: string | null } | null>(null);
+  // Each component type's costing rule, for the sheet's measurement fields.
+  const costingByType = useMemo(() => {
+    const m = new Map<string, ComponentCosting>();
+    for (const t of componentTypes) {
+      const c = readCosting(t.config_schema);
+      if (hasCosting(c)) m.set(t.id, c);
+    }
+    return m;
+  }, [componentTypes]);
   const openItem = (id: string) => {
     const row = items.find((i) => i.id === id);
     if (!row) return;
@@ -1046,6 +1058,7 @@ export function ScopeTab({
           readOnly={readOnly}
           focusComponentId={openTarget.componentId}
           namePrefix={namePrefix}
+          costingByType={costingByType}
           onReload={() => void load()}
           onClose={() => setOpenTarget(null)}
           onNavigate={(i) => setOpenTarget({ spaceId: i.id, componentId: null })}

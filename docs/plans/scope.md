@@ -56,6 +56,13 @@ grouped by category; on the room sheet one tap = considering, two = chosen,
 three = clear. Never a price on the sheet. Chosen items become line items
 when the quotation starts from the scope or *Bring in from scope* runs.
 
+## Costing is configured by the tenant (2026-09-19)
+Per component type: the fields they measure, the quantities they cost
+against (formulas over the fields, lengths in feet inside), and which
+quantity each template line is priced per. The platform holds no rule of
+its own. Rough numbers in the showroom, site-measured later; the quotation
+re-quantifies on *Bring in from scope* and on revision.
+
 ## How the scope is used downstream
 - the quotation starts from it and *Bring in from scope* adds what is
   missing (rows not ours never come in);

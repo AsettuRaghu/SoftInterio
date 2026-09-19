@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { calculateSqft, convertToFeet, getMeasurementInfo, type MeasurementUnit } from "@/components/quotations/types";
+import { hasCosting, quantify, readCosting } from "@/lib/costing/component-costing";
 
 /**
  * Brings the property's scope into a quotation - the rooms and components
@@ -51,6 +52,7 @@ type Row = Record<string, unknown> & {
   width: number | null;
   height: number | null;
   display_order: number;
+  measures: Record<string, number> | null;
 };
 
 export interface ScopeCopyResult {
@@ -110,19 +112,20 @@ export async function copyScopeToQuotation(
     const compScopeIds = new Set<string>();
     const compByTypeName = new Set<string>();
     // Where each scope component already lives, with the cost items it holds.
-    const qcompByScopeId = new Map<string, { id: string; width: number | null; height: number | null; unit: string; lines: Set<string> }>();
-    const qcompByTypeName = new Map<string, { id: string; width: number | null; height: number | null; unit: string; lines: Set<string> }>();
+    type Target = { id: string; width: number | null; height: number | null; unit: string; lines: Set<string>; componentTypeId: string | null; measures: Record<string, number> | null };
+    const qcompByScopeId = new Map<string, Target>();
+    const qcompByTypeName = new Map<string, Target>();
     let maxOrder = -1;
     for (const qs of (existingSpaces ?? []) as Array<{
       id: string; name: string; space_type_id: string | null; display_order: number | null;
       metadata: { scope_item_id?: string } | null;
-      components: Array<{ id: string; name: string; component_type_id: string | null; width: number | null; height: number | null; metadata: { scope_item_id?: string; measurement_unit?: string } | null; lines: Array<{ quotation_cost_item_id: string | null }> | null }> | null;
+      components: Array<{ id: string; name: string; component_type_id: string | null; width: number | null; height: number | null; metadata: { scope_item_id?: string; measurement_unit?: string; measures?: Record<string, number> } | null; lines: Array<{ quotation_cost_item_id: string | null }> | null }> | null;
     }>) {
       if (qs.metadata?.scope_item_id) spaceByScopeId.set(qs.metadata.scope_item_id, qs.id);
       spaceByTypeName.set(`${qs.space_type_id ?? ""}::${qs.name.trim().toLowerCase()}`, qs.id);
       maxOrder = Math.max(maxOrder, qs.display_order ?? 0);
       for (const c of qs.components ?? []) {
-        const info = { id: c.id, width: c.width, height: c.height, unit: c.metadata?.measurement_unit ?? "mm", lines: new Set((c.lines ?? []).map((l) => l.quotation_cost_item_id).filter(Boolean) as string[]) };
+        const info: Target = { id: c.id, width: c.width, height: c.height, unit: c.metadata?.measurement_unit ?? "mm", lines: new Set((c.lines ?? []).map((l) => l.quotation_cost_item_id).filter(Boolean) as string[]), componentTypeId: c.component_type_id, measures: c.metadata?.measures ?? null };
         if (c.metadata?.scope_item_id) {
           compScopeIds.add(c.metadata.scope_item_id);
           qcompByScopeId.set(c.metadata.scope_item_id, info);
@@ -184,7 +187,7 @@ export async function copyScopeToQuotation(
 
     const compRows: Array<{ r: Row; spaceId: string }> = [];
     // Scope component id -> quotation component (existing or new) for the lines.
-    const targetByScopeComp = new Map<string, { id: string; width: number | null; height: number | null; unit: string; lines: Set<string> }>();
+    const targetByScopeComp = new Map<string, Target>();
     for (const r of scope) {
       if (!r.component_type_id || !r.parent_id || r.cost_item_id) continue;
       const spaceId = quotationSpaceByScopeId.get(r.parent_id);
@@ -221,6 +224,7 @@ export async function copyScopeToQuotation(
               measurement_unit: r.measurement_unit ?? undefined,
               scope_item_id: r.id,
               measurement_status: r.measurement_status,
+              ...(r.measures ? { measures: r.measures } : {}),
             },
             subtotal: 0,
           })),
@@ -230,7 +234,7 @@ export async function copyScopeToQuotation(
       else {
         result.components = inserted?.length ?? 0;
         compRows.forEach(({ r }, i) => {
-          if (inserted?.[i]) targetByScopeComp.set(r.id, { id: inserted[i].id, width: r.width, height: r.length, unit: r.measurement_unit ?? "mm", lines: new Set() });
+          if (inserted?.[i]) targetByScopeComp.set(r.id, { id: inserted[i].id, width: r.width, height: r.length, unit: r.measurement_unit ?? "mm", lines: new Set(), componentTypeId: r.component_type_id, measures: r.measures ?? null });
         });
       }
     }
@@ -241,11 +245,18 @@ export async function copyScopeToQuotation(
     const chosen = scope.filter((r) => r.cost_item_id && r.choice_status === "p1" && OURS(r.scope_owner) && r.parent_id && targetByScopeComp.has(r.parent_id));
     const wantedIds = [...new Set(chosen.map((r) => r.cost_item_id as string))];
     if (wantedIds.length) {
-      const { data: costItems } = await supabase
-        .from("quotation_cost_items")
-        .select("id, name, unit_code, default_rate, company_cost, vendor_cost")
-        .in("id", wantedIds);
+      const typeIds = [...new Set([...targetByScopeComp.values()].map((t) => t.componentTypeId).filter(Boolean) as string[])];
+      const [{ data: costItems }, { data: types }, { data: templateLines }] = await Promise.all([
+        supabase.from("quotation_cost_items").select("id, name, unit_code, default_rate, company_cost, vendor_cost").in("id", wantedIds),
+        typeIds.length ? supabase.from("component_types").select("id, config_schema").in("id", typeIds) : Promise.resolve({ data: [] as { id: string; config_schema: unknown }[] }),
+        typeIds.length
+          ? supabase.from("quotation_template_line_items").select("component_type_id, cost_item_id, quantity_key").in("component_type_id", typeIds).in("cost_item_id", wantedIds).not("quantity_key", "is", null)
+          : Promise.resolve({ data: [] as { component_type_id: string; cost_item_id: string; quantity_key: string }[] }),
+      ]);
       const byId = new Map((costItems ?? []).map((c) => [c.id as string, c]));
+      // The tenant's rule per component type, and what each item is priced per.
+      const ruleByType = new Map((types ?? []).map((t) => [t.id as string, readCosting(t.config_schema)]));
+      const keyFor = new Map((templateLines ?? []).map((l) => [`${l.component_type_id}::${l.cost_item_id}`, l.quantity_key as string]));
       const lineRows: Record<string, unknown>[] = [];
       for (const r of chosen) {
         const target = targetByScopeComp.get(r.parent_id as string)!;
@@ -257,10 +268,16 @@ export async function copyScopeToQuotation(
         const unit = (target.unit || "mm") as MeasurementUnit;
         const kind = getMeasurementInfo(ci.unit_code).type;
         const rate = Number(ci.default_rate) || 0;
-        // The same arithmetic the builder uses; a measured line follows the
-        // component's size until somebody types its own.
-        const amount =
-          kind === "area" ? calculateSqft(target.width, target.height, unit) * rate
+        // Priced per one of the tenant's quantities when the type has a rule
+        // and the template says which; else the builder's own arithmetic on
+        // the component's one face.
+        const rule = target.componentTypeId ? ruleByType.get(target.componentTypeId) : undefined;
+        const quantityKey = target.componentTypeId ? keyFor.get(`${target.componentTypeId}::${ci.id}`) ?? null : null;
+        const ruled = !!(rule && hasCosting(rule) && quantityKey && rule.quantities.some((q) => q.key === quantityKey));
+        const derived = ruled ? quantify(rule!, target.measures, unit).values[quantityKey!] ?? 0 : null;
+        const amount = ruled
+          ? (derived ?? 0) * rate
+          : kind === "area" ? calculateSqft(target.width, target.height, unit) * rate
           : kind === "length" ? convertToFeet(target.width || 0, unit) * rate
           : kind === "fixed" ? rate
           : rate;
@@ -269,9 +286,9 @@ export async function copyScopeToQuotation(
           quotation_component_id: target.id,
           quotation_cost_item_id: ci.id,
           name: ci.name,
-          length: kind === "area" || kind === "length" ? target.width : null,
-          width: kind === "area" ? target.height : null,
-          quantity: 1,
+          length: !ruled && (kind === "area" || kind === "length") ? target.width : null,
+          width: !ruled && kind === "area" ? target.height : null,
+          quantity: ruled ? Math.round((derived ?? 0) * 100) / 100 : 1,
           unit_code: ci.unit_code,
           rate,
           amount: Math.round(amount * 100) / 100,
@@ -279,7 +296,7 @@ export async function copyScopeToQuotation(
           company_cost: ci.company_cost ?? null,
           vendor_cost: ci.vendor_cost ?? null,
           display_order: target.lines.size + lineRows.filter((l) => l.quotation_component_id === target.id).length,
-          metadata: { follows_component: kind === "area" || kind === "length", scope_item_id: r.id },
+          metadata: { follows_component: !ruled && (kind === "area" || kind === "length"), scope_item_id: r.id, quantity_key: ruled ? quantityKey : null },
         });
         target.lines.add(ci.id);
       }

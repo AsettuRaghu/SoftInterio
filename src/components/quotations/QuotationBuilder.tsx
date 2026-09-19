@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -25,6 +25,7 @@ import { SpaceCard } from "@/components/quotations/SpaceCard";
 import { BuilderSidebar } from "@/components/quotations/BuilderSidebar";
 import { Toast } from "@/components/ui/Toast";
 import { useDefaultMeasurementUnit } from "@/lib/settings/use-default-unit";
+import { deriveQuantities } from "@/lib/costing/derive-quantities";
 import { RepriceModal } from "@/components/quotations/RepriceModal";
 import { PrintQuotationModal } from "@/components/quotations/PrintQuotationModal";
 import { TemplateModal } from "@/components/quotations/TemplateModal";
@@ -106,6 +107,20 @@ export function QuotationBuilder({
   // What this business measures in (Settings → Config): every new component
   // and line starts on it; any row can still be changed.
   const defaultUnit = useDefaultMeasurementUnit();
+  // What each cost item is priced per on a component type, from the tenant's
+  // rule (Catalogue → Costing). Fetched once per type, kept for the session.
+  const pricedPer = useRef(new Map<string, Promise<Map<string, string | null>>>());
+  const pricedPerFor = (componentTypeId: string) => {
+    let p = pricedPer.current.get(componentTypeId);
+    if (!p) {
+      p = fetch(`/api/quotations/config/component-types/${componentTypeId}/costing`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => new Map<string, string | null>((j?.data?.lines ?? []).map((l: { cost_item_id: string; quantity_key: string | null }) => [l.cost_item_id, l.quantity_key])))
+        .catch(() => new Map<string, string | null>());
+      pricedPer.current.set(componentTypeId, p);
+    }
+    return p;
+  };
   const [scopeNotice, setScopeNotice] = useState<{ message: string; variant: "success" | "info" | "error" } | null>(null);
   const [quotationName, setQuotationName] = useState("");
   const [version, setVersion] = useState(1);
@@ -299,10 +314,14 @@ export function QuotationBuilder({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs only when the listed values change; the fetch functions are defined in this component
   }, [shouldOpenTemplateModal, isLoading, quotationId, router]);
 
+  // The spaces as drawn: each component carries its costing rule and every
+  // rule-priced line its derived quantity. Ephemeral - never saved as state.
+  const viewSpaces = useMemo(() => deriveQuantities(spaces, masterData.component_types), [spaces, masterData.component_types]);
+
   // Calculate totals
   const calculateTotals = useCallback(() => {
     let subtotal = 0;
-    spaces.forEach((space) => {
+    viewSpaces.forEach((space) => {
       space.components.forEach((comp) => {
         comp.lineItems.forEach((item) => {
           subtotal += calculateItemAmount(item);
@@ -312,10 +331,13 @@ export function QuotationBuilder({
     const taxAmount = subtotal * (taxPercent / 100);
     const total = subtotal + taxAmount;
     return { subtotal, taxAmount, total };
-  }, [spaces, taxPercent]);
+  }, [viewSpaces, taxPercent]);
 
   // Calculate single item amount
   const calculateItemAmount = (item: LineItem): number => {
+    // A line priced per one of the component's quantities follows that
+    // quantity; deriveQuantities put it on the line.
+    if (item.quantityKey) return (item.derivedQuantity ?? 0) * item.rate;
     const measureType = getMeasurementInfo(item.unitCode).type;
     const unit = item.measurementUnit || "mm"; // Use stored unit, default to mm for legacy data
     switch (measureType) {
@@ -681,11 +703,16 @@ export function QuotationBuilder({
   };
 
   // Cost item operations
-  const addCostItem = (
+  const addCostItem = async (
     spaceId: string,
     componentId: string,
     costItem: CostItem
   ) => {
+    // If the component type has a costing rule and the template says what
+    // this item is priced per, the new line follows that quantity.
+    const componentTypeId = spaces.find((sp) => sp.id === spaceId)?.components.find((c) => c.id === componentId)?.componentTypeId;
+    const hasRule = !!componentTypeId && masterData.component_types.some((t) => t.id === componentTypeId && (t.config_schema as { quantities?: unknown[] } | null)?.quantities?.length);
+    const quantityKey = hasRule && componentTypeId ? (await pricedPerFor(componentTypeId)).get(costItem.id) ?? null : null;
     const categoriesData =
       masterData.quotation_cost_item_categories ||
       masterData.cost_item_categories ||
@@ -712,10 +739,11 @@ export function QuotationBuilder({
       // Measured lines follow the component by default, so a size already
       // entered applies to them the moment they are added.
       followsComponent: true,
+      quantityKey,
     };
 
-    setSpaces(
-      spaces.map((space) => {
+    setSpaces((current) =>
+      current.map((space) => {
         if (space.id === spaceId) {
           return {
             ...space,
@@ -746,7 +774,7 @@ export function QuotationBuilder({
     dimensions: Pick<
       BuilderComponent,
       "width" | "height" | "measurementUnit"
-    >
+    > & { measures?: Record<string, number> | null }
   ) => {
     setSpaces(
       spaces.map((space) => {
@@ -1314,8 +1342,9 @@ export function QuotationBuilder({
       setIsSaving(true);
       setSaveError(null); // Clear any previous error
 
-      // Use override spaces if provided, otherwise use state
-      const spacesToSave = overrideSpaces || spaces;
+      // Use override spaces if provided, otherwise use state - with each
+      // rule-priced line's quantity worked out, so its amount is right.
+      const spacesToSave = deriveQuantities(overrideSpaces || spaces, masterData.component_types);
       const notesToUse = overrideVersionNotes ?? versionNotes;
 
       console.log("[saveQuotation] Starting save:", {
@@ -1410,6 +1439,7 @@ export function QuotationBuilder({
               ...(comp.scopeItemId
                 ? { scope_item_id: comp.scopeItemId, measurement_status: comp.measurementStatus ?? null }
                 : {}),
+              ...(comp.measures ? { measures: comp.measures } : {}),
             },
             lineItems: comp.lineItems.map((item, itemIndex) => {
               // Calculate amount on frontend based on measurement unit
@@ -1422,7 +1452,9 @@ export function QuotationBuilder({
                 // Store dimensions as-is (in user's selected unit)
                 length: item.length,
                 width: item.width,
-                quantity: item.quantity,
+                // A rule-priced line stores the quantity it followed, so the
+                // summary page and the PDF read the number the builder used.
+                quantity: item.quantityKey ? Math.round((item.derivedQuantity ?? 0) * 100) / 100 : item.quantity,
                 unit_code: item.unitCode,
                 rate: item.rate,
                 // Internal costs, already loaded into the builder from the
@@ -1441,6 +1473,7 @@ export function QuotationBuilder({
                 // rather than something the PDF or client ever reads.
                 metadata: {
                   ...(item as any).metadata,
+                  quantity_key: item.quantityKey ?? null,
                   follows_component: item.followsComponent !== false,
                 },
               };
@@ -2257,7 +2290,7 @@ export function QuotationBuilder({
               </div>
             ) : (
               <>
-                {spaces.map((space, index) => (
+                {viewSpaces.map((space, index) => (
                   <SpaceCard
                     key={space.id}
                     space={space}

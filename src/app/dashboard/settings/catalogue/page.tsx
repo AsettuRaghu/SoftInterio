@@ -15,6 +15,7 @@ import {
   TagIcon,
   CurrencyDollarIcon,
   RectangleStackIcon,
+  CalculatorIcon,
 } from "@heroicons/react/24/outline";
 import {
   SettingsPageLayout,
@@ -38,6 +39,8 @@ interface ComponentType {
   description: string | null;
   is_active: boolean;
   created_at: string;
+  /** The tenant's costing rule; see lib/costing. */
+  config_schema?: Record<string, unknown> | null;
 }
 
 interface CostItemCategory {
@@ -1086,6 +1089,19 @@ export default function QuotationsConfigPage() {
                   </td>
                   <td className="px-4 py-2.5 text-right">
                     <div className="flex items-center justify-end gap-1.5">
+                      {/* How this business measures the component and what
+                          each cost line is priced per - the tenant's rule. */}
+                      <Link
+                        href={`/dashboard/settings/catalogue/components/${component.id}/costing`}
+                        title="Costing: what you measure and what each line is priced per"
+                        className={`w-6.5 h-6.5 flex items-center justify-center rounded-md border transition-all ${
+                          component.config_schema && (component.config_schema as { fields?: unknown[] }).fields?.length
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                            : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <CalculatorIcon className="w-3.5 h-3.5" />
+                      </Link>
                       <button
                         onClick={() => openEditModal(component)}
                         title="Edit"

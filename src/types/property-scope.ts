@@ -74,6 +74,8 @@ export const SCOPE_OWNER_LABELS: Record<ScopeOwner, string> = {
 export const scopeOwnerLabel = (owner: ScopeOwner | null | undefined) => SCOPE_OWNER_LABELS[owner ?? "us"];
 
 export interface PropertyScopeItem {
+  /** Field values under the component type's costing rule (lib/costing). */
+  measures?: Record<string, number> | null;
   /** Set on a cost-item row under a component: which catalogue item, and
    *  whether it is the customer's first or second preference. Never a price. */
   cost_item_id?: string | null;

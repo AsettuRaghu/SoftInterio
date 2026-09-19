@@ -40,6 +40,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { scopeOwnerLabel, type PropertyScopeItem } from "@/types/property-scope";
 import { ScopeDiscussion } from "./ScopeDiscussion";
 import { MediaViewer, type MediaItem } from "@/components/ui/MediaViewer";
+import { quantify, type ComponentCosting } from "@/lib/costing/component-costing";
 
 
 interface RefDoc {
@@ -262,6 +263,7 @@ function ComponentCard({
   open,
   onToggle,
   onChoicesChanged,
+  costing = null,
 }: {
   c: PropertyScopeItem;
   /** Names of the items chosen for it, for the closed row. */
@@ -276,8 +278,12 @@ function ComponentCard({
   open: boolean;
   onToggle: () => void;
   onChoicesChanged: () => void;
+  /** The tenant's costing rule for this component type, when set. */
+  costing?: ComponentCosting | null;
 }) {
   const [supplied, setSupplied] = useState(c.supplied_detail ?? "");
+  const [measures, setMeasures] = useState<Record<string, number>>((c.measures as Record<string, number> | null) ?? {});
+  const derived = costing ? quantify(costing, measures, c.measurement_unit) : null;
   const ours = !c.scope_owner || c.scope_owner === "us";
   const size = c.length || c.width ? `${c.length ?? "—"} × ${c.width ?? "—"} ${c.measurement_unit}` : null;
   return (
@@ -296,6 +302,37 @@ function ComponentCard({
       </button>
       {open && (
         <div className="px-4 pb-4 space-y-3 border-t border-slate-100 pt-3">
+          {costing && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                Measurements <span className="normal-case tracking-normal font-normal text-slate-400">· lengths in {c.measurement_unit}</span>
+              </p>
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {costing.fields.map((f) => (
+                  <label key={f.key} className="text-[11px] text-slate-600" title={f.hint}>
+                    {f.label}
+                    <input
+                      type="number"
+                      value={measures[f.key] ?? ""}
+                      disabled={readOnly}
+                      placeholder={f.kind === "count" ? "0" : "—"}
+                      onChange={(e) => setMeasures((m) => ({ ...m, [f.key]: e.target.value === "" ? 0 : Number(e.target.value) }))}
+                      onBlur={() => {
+                        const before = JSON.stringify(c.measures ?? {});
+                        if (JSON.stringify(measures) !== before) void onPatch(c, { measures });
+                      }}
+                      className="mt-0.5 block w-24 px-2 py-1 text-sm border border-slate-200 rounded-md outline-none focus:border-blue-400 text-right disabled:bg-transparent"
+                    />
+                  </label>
+                ))}
+              </div>
+              {derived && Object.keys(derived.values).length > 0 && (
+                <p className="mt-1.5 text-[11px] text-slate-500">
+                  {costing.quantities.map((q) => `${q.label}: ${Math.round((derived.values[q.key] ?? 0) * 100) / 100} ${q.unit_code}`).join(" · ")}
+                </p>
+              )}
+            </div>
+          )}
           {ours ? (
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Options</p>
@@ -351,6 +388,7 @@ export function ScopeItemPanel({
   focusComponentId = null,
   namePrefix,
   onReload,
+  costingByType,
 }: {
   /** The space being shown - one room sheet. Components sit inside it. */
   item: PropertyScopeItem;
@@ -367,6 +405,8 @@ export function ScopeItemPanel({
   namePrefix: string;
   /** Re-reads the scope, so the list mirrors what was chosen here. */
   onReload: () => void;
+  /** Costing rules by component type id, for the measurement fields. */
+  costingByType?: Map<string, ComponentCosting>;
 }) {
   const { confirm, confirmDialog } = useConfirm();
   const [openComponents, setOpenComponents] = useState<Set<string>>(() => new Set(focusComponentId ? [focusComponentId] : []));
@@ -470,6 +510,7 @@ export function ScopeItemPanel({
                     open={openComponents.has(c.id)}
                     onToggle={() => setOpenComponents((o) => { const n = new Set(o); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; })}
                     onChoicesChanged={onReload}
+                    costing={c.component_type_id ? costingByType?.get(c.component_type_id) ?? null : null}
                   />
                 ))}
               </ul>

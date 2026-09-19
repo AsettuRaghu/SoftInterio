@@ -33,6 +33,8 @@ const WRITABLE = [
   "preferred_finish",
   "supplied_detail",
   "supplied_expected_by",
+  // The component's field values under the tenant's costing rule.
+  "measures",
 ] as const;
 
 const SCOPE_OWNERS = new Set(["us", "client", "vendor", "excluded"]);

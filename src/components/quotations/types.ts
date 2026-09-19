@@ -1,3 +1,4 @@
+import type { ComponentCosting } from "@/lib/costing/component-costing";
 // Shared types for quotation builder components
 // Re-export core types from main types file
 export type {
@@ -54,6 +55,11 @@ import type { QuotationCostItemCategory, QuotationCostItem, SpaceType, Component
 
 export interface LineItem {
   id: string;
+  /** Priced per this quantity of the component's costing rule; null = per
+   *  piece or per the one face, as before. */
+  quantityKey?: string | null;
+  /** That quantity's value, derived at render from the component's measures. */
+  derivedQuantity?: number | null;
   costItemId: string;
   costItemName: string;
   categoryName: string;
@@ -94,6 +100,10 @@ export interface BuilderComponent {
   expanded: boolean;
   scopeItemId?: string | null;
   measurementStatus?: string | null;
+  /** Field values under the tenant's costing rule for this component type
+   *  (lib/costing); the rule itself is attached at render from master data. */
+  measures?: Record<string, number> | null;
+  costing?: ComponentCosting | null;
   /**
    * The component's own size, entered once and pushed down to every line that
    * follows it. These columns have existed on quotation_components all along

@@ -33,7 +33,7 @@ interface ApiLineItem {
   quantity?: number;
   amount?: number;
   notes?: string;
-  metadata?: { follows_component?: boolean } | null;
+  metadata?: { follows_component?: boolean; quantity_key?: string | null } | null;
   cost_item?: {
     name?: string;
     default_rate?: number;
@@ -50,7 +50,7 @@ interface ApiComponent {
   description?: string;
   width?: number | null;
   height?: number | null;
-  metadata?: { measurement_unit?: string; scope_item_id?: string; measurement_status?: string } | null;
+  metadata?: { measurement_unit?: string; scope_item_id?: string; measurement_status?: string; measures?: Record<string, number> } | null;
   component_type?: { name?: string } | null;
   lineItems?: ApiLineItem[];
 }
@@ -81,6 +81,7 @@ export function toBuilderSpaces(spaces: ApiSpace[] | null | undefined): BuilderS
       expanded: true,
       scopeItemId: comp.metadata?.scope_item_id ?? null,
       measurementStatus: comp.metadata?.measurement_status ?? null,
+      measures: comp.metadata?.measures ?? null,
       width: comp.width ?? null,
       height: comp.height ?? null,
       measurementUnit: (comp.metadata?.measurement_unit ||
@@ -110,6 +111,7 @@ export function toBuilderSpaces(spaces: ApiSpace[] | null | undefined): BuilderS
         // Lines that pre-date component sizing carry no flag and keep the
         // dimensions already typed into them.
         followsComponent: item.metadata?.follows_component === true,
+        quantityKey: item.metadata?.quantity_key ?? null,
       })),
     })),
   }));

@@ -745,6 +745,34 @@ and projects lists are where the shape was settled. `LastActivityCell`'s
 staleness colouring is right for a lead or a project and wrong for a
 quotation, which is expected to sit once sent - pass `urgency={false}`.
 
+### Costing rules are the tenant's, not the platform's
+
+Built 2026-09-19. How a component is measured and how each cost line
+follows from that measurement are configured per component type under
+Settings → Catalogue → Components → the calculator icon
+(`/settings/catalogue/components/[id]/costing`), in the tenant's own words:
+
+- **fields** - what is measured ("counter run", "blind corner", "drawer
+  count"); a length is typed in the row's unit and is **in feet inside a
+  formula**, so two lengths multiplied give square feet;
+- **quantities** - what is costed against, each a formula over the fields
+  and over quantities above it (`lib/costing/formula.ts`: numbers, names,
+  `+ − × ÷ ( )`, max/min/round/ceil/floor - nothing else), evaluated live
+  on the screen against a sample measurement;
+- **priced per** - which quantity each cost item the templates put on that
+  type follows (`quotation_template_line_items.quantity_key`).
+
+Stored on `component_types.config_schema` (`lib/costing/component-costing.ts`
+reads, validates and quantifies). The Scope sheet asks the fields
+(`property_scope_items.measures`); the builder asks them on the component
+(`metadata.measures`) and a rule-priced line (`metadata.quantity_key`) shows
+its derived quantity instead of inputs; `deriveQuantities()` attaches rule
+and quantities at render, for totals and on save - never as state.
+`copyScopeToQuotation` prices a chosen item per its quantity when the type
+has a rule and the template names one, else on the one face as before. A
+type with no rule behaves exactly as before. A sample Kitchen and Wardrobe
+rule was seeded where such types existed; the tenant edits or replaces it.
+
 ### Charges are ordinary line items
 Delivery, cleanup and site protection are cost items in a category marked
 `is_charge`. A space made up entirely of such items *prints* below the room
