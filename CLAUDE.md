@@ -2855,6 +2855,11 @@ not on the hot path and were left alone.
   while the middleware still guarded `/dashboard/settings/roles` — a page that
   does not exist — behind `settings.roles.view`, a permission that does not
   exist. The module is types and a literal array, so Edge imports it fine.
+- **`/api/settings/quotation-cost-items` pages at 50, and the Catalogue
+  screen read one page.** Invisible at 43 items; at 105 whole categories
+  vanished, in an order set by category UUID, and "where is Installation
+  Labour coming from?" was the symptom. The screen reads every page now.
+  Before drawing a whole set from a paged API, read its `pagination`.
 - **A plain PostgREST select stops at 1000 rows and says nothing.** `.limit()`
   does not raise that cap. It matters most where figures are computed in
   TypeScript from a whole set: a truncated fetch does not fail, it reports a

@@ -217,14 +217,22 @@ export default function QuotationsConfigPage() {
   const fetchCostItems = useCallback(async () => {
     try {
       uiLogger.debug("Fetching quotation cost items");
-      const res = await fetch("/api/settings/quotation-cost-items");
-      if (!res.ok) throw new Error("Failed to fetch cost items");
-      const data = await res.json();
-      setCostItems(data.quotationCostItems || data.costItems || []);
-      setCanViewCosts(!!data.can_view_costs);
-      uiLogger.info("Cost items fetched successfully", {
-        count: (data.quotationCostItems || data.costItems)?.length || 0,
-      });
+      // The API pages at 50; this screen is the whole catalogue, so read
+      // every page. It used to take the first page only, and once the
+      // catalogue passed 50 items whole categories silently went missing.
+      const all: QuotationCostItem[] = [];
+      let canView = false;
+      for (let page = 1, pages = 1; page <= pages; page++) {
+        const res = await fetch(`/api/settings/quotation-cost-items?page=${page}&limit=200`);
+        if (!res.ok) throw new Error("Failed to fetch cost items");
+        const data = await res.json();
+        all.push(...(data.quotationCostItems || data.costItems || []));
+        canView = !!data.can_view_costs;
+        pages = data.pagination?.totalPages || 1;
+      }
+      setCostItems(all);
+      setCanViewCosts(canView);
+      uiLogger.info("Cost items fetched successfully", { count: all.length });
     } catch (err) {
       uiLogger.error("Error fetching cost items", { error: err });
       setError("Failed to load cost items");
