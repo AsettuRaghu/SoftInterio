@@ -7,14 +7,20 @@ type RouteParams = { params: Promise<{ id: string; itemId: string }> };
 /**
  * What a component can carry, and what has been picked.
  *
- * The options are the cost items the business's quotation templates list
- * for this component type - the catalogue's own answer to "what goes in a
- * wardrobe", grouped by cost category. Nothing new to configure: a tenant
- * that wants different options edits the template it already keeps. An item
- * picked here that no template lists (added in the builder, say) still
- * shows, under its category.
+ * The options are the cost items the business's Options Menu template(s)
+ * list for this component type (`quotation_templates.is_options_menu`) -
+ * the catalogue's own answer to "what goes in a wardrobe", grouped by cost
+ * category. Where a type has no menu, every active template that names it
+ * supplies the options, as before. An item picked here that no template
+ * lists (added in the builder, say) still shows, under its category.
  *
- * GET  -> { groups: [{ category, items: [{ cost_item_id, name, tier, status, row_id, scope_owner }] }], from_templates }
+ * Alternatives: within one category, items priced per the SAME quantity
+ * (two carcass grades both per front area; two hinge grades both per
+ * hinges) are ways of pricing one thing, so they share a `group_key` and
+ * carry at most one ① and one ② between them - choosing a new ① moves the
+ * old one to ②. Counted items (drawers, trays) are independent.
+ *
+ * GET  -> { groups: [{ category, items: [{ cost_item_id, name, tier, counted, group_key, status, row_id, scope_owner }] }], from_templates }
  * PUT  { cost_item_id, status: "p1" | "p2" | null, scope_owner?, quantity? }
  *      quantity: how many, for an item priced per piece (two wooden drawers)
  *      p1 = first preference (what a quotation starts from), p2 = second;
@@ -36,28 +42,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     .maybeSingle();
   if (!component?.component_type_id) return NextResponse.json({ error: "Not a component" }, { status: 400 });
 
-  const [{ data: templated }, { data: picked }] = await Promise.all([
-    supabase
-      .from("quotation_template_line_items")
-      .select("cost_item_id, template:quotation_templates!inner(is_active)")
-      .eq("component_type_id", component.component_type_id)
-      .not("cost_item_id", "is", null),
+  const [templated, { data: picked }] = await Promise.all([
+    menuLines(supabase, component.component_type_id),
     supabase.from("property_scope_items").select("id, cost_item_id, choice_status, scope_owner, choice_quantity").eq("parent_id", itemId).not("cost_item_id", "is", null),
   ]);
-  // Which items a costing rule already quantifies on this component type;
-  // the others are per piece and take a count on the sheet.
-  const { data: ruled } = await supabase
-    .from("quotation_template_line_items")
-    .select("cost_item_id, quantity_key")
-    .eq("component_type_id", component.component_type_id)
-    .not("quantity_key", "is", null);
-  const ruledIds = new Set((ruled ?? []).map((r) => r.cost_item_id as string));
-
-  const templateIds = new Set(
-    (templated ?? [])
-      .filter((t) => (t.template as unknown as { is_active?: boolean } | null)?.is_active !== false)
-      .map((t) => t.cost_item_id as string),
-  );
+  // Which quantity each item follows on this type - null means per piece
+  // (a count on the sheet) or the one face.
+  const keyByItem = new Map<string, string | null>();
+  for (const l of templated.lines) if (!keyByItem.has(l.cost_item_id) || l.quantity_key) keyByItem.set(l.cost_item_id, l.quantity_key);
+  const ruledIds = new Set([...keyByItem.entries()].filter(([, k]) => k).map(([id]) => id));
+  const templateIds = new Set(keyByItem.keys());
   const pickedByItem = new Map((picked ?? []).map((p) => [p.cost_item_id as string, p]));
   const ids = [...new Set([...templateIds, ...pickedByItem.keys()])];
   if (ids.length === 0) return NextResponse.json({ data: { groups: [], from_templates: false } });
@@ -70,17 +64,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     .order("display_order")
     .order("name");
 
-  const groups = new Map<string, { category: { id: string; name: string; order: number }; items: { cost_item_id: string; name: string; tier: string | null; unit_code: string; counted: boolean; quantity: number | null; status: string | null; row_id: string | null; scope_owner: string | null }[] }>();
+  const groups = new Map<string, { category: { id: string; name: string; order: number }; items: { cost_item_id: string; name: string; tier: string | null; unit_code: string; counted: boolean; group_key: string | null; quantity: number | null; status: string | null; row_id: string | null; scope_owner: string | null }[] }>();
   for (const c of costItems ?? []) {
     const cat = (c.category as unknown as { id: string; name: string; display_order: number | null } | null) ?? { id: "other", name: "Other", display_order: 999 };
     const g = groups.get(cat.id) ?? { category: { id: cat.id, name: cat.name, order: cat.display_order ?? 999 }, items: [] };
     const p = pickedByItem.get(c.id);
     // Counted = priced per piece and not quantified by the rule: it takes a
     // "× n" on the sheet. Area / length items follow the rule or the face.
-    const perPiece = ["nos", "set", "kg", "ltr", "pcs"].includes(String(c.unit_code).toLowerCase());
+    const perPiece = PER_PIECE.has(String(c.unit_code).toLowerCase());
+    const counted = perPiece && !ruledIds.has(c.id);
     g.items.push({
       cost_item_id: c.id, name: c.name, tier: (c.quality_tier as string | null) ?? null, unit_code: c.unit_code as string,
-      counted: perPiece && !ruledIds.has(c.id), quantity: p?.choice_quantity != null ? Number(p.choice_quantity) : null,
+      counted, group_key: counted ? null : `${cat.id}:${keyByItem.get(c.id) ?? "face"}`,
+      quantity: p?.choice_quantity != null ? Number(p.choice_quantity) : null,
       status: p?.choice_status ?? null, row_id: p?.id ?? null, scope_owner: p?.scope_owner ?? null,
     });
     groups.set(cat.id, g);
@@ -91,6 +87,53 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       from_templates: templateIds.size > 0,
     },
   });
+}
+
+const PER_PIECE = new Set(["nos", "set", "kg", "ltr", "pcs"]);
+
+type Db = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * The template lines that define this type's options: its Options Menu(s)
+ * when it has any, otherwise every active template naming it.
+ */
+async function menuLines(supabase: Db, componentTypeId: string) {
+  const { data } = await supabase
+    .from("quotation_template_line_items")
+    .select("cost_item_id, quantity_key, template:quotation_templates!inner(is_active, is_options_menu)")
+    .eq("component_type_id", componentTypeId)
+    .not("cost_item_id", "is", null);
+  const rows = (data ?? [])
+    .map((r) => ({ cost_item_id: r.cost_item_id as string, quantity_key: (r.quantity_key as string | null) ?? null, template: r.template as unknown as { is_active?: boolean; is_options_menu?: boolean } | null }))
+    .filter((r) => r.template?.is_active !== false);
+  const menu = rows.filter((r) => r.template?.is_options_menu);
+  return { lines: menu.length ? menu : rows, fromMenu: menu.length > 0 };
+}
+
+/**
+ * Which picked rows under a component are alternatives to `costItemId`:
+ * same category, same priced-per quantity, neither counted. Those hold at
+ * most one ① and one ② between them.
+ */
+async function alternativesOf(supabase: Db, componentTypeId: string, componentRowId: string, costItemId: string) {
+  const [{ lines }, { data: picked }] = await Promise.all([
+    menuLines(supabase, componentTypeId),
+    supabase.from("property_scope_items").select("id, cost_item_id, choice_status").eq("parent_id", componentRowId).not("cost_item_id", "is", null).neq("cost_item_id", costItemId),
+  ]);
+  if (!picked?.length) return [];
+  const ids = [costItemId, ...picked.map((p) => p.cost_item_id as string)];
+  const { data: items } = await supabase.from("quotation_cost_items").select("id, category_id, unit_code").in("id", ids);
+  const keyByItem = new Map<string, string | null>();
+  for (const l of lines) if (!keyByItem.has(l.cost_item_id) || l.quantity_key) keyByItem.set(l.cost_item_id, l.quantity_key);
+  const groupOf = (id: string) => {
+    const it = (items ?? []).find((x) => x.id === id);
+    if (!it) return null;
+    const counted = PER_PIECE.has(String(it.unit_code).toLowerCase()) && !keyByItem.get(id);
+    return counted ? null : `${it.category_id}:${keyByItem.get(id) ?? "face"}`;
+  };
+  const mine = groupOf(costItemId);
+  if (!mine) return [];
+  return picked.filter((p) => groupOf(p.cost_item_id as string) === mine).map((p) => ({ id: p.id as string, status: p.choice_status as "p1" | "p2" | null }));
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
@@ -124,6 +167,19 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   if (!status) {
     if (existing) await supabase.from("property_scope_items").delete().eq("id", existing.id);
     return NextResponse.json({ data: { row_id: null, status: null } });
+  }
+  // Alternatives hold one ① and one ②. A new ① moves the old ① to ② (and
+  // clears the ② that was there); a new ② clears the old ②.
+  const rivals = await alternativesOf(supabase, component.component_type_id, itemId, body.cost_item_id);
+  if (rivals.length) {
+    const oldP1 = rivals.find((r) => r.status === "p1");
+    const oldP2 = rivals.find((r) => r.status === "p2");
+    if (status === "p1") {
+      if (oldP2 && oldP1) await supabase.from("property_scope_items").delete().eq("id", oldP2.id);
+      if (oldP1) await supabase.from("property_scope_items").update({ choice_status: "p2" }).eq("id", oldP1.id);
+    } else if (oldP2) {
+      await supabase.from("property_scope_items").delete().eq("id", oldP2.id);
+    }
   }
   if (existing) {
     const { error } = await supabase

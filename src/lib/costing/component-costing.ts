@@ -115,3 +115,40 @@ export function validateCosting(c: ComponentCosting): string[] {
   }
   return problems;
 }
+
+/**
+ * A rule's `width`, `height` and `length` fields ARE the row's own size
+ * columns - the size typed on the Scope list, or the builder's width ×
+ * height - never a second copy in `measures`. So a size is entered once,
+ * wherever it is entered, and the rule reads it from there; `measures`
+ * holds only the rule's other fields (depth, shutters, exposed sides…).
+ */
+export const DIMENSION_KEYS = ["width", "height", "length"] as const;
+export type DimensionKey = (typeof DIMENSION_KEYS)[number];
+export const isDimensionKey = (k: string): k is DimensionKey => (DIMENSION_KEYS as readonly string[]).includes(k);
+
+/** The values a rule evaluates over: the size columns laid over `measures`. */
+export function mergeMeasures(row: {
+  width?: number | null;
+  height?: number | null;
+  length?: number | null;
+  measures?: Record<string, number> | null;
+}): Record<string, number> {
+  const m: Record<string, number> = { ...(row.measures ?? {}) };
+  for (const k of DIMENSION_KEYS) {
+    const v = row[k];
+    if (v != null && Number.isFinite(Number(v))) m[k] = Number(v);
+  }
+  return m;
+}
+
+/** Splits an edited value set back into the size columns and `measures`. */
+export function splitMeasures(values: Record<string, number>): { dims: Partial<Record<DimensionKey, number | null>>; measures: Record<string, number> } {
+  const dims: Partial<Record<DimensionKey, number | null>> = {};
+  const measures: Record<string, number> = {};
+  for (const [k, v] of Object.entries(values)) {
+    if (isDimensionKey(k)) dims[k] = v;
+    else measures[k] = v;
+  }
+  return { dims, measures };
+}

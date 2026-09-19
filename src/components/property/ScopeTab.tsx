@@ -39,12 +39,10 @@ import {
 import {
   MEASUREMENT_STATUS_LABELS,
   SCOPE_OWNER_LABELS,
-  formatQualityTier,
   type PropertyScopeItem,
   type ScopeOwner,
   type ScopeBulkEntry,
   type ScopeMeasurementUnit,
-  type QualityTier,
   type ScopePreset,
   scopeOwnerLabel,
 } from "@/types/property-scope";
@@ -164,7 +162,6 @@ export function ScopeTab({
   const [componentTypes, setComponentTypes] = useState<SpaceTypeOption[]>([]);
   // Read from the cost item catalogue, so a tier chosen here always matches
   // something that can actually be priced.
-  const [qualityTiers, setQualityTiers] = useState<string[]>([]);
   const [presets, setPresets] = useState<ScopePreset[]>([]);
   // A preset card on the empty state opens the add dialog already filled.
   const [presetToOpen, setPresetToOpen] = useState<ScopePreset | null>(null);
@@ -226,16 +223,13 @@ export function ScopeTab({
        * fixed cost (an Auth-server round trip plus a users lookup, ~650ms
        * together) before reading a row. See lib/quotations/config-cache.
        */
-      const [scopeRes, types, comps, tiers, presetList] = await Promise.all([
+      const [scopeRes, types, comps, presetList] = await Promise.all([
         fetch(`/api/properties/${propertyId}/scope`),
         fetchConfigOnce<{ data?: SpaceTypeOption[] }>(
           "/api/quotations/config/space-types"
         ).catch(() => null),
         fetchConfigOnce<{ data?: SpaceTypeOption[] }>(
           "/api/quotations/config/component-types"
-        ).catch(() => null),
-        fetchConfigOnce<{ tiers?: { name: string }[] }>(
-          "/api/quotations/config/quality-tiers"
         ).catch(() => null),
         fetchConfigOnce<{ data?: ScopePreset[] }>("/api/scope-presets").catch(() => null),
       ]);
@@ -247,9 +241,6 @@ export function ScopeTab({
       // than hiding the scope this tab exists to show.
       if (types) setSpaceTypes(types.data || []);
       if (comps) setComponentTypes(comps.data || []);
-      if (tiers) {
-        setQualityTiers((tiers.tiers || []).map((x) => x.name));
-      }
       if (presetList) setPresets(presetList.data || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
@@ -311,9 +302,6 @@ export function ScopeTab({
   // room sheet shows them. They still travel in `items` for the panel.
   const childrenOf = (id: string) =>
     items.filter((i) => i.parent_id === id && !i.cost_item_id).sort(byOrder);
-  /** The chosen items of a component, for its row's one-line summary. */
-  const chosenOf = (id: string) =>
-    items.filter((i) => i.parent_id === id && i.cost_item_id && i.choice_status === "p1").map((i) => i.name);
 
   /**
    * Saves one field. Edits are sent on blur rather than on every keystroke -
@@ -630,14 +618,6 @@ export function ScopeTab({
                 container
               </span>
             )}
-            {item.component_type_id && chosenOf(item.id).length > 0 && (
-              <span
-                className="shrink-0 max-w-[16rem] truncate text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5"
-                title={chosenOf(item.id).join(" · ")}
-              >
-                {chosenOf(item.id).join(" · ")}
-              </span>
-            )}
             {!item.component_type_id && !readOnly && (
               <button
                 type="button"
@@ -663,35 +643,6 @@ export function ScopeTab({
         </td>
         <td className="px-3 py-2 text-xs text-slate-500">
           {item.component_type?.name || item.space_type?.name || "—"}
-        </td>
-        <td className="px-3 py-2">
-          {item.component_type_id ? (
-            <select
-              value={item.quality_tier || ""}
-              disabled={readOnly}
-              onChange={(e) =>
-                void patchItem(item, {
-                  quality_tier: (e.target.value || null) as QualityTier | null,
-                })
-              }
-              className="px-1.5 py-1 text-xs border border-slate-200 rounded bg-white outline-none focus:border-blue-400 disabled:border-transparent disabled:bg-transparent"
-            >
-              <option value="">—</option>
-              {/* A tier already stored but no longer in the catalogue still
-                  shows, so an edit elsewhere cannot silently blank it. */}
-              {[
-                ...new Set(
-                  [...qualityTiers, item.quality_tier].filter(Boolean) as string[]
-                ),
-              ].map((t) => (
-                <option key={t} value={t}>
-                  {formatQualityTier(t)}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <span className="text-xs text-slate-300">—</span>
-          )}
         </td>
         <td className="px-3 py-2">
           {/* Who does this part. A kitchen is ours and its counter top the
@@ -750,7 +701,7 @@ export function ScopeTab({
         </td>
         <td className="px-3 py-2">
           <div className="flex items-center gap-1">
-            {(["length", "width"] as const).map((field, idx) => (
+            {(item.component_type_id ? (["width", "height"] as const) : (["length", "width"] as const)).map((field, idx) => (
               <React.Fragment key={field}>
                 {idx > 0 && <span className="text-slate-300 text-xs">×</span>}
                 <input
@@ -983,7 +934,7 @@ export function ScopeTab({
               <tr>
                 <th
                   className="px-3 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider"
-                  style={{ width: "24%" }}
+                  style={{ width: "30%" }}
                 >
                   Space
                 </th>
@@ -995,12 +946,6 @@ export function ScopeTab({
                 </th>
                 <th
                   className="px-3 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider"
-                  style={{ width: "10%" }}
-                >
-                  Quality
-                </th>
-                <th
-                  className="px-3 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider"
                   style={{ width: "14%" }}
                   title="Who does this part: us, the client, a vendor, or nobody"
                 >
@@ -1008,7 +953,7 @@ export function ScopeTab({
                 </th>
                 <th
                   className="px-3 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider"
-                  style={{ width: "20%" }}
+                  style={{ width: "24%" }}
                 >
                   Size
                 </th>

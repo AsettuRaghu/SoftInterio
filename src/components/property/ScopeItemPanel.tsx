@@ -40,7 +40,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { scopeOwnerLabel, type PropertyScopeItem } from "@/types/property-scope";
 import { ScopeDiscussion } from "./ScopeDiscussion";
 import { MediaViewer, type MediaItem } from "@/components/ui/MediaViewer";
-import { quantify, type ComponentCosting } from "@/lib/costing/component-costing";
+import { mergeMeasures, quantify, splitMeasures, type ComponentCosting } from "@/lib/costing/component-costing";
 
 
 interface RefDoc {
@@ -128,7 +128,7 @@ function Thread({
  */
 interface OptionGroup {
   category: { id: string; name: string };
-  items: { cost_item_id: string; name: string; tier: string | null; unit_code: string; counted: boolean; quantity: number | null; status: "p1" | "p2" | null; row_id: string | null; scope_owner: string | null }[];
+  items: { cost_item_id: string; name: string; tier: string | null; unit_code: string; counted: boolean; group_key: string | null; quantity: number | null; status: "p1" | "p2" | null; row_id: string | null; scope_owner: string | null }[];
 }
 
 function Options({
@@ -176,8 +176,10 @@ function Options({
       body: JSON.stringify({ cost_item_id: o.cost_item_id, ...patch }),
     });
     if (mine !== seq.current) return;
+    // Reload either way: a first preference among alternatives moves the
+    // previous one to second, and the server is the one that knows.
+    void load();
     if (res.ok) onChanged();
-    else void load();
   };
   const cycle = (g: OptionGroup, o: OptionGroup["items"][number]) => {
     if (readOnly) return;
@@ -198,7 +200,12 @@ function Options({
     <div className="space-y-2">
       {groups.map((g) => (
         <div key={g.category.id} className="grid grid-cols-[6rem_1fr] gap-x-2 items-start">
-          <span className="text-[11px] font-medium text-slate-500 pt-1 truncate" title={g.category.name}>{g.category.name}</span>
+          <span className="text-[11px] font-medium text-slate-500 pt-1 truncate" title={g.category.name}>
+            {g.category.name}
+            {g.items.length > 1 && g.items.every((x) => x.group_key && x.group_key === g.items[0].group_key) && (
+              <span className="block text-[9px] font-normal text-slate-400">one of these</span>
+            )}
+          </span>
           <div className="flex flex-wrap gap-1.5">
             {g.items.map((o) => (
               <span key={o.cost_item_id} className="inline-flex items-center">
@@ -257,7 +264,7 @@ function Options({
           </div>
         </div>
       ))}
-      <p className="text-[10px] text-slate-400">Tap once for first preference ①, again for second ②, again to clear.</p>
+      <p className="text-[10px] text-slate-400">Tap once for first preference ①, again for second ②, again to clear. Where items are alternatives, choosing a new ① moves the old one to ②.</p>
     </div>
   );
 }
@@ -295,10 +302,19 @@ function ComponentCard({
   costing?: ComponentCosting | null;
 }) {
   const [supplied, setSupplied] = useState(c.supplied_detail ?? "");
-  const [measures, setMeasures] = useState<Record<string, number>>((c.measures as Record<string, number> | null) ?? {});
+  // The rule's width / height / length fields are the row's own size
+  // columns - typed once, on the list or here - and `measures` holds the
+  // rest. Merged for the rule, split again on save.
+  const [measures, setMeasures] = useState<Record<string, number>>(() => mergeMeasures(c));
   const derived = costing ? quantify(costing, measures, c.measurement_unit) : null;
   const ours = !c.scope_owner || c.scope_owner === "us";
-  const size = c.length || c.width ? `${c.length ?? "—"} × ${c.width ?? "—"} ${c.measurement_unit}` : null;
+  const size = c.width || c.height ? `${c.width ?? "—"} × ${c.height ?? "—"} ${c.measurement_unit}` : null;
+  const saveMeasures = () => {
+    const before = mergeMeasures(c);
+    if (JSON.stringify(measures) === JSON.stringify(before)) return;
+    const { dims, measures: rest } = splitMeasures(measures);
+    void onPatch(c, { ...dims, measures: rest });
+  };
   return (
     <li className={cn("rounded-lg border", open ? "border-slate-300 bg-white" : "border-slate-200 bg-white")}>
       <button type="button" onClick={onToggle} className="w-full px-4 py-2.5 flex items-center gap-3 text-left hover:bg-slate-50 rounded-lg">
@@ -330,10 +346,7 @@ function ComponentCard({
                       disabled={readOnly}
                       placeholder={f.kind === "count" ? "0" : "—"}
                       onChange={(e) => setMeasures((m) => ({ ...m, [f.key]: e.target.value === "" ? 0 : Number(e.target.value) }))}
-                      onBlur={() => {
-                        const before = JSON.stringify(c.measures ?? {});
-                        if (JSON.stringify(measures) !== before) void onPatch(c, { measures });
-                      }}
+                      onBlur={saveMeasures}
                       className="mt-0.5 block w-24 px-2 py-1 text-sm border border-slate-200 rounded-md outline-none focus:border-blue-400 text-right disabled:bg-transparent"
                     />
                   </label>

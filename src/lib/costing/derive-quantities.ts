@@ -1,6 +1,6 @@
 import type { BuilderSpace } from "@/components/quotations/types";
 import type { ComponentType } from "@/types/quotations";
-import { hasCosting, quantify, readCosting } from "./component-costing";
+import { hasCosting, mergeMeasures, quantify, readCosting } from "./component-costing";
 
 /**
  * Attaches each component's costing rule (from master data) and works out
@@ -15,7 +15,7 @@ export function deriveQuantities(spaces: BuilderSpace[], componentTypes: Compone
     components: space.components.map((comp) => {
       const costing = rules.get(comp.componentTypeId);
       if (!costing || !hasCosting(costing)) return { ...comp, costing: null };
-      const { values } = quantify(costing, comp.measures, comp.measurementUnit || "mm");
+      const { values } = quantify(costing, mergeMeasures(comp), comp.measurementUnit || "mm");
       return {
         ...comp,
         costing,

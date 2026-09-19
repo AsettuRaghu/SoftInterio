@@ -11,6 +11,7 @@ import {
   getMeasurementInfo,
 } from "./types";
 import { LineItemRow } from "./LineItemRow";
+import { isDimensionKey } from "@/lib/costing/component-costing";
 
 interface ComponentCardProps {
   component: BuilderComponent;
@@ -375,17 +376,21 @@ export function ComponentCard({
                     <label className="block text-[10px] font-medium text-slate-500 mb-1" title={f.hint}>{f.label}</label>
                     <input
                       type="number"
-                      value={component.measures?.[f.key] ?? ""}
+                      value={(isDimensionKey(f.key) ? component[f.key === "length" ? "width" : f.key] : component.measures?.[f.key]) ?? ""}
                       readOnly={readOnly}
                       placeholder={f.kind === "count" ? "0" : "—"}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const v = e.target.value === "" ? null : Number(e.target.value);
+                        // width / height are the component's own size, so a
+                        // line priced on the one face and a rule-priced line
+                        // read the same number; the rest lives in measures.
                         onUpdateDimensions({
-                          width: component.width ?? null,
-                          height: component.height ?? null,
+                          width: f.key === "width" || f.key === "length" ? v : (component.width ?? null),
+                          height: f.key === "height" ? v : (component.height ?? null),
                           measurementUnit: component.measurementUnit || "mm",
-                          measures: { ...(component.measures ?? {}), [f.key]: e.target.value === "" ? 0 : Number(e.target.value) },
-                        })
-                      }
+                          measures: isDimensionKey(f.key) ? (component.measures ?? null) : { ...(component.measures ?? {}), [f.key]: v ?? 0 },
+                        });
+                      }}
                       className="w-24 px-2 py-1.5 text-sm border border-slate-200 rounded-md focus:ring-1 focus:ring-purple-500 outline-none text-right"
                     />
                   </div>

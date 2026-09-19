@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { calculateSqft, convertToFeet, getMeasurementInfo, type MeasurementUnit } from "@/components/quotations/types";
-import { hasCosting, quantify, readCosting } from "@/lib/costing/component-costing";
+import { hasCosting, mergeMeasures, quantify, readCosting } from "@/lib/costing/component-costing";
 
 /**
  * Brings the property's scope into a quotation - the rooms and components
@@ -217,7 +217,9 @@ export async function copyScopeToQuotation(
             component_type_id: r.component_type_id,
             name: r.name,
             width: r.width,
-            height: r.length,
+            // A component is width × height; rows older than the height
+            // column being used on the list carried the height in `length`.
+            height: r.height ?? r.length,
             display_order: index,
             // The builder reads the unit from metadata, and without it every
             // dimension would be read as millimetres.
@@ -235,7 +237,7 @@ export async function copyScopeToQuotation(
       else {
         result.components = inserted?.length ?? 0;
         compRows.forEach(({ r }, i) => {
-          if (inserted?.[i]) targetByScopeComp.set(r.id, { id: inserted[i].id, width: r.width, height: r.length, unit: r.measurement_unit ?? "mm", lines: new Set(), componentTypeId: r.component_type_id, measures: r.measures ?? null });
+          if (inserted?.[i]) targetByScopeComp.set(r.id, { id: inserted[i].id, width: r.width, height: r.height ?? r.length, unit: r.measurement_unit ?? "mm", lines: new Set(), componentTypeId: r.component_type_id, measures: r.measures ?? null });
         });
       }
     }
@@ -275,7 +277,7 @@ export async function copyScopeToQuotation(
         const rule = target.componentTypeId ? ruleByType.get(target.componentTypeId) : undefined;
         const quantityKey = target.componentTypeId ? keyFor.get(`${target.componentTypeId}::${ci.id}`) ?? null : null;
         const ruled = !!(rule && hasCosting(rule) && quantityKey && rule.quantities.some((q) => q.key === quantityKey));
-        const derived = ruled ? quantify(rule!, target.measures, unit).values[quantityKey!] ?? 0 : null;
+        const derived = ruled ? quantify(rule!, mergeMeasures(target), unit).values[quantityKey!] ?? 0 : null;
         // A per-piece item carries how many were chosen (two wooden drawers).
         const count = kind === "quantity" ? Number(r.choice_quantity) || 1 : 1;
         const amount = ruled

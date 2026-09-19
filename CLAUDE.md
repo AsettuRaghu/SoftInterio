@@ -139,9 +139,10 @@ budget. Done-by per item (`scope_owner` on the row) is shown on a project
 only - it is decided there, kept from the sale. An item priced per piece (nos/set…) and not
 quantified by a costing rule takes a count on the sheet (`choice_quantity`,
 the "× n" stepper) - two wooden drawers, one tandem box are three rows with
-their own counts - and the copy makes a line of that many. The list shows
-the chosen items as a chip on the component row and never lists cost-item
-rows themselves. The finish chips
+their own counts - and the copy makes a line of that many. The list row
+shows the component's name and nothing else - a chip of chosen items was
+tried and read as clutter (2026-09-19) - and never lists cost-item rows
+themselves; the room sheet is where choices are seen. The finish chips
 and the "preferred finish" ordering in the builder went with this; a finish
 is now one option category among the others.
 
@@ -776,6 +777,38 @@ and quantities at render, for totals and on save - never as state.
 has a rule and the template names one, else on the one face as before. A
 type with no rule behaves exactly as before. A sample Kitchen and Wardrobe
 rule was seeded where such types existed; the tenant edits or replaces it.
+
+**What the first walk through the wardrobe sample settled** (2026-09-19):
+
+- **A size is typed once.** A rule's `width`, `height` and `length` fields
+  ARE the row's size columns (`mergeMeasures` / `splitMeasures` in
+  `lib/costing/component-costing`); `measures` holds only the rule's other
+  fields. The Scope list asks width × height on a component (length × width
+  on a space, its floor); the room sheet's Measurements show the same two
+  numbers pre-filled plus the rest. The builder does the same: a rule's
+  width/height fields write the component's own size, so a line priced on
+  the one face and a rule-priced line read one number.
+- **The Quality column is gone from the list.** An option carries its tier
+  as a word; a second tier on the component row answered nothing.
+  `quality_tier` stays on the row, read by nothing.
+- **Options come from the Options Menu** (`quotation_templates.
+  is_options_menu`, set on the seeded "<Component> - Options Menu"
+  templates). Every active template naming the type used to supply them,
+  so a pruned menu still showed items from older templates. A type with
+  no flagged template falls back to every active template. There is no
+  UI for the flag yet - set it when a Templates screen asks for it.
+- **Alternatives hold one ① and one ②.** Within a category, items priced
+  per the same quantity (two carcass grades, both per front area) are ways
+  of pricing one thing: `group_key` on the option, "one of these" under the
+  category name, and the PUT moves the old ① to ② when a new ① is chosen
+  (clearing the ② that was there) and clears the old ② for a new ②. Counted
+  items are independent - a wardrobe has drawers AND a tray.
+- **Shelves and drawers are counted options, not rule fields.** A number
+  decided with the customer is a count on the option; the rule keeps only
+  what the measurement decides (size, depth, shutters, exposed sides). The
+  wardrobe menus carry the whole internals list, each with × n; an internal
+  mirror is per door (`nos`), because a sqft item with no rule quantity is
+  priced on the whole front.
 
 ### The seeded catalogue is complete enough to quote a whole home
 
