@@ -27,9 +27,11 @@ import {
   ArrowUpTrayIcon,
   BookmarkIcon,
   ChatBubbleLeftRightIcon,
+  CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   PhotoIcon,
+  PlusIcon,
   StarIcon,
   TrashIcon,
   XMarkIcon,
@@ -115,21 +117,47 @@ function Thread({
 }
 
 /**
- * What a component can carry - the cost items the business's quotation
- * templates list for its type, grouped by category - and what the customer
- * prefers. One tap: preference ① (filled). Second: preference ② (outlined).
- * Third: clear. The tier (Basic / Standard / Premium…) shows as a word so
- * the seller can steer to the budget; no prices here - this sheet is shown
- * with the customer, and the builder prices preference ①.
+ * What a component can carry - the cost items its Options Menu lists,
+ * grouped by category - and what the customer prefers. Three kinds of item,
+ * decided in `lib/scope/options` and drawn differently:
+ *
+ *   exclusive  several answers to one decision (four carcass grades). Tap
+ *              one: it is ① and the previous ① slides to ② by itself. Tap
+ *              the ① again to clear it; tap the ② to drop the fallback.
+ *              Your last tap is your first choice.
+ *   counted    in or out, with a "× n" - a tray, a pull-out. No preference.
+ *   auto       the only item that follows a rule quantity (Shelf per
+ *              shelves): priced from the measurement, nothing to tap.
+ *
+ * Every tap changes the screen at once and nothing repaints afterwards: the
+ * one-①-one-② rule is applied locally (the same rule the database keeps),
+ * the save goes out behind it, and only a failure re-reads. The tier shows
+ * as a word so the seller can steer to the budget; no prices here - this
+ * sheet is shown with the customer.
  *
  * On a project the item also carries who does it (Us / Client): the hob in
- * "Appliances" is the customer's, the chimney is ours. The column exists on
- * every row; it is shown here only where it is used.
+ * "Appliances" is the customer's, the chimney is ours.
  */
+interface OptionItem {
+  cost_item_id: string;
+  name: string;
+  tier: string | null;
+  unit_code: string;
+  counted: boolean;
+  group_key: string | null;
+  quantity_key: string | null;
+  auto: boolean;
+  quantity: number | null;
+  status: "p1" | "p2" | null;
+  row_id: string | null;
+  scope_owner: string | null;
+}
 interface OptionGroup {
   category: { id: string; name: string };
-  items: { cost_item_id: string; name: string; tier: string | null; unit_code: string; counted: boolean; group_key: string | null; quantity: number | null; status: "p1" | "p2" | null; row_id: string | null; scope_owner: string | null }[];
+  items: OptionItem[];
 }
+
+const TIER: Record<string, string> = { basic: "Basic", standard: "Standard", premium: "Premium", luxury: "Luxury" };
 
 function Options({
   item,
@@ -137,18 +165,22 @@ function Options({
   readOnly,
   onChanged,
   showOwner,
+  costing = null,
 }: {
   item: PropertyScopeItem;
   propertyId: string;
   readOnly: boolean;
-  /** The list behind the sheet mirrors the chosen items on the row. */
+  /** The list behind the sheet mirrors the chosen items on the row; called quietly, after a pause. */
   onChanged: () => void;
   /** Done-by per item - shown on a project, where it is decided. */
   showOwner: boolean;
+  /** The rule, for naming what an auto item follows. */
+  costing?: ComponentCosting | null;
 }) {
   const [groups, setGroups] = useState<OptionGroup[] | null>(null);
   const [fromTemplates, setFromTemplates] = useState(true);
   const seq = useRef(0);
+  const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/properties/${propertyId}/scope/${item.id}/options`);
@@ -165,106 +197,160 @@ function Options({
     void load();
   }, [load]);
 
-  const save = async (g: OptionGroup, o: OptionGroup["items"][number], patch: { status: "p1" | "p2" | null; scope_owner?: string; quantity?: number | null }) => {
+  /** Applies a local change to every item at once, then saves the one that was tapped. */
+  const apply = (next: (items: OptionItem[]) => OptionItem[], tapped: { cost_item_id: string; status: "p1" | "p2" | null; scope_owner?: string; quantity?: number | null }) => {
+    setGroups((prev) => (prev ?? []).map((g) => ({ ...g, items: next(g.items) })));
     const mine = ++seq.current;
-    setGroups((prev) =>
-      (prev ?? []).map((gg) => (gg.category.id !== g.category.id ? gg : { ...gg, items: gg.items.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, status: patch.status, scope_owner: patch.scope_owner ?? x.scope_owner, quantity: patch.quantity !== undefined ? patch.quantity : x.quantity } : x)) })),
-    );
-    const res = await fetch(`/api/properties/${propertyId}/scope/${item.id}/options`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cost_item_id: o.cost_item_id, ...patch }),
-    });
-    if (mine !== seq.current) return;
-    // Reload either way: a first preference among alternatives moves the
-    // previous one to second, and the server is the one that knows.
-    void load();
-    if (res.ok) onChanged();
+    void (async () => {
+      const res = await fetch(`/api/properties/${propertyId}/scope/${item.id}/options`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(tapped),
+      });
+      if (mine !== seq.current) return;
+      if (!res.ok) void load();
+      else {
+        // Tell the list once the tapping has paused, not on every tap.
+        if (settle.current) clearTimeout(settle.current);
+        settle.current = setTimeout(onChanged, 900);
+      }
+    })();
   };
-  const cycle = (g: OptionGroup, o: OptionGroup["items"][number]) => {
+
+  /** Exclusive: your last tap is ①; the previous ① becomes ②; tap ① or ② to clear. */
+  const tapExclusive = (o: OptionItem) => {
     if (readOnly) return;
-    const next: "p1" | "p2" | null = o.status === null ? "p1" : o.status === "p1" ? "p2" : null;
-    void save(g, o, { status: next });
+    if (o.status) {
+      apply((items) => items.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, status: null } : x)), { cost_item_id: o.cost_item_id, status: null });
+      return;
+    }
+    apply(
+      (items) =>
+        items.map((x) => {
+          if (x.cost_item_id === o.cost_item_id) return { ...x, status: "p1" as const };
+          if (x.group_key !== o.group_key) return x;
+          if (x.status === "p1") return { ...x, status: "p2" as const };
+          if (x.status === "p2") return { ...x, status: null };
+          return x;
+        }),
+      { cost_item_id: o.cost_item_id, status: "p1" },
+    );
   };
-  const TIER: Record<string, string> = { basic: "Basic", standard: "Standard", premium: "Premium", luxury: "Luxury" };
+  /** Counted: in with a count, or out. */
+  const setCounted = (o: OptionItem, quantity: number | null) => {
+    if (readOnly) return;
+    const status = quantity ? ("p1" as const) : null;
+    apply((items) => items.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, status, quantity } : x)), { cost_item_id: o.cost_item_id, status, quantity });
+  };
+  const setOwner = (o: OptionItem, scope_owner: string) => {
+    apply((items) => items.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, scope_owner } : x)), { cost_item_id: o.cost_item_id, status: o.status, scope_owner });
+  };
+  const quantityLabel = (key: string | null) => costing?.quantities.find((q) => q.key === key)?.label ?? key ?? "";
 
   if (groups === null) return <p className="text-xs text-slate-400">Loading options…</p>;
   if (groups.length === 0) {
     return (
       <p className="text-xs text-slate-400">
-        {fromTemplates ? "No options for this component." : "No options set up for this kind of component yet - a quotation template that lists its items would supply them."}
+        {fromTemplates ? "No options for this component." : "No options set up for this kind of component yet - an Options Menu template for it would supply them."}
       </p>
     );
   }
+
+  // Render helpers, CALLED rather than rendered as elements: a component
+  // defined inside another is a new type each render and would remount.
+  const tier = (o: OptionItem, on: boolean) =>
+    o.tier && TIER[o.tier.toLowerCase()] ? <span className={cn("text-[9px] uppercase tracking-wider", on ? "text-emerald-100" : "text-slate-400")}>{TIER[o.tier.toLowerCase()]}</span> : null;
+  const owner = (o: OptionItem) =>
+    !showOwner || !o.status ? null : readOnly ? (
+      o.scope_owner && o.scope_owner !== "us" ? <span className="ml-1 text-[10px] text-amber-700">{scopeOwnerLabel(o.scope_owner as "client")}</span> : null
+    ) : (
+      <select value={o.scope_owner ?? "us"} onChange={(e) => setOwner(o, e.target.value)} title="Who does this item" className="ml-1 text-[10px] border border-slate-200 rounded px-1 py-0.5 bg-white text-slate-600">
+        <option value="us">Us</option>
+        <option value="client">Client</option>
+        <option value="vendor">Vendor</option>
+        <option value="excluded">Not in scope</option>
+      </select>
+    );
+
   return (
-    <div className="space-y-2">
-      {groups.map((g) => (
-        <div key={g.category.id} className="grid grid-cols-[6rem_1fr] gap-x-2 items-start">
-          <span className="text-[11px] font-medium text-slate-500 pt-1 truncate" title={g.category.name}>
-            {g.category.name}
-            {g.items.length > 1 && g.items.every((x) => x.group_key && x.group_key === g.items[0].group_key) && (
-              <span className="block text-[9px] font-normal text-slate-400">one of these</span>
-            )}
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            {g.items.map((o) => (
-              <span key={o.cost_item_id} className="inline-flex items-center">
-                <button
-                  type="button"
-                  disabled={readOnly}
-                  onClick={() => cycle(g, o)}
-                  title={o.status === "p1" ? "First preference - tap for second" : o.status === "p2" ? "Second preference - tap to clear" : "Tap to mark as first preference"}
-                  className={cn(
-                    "inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full border transition-colors disabled:cursor-default",
-                    o.status === "p1"
-                      ? "bg-emerald-600 text-white border-emerald-600"
-                      : o.status === "p2"
-                        ? "bg-white text-emerald-700 border-emerald-500"
-                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-400",
+    <div className="space-y-2.5">
+      {groups.map((g) => {
+        const exclusive = g.items.filter((o) => !o.counted && !o.auto);
+        const autos = g.items.filter((o) => o.auto);
+        const counted = g.items.filter((o) => o.counted);
+        const oneOf = exclusive.length > 1 && exclusive.every((o) => o.group_key === exclusive[0].group_key);
+        return (
+          <div key={g.category.id} className="grid grid-cols-[6rem_1fr] gap-x-2 items-start">
+            <span className="text-[11px] font-medium text-slate-500 pt-1 truncate" title={g.category.name}>
+              {g.category.name}
+              {oneOf && <span className="block text-[9px] font-normal text-slate-400">one of these</span>}
+            </span>
+            <div className="space-y-1.5">
+              {exclusive.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {exclusive.map((o) => (
+                    <span key={o.cost_item_id} className="inline-flex items-center">
+                      <button
+                        type="button"
+                        disabled={readOnly}
+                        onClick={() => tapExclusive(o)}
+                        title={o.status === "p1" ? "First preference - tap to clear" : o.status === "p2" ? "Second preference - tap to drop" : "Tap to make this the first preference"}
+                        className={cn(
+                          "inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full border transition-colors disabled:cursor-default",
+                          o.status === "p1" ? "bg-emerald-600 text-white border-emerald-600" : o.status === "p2" ? "bg-white text-emerald-700 border-emerald-500" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400",
+                        )}
+                      >
+                        {o.status === "p1" && <span className="text-[10px]">①</span>}
+                        {o.status === "p2" && <span className="text-[10px]">②</span>}
+                        {o.name}
+                        {tier(o, o.status === "p1")}
+                      </button>
+                      {owner(o)}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {autos.map((o) => (
+                <p key={o.cost_item_id} className="text-[11px] text-slate-500 flex items-center gap-1">
+                  <CheckIcon className="w-3 h-3 text-emerald-600" />
+                  <span className="text-slate-700">{o.name}</span>
+                  <span className="text-slate-400">· follows {quantityLabel(o.quantity_key)}</span>
+                </p>
+              ))}
+              {counted.length > 0 && (
+                <div className="space-y-1">
+                  {counted.filter((o) => o.status).map((o) => (
+                    <div key={o.cost_item_id} className="flex items-center gap-2 text-[11px]">
+                      <span className="inline-flex items-center rounded border border-slate-200 bg-white text-slate-700 tabular-nums">
+                        <button type="button" disabled={readOnly} onClick={() => setCounted(o, Math.max(1, (o.quantity ?? 1) - 1))} className="px-1.5 py-0.5 hover:bg-slate-100 disabled:opacity-40" title="One fewer">−</button>
+                        <span className="px-1.5 min-w-[1.6rem] text-center">{o.quantity ?? 1}</span>
+                        <button type="button" disabled={readOnly} onClick={() => setCounted(o, (o.quantity ?? 1) + 1)} className="px-1.5 py-0.5 hover:bg-slate-100 disabled:opacity-40" title="One more">+</button>
+                      </span>
+                      <span className="text-slate-800">{o.name}</span>
+                      {owner(o)}
+                      {!readOnly && (
+                        <button type="button" onClick={() => setCounted(o, null)} className="text-slate-400 hover:text-red-600" title="Remove">
+                          <XMarkIcon className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {!readOnly && counted.some((o) => !o.status) && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {counted.filter((o) => !o.status).map((o) => (
+                        <button key={o.cost_item_id} type="button" onClick={() => setCounted(o, 1)} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-full border border-dashed border-slate-300 text-slate-500 hover:border-slate-400 hover:text-slate-700">
+                          <PlusIcon className="w-3 h-3" />
+                          {o.name}
+                        </button>
+                      ))}
+                    </div>
                   )}
-                >
-                  {o.status === "p1" && <span className="text-[10px]">①</span>}
-                  {o.status === "p2" && <span className="text-[10px]">②</span>}
-                  {o.name}
-                  {o.tier && TIER[o.tier.toLowerCase()] && (
-                    <span className={cn("text-[9px] uppercase tracking-wider", o.status === "p1" ? "text-emerald-100" : "text-slate-400")}>{TIER[o.tier.toLowerCase()]}</span>
-                  )}
-                </button>
-                {/* How many, for an item priced per piece - two wooden
-                    drawers, one tandem box. Rule-priced items need none. */}
-                {o.counted && o.status && (
-                  <span className="ml-0.5 inline-flex items-center rounded border border-slate-200 bg-white text-[10px] text-slate-700">
-                    {!readOnly && (
-                      <button type="button" onClick={() => void save(g, o, { status: o.status, quantity: Math.max(1, (o.quantity ?? 1) - 1) })} className="px-1 hover:bg-slate-100" title="One fewer">−</button>
-                    )}
-                    <span className="px-1 tabular-nums">× {o.quantity ?? 1}</span>
-                    {!readOnly && (
-                      <button type="button" onClick={() => void save(g, o, { status: o.status, quantity: (o.quantity ?? 1) + 1 })} className="px-1 hover:bg-slate-100" title="One more">+</button>
-                    )}
-                  </span>
-                )}
-                {showOwner && o.status && !readOnly && (
-                  <select
-                    value={o.scope_owner ?? "us"}
-                    onChange={(e) => void save(g, o, { status: o.status, scope_owner: e.target.value })}
-                    title="Who does this item"
-                    className="ml-0.5 text-[10px] border border-slate-200 rounded px-1 py-0.5 bg-white text-slate-600"
-                  >
-                    <option value="us">Us</option>
-                    <option value="client">Client</option>
-                    <option value="vendor">Vendor</option>
-                    <option value="excluded">Not in scope</option>
-                  </select>
-                )}
-                {showOwner && o.status && readOnly && o.scope_owner && o.scope_owner !== "us" && (
-                  <span className="ml-1 text-[10px] text-amber-700">{scopeOwnerLabel(o.scope_owner as "client")}</span>
-                )}
-              </span>
-            ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
-      <p className="text-[10px] text-slate-400">Tap once for first preference ①, again for second ②, again to clear. Where items are alternatives, choosing a new ① moves the old one to ②.</p>
+        );
+      })}
     </div>
   );
 }
@@ -362,7 +448,7 @@ function ComponentCard({
           {ours ? (
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Options</p>
-              <Options item={c} propertyId={propertyId} readOnly={readOnly} onChanged={onChoicesChanged} showOwner={linkedType === "project"} />
+              <Options item={c} propertyId={propertyId} readOnly={readOnly} onChanged={onChoicesChanged} showOwner={linkedType === "project"} costing={costing} />
             </div>
           ) : c.scope_owner === "excluded" ? (
             <p className="text-xs text-slate-500">Not part of this scope.</p>

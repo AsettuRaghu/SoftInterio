@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { menuOf, shapeOptions } from "@/lib/scope/options";
 
 type RouteParams = { params: Promise<{ id: string; itemId: string }> };
 
@@ -14,12 +15,10 @@ type RouteParams = { params: Promise<{ id: string; itemId: string }> };
  * supplies the options, as before. An item picked here that no template
  * lists (added in the builder, say) still shows, under its category.
  *
- * Alternatives: within one category, items priced per the SAME quantity
- * (two carcass grades both per front area; two hinge grades both per
- * hinges) are ways of pricing one thing, so they share a `group_key` and
- * carry at most one ① and one ② between them. `trg_scope_choice_alternatives`
- * keeps that on every write - here the key is computed only so the sheet
- * can say "one of these"; the client re-reads after each save.
+ * What each item IS - counted, one of several alternatives, or automatic
+ * - is decided in `lib/scope/options` (shared with the quotation copy);
+ * `trg_scope_choice_alternatives` keeps one ① and one ② per group on every
+ * write, and the sheet mirrors that rule locally so nothing repaints.
  *
  * GET  -> { groups: [{ category, items: [{ cost_item_id, name, tier, counted, group_key, status, row_id, scope_owner }] }], from_templates }
  * PUT  { cost_item_id, status: "p1" | "p2" | null, scope_owner?, quantity? }
@@ -47,12 +46,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     menuLines(supabase, component.component_type_id),
     supabase.from("property_scope_items").select("id, cost_item_id, choice_status, scope_owner, choice_quantity").eq("parent_id", itemId).not("cost_item_id", "is", null),
   ]);
-  // Which quantity each item follows on this type - null means per piece
-  // (a count on the sheet) or the one face.
-  const keyByItem = new Map<string, string | null>();
-  for (const l of templated.lines) if (!keyByItem.has(l.cost_item_id) || l.quantity_key) keyByItem.set(l.cost_item_id, l.quantity_key);
-  const ruledIds = new Set([...keyByItem.entries()].filter(([, k]) => k).map(([id]) => id));
-  const templateIds = new Set(keyByItem.keys());
+  const templateIds = new Set(templated.lines.map((l) => l.cost_item_id));
   const pickedByItem = new Map((picked ?? []).map((p) => [p.cost_item_id as string, p]));
   const ids = [...new Set([...templateIds, ...pickedByItem.keys()])];
   if (ids.length === 0) return NextResponse.json({ data: { groups: [], from_templates: false } });
@@ -65,18 +59,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     .order("display_order")
     .order("name");
 
-  const groups = new Map<string, { category: { id: string; name: string; order: number }; items: { cost_item_id: string; name: string; tier: string | null; unit_code: string; counted: boolean; group_key: string | null; quantity: number | null; status: string | null; row_id: string | null; scope_owner: string | null }[] }>();
+  // Shapes are worked out over the MENU's items only - an item picked from
+  // outside the menu is shown, but it neither joins a group nor prices itself.
+  const shapes = shapeOptions(
+    templated.lines,
+    (costItems ?? []).filter((c) => templateIds.has(c.id)).map((c) => ({ id: c.id as string, category_id: (c.category_id as string | null) ?? null, unit_code: c.unit_code as string })),
+  );
+  const groups = new Map<string, { category: { id: string; name: string; order: number }; items: { cost_item_id: string; name: string; tier: string | null; unit_code: string; counted: boolean; group_key: string | null; quantity_key: string | null; auto: boolean; quantity: number | null; status: string | null; row_id: string | null; scope_owner: string | null }[] }>();
   for (const c of costItems ?? []) {
     const cat = (c.category as unknown as { id: string; name: string; display_order: number | null } | null) ?? { id: "other", name: "Other", display_order: 999 };
     const g = groups.get(cat.id) ?? { category: { id: cat.id, name: cat.name, order: cat.display_order ?? 999 }, items: [] };
     const p = pickedByItem.get(c.id);
-    // Counted = priced per piece and not quantified by the rule: it takes a
-    // "× n" on the sheet. Area / length items follow the rule or the face.
-    const perPiece = PER_PIECE.has(String(c.unit_code).toLowerCase());
-    const counted = perPiece && !ruledIds.has(c.id);
+    const shape = shapes.get(c.id) ?? { quantity_key: null, counted: PER_PIECE.has(String(c.unit_code).toLowerCase()), group_key: null, auto: false };
     g.items.push({
       cost_item_id: c.id, name: c.name, tier: (c.quality_tier as string | null) ?? null, unit_code: c.unit_code as string,
-      counted, group_key: counted ? null : `${cat.id}:${keyByItem.get(c.id) ?? "face"}`,
+      counted: shape.counted, group_key: shape.group_key, quantity_key: shape.quantity_key, auto: shape.auto,
       quantity: p?.choice_quantity != null ? Number(p.choice_quantity) : null,
       status: p?.choice_status ?? null, row_id: p?.id ?? null, scope_owner: p?.scope_owner ?? null,
     });
@@ -94,21 +91,15 @@ const PER_PIECE = new Set(["nos", "set", "kg", "ltr", "pcs"]);
 
 type Db = Awaited<ReturnType<typeof createClient>>;
 
-/**
- * The template lines that define this type's options: its Options Menu(s)
- * when it has any, otherwise every active template naming it.
- */
+/** The template lines that define this type's options - see `menuOf`. */
 async function menuLines(supabase: Db, componentTypeId: string) {
   const { data } = await supabase
     .from("quotation_template_line_items")
     .select("cost_item_id, quantity_key, template:quotation_templates!inner(is_active, is_options_menu)")
     .eq("component_type_id", componentTypeId)
     .not("cost_item_id", "is", null);
-  const rows = (data ?? [])
-    .map((r) => ({ cost_item_id: r.cost_item_id as string, quantity_key: (r.quantity_key as string | null) ?? null, template: r.template as unknown as { is_active?: boolean; is_options_menu?: boolean } | null }))
-    .filter((r) => r.template?.is_active !== false);
-  const menu = rows.filter((r) => r.template?.is_options_menu);
-  return { lines: menu.length ? menu : rows, fromMenu: menu.length > 0 };
+  const rows = (data ?? []).map((r) => ({ cost_item_id: r.cost_item_id as string, quantity_key: (r.quantity_key as string | null) ?? null, template: r.template as unknown as { is_active?: boolean; is_options_menu?: boolean } | null }));
+  return { lines: menuOf(rows) };
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {

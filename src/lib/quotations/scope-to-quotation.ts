@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { calculateSqft, convertToFeet, getMeasurementInfo, type MeasurementUnit } from "@/components/quotations/types";
 import { hasCosting, mergeMeasures, quantify, readCosting } from "@/lib/costing/component-costing";
+import { menuOf, shapeOptions } from "@/lib/scope/options";
 
 /**
  * Brings the property's scope into a quotation - the rooms and components
@@ -244,25 +245,50 @@ export async function copyScopeToQuotation(
 
     // The third level: first-preference cost items become line items, sized
     // from the component at the catalogue's rate. Second preferences and
-    // items the client keeps stay behind.
+    // items the client keeps stay behind. An AUTO item - the only item on
+    // the menu that follows a rule quantity (Shelf per shelves) - is a
+    // decision with one answer, so it is priced from the measurement without
+    // having been tapped, and skipped when its quantity is 0.
     const chosen = scope.filter((r) => r.cost_item_id && r.choice_status === "p1" && OURS(r.scope_owner) && r.parent_id && targetByScopeComp.has(r.parent_id));
-    const wantedIds = [...new Set(chosen.map((r) => r.cost_item_id as string))];
+    const typeIds = [...new Set([...targetByScopeComp.values()].map((t) => t.componentTypeId).filter(Boolean) as string[])];
+    const [{ data: types }, { data: menuRows }] = await Promise.all([
+      typeIds.length ? supabase.from("component_types").select("id, config_schema").in("id", typeIds) : Promise.resolve({ data: [] as { id: string; config_schema: unknown }[] }),
+      typeIds.length
+        ? supabase.from("quotation_template_line_items").select("component_type_id, cost_item_id, quantity_key, template:quotation_templates!inner(is_active, is_options_menu)").in("component_type_id", typeIds).not("cost_item_id", "is", null)
+        : Promise.resolve({ data: [] as unknown[] }),
+    ]);
+    const ruleByType = new Map((types ?? []).map((t) => [t.id as string, readCosting(t.config_schema)]));
+    // Each type's menu, and what it says about every item on it.
+    const menuByType = new Map<string, { cost_item_id: string; quantity_key: string | null }[]>();
+    for (const typeId of typeIds) {
+      const rows = ((menuRows ?? []) as { component_type_id: string; cost_item_id: string; quantity_key: string | null; template: { is_active?: boolean; is_options_menu?: boolean } | null }[]).filter((r) => r.component_type_id === typeId);
+      menuByType.set(typeId, menuOf(rows).map((r) => ({ cost_item_id: r.cost_item_id, quantity_key: r.quantity_key ?? null })));
+    }
+    const menuIds = [...new Set([...menuByType.values()].flat().map((l) => l.cost_item_id))];
+    const wantedIds = [...new Set([...chosen.map((r) => r.cost_item_id as string), ...menuIds])];
     if (wantedIds.length) {
-      const typeIds = [...new Set([...targetByScopeComp.values()].map((t) => t.componentTypeId).filter(Boolean) as string[])];
-      const [{ data: costItems }, { data: types }, { data: templateLines }] = await Promise.all([
-        supabase.from("quotation_cost_items").select("id, name, unit_code, default_rate, company_cost, vendor_cost").in("id", wantedIds),
-        typeIds.length ? supabase.from("component_types").select("id, config_schema").in("id", typeIds) : Promise.resolve({ data: [] as { id: string; config_schema: unknown }[] }),
-        typeIds.length
-          ? supabase.from("quotation_template_line_items").select("component_type_id, cost_item_id, quantity_key").in("component_type_id", typeIds).in("cost_item_id", wantedIds).not("quantity_key", "is", null)
-          : Promise.resolve({ data: [] as { component_type_id: string; cost_item_id: string; quantity_key: string }[] }),
-      ]);
+      const { data: costItems } = await supabase.from("quotation_cost_items").select("id, name, unit_code, default_rate, company_cost, vendor_cost, category_id").in("id", wantedIds);
       const byId = new Map((costItems ?? []).map((c) => [c.id as string, c]));
-      // The tenant's rule per component type, and what each item is priced per.
-      const ruleByType = new Map((types ?? []).map((t) => [t.id as string, readCosting(t.config_schema)]));
-      const keyFor = new Map((templateLines ?? []).map((l) => [`${l.component_type_id}::${l.cost_item_id}`, l.quantity_key as string]));
+      const shapesByType = new Map<string, ReturnType<typeof shapeOptions>>();
+      for (const [typeId, lines] of menuByType) {
+        const items = lines.map((l) => byId.get(l.cost_item_id)).filter(Boolean).map((c) => ({ id: c!.id as string, category_id: (c!.category_id as string | null) ?? null, unit_code: c!.unit_code as string }));
+        shapesByType.set(typeId, shapeOptions(lines, items));
+      }
+      const keyFor = new Map<string, string>();
+      for (const [typeId, lines] of menuByType) for (const l of lines) if (l.quantity_key) keyFor.set(`${typeId}::${l.cost_item_id}`, l.quantity_key);
+      // Auto items on each component, unless a row already says something.
+      const rowsFor = (parentId: string) => scope.filter((r) => r.parent_id === parentId && r.cost_item_id);
+      const candidates: { id: string | null; parent_id: string; cost_item_id: string; choice_quantity: number | null }[] = chosen.map((r) => ({ id: r.id, parent_id: r.parent_id as string, cost_item_id: r.cost_item_id as string, choice_quantity: r.choice_quantity == null ? null : Number(r.choice_quantity) }));
+      for (const r of scope) {
+        if (!targetByScopeComp.has(r.id) || !OURS(r.scope_owner) || !r.component_type_id) continue;
+        const shapes = shapesByType.get(r.component_type_id);
+        if (!shapes) continue;
+        const said = new Set(rowsFor(r.id).map((x) => x.cost_item_id as string));
+        for (const [itemId, shape] of shapes) if (shape.auto && !said.has(itemId)) candidates.push({ id: null, parent_id: r.id, cost_item_id: itemId, choice_quantity: null });
+      }
       const lineRows: Record<string, unknown>[] = [];
-      for (const r of chosen) {
-        const target = targetByScopeComp.get(r.parent_id as string)!;
+      for (const r of candidates) {
+        const target = targetByScopeComp.get(r.parent_id)!;
         const ci = byId.get(r.cost_item_id as string);
         if (!ci || target.lines.has(ci.id)) {
           if (ci) result.already += 1;
@@ -278,6 +304,8 @@ export async function copyScopeToQuotation(
         const quantityKey = target.componentTypeId ? keyFor.get(`${target.componentTypeId}::${ci.id}`) ?? null : null;
         const ruled = !!(rule && hasCosting(rule) && quantityKey && rule.quantities.some((q) => q.key === quantityKey));
         const derived = ruled ? quantify(rule!, mergeMeasures(target), unit).values[quantityKey!] ?? 0 : null;
+        // An auto item with nothing to measure against is not a line.
+        if (r.id === null && !(derived && derived > 0)) continue;
         // A per-piece item carries how many were chosen (two wooden drawers).
         const count = kind === "quantity" ? Number(r.choice_quantity) || 1 : 1;
         const amount = ruled
@@ -301,7 +329,7 @@ export async function copyScopeToQuotation(
           company_cost: ci.company_cost ?? null,
           vendor_cost: ci.vendor_cost ?? null,
           display_order: target.lines.size + lineRows.filter((l) => l.quotation_component_id === target.id).length,
-          metadata: { follows_component: !ruled && (kind === "area" || kind === "length"), scope_item_id: r.id, quantity_key: ruled ? quantityKey : null },
+          metadata: { follows_component: !ruled && (kind === "area" || kind === "length"), scope_item_id: r.id ?? undefined, auto: r.id === null || undefined, quantity_key: ruled ? quantityKey : null },
         });
         target.lines.add(ci.id);
       }

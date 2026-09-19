@@ -808,12 +808,33 @@ rule was seeded where such types existed; the tenant edits or replaces it.
   read-then-write rule belongs in the database. The route also treats a
   duplicate-key insert (the same race) as the update it meant. Counted
   items are independent - a wardrobe has drawers AND a tray.
-- **Shelves and drawers are counted options, not rule fields.** A number
-  decided with the customer is a count on the option; the rule keeps only
-  what the measurement decides (size, depth, shutters, exposed sides). The
-  wardrobe menus carry the whole internals list, each with × n; an internal
-  mirror is per door (`nos`), because a sqft item with no rule quantity is
-  priced on the whole front.
+- **An option is one of three things**, decided in `lib/scope/options`
+  (shared by the options route and the quotation copy, so a tap and a line
+  never disagree) - settled on the second walk-through, 2026-09-19, after
+  the three-state tap cycle and a repaint after every tap read as "jibbery":
+  - *exclusive* - several answers to one decision (four carcass grades, all
+    per front area): chips that behave like a radio. **Your last tap is ①;
+    the previous ① slides to ②** by itself; tap ① or ② again to clear. No
+    cycle to learn.
+  - *counted* - per piece and not quantified by the rule (a tray, a
+    pull-out): a list with a × n stepper and a ✕; "+ Tray" chips to add. No
+    preference - a tray is not an answer to a question.
+  - *auto* - the only menu item that follows a rule quantity (Shelf per
+    `shelves`, Exposed Side Finish per `exposed_side_sqft`, Installation
+    per front area): a decision with one answer is not a decision, so it
+    shows as "✓ Shelf · follows Shelves", nothing to tap, and the copy
+    prices it from the measurement, skipping it at quantity 0. The way to
+    not have one is to take it off the menu.
+  Every tap changes the screen at once and nothing repaints afterwards: the
+  one-①-one-② rule is applied locally (mirroring the trigger), the save goes
+  out behind it, only a failure re-reads, and the list behind the sheet is
+  told once the tapping has paused (900 ms), not per tap.
+- **Drawers and shelves are counts on the rule; the KIND of drawer is a
+  decision.** `Shelves: 5` prices Shelf automatically; `Drawers: 4` plus
+  Wooden Drawer / Tandem Box as an exclusive pair priced per `drawers`
+  gives four of whichever is ①. Pull-outs and trays stay counted extras.
+  An internal mirror is per door (`nos`), because a sqft item with no rule
+  quantity is priced on the whole front.
 
 ### The seeded catalogue is complete enough to quote a whole home
 
