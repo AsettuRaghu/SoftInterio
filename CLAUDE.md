@@ -777,6 +777,40 @@ has a rule and the template names one, else on the one face as before. A
 type with no rule behaves exactly as before. A sample Kitchen and Wardrobe
 rule was seeded where such types existed; the tenant edits or replaces it.
 
+### The seeded catalogue is complete enough to quote a whole home
+
+`20260919110000_catalogue_completion.sql` (2026-09-19) took the shipped
+catalogue from 11 categories / 43 cost items / 19 component types / 6
+templates to **24 / 99 / 29 / 39**, so that a kitchen or a full-home
+quotation does not run into a thing the catalogue cannot name. The plain
+account of what and why is the Scope to Quotation Handbook artifact
+(https://claude.ai/artifact/SrSeVHrrGKzPEms8xK9urf, "What was added").
+
+- **New categories are untiered on purpose** - Countertop, Dado, Shutters
+  by Finish, Appliances, Sliding Systems, Profiles, Internals, Glass &
+  Mirror, False Ceiling, Painting, Electrical, Civil & Plumbing, Soft
+  Furnishings. Reprice needs one family per graded category (see above),
+  and these are chosen by kind, not by grade. The graded Shutters and
+  Drawer Systems ladders stay beside the by-kind sets; a menu should carry
+  one or the other, never both.
+- **Every new cost item's description says "Starting rate - edit."** They
+  are placeholders for the tenant's finance to replace, not prices.
+- **One "<Component> - Options Menu" template per component type.** The
+  room sheet's options are the distinct cost items across the active
+  templates for the type, so a type absent from every template offers
+  nothing to pick. These templates exist to make every component pickable
+  on day one; a business prunes them like any template.
+- **Internals are per-piece items with a count**, not fields on a rule:
+  Shelf (nos), Shelf - per area (sqft), Hanging Rod (rft), and drawers by
+  type (Wooden, Tandem Box, Trouser Pull-out, Wicker Basket, Cutlery Tray,
+  Bottle Pull-out, Plate Rack, Pantry Pull-out). The rule of thumb in the
+  handbook: derivable from the measurement -> costing rule; decided with
+  the customer -> a counted option.
+- **A wardrobe's two height offers are the same rule with different
+  numbers**: wardrobe + loft is `height 7, loft_height 2.5`; floor to
+  ceiling is `height 9.5, loft_height 0`. The separate `loft` component
+  type (with its own sample rule) is for a loft sold on its own.
+
 ### Charges are ordinary line items
 Delivery, cleanup and site protection are cost items in a category marked
 `is_charge`. A space made up entirely of such items *prints* below the room
