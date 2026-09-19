@@ -795,8 +795,12 @@ rule was seeded where such types existed; the tenant edits or replaces it.
   is_options_menu`, set on the seeded "<Component> - Options Menu"
   templates). Every active template naming the type used to supply them,
   so a pruned menu still showed items from older templates. A type with
-  no flagged template falls back to every active template. There is no
-  UI for the flag yet - set it when a Templates screen asks for it.
+  no flagged template falls back to every active template. The flag is
+  the **"Room sheet menu"** checkbox on a component template's editor
+  (Quotations → Templates), and a green chip on the list. What a component
+  offers on the room sheet is therefore controlled in exactly one place:
+  the lines of its flagged template. Labour lines were taken off every menu
+  on 2026-09-19 - the business quotes fitting inside its rates.
 - **Alternatives hold one ① and one ②, kept by a trigger.** Within a
   category, items priced per the same quantity (two carcass grades, both
   per front area) are ways of pricing one thing: `group_key` on the option,

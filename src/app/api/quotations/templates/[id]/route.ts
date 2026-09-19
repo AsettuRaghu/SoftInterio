@@ -136,6 +136,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       line_items,
       is_active,
       is_featured,
+      is_options_menu,
     } = body;
 
     // Build update object with only provided fields
@@ -151,6 +152,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (template_data !== undefined) updateData.template_data = template_data;
     if (is_active !== undefined) updateData.is_active = is_active;
     if (is_featured !== undefined) updateData.is_featured = is_featured;
+    // The Scope room sheet offers a component type the items of its flagged
+    // template(s) - see lib/scope/options.
+    if (typeof is_options_menu === "boolean") updateData.is_options_menu = is_options_menu;
 
     // Update template - filter by tenant for security
     const { data: template, error } = await supabase
