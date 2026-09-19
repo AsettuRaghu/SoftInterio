@@ -136,8 +136,12 @@ builder's own arithmetic, from `components/quotations/types`); second
 preferences stay behind for the alternative quotation that comes later.
 The tier shows on each option as a word so the seller can steer to the
 budget. Done-by per item (`scope_owner` on the row) is shown on a project
-only - it is decided there, kept from the sale. The list shows the chosen items as a chip on the
-component row and never lists cost-item rows themselves. The finish chips
+only - it is decided there, kept from the sale. An item priced per piece (nos/set…) and not
+quantified by a costing rule takes a count on the sheet (`choice_quantity`,
+the "× n" stepper) - two wooden drawers, one tandem box are three rows with
+their own counts - and the copy makes a line of that many. The list shows
+the chosen items as a chip on the component row and never lists cost-item
+rows themselves. The finish chips
 and the "preferred finish" ordering in the builder went with this; a finish
 is now one option category among the others.
 

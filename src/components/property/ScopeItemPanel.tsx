@@ -128,7 +128,7 @@ function Thread({
  */
 interface OptionGroup {
   category: { id: string; name: string };
-  items: { cost_item_id: string; name: string; tier: string | null; status: "p1" | "p2" | null; row_id: string | null; scope_owner: string | null }[];
+  items: { cost_item_id: string; name: string; tier: string | null; unit_code: string; counted: boolean; quantity: number | null; status: "p1" | "p2" | null; row_id: string | null; scope_owner: string | null }[];
 }
 
 function Options({
@@ -165,10 +165,10 @@ function Options({
     void load();
   }, [load]);
 
-  const save = async (g: OptionGroup, o: OptionGroup["items"][number], patch: { status: "p1" | "p2" | null; scope_owner?: string }) => {
+  const save = async (g: OptionGroup, o: OptionGroup["items"][number], patch: { status: "p1" | "p2" | null; scope_owner?: string; quantity?: number | null }) => {
     const mine = ++seq.current;
     setGroups((prev) =>
-      (prev ?? []).map((gg) => (gg.category.id !== g.category.id ? gg : { ...gg, items: gg.items.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, status: patch.status, scope_owner: patch.scope_owner ?? x.scope_owner } : x)) })),
+      (prev ?? []).map((gg) => (gg.category.id !== g.category.id ? gg : { ...gg, items: gg.items.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, status: patch.status, scope_owner: patch.scope_owner ?? x.scope_owner, quantity: patch.quantity !== undefined ? patch.quantity : x.quantity } : x)) })),
     );
     const res = await fetch(`/api/properties/${propertyId}/scope/${item.id}/options`, {
       method: "PUT",
@@ -223,6 +223,19 @@ function Options({
                     <span className={cn("text-[9px] uppercase tracking-wider", o.status === "p1" ? "text-emerald-100" : "text-slate-400")}>{TIER[o.tier.toLowerCase()]}</span>
                   )}
                 </button>
+                {/* How many, for an item priced per piece - two wooden
+                    drawers, one tandem box. Rule-priced items need none. */}
+                {o.counted && o.status && (
+                  <span className="ml-0.5 inline-flex items-center rounded border border-slate-200 bg-white text-[10px] text-slate-700">
+                    {!readOnly && (
+                      <button type="button" onClick={() => void save(g, o, { status: o.status, quantity: Math.max(1, (o.quantity ?? 1) - 1) })} className="px-1 hover:bg-slate-100" title="One fewer">−</button>
+                    )}
+                    <span className="px-1 tabular-nums">× {o.quantity ?? 1}</span>
+                    {!readOnly && (
+                      <button type="button" onClick={() => void save(g, o, { status: o.status, quantity: (o.quantity ?? 1) + 1 })} className="px-1 hover:bg-slate-100" title="One more">+</button>
+                    )}
+                  </span>
+                )}
                 {showOwner && o.status && !readOnly && (
                   <select
                     value={o.scope_owner ?? "us"}

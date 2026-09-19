@@ -15,7 +15,8 @@ type RouteParams = { params: Promise<{ id: string; itemId: string }> };
  * shows, under its category.
  *
  * GET  -> { groups: [{ category, items: [{ cost_item_id, name, tier, status, row_id, scope_owner }] }], from_templates }
- * PUT  { cost_item_id, status: "p1" | "p2" | null, scope_owner? }
+ * PUT  { cost_item_id, status: "p1" | "p2" | null, scope_owner?, quantity? }
+ *      quantity: how many, for an item priced per piece (two wooden drawers)
  *      p1 = first preference (what a quotation starts from), p2 = second;
  *      null removes the row. scope_owner (us / client / vendor / excluded)
  *      is who does that item - used on the project, kept for the sale.
@@ -41,8 +42,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .select("cost_item_id, template:quotation_templates!inner(is_active)")
       .eq("component_type_id", component.component_type_id)
       .not("cost_item_id", "is", null),
-    supabase.from("property_scope_items").select("id, cost_item_id, choice_status, scope_owner").eq("parent_id", itemId).not("cost_item_id", "is", null),
+    supabase.from("property_scope_items").select("id, cost_item_id, choice_status, scope_owner, choice_quantity").eq("parent_id", itemId).not("cost_item_id", "is", null),
   ]);
+  // Which items a costing rule already quantifies on this component type;
+  // the others are per piece and take a count on the sheet.
+  const { data: ruled } = await supabase
+    .from("quotation_template_line_items")
+    .select("cost_item_id, quantity_key")
+    .eq("component_type_id", component.component_type_id)
+    .not("quantity_key", "is", null);
+  const ruledIds = new Set((ruled ?? []).map((r) => r.cost_item_id as string));
 
   const templateIds = new Set(
     (templated ?? [])
@@ -55,18 +64,25 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   const { data: costItems } = await supabase
     .from("quotation_cost_items")
-    .select("id, name, category_id, quality_tier, display_order, category:quotation_cost_item_categories(id, name, display_order)")
+    .select("id, name, category_id, quality_tier, unit_code, display_order, category:quotation_cost_item_categories(id, name, display_order)")
     .in("id", ids)
     .eq("is_active", true)
     .order("display_order")
     .order("name");
 
-  const groups = new Map<string, { category: { id: string; name: string; order: number }; items: { cost_item_id: string; name: string; tier: string | null; status: string | null; row_id: string | null; scope_owner: string | null }[] }>();
+  const groups = new Map<string, { category: { id: string; name: string; order: number }; items: { cost_item_id: string; name: string; tier: string | null; unit_code: string; counted: boolean; quantity: number | null; status: string | null; row_id: string | null; scope_owner: string | null }[] }>();
   for (const c of costItems ?? []) {
     const cat = (c.category as unknown as { id: string; name: string; display_order: number | null } | null) ?? { id: "other", name: "Other", display_order: 999 };
     const g = groups.get(cat.id) ?? { category: { id: cat.id, name: cat.name, order: cat.display_order ?? 999 }, items: [] };
     const p = pickedByItem.get(c.id);
-    g.items.push({ cost_item_id: c.id, name: c.name, tier: (c.quality_tier as string | null) ?? null, status: p?.choice_status ?? null, row_id: p?.id ?? null, scope_owner: p?.scope_owner ?? null });
+    // Counted = priced per piece and not quantified by the rule: it takes a
+    // "× n" on the sheet. Area / length items follow the rule or the face.
+    const perPiece = ["nos", "set", "kg", "ltr", "pcs"].includes(String(c.unit_code).toLowerCase());
+    g.items.push({
+      cost_item_id: c.id, name: c.name, tier: (c.quality_tier as string | null) ?? null, unit_code: c.unit_code as string,
+      counted: perPiece && !ruledIds.has(c.id), quantity: p?.choice_quantity != null ? Number(p.choice_quantity) : null,
+      status: p?.choice_status ?? null, row_id: p?.id ?? null, scope_owner: p?.scope_owner ?? null,
+    });
     groups.set(cat.id, g);
   }
   return NextResponse.json({
@@ -87,6 +103,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   const status = body.status === "p1" || body.status === "p2" ? body.status : null;
   const OWNERS = new Set(["us", "client", "vendor", "excluded"]);
   const owner = typeof body.scope_owner === "string" && OWNERS.has(body.scope_owner) ? body.scope_owner : undefined;
+  const quantity = body.quantity === null ? null : Number.isFinite(Number(body.quantity)) && Number(body.quantity) > 0 ? Math.round(Number(body.quantity) * 100) / 100 : undefined;
   if (!body.cost_item_id) return NextResponse.json({ error: "cost_item_id is required" }, { status: 400 });
 
   const { data: component } = await supabase
@@ -111,7 +128,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   if (existing) {
     const { error } = await supabase
       .from("property_scope_items")
-      .update({ choice_status: status, ...(owner ? { scope_owner: owner } : {}) })
+      .update({ choice_status: status, ...(owner ? { scope_owner: owner } : {}), ...(quantity !== undefined ? { choice_quantity: quantity } : {}) })
       .eq("id", existing.id);
     if (error) return NextResponse.json({ error: "Could not save" }, { status: 500 });
     return NextResponse.json({ data: { row_id: existing.id, status } });
@@ -127,6 +144,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       cost_item_id: costItem.id,
       choice_status: status,
       ...(owner ? { scope_owner: owner } : {}),
+      ...(quantity !== undefined ? { choice_quantity: quantity } : {}),
       name: costItem.name,
       display_order: 0,
       created_by: user.id,

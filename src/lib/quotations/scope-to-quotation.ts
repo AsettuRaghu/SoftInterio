@@ -53,6 +53,7 @@ type Row = Record<string, unknown> & {
   height: number | null;
   display_order: number;
   measures: Record<string, number> | null;
+  choice_quantity: number | null;
 };
 
 export interface ScopeCopyResult {
@@ -275,12 +276,14 @@ export async function copyScopeToQuotation(
         const quantityKey = target.componentTypeId ? keyFor.get(`${target.componentTypeId}::${ci.id}`) ?? null : null;
         const ruled = !!(rule && hasCosting(rule) && quantityKey && rule.quantities.some((q) => q.key === quantityKey));
         const derived = ruled ? quantify(rule!, target.measures, unit).values[quantityKey!] ?? 0 : null;
+        // A per-piece item carries how many were chosen (two wooden drawers).
+        const count = kind === "quantity" ? Number(r.choice_quantity) || 1 : 1;
         const amount = ruled
           ? (derived ?? 0) * rate
           : kind === "area" ? calculateSqft(target.width, target.height, unit) * rate
           : kind === "length" ? convertToFeet(target.width || 0, unit) * rate
           : kind === "fixed" ? rate
-          : rate;
+          : count * rate;
         lineRows.push({
           quotation_id: quotationId,
           quotation_component_id: target.id,
@@ -288,7 +291,7 @@ export async function copyScopeToQuotation(
           name: ci.name,
           length: !ruled && (kind === "area" || kind === "length") ? target.width : null,
           width: !ruled && kind === "area" ? target.height : null,
-          quantity: ruled ? Math.round((derived ?? 0) * 100) / 100 : 1,
+          quantity: ruled ? Math.round((derived ?? 0) * 100) / 100 : count,
           unit_code: ci.unit_code,
           rate,
           amount: Math.round(amount * 100) / 100,
