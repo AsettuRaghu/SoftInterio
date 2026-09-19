@@ -1101,7 +1101,7 @@ export default function QuotationsConfigPage() {
                           each cost line is priced per - the tenant's rule. */}
                       <Link
                         href={`/dashboard/settings/catalogue/components/${component.id}/costing`}
-                        title="Costing: what you measure and what each line is priced per"
+                        title="How it is measured, what it offers on the room sheet, and what each item is priced per"
                         className={`w-6.5 h-6.5 flex items-center justify-center rounded-md border transition-all ${
                           component.config_schema && (component.config_schema as { fields?: unknown[] }).fields?.length
                             ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"

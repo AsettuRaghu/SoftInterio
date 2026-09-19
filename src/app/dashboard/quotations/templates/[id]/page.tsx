@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Toast } from "@/components/ui/Toast";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
 import {
   BuilderSpace,
@@ -39,6 +39,7 @@ const LEVEL_LABELS: Record<string, string> = {
 
 export default function EditTemplatePage() {
   const params = useParams();
+  const router = useRouter();
   const templateId = params.id as string;
 
   // Loading states
@@ -70,9 +71,6 @@ export default function EditTemplatePage() {
    * should not carry one.
    */
   const [level, setLevel] = useState<string>("quotation");
-  // A component template can be the Scope room sheet's menu for its type:
-  // the sheet offers exactly its lines as options. Nothing else decides that.
-  const [isOptionsMenu, setIsOptionsMenu] = useState(false);
   // A property type and multiple rooms only mean something for a template that
   // covers a whole quotation. Narrower levels are one component or one bundle.
   const isWholeQuotation = level === "quotation" || level === "space";
@@ -188,7 +186,16 @@ export default function EditTemplatePage() {
         setTemplateName(template.name || "");
         setTemplateDescription(template.description || "");
         setLevel(template.level || "quotation");
-        setIsOptionsMenu(template.is_options_menu === true);
+        // A "Room sheet menu" template is what a component type offers on
+        // the Scope room sheet, edited on the component's own page - this
+        // editor is built from spaces and would show it empty.
+        if (template.is_options_menu === true) {
+          const typeId = (template.line_items || []).find((li: any) => li.component_type_id)?.component_type_id;
+          if (typeId) {
+            router.replace(`/dashboard/settings/catalogue/components/${typeId}/costing`);
+            return;
+          }
+        }
         setPropertyType(template.property_type || "3bhk");
         setQualityTier(template.quality_tier || "standard");
         setMeta({
@@ -800,7 +807,6 @@ export default function EditTemplatePage() {
           quality_tier: qualityTier,
           spaces: templateSpaces,
           line_items: templateLineItems,
-          ...(isWholeQuotation ? {} : { is_options_menu: isOptionsMenu }),
         }),
       });
 
@@ -901,15 +907,6 @@ export default function EditTemplatePage() {
                   <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200 shrink-0">
                     {LEVEL_LABELS[level] || level}
                   </span>
-                )}
-                {!isWholeQuotation && (
-                  <label
-                    className="inline-flex items-center gap-1.5 text-[11px] text-slate-600 shrink-0 cursor-pointer"
-                    title="The Scope room sheet offers this template's items as the options for its component type. Only flagged templates count; a type with none falls back to every active template naming it."
-                  >
-                    <input type="checkbox" checked={isOptionsMenu} onChange={(e) => setIsOptionsMenu(e.target.checked)} className="rounded border-slate-300" />
-                    Room sheet menu
-                  </label>
                 )}
               </div>
             </div>

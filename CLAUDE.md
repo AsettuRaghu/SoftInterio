@@ -795,12 +795,18 @@ rule was seeded where such types existed; the tenant edits or replaces it.
   is_options_menu`, set on the seeded "<Component> - Options Menu"
   templates). Every active template naming the type used to supply them,
   so a pruned menu still showed items from older templates. A type with
-  no flagged template falls back to every active template. The flag is
-  the **"Room sheet menu"** checkbox on a component template's editor
-  (Quotations → Templates), and a green chip on the list. What a component
-  offers on the room sheet is therefore controlled in exactly one place:
-  the lines of its flagged template. Labour lines were taken off every menu
-  on 2026-09-19 - the business quotes fitting inside its rates.
+  no flagged template falls back to every active template. **The tenant
+  never meets the template.** What a component offers is edited on the
+  component's own page (Settings → Catalogue → Components → calculator,
+  `/settings/catalogue/components/[id]/costing`): "What it offers on the
+  room sheet" lists the items with add / remove, a plain word for how each
+  will behave (One of these · Counted · Automatic, from `shapeOptions`),
+  and what it is priced per. The costing route creates the flagged
+  template on first add. The template editor redirects a flagged template
+  to that page - it is built from spaces and showed a menu as empty, which
+  is how "the edit page is blank" was reported. A "Room sheet menu" chip
+  on the templates list says why the row exists. Labour lines came off
+  every menu on 2026-09-19 - the business quotes fitting inside its rates.
 - **Alternatives hold one ① and one ②, kept by a trigger.** Within a
   category, items priced per the same quantity (two carcass grades, both
   per front area) are ways of pricing one thing: `group_key` on the option,

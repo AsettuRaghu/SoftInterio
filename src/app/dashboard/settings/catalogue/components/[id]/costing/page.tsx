@@ -9,22 +9,24 @@
  *   Quantities  what you cost against - a formula over the fields, written
  *               the way you would on paper, evaluated live against a sample
  *               measurement so a mistake shows as it is typed
- *   Priced per  which quantity each cost item your templates put on this
- *               component is priced per
+ *   Offers      what this component offers on the Scope room sheet - the
+ *               cost items a seller can pick for it - and what each one is
+ *               priced per. The one place the offer is decided; it is stored
+ *               as a "Room sheet menu" template the page never mentions.
  *
  * Lengths are typed in whatever unit the row uses and are in feet inside a
  * formula, so multiplying two lengths gives square feet.
  */
 
 import React, { use, useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { ArrowDownIcon, ArrowUpIcon, PlusIcon, TrashIcon, CalculatorIcon } from "@heroicons/react/24/outline";
+import { ArrowDownIcon, ArrowUpIcon, PlusIcon, TrashIcon, CalculatorIcon, XMarkIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { PageLayout, PageHeader, PageContent } from "@/components/ui/PageLayout";
 import { Toast } from "@/components/ui/Toast";
 import { buttonVariants } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
 import { invalidateQuotationConfig } from "@/lib/quotations/config-cache";
 import { quantify, validateCosting, KEY_RE, type ComponentCosting, type CostingField, type CostingQuantity } from "@/lib/costing/component-costing";
+import { shapeOptions } from "@/lib/scope/options";
 
 const UNIT_CODES = ["sqft", "rft", "nos", "set", "lot", "lumpsum", "kg", "ltr"];
 const KIND_LABEL = { length: "Length", count: "Count", number: "Number" } as const;
@@ -34,8 +36,17 @@ interface LineRow {
   name: string;
   unit_code: string;
   category: string | null;
+  category_id: string | null;
+  category_order: number;
   quantity_key: string | null;
-  template_count: number;
+}
+interface CatalogueItem {
+  id: string;
+  name: string;
+  unit_code: string;
+  category: string | null;
+  category_id: string | null;
+  category_order: number;
 }
 
 const slug = (label: string) => label.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").replace(/^[0-9]/, "n$&");
@@ -45,6 +56,9 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
   const [name, setName] = useState("");
   const [costing, setCosting] = useState<ComponentCosting | null>(null);
   const [lines, setLines] = useState<LineRow[]>([]);
+  const [catalogue, setCatalogue] = useState<CatalogueItem[]>([]);
+  const [picking, setPicking] = useState(false);
+  const [pickSearch, setPickSearch] = useState("");
   const [sample, setSample] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -57,6 +71,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
     setName(json.data.name);
     setCosting(json.data.costing);
     setLines(json.data.lines);
+    setCatalogue(json.data.catalogue ?? []);
   }, [id]);
 
   useEffect(() => {
@@ -66,6 +81,39 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
   }, [load]);
 
   const problems = useMemo(() => (costing ? validateCosting(costing) : []), [costing]);
+  // How each offered item will behave on the room sheet, from the same
+  // rule the sheet and the quotation use.
+  const shapes = useMemo(
+    () => shapeOptions(lines.map((l) => ({ cost_item_id: l.cost_item_id, quantity_key: l.quantity_key })), lines.map((l) => ({ id: l.cost_item_id, category_id: l.category_id, unit_code: l.unit_code }))),
+    [lines],
+  );
+  const behaviour = (costItemId: string) => {
+    const sh = shapes.get(costItemId);
+    if (!sh) return null;
+    if (sh.auto) return { label: "Automatic", hint: "The only item that follows this quantity - priced from the measurement, nothing to tap", tone: "text-emerald-700 bg-emerald-50 border-emerald-200" };
+    if (sh.counted) return { label: "Counted", hint: "In or out, with a × n", tone: "text-slate-600 bg-slate-50 border-slate-200" };
+    return { label: "One of these", hint: "An alternative among the items of its category priced the same way - one ① and one ② between them", tone: "text-blue-700 bg-blue-50 border-blue-200" };
+  };
+
+  const changeMenu = async (patch: { add?: string[]; remove?: string[] }) => {
+    const res = await fetch(`/api/quotations/config/component-types/${id}/costing`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) return setNotice({ message: json.error || "Could not change the offer", variant: "error" });
+    invalidateQuotationConfig();
+    await load();
+  };
+  const offered = useMemo(() => new Set(lines.map((l) => l.cost_item_id)), [lines]);
+  const pickable = useMemo(() => {
+    const q = pickSearch.trim().toLowerCase();
+    return catalogue
+      .filter((c) => !offered.has(c.id))
+      .filter((c) => !q || c.name.toLowerCase().includes(q) || (c.category ?? "").toLowerCase().includes(q))
+      .sort((a, b) => a.category_order - b.category_order || (a.category ?? "").localeCompare(b.category ?? "") || a.name.localeCompare(b.name));
+  }, [catalogue, offered, pickSearch]);
   const live = useMemo(() => (costing ? quantify(costing, sample, "ft") : { values: {}, errors: {} }), [costing, sample]);
 
   const update = (patch: Partial<ComponentCosting>) => {
@@ -96,16 +144,16 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
     if (!res.ok) return setNotice({ message: json.error || "Could not save", variant: "error" });
     invalidateQuotationConfig();
     setDirty(false);
-    setNotice({ message: "Costing rule saved", variant: "success" });
+    setNotice({ message: "Saved", variant: "success" });
   };
 
   return (
     <PageLayout isLoading={!costing} loadingText="Loading…">
       <PageHeader
-        title={name ? `${name} · Costing` : "Costing"}
-        subtitle="How you measure this component and how each cost line follows from it. Lengths are in feet inside a formula, whatever unit was typed."
+        title={name || "Component"}
+        subtitle="How this component is measured, what it offers on the room sheet, and what each item is priced per. Lengths are in feet inside a formula, whatever unit was typed."
         basePath={{ label: "Settings", href: "/dashboard/settings" }}
-        breadcrumbs={[{ label: "Catalogue", href: "/dashboard/settings/catalogue" }, { label: name || "Component" }, { label: "Costing" }]}
+        breadcrumbs={[{ label: "Catalogue", href: "/dashboard/settings/catalogue" }, { label: name || "Component" }]}
         icon={<CalculatorIcon className="w-4 h-4 text-white" />}
         iconBgClass="from-blue-500 to-blue-600"
         actions={
@@ -218,41 +266,72 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
                 )}
               </section>
 
-              {/* Priced per */}
+              {/* What it offers */}
               <section className="rounded-lg border border-slate-200 bg-white">
-                <div className="px-4 py-3 border-b border-slate-100">
-                  <h2 className="text-sm font-semibold text-slate-900">What each cost item is priced per</h2>
-                  <p className="text-xs text-slate-500">
-                    The cost items your quotation templates put on a {name || "component"} of this type. Leave one blank to keep it as it was: per piece, or per the component&rsquo;s one face.
-                  </p>
+                <div className="px-4 py-3 border-b border-slate-100 flex items-start gap-3">
+                  <div className="flex-1">
+                    <h2 className="text-sm font-semibold text-slate-900">What it offers on the room sheet</h2>
+                    <p className="text-xs text-slate-500">
+                      The cost items a seller can pick for a {name || "component"} of this type, and what each is priced per. Items of one category priced the same way are alternatives; a per-piece item is counted; the only item following a quantity prices itself.
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => setPicking((p) => !p)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0">
+                    <PlusIcon className="w-3.5 h-3.5" /> Add items
+                  </button>
                 </div>
+                {picking && (
+                  <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
+                    <div className="relative mb-2">
+                      <MagnifyingGlassIcon className="w-4 h-4 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
+                      <input value={pickSearch} onChange={(e) => setPickSearch(e.target.value)} placeholder="Search the catalogue" className="w-full pl-8 pr-2 py-1.5 text-sm border border-slate-200 rounded-md bg-white outline-none focus:border-blue-400" />
+                    </div>
+                    {pickable.length === 0 ? (
+                      <p className="text-xs text-slate-400 py-2">Nothing else to add.</p>
+                    ) : (
+                      <div className="max-h-64 overflow-y-auto flex flex-wrap gap-1.5">
+                        {pickable.map((c) => (
+                          <button key={c.id} type="button" onClick={() => void changeMenu({ add: [c.id] })} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-full border border-dashed border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:text-slate-800" title={`${c.category ?? "Uncategorised"} · ${c.unit_code}`}>
+                            <PlusIcon className="w-3 h-3" />
+                            {c.name}
+                            <span className="text-[9px] text-slate-400">{c.category}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {lines.length === 0 ? (
-                  <p className="px-4 py-6 text-xs text-slate-400">
-                    No template lists cost items for this component type yet. Add them on a <Link href="/dashboard/quotations/templates" className="text-blue-600 hover:underline">quotation template</Link> and they appear here.
-                  </p>
+                  <p className="px-4 py-6 text-xs text-slate-400">This component offers nothing yet - add items from the catalogue and they appear on every room sheet that has one.</p>
                 ) : (
                   <ul className="divide-y divide-slate-100">
-                    {lines.map((l) => (
-                      <li key={l.cost_item_id} className="px-4 py-2 flex items-center gap-3">
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-sm text-slate-800 truncate">{l.name}</span>
-                          <span className="block text-[11px] text-slate-500">{l.category ?? "Uncategorised"} · catalogue unit {l.unit_code} · in {l.template_count} template{l.template_count === 1 ? "" : "s"}</span>
-                        </span>
-                        <select
-                          value={l.quantity_key ?? ""}
-                          onChange={(e) => {
-                            setLines((prev) => prev.map((x) => (x.cost_item_id === l.cost_item_id ? { ...x, quantity_key: e.target.value || null } : x)));
-                            setDirty(true);
-                          }}
-                          className="px-2 py-1.5 text-xs border border-slate-200 rounded-md bg-white min-w-[14rem]"
-                        >
-                          <option value="">As before (per piece / one face)</option>
-                          {costing.quantities.map((q) => (
-                            <option key={q.key} value={q.key}>per {q.label || q.key} ({q.unit_code})</option>
-                          ))}
-                        </select>
-                      </li>
-                    ))}
+                    {lines.map((l) => {
+                      const b = behaviour(l.cost_item_id);
+                      return (
+                        <li key={l.cost_item_id} className="px-4 py-2 flex items-center gap-3">
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm text-slate-800 truncate">{l.name}</span>
+                            <span className="block text-[11px] text-slate-500">{l.category ?? "Uncategorised"} · catalogue unit {l.unit_code}</span>
+                          </span>
+                          {b && <span className={cn("shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded border", b.tone)} title={b.hint}>{b.label}</span>}
+                          <select
+                            value={l.quantity_key ?? ""}
+                            onChange={(e) => {
+                              setLines((prev) => prev.map((x) => (x.cost_item_id === l.cost_item_id ? { ...x, quantity_key: e.target.value || null } : x)));
+                              setDirty(true);
+                            }}
+                            className="px-2 py-1.5 text-xs border border-slate-200 rounded-md bg-white min-w-[14rem]"
+                          >
+                            <option value="">Per piece / one face</option>
+                            {costing.quantities.map((q) => (
+                              <option key={q.key} value={q.key}>per {q.label || q.key} ({q.unit_code})</option>
+                            ))}
+                          </select>
+                          <button type="button" onClick={() => void changeMenu({ remove: [l.cost_item_id] })} className="p-1 text-slate-400 hover:text-red-600 rounded" title="Take off this component's offer">
+                            <XMarkIcon className="w-4 h-4" />
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </section>
