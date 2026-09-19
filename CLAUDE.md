@@ -810,6 +810,14 @@ account of what and why is the Scope to Quotation Handbook artifact
   numbers**: wardrobe + loft is `height 7, loft_height 2.5`; floor to
   ceiling is `height 9.5, loft_height 0`. The separate `loft` component
   type (with its own sample rule) is for a loft sold on its own.
+- **Exposed sides are a field, a quantity and one item**
+  (`20260919120000`): the seeded Kitchen, Wardrobe and Loft rules ask
+  `depth` and `exposed_sides` (kitchen also `wall_exposed_sides`) and derive
+  `exposed_side_sqft`; *Exposed Side Finish* (sqft, in Shutters by Finish)
+  sits on those Options Menus priced per it. A visible end of a run is
+  finished to match the shutters and is the classic forgotten line. The
+  same shape - a count the seller sees on the plan, an area the rule works
+  out, a per-area item - is how fillers and skirting would be added.
 
 ### Charges are ordinary line items
 Delivery, cleanup and site protection are cost items in a category marked
