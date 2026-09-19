@@ -818,6 +818,18 @@ account of what and why is the Scope to Quotation Handbook artifact
   finished to match the shutters and is the classic forgotten line. The
   same shape - a count the seller sees on the plan, an area the rule works
   out, a per-area item - is how fillers and skirting would be added.
+- **Two wardrobe rules are the worked samples** (`20260919130000`):
+  Wardrobe - Openable and Wardrobe With Loft - Openable carry the whole
+  calculation - front area, hinges by door height (`max(2, ceil(height /
+  2))` per door; wardrobe and loft hinges apart, summed), handles, shelves
+  and drawers as counts, exposed sides - and their Options Menus hold only
+  what that prices (carcass, shutter by finish, hinges, handles, shelf,
+  drawers by type, exposed side, installation). Accessories and the graded
+  Shutters / Drawer Systems ladders are off those two menus so a menu never
+  offers two ways to price one thing. The per-sqft "all in" model the
+  market quotes in is a print-format question (`itemise_to`), not a
+  catalogue one: the record stays itemised so material spend can be
+  compared across projects later (a take-off is parked, not planned).
 
 ### Charges are ordinary line items
 Delivery, cleanup and site protection are cost items in a category marked
