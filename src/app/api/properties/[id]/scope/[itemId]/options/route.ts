@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
-import { menuOf, shapeOptions } from "@/lib/scope/options";
+import { shapeOptions } from "@/lib/scope/options";
 
 type RouteParams = { params: Promise<{ id: string; itemId: string }> };
 
 /**
  * What a component can carry, and what has been picked.
  *
- * The options are the cost items the business's Options Menu template(s)
- * list for this component type (`quotation_templates.is_options_menu`) -
- * the catalogue's own answer to "what goes in a wardrobe", grouped by cost
- * category. Where a type has no menu, every active template that names it
- * supplies the options, as before. An item picked here that no template
- * lists (added in the builder, say) still shows, under its category.
+ * The options are `component_type_offers` for this component type - what
+ * the business says a wardrobe can carry, edited on the component's page
+ * under Settings → Catalogue - grouped by cost category. An item picked
+ * here that the type no longer offers still shows, under its category.
  *
  * What each item IS - counted, one of several alternatives, or automatic
  * - is decided in `lib/scope/options` (shared with the quotation copy);
@@ -43,7 +41,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   if (!component?.component_type_id) return NextResponse.json({ error: "Not a component" }, { status: 400 });
 
   const [templated, { data: picked }] = await Promise.all([
-    menuLines(supabase, component.component_type_id),
+    offersOf(supabase, component.component_type_id),
     supabase.from("property_scope_items").select("id, cost_item_id, choice_status, scope_owner, choice_quantity").eq("parent_id", itemId).not("cost_item_id", "is", null),
   ]);
   const templateIds = new Set(templated.lines.map((l) => l.cost_item_id));
@@ -59,8 +57,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     .order("display_order")
     .order("name");
 
-  // Shapes are worked out over the MENU's items only - an item picked from
-  // outside the menu is shown, but it neither joins a group nor prices itself.
+  // Shapes are worked out over the OFFERED items only - an item picked from
+  // outside the offer is shown, but it neither joins a group nor prices itself.
   const shapes = shapeOptions(
     templated.lines,
     (costItems ?? []).filter((c) => templateIds.has(c.id)).map((c) => ({ id: c.id as string, category_id: (c.category_id as string | null) ?? null, unit_code: c.unit_code as string })),
@@ -91,15 +89,10 @@ const PER_PIECE = new Set(["nos", "set", "kg", "ltr", "pcs"]);
 
 type Db = Awaited<ReturnType<typeof createClient>>;
 
-/** The template lines that define this type's options - see `menuOf`. */
-async function menuLines(supabase: Db, componentTypeId: string) {
-  const { data } = await supabase
-    .from("quotation_template_line_items")
-    .select("cost_item_id, quantity_key, template:quotation_templates!inner(is_active, is_options_menu)")
-    .eq("component_type_id", componentTypeId)
-    .not("cost_item_id", "is", null);
-  const rows = (data ?? []).map((r) => ({ cost_item_id: r.cost_item_id as string, quantity_key: (r.quantity_key as string | null) ?? null, template: r.template as unknown as { is_active?: boolean; is_options_menu?: boolean } | null }));
-  return { lines: menuOf(rows) };
+/** What the type offers, and what each item is priced per. */
+async function offersOf(supabase: Db, componentTypeId: string) {
+  const { data } = await supabase.from("component_type_offers").select("cost_item_id, quantity_key").eq("component_type_id", componentTypeId).order("display_order");
+  return { lines: (data ?? []).map((r) => ({ cost_item_id: r.cost_item_id as string, quantity_key: (r.quantity_key as string | null) ?? null })) };
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {

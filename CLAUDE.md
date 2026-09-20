@@ -791,26 +791,23 @@ rule was seeded where such types existed; the tenant edits or replaces it.
 - **The Quality column is gone from the list.** An option carries its tier
   as a word; a second tier on the component row answered nothing.
   `quality_tier` stays on the row, read by nothing.
-- **Options come from the Options Menu** (`quotation_templates.
-  is_options_menu`, set on the seeded "<Component> - Options Menu"
-  templates). Every active template naming the type used to supply them,
-  so a pruned menu still showed items from older templates. A type with
-  no flagged template falls back to every active template. **The tenant
-  never meets the template.** What a component offers is edited on the
-  component's own page (Settings → Catalogue → Components → calculator,
-  `/settings/catalogue/components/[id]/costing`): "What it offers on the
-  room sheet" lists the items with add / remove, a plain word for how each
-  will behave (One of these · Counted · Automatic, from `shapeOptions`),
-  and what it is priced per. The costing route creates the flagged
-  template on first add. The template editor redirects a flagged template
-  to that page - it is built from spaces and showed a menu as empty, which
-  is how "the edit page is blank" was reported. **Menus are not listed
-  among the quotation templates** (`GET /api/quotations/templates`
-  excludes `is_options_menu` unless `include_menus=true`) - the Templates
-  screen and the builder's picker show only templates a quotation can be
-  made from; 29 menu rows there were clutter and an invitation to the
-  blank editor (2026-09-20). Labour lines came off every menu on
-  2026-09-19 - the business quotes fitting inside its rates.
+- **What a component offers is a table on the type**:
+  `component_type_offers` (`20260920090000`) - one row per item a
+  component type offers on the room sheet, with `quantity_key`, what that
+  item is priced per on it. Edited on the component's own page (Settings →
+  Catalogue → Components → calculator, "What it offers on the room
+  sheet": add / remove, a plain word for how each behaves from
+  `shapeOptions`, priced-per). Read by the options route, the quotation
+  copy, the builder's priced-per lookup and the alternatives trigger -
+  nowhere else. **It went through three wrong homes in two days**: every
+  template naming the type (older templates leaked items onto a pruned
+  menu), then templates flagged `is_options_menu` (a template that is not
+  a template, whose editor showed it blank because that editor is built
+  from spaces), then those hidden from the template screens. The user
+  asked "is this the way we should handle this?" and it was not: the offer
+  is a property of the component type, like its rule, so it lives beside
+  it. `quotation_template_line_items.quantity_key` and the flag are gone;
+  templates are templates again.
 - **Alternatives hold one ① and one ②, kept by a trigger.** Within a
   category, items priced per the same quantity (two carcass grades, both
   per front area) are ways of pricing one thing: `group_key` on the option,

@@ -117,7 +117,7 @@ function Thread({
 }
 
 /**
- * What a component can carry - the cost items its Options Menu lists,
+ * What a component can carry - the cost items its type offers,
  * grouped by category - and what the customer prefers. Three kinds of item,
  * decided in `lib/scope/options` and drawn differently:
  *
@@ -251,7 +251,7 @@ function Options({
   if (groups.length === 0) {
     return (
       <p className="text-xs text-slate-400">
-        {fromTemplates ? "No options for this component." : "No options set up for this kind of component yet - an Options Menu template for it would supply them."}
+        {fromTemplates ? "No options for this component." : "This kind of component offers nothing yet - add items on its page under Settings → Catalogue → Components."}
       </p>
     );
   }

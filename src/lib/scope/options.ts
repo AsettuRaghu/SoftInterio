@@ -1,10 +1,11 @@
 /**
  * The shape of a component's options - shared by the options route (what
- * the room sheet draws) and the scope-to-quotation copy (what becomes a
- * line), so the two never disagree about what a tap means.
+ * the room sheet draws), the component page and the scope-to-quotation
+ * copy (what becomes a line), so none of them disagree about what a tap
+ * means. The options themselves are `component_type_offers`: one row per
+ * item a component type offers, with what it is priced per.
  *
- * Every cost item a component type's Options Menu lists is one of three
- * things:
+ * Every offered item is one of three things:
  *
  *   counted    priced per piece and not quantified by the rule (a tray, a
  *              pull-out): in or out, with a "× n". No preference - a tray
@@ -22,7 +23,7 @@
 
 export const PER_PIECE_UNITS = new Set(["nos", "set", "kg", "ltr", "pcs"]);
 
-export interface MenuLine {
+export interface Offer {
   cost_item_id: string;
   quantity_key: string | null;
 }
@@ -39,7 +40,7 @@ export interface OptionShape {
   auto: boolean;
 }
 
-export function shapeOptions(lines: MenuLine[], items: MenuItem[]): Map<string, OptionShape> {
+export function shapeOptions(lines: Offer[], items: MenuItem[]): Map<string, OptionShape> {
   const keyByItem = new Map<string, string | null>();
   for (const l of lines) if (!keyByItem.has(l.cost_item_id) || l.quantity_key) keyByItem.set(l.cost_item_id, l.quantity_key);
   const shapes = new Map<string, OptionShape>();
@@ -55,11 +56,4 @@ export function shapeOptions(lines: MenuLine[], items: MenuItem[]): Map<string, 
     s.auto = !!s.quantity_key && !!s.group_key && groupSize.get(s.group_key) === 1;
   }
   return shapes;
-}
-
-/** The lines that define a type's options: its flagged menu(s), else every active template naming it. */
-export function menuOf<T extends { template: { is_active?: boolean; is_options_menu?: boolean } | null }>(rows: T[]): T[] {
-  const active = rows.filter((r) => r.template?.is_active !== false);
-  const menu = active.filter((r) => r.template?.is_options_menu);
-  return menu.length ? menu : active;
 }

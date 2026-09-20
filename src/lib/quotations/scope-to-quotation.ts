@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { calculateSqft, convertToFeet, getMeasurementInfo, type MeasurementUnit } from "@/components/quotations/types";
 import { hasCosting, mergeMeasures, quantify, readCosting } from "@/lib/costing/component-costing";
-import { menuOf, shapeOptions } from "@/lib/scope/options";
+import { shapeOptions } from "@/lib/scope/options";
 
 /**
  * Brings the property's scope into a quotation - the rooms and components
@@ -246,23 +246,22 @@ export async function copyScopeToQuotation(
     // The third level: first-preference cost items become line items, sized
     // from the component at the catalogue's rate. Second preferences and
     // items the client keeps stay behind. An AUTO item - the only item on
-    // the menu that follows a rule quantity (Shelf per shelves) - is a
+    // the offer that follows a rule quantity (Shelf per shelves) - is a
     // decision with one answer, so it is priced from the measurement without
     // having been tapped, and skipped when its quantity is 0.
     const chosen = scope.filter((r) => r.cost_item_id && r.choice_status === "p1" && OURS(r.scope_owner) && r.parent_id && targetByScopeComp.has(r.parent_id));
     const typeIds = [...new Set([...targetByScopeComp.values()].map((t) => t.componentTypeId).filter(Boolean) as string[])];
-    const [{ data: types }, { data: menuRows }] = await Promise.all([
+    const [{ data: types }, { data: offerRows }] = await Promise.all([
       typeIds.length ? supabase.from("component_types").select("id, config_schema").in("id", typeIds) : Promise.resolve({ data: [] as { id: string; config_schema: unknown }[] }),
       typeIds.length
-        ? supabase.from("quotation_template_line_items").select("component_type_id, cost_item_id, quantity_key, template:quotation_templates!inner(is_active, is_options_menu)").in("component_type_id", typeIds).not("cost_item_id", "is", null)
-        : Promise.resolve({ data: [] as unknown[] }),
+        ? supabase.from("component_type_offers").select("component_type_id, cost_item_id, quantity_key").in("component_type_id", typeIds)
+        : Promise.resolve({ data: [] as { component_type_id: string; cost_item_id: string; quantity_key: string | null }[] }),
     ]);
     const ruleByType = new Map((types ?? []).map((t) => [t.id as string, readCosting(t.config_schema)]));
-    // Each type's menu, and what it says about every item on it.
+    // What each type offers, and what each item is priced per on it.
     const menuByType = new Map<string, { cost_item_id: string; quantity_key: string | null }[]>();
     for (const typeId of typeIds) {
-      const rows = ((menuRows ?? []) as { component_type_id: string; cost_item_id: string; quantity_key: string | null; template: { is_active?: boolean; is_options_menu?: boolean } | null }[]).filter((r) => r.component_type_id === typeId);
-      menuByType.set(typeId, menuOf(rows).map((r) => ({ cost_item_id: r.cost_item_id, quantity_key: r.quantity_key ?? null })));
+      menuByType.set(typeId, (offerRows ?? []).filter((r) => r.component_type_id === typeId).map((r) => ({ cost_item_id: r.cost_item_id as string, quantity_key: (r.quantity_key as string | null) ?? null })));
     }
     const menuIds = [...new Set([...menuByType.values()].flat().map((l) => l.cost_item_id))];
     const wantedIds = [...new Set([...chosen.map((r) => r.cost_item_id as string), ...menuIds])];

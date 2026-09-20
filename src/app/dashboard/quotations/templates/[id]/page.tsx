@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Toast } from "@/components/ui/Toast";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
 import {
   BuilderSpace,
@@ -39,7 +39,6 @@ const LEVEL_LABELS: Record<string, string> = {
 
 export default function EditTemplatePage() {
   const params = useParams();
-  const router = useRouter();
   const templateId = params.id as string;
 
   // Loading states
@@ -186,16 +185,6 @@ export default function EditTemplatePage() {
         setTemplateName(template.name || "");
         setTemplateDescription(template.description || "");
         setLevel(template.level || "quotation");
-        // A "Room sheet menu" template is what a component type offers on
-        // the Scope room sheet, edited on the component's own page - this
-        // editor is built from spaces and would show it empty.
-        if (template.is_options_menu === true) {
-          const typeId = (template.line_items || []).find((li: any) => li.component_type_id)?.component_type_id;
-          if (typeId) {
-            router.replace(`/dashboard/settings/catalogue/components/${typeId}/costing`);
-            return;
-          }
-        }
         setPropertyType(template.property_type || "3bhk");
         setQualityTier(template.quality_tier || "standard");
         setMeta({

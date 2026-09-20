@@ -11,8 +11,8 @@
  *               measurement so a mistake shows as it is typed
  *   Offers      what this component offers on the Scope room sheet - the
  *               cost items a seller can pick for it - and what each one is
- *               priced per. The one place the offer is decided; it is stored
- *               as a "Room sheet menu" template the page never mentions.
+ *               priced per (`component_type_offers`). The one place the
+ *               offer is decided; the room sheet and the builder read it.
  *
  * Lengths are typed in whatever unit the row uses and are in feet inside a
  * formula, so multiplying two lengths gives square feet.
