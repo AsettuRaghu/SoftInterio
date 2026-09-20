@@ -804,9 +804,13 @@ rule was seeded where such types existed; the tenant edits or replaces it.
   and what it is priced per. The costing route creates the flagged
   template on first add. The template editor redirects a flagged template
   to that page - it is built from spaces and showed a menu as empty, which
-  is how "the edit page is blank" was reported. A "Room sheet menu" chip
-  on the templates list says why the row exists. Labour lines came off
-  every menu on 2026-09-19 - the business quotes fitting inside its rates.
+  is how "the edit page is blank" was reported. **Menus are not listed
+  among the quotation templates** (`GET /api/quotations/templates`
+  excludes `is_options_menu` unless `include_menus=true`) - the Templates
+  screen and the builder's picker show only templates a quotation can be
+  made from; 29 menu rows there were clutter and an invitation to the
+  blank editor (2026-09-20). Labour lines came off every menu on
+  2026-09-19 - the business quotes fitting inside its rates.
 - **Alternatives hold one ① and one ②, kept by a trigger.** Within a
   category, items priced per the same quantity (two carcass grades, both
   per front area) are ways of pricing one thing: `group_key` on the option,

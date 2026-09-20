@@ -46,8 +46,6 @@ interface QuotationTemplate {
   status: TemplateStatus;
   is_active?: boolean;
   is_featured?: boolean;
-  /** The Scope room sheet offers this template's items for its component type. */
-  is_options_menu?: boolean;
   spaces_count: number;
   components_count: number;
   created_at: string;
@@ -342,7 +340,6 @@ export default function QuotationTemplatesPage() {
               <>
                 {level !== "quotation" && <Chip label={levelLabel} tone="violet" />}
                 {template.is_featured && <Chip label="Featured" tone="amber" />}
-                {template.is_options_menu && <Chip label="Room sheet menu" tone="green" />}
               </>
             }
             line1={line1 || undefined}

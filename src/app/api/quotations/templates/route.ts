@@ -32,6 +32,14 @@ export async function GET(request: NextRequest) {
       .select("*", { count: "exact" })
       .eq("tenant_id", user!.tenantId);
 
+    // A "Room sheet menu" is what a component type offers on the Scope room
+    // sheet, edited on the component's own page. It is stored as a template
+    // but is not one anybody applies to a quotation, so neither the
+    // Templates list nor the builder's picker shows it.
+    if (searchParams.get("include_menus") !== "true") {
+      query = query.eq("is_options_menu", false);
+    }
+
     // Filter by status (is_active)
     if (status !== "all") {
       if (status === "active") {
