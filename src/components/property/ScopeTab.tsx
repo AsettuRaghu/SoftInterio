@@ -34,6 +34,7 @@ import {
   ChevronRightIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  DocumentTextIcon,
   Bars2Icon,
 } from "@heroicons/react/24/outline";
 import {
@@ -831,6 +832,18 @@ export function ScopeTab({
         >
           {saveState === "saving" ? "Saving…" : saveState === "failed" ? "Not saved - try again" : <><CheckIcon className="w-3 h-3" /> Saved</>}
         </span>
+        {roots.length > 0 && (
+          <a
+            href={`/scope-summary/${propertyId}?${linkedType}=${linkedId}`}
+            target="_blank"
+            rel="noreferrer"
+            title="A page for the customer: rooms, what is planned, the finishes chosen, their pictures - no prices"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+          >
+            <DocumentTextIcon className="w-3.5 h-3.5" />
+            Customer summary
+          </a>
+        )}
         {roots.length > 0 && (
           <button
             type="button"

@@ -64,6 +64,21 @@ quotations with new numbers, titled "Variation for …" / "Option 2 for …".
 `preference`, `pricedOn` - and its result carries `added` names. It still
 only ever adds.
 
+### The customer summary is the scope as a page, and it carries no price
+
+`/scope-summary/[propertyId]?lead=|project=` (2026-09-21, "Customer
+summary" on the Scope tab, opens in a new tab, prints or saves as PDF from
+the browser). Outside `/dashboard` so it has no app chrome; still behind
+sign-in and `leads.view`. `GET /api/properties/[id]/scope/summary` shapes
+it: room by room, size, the pictures they liked (starred first, uploaded
+references and pinned library entries, up to four), the components with
+their chosen finishes by category and tier word, what the client is
+bringing, and the thread entries marked as decisions. **No prices, no
+second preferences, no notes that are not decisions, no excluded rows.**
+It stores nothing - the document a seller sends the evening after the
+showroom visit so the customer sees the conversation was heard. The
+customer is read from the lead or project (properties carry no client).
+
 ### Quotations are auto-created by a database trigger
 `trg_lead_stage_change` calls `create_quotation_for_lead()` when a lead reaches
 `proposal_discussion` — **inside the UPDATE**, before any application code
