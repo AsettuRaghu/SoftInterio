@@ -50,7 +50,9 @@ export async function POST(request: NextRequest) {
 
   const ids: string[] = [];
   for (const f of files) {
-    const stem = f.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() || "Untitled";
+    // A title given on the batch names every entry (pictures of one cost
+    // item are all "Shutter - Acrylic"); otherwise the file name does.
+    const stem = String(form.get("title") ?? "").trim() || f.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() || "Untitled";
     const { data: entry } = await supabase.from("library_entries").insert({ ...shared, title: stem }).select("id").single();
     if (!entry) continue;
     const ext = f.name.includes(".") ? f.name.slice(f.name.lastIndexOf(".")) : "";

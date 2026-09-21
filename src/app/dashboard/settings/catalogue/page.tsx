@@ -16,6 +16,7 @@ import {
   CurrencyDollarIcon,
   RectangleStackIcon,
   CalculatorIcon,
+  PhotoIcon,
 } from "@heroicons/react/24/outline";
 import {
   SettingsPageLayout,
@@ -24,6 +25,7 @@ import {
 } from "@/components/ui/SettingsPageLayout";
 import { uiLogger } from "@/lib/logger";
 import { invalidateQuotationConfig } from "@/lib/quotations/config-cache";
+import { CostItemPicturesDialog } from "@/components/catalogue/CostItemPictures";
 
 interface SpaceType {
   id: string;
@@ -138,6 +140,8 @@ export default function QuotationsConfigPage() {
     mode: "add",
     item: null,
   });
+  // Pictures of a cost item - Design Library entries under it.
+  const [picturesOf, setPicturesOf] = useState<{ id: string; name: string } | null>(null);
   const [deleteModal, setDeleteModal] = useState<DeleteModalState>({
     isOpen: false,
     item: null,
@@ -1344,6 +1348,13 @@ export default function QuotationsConfigPage() {
                 <td className="px-4 py-2.5 text-right">
                   <div className="flex items-center justify-end gap-1">
                     <button
+                      onClick={() => setPicturesOf({ id: item.id, name: item.name })}
+                      title="Pictures - shown on the room sheet while choosing"
+                      className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                    >
+                      <PhotoIcon className="w-4 h-4" />
+                    </button>
+                    <button
                       onClick={() => openEditModal(item)}
                       className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
                     >
@@ -1816,6 +1827,7 @@ export default function QuotationsConfigPage() {
       )}
 
       {/* Delete Confirmation Modal */}
+      {picturesOf && <CostItemPicturesDialog item={picturesOf} onClose={() => setPicturesOf(null)} />}
       {deleteModal.isOpen && deleteModal.item && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div

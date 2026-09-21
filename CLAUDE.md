@@ -64,6 +64,25 @@ quotations with new numbers, titled "Variation for …" / "Option 2 for …".
 `preference`, `pricedOn` - and its result carries `added` names. It still
 only ever adds.
 
+### A cost item's pictures are library entries under it
+
+Built 2026-09-21. The Design Library already linked an entry to a cost item;
+what was missing was the two ends. **Catalogue side**: the photo icon on a
+cost item row (Settings → Catalogue → Cost items) opens
+`CostItemPicturesDialog` - several files at once through
+`POST /api/library/batch` with `cost_item_id`, kind `product`, the item's
+name as every entry's title (the batch route takes a `title` override for
+this), one entry per picture so each can be hidden from the customer
+(`visible_to_customer`) or removed on its own. **Reading side**:
+`GET /api/library/cost-item-pictures?ids=` groups them by item, signed;
+gated on `leads.view`, because a seller reading a picture of a shutter is
+not browsing the library. The room sheet reads it once per component and
+shows a thumbnail beside any option that has pictures, opening the viewer
+with all of them - acrylic against laminate, while the customer chooses.
+The customer summary shows the first customer-visible picture beside each
+chosen item (`customer=1` / `visible_to_customer` is the only filter
+between internal and customer surfaces). No second file store.
+
 ### The customer summary is the scope as a page, and it carries no price
 
 `/scope-summary/[propertyId]?lead=|project=` (2026-09-21, "Customer

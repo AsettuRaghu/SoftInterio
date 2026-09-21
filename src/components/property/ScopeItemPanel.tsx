@@ -179,6 +179,11 @@ function Options({
 }) {
   const [groups, setGroups] = useState<OptionGroup[] | null>(null);
   const [fromTemplates, setFromTemplates] = useState(true);
+  // Pictures of the offered items (Design Library entries under them), read
+  // once per component: a chip with pictures shows a thumbnail, and opens
+  // the viewer - acrylic against laminate, while the customer is choosing.
+  const [pictures, setPictures] = useState<Record<string, { entry_id: string; url: string; title: string }[]>>({});
+  const [viewing, setViewing] = useState<{ items: { id: string; name: string; url: string; type: string }[]; index: number } | null>(null);
   const seq = useRef(0);
   const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -186,8 +191,15 @@ function Options({
     const res = await fetch(`/api/properties/${propertyId}/scope/${item.id}/options`);
     const json = await res.json().catch(() => ({}));
     if (res.ok) {
-      setGroups(json.data?.groups ?? []);
+      const gs: OptionGroup[] = json.data?.groups ?? [];
+      setGroups(gs);
       setFromTemplates(json.data?.from_templates !== false);
+      const ids = gs.flatMap((g) => g.items.map((o) => o.cost_item_id));
+      if (ids.length) {
+        const pr = await fetch(`/api/library/cost-item-pictures?ids=${ids.join(",")}`);
+        const pj = await pr.json().catch(() => ({}));
+        if (pr.ok) setPictures(pj.data ?? {});
+      }
     } else setGroups([]);
   }, [propertyId, item.id]);
 
@@ -246,6 +258,21 @@ function Options({
     apply((items) => items.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, scope_owner } : x)), { cost_item_id: o.cost_item_id, status: o.status, scope_owner });
   };
   const quantityLabel = (key: string | null) => costing?.quantities.find((q) => q.key === key)?.label ?? key ?? "";
+  const showPictures = (o: OptionItem) => {
+    const pics = pictures[o.cost_item_id] ?? [];
+    if (!pics.length) return;
+    setViewing({ items: pics.map((p) => ({ id: p.entry_id, name: o.name, url: p.url, type: "image/jpeg" })), index: 0 });
+  };
+  // A small thumbnail beside an item that has pictures; tap to see them all.
+  const thumb = (o: OptionItem) => {
+    const pics = pictures[o.cost_item_id];
+    if (!pics?.length) return null;
+    return (
+      <button type="button" onClick={(e) => { e.stopPropagation(); showPictures(o); }} title={`${pics.length} picture${pics.length === 1 ? "" : "s"} - tap to view`} className="shrink-0 w-6 h-6 rounded overflow-hidden border border-slate-200 hover:ring-2 hover:ring-blue-300">
+        <img src={pics[0].url} alt="" className="w-full h-full object-cover" />
+      </button>
+    );
+  };
 
   if (groups === null) return <p className="text-xs text-slate-400">Loading options…</p>;
   if (groups.length === 0) {
@@ -289,7 +316,8 @@ function Options({
               {exclusive.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {exclusive.map((o) => (
-                    <span key={o.cost_item_id} className="inline-flex items-center">
+                    <span key={o.cost_item_id} className="inline-flex items-center gap-1">
+                      {thumb(o)}
                       <button
                         type="button"
                         disabled={readOnly}
@@ -312,6 +340,7 @@ function Options({
               )}
               {autos.map((o) => (
                 <p key={o.cost_item_id} className="text-[11px] text-slate-500 flex items-center gap-1">
+                  {thumb(o)}
                   <CheckIcon className="w-3 h-3 text-emerald-600" />
                   <span className="text-slate-700">{o.name}</span>
                   <span className="text-slate-400">· follows {quantityLabel(o.quantity_key)}</span>
@@ -326,6 +355,7 @@ function Options({
                         <span className="px-1.5 min-w-[1.6rem] text-center">{o.quantity ?? 1}</span>
                         <button type="button" disabled={readOnly} onClick={() => setCounted(o, (o.quantity ?? 1) + 1)} className="px-1.5 py-0.5 hover:bg-slate-100 disabled:opacity-40" title="One more">+</button>
                       </span>
+                      {thumb(o)}
                       <span className="text-slate-800">{o.name}</span>
                       {owner(o)}
                       {!readOnly && (
@@ -338,10 +368,13 @@ function Options({
                   {!readOnly && counted.some((o) => !o.status) && (
                     <div className="flex flex-wrap gap-1.5">
                       {counted.filter((o) => !o.status).map((o) => (
-                        <button key={o.cost_item_id} type="button" onClick={() => setCounted(o, 1)} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-full border border-dashed border-slate-300 text-slate-500 hover:border-slate-400 hover:text-slate-700">
-                          <PlusIcon className="w-3 h-3" />
-                          {o.name}
-                        </button>
+                        <span key={o.cost_item_id} className="inline-flex items-center gap-1">
+                          {thumb(o)}
+                          <button type="button" onClick={() => setCounted(o, 1)} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-full border border-dashed border-slate-300 text-slate-500 hover:border-slate-400 hover:text-slate-700">
+                            <PlusIcon className="w-3 h-3" />
+                            {o.name}
+                          </button>
+                        </span>
                       ))}
                     </div>
                   )}
@@ -351,6 +384,7 @@ function Options({
           </div>
         );
       })}
+      {viewing && <MediaViewer items={viewing.items} index={viewing.index} onClose={() => setViewing(null)} onIndexChange={(i) => setViewing((v) => (v ? { ...v, index: i } : v))} />}
     </div>
   );
 }

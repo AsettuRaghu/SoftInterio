@@ -16,7 +16,7 @@ import { useSearchParams } from "next/navigation";
 import { PrinterIcon } from "@heroicons/react/24/outline";
 
 interface Picture { url: string | null; title: string; starred: boolean }
-interface Choice { category: string; name: string; tier: string | null; quantity: number | null }
+interface Choice { category: string; name: string; tier: string | null; quantity: number | null; picture: string | null }
 interface Component { name: string; type: string | null; size: string | null; done_by: string | null; provided: string | null; choices: Choice[]; pictures: Picture[]; decisions: string[] }
 interface Space { name: string; size: string | null; done_by: string | null; pictures: Picture[]; decisions: string[]; components: Component[] }
 interface Summary { company: string; logo_url: string | null; client: string; reference: string | null; address: string; configuration: string | null; date: string; spaces: Space[] }
@@ -128,10 +128,13 @@ function ScopeSummary({ propertyId }: { propertyId: string }) {
                             {c.choices.map((ch, j) => (
                               <React.Fragment key={j}>
                                 <dt className="text-slate-500">{ch.category}</dt>
-                                <dd className="text-slate-800">
-                                  {ch.name}
-                                  {ch.tier ? <span className="text-slate-500"> · {ch.tier}</span> : null}
-                                  {ch.quantity ? <span className="text-slate-500"> × {ch.quantity}</span> : null}
+                                <dd className="text-slate-800 flex items-center gap-2">
+                                  {ch.picture && <img src={ch.picture} alt="" className="w-8 h-8 rounded object-cover border border-slate-200 shrink-0" />}
+                                  <span>
+                                    {ch.name}
+                                    {ch.tier ? <span className="text-slate-500"> · {ch.tier}</span> : null}
+                                    {ch.quantity ? <span className="text-slate-500"> × {ch.quantity}</span> : null}
+                                  </span>
                                 </dd>
                               </React.Fragment>
                             ))}

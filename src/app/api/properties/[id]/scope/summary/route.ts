@@ -81,6 +81,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return [...uploaded, ...pinned].filter((p) => p.url).sort((a, b) => Number(b.starred) - Number(a.starred)).slice(0, 4);
   };
 
+  // A picture of each chosen item, where the catalogue has one the customer
+  // may see (Design Library entries under the item, visible_to_customer).
+  const itemPicture = new Map<string, string>();
+  if (itemIds.length) {
+    const { data: ents } = await supabase.from("library_entries").select(ENTRY_SELECT).in("cost_item_id", itemIds).eq("visible_to_customer", true).order("created_at");
+    for (const e of await shapeEntries(ents ?? [])) {
+      if (e.cost_item_id && e.cover_url && !itemPicture.has(e.cost_item_id)) itemPicture.set(e.cost_item_id, e.cover_url);
+    }
+  }
+
   type Item = { id: string; name: string; quality_tier: string | null; category: { name: string; display_order: number | null } | null };
   const itemById = new Map(((items ?? []) as Item[]).map((i) => [i.id, i]));
   const typeById = new Map(((types ?? []) as { id: string; name: string }[]).map((t) => [t.id, t.name]));
@@ -121,7 +131,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             .map((x) => ({ item: itemById.get(x.cost_item_id as string), quantity: x.choice_quantity }))
             .filter((x) => x.item)
             .sort((a, b) => (a.item!.category?.display_order ?? 999) - (b.item!.category?.display_order ?? 999))
-            .map((x) => ({ category: x.item!.category?.name ?? "", name: x.item!.name, tier: x.item!.quality_tier ? TIER[x.item!.quality_tier.toLowerCase()] ?? null : null, quantity: x.quantity != null && Number(x.quantity) > 1 ? Number(x.quantity) : null })),
+            .map((x) => ({ category: x.item!.category?.name ?? "", name: x.item!.name, tier: x.item!.quality_tier ? TIER[x.item!.quality_tier.toLowerCase()] ?? null : null, quantity: x.quantity != null && Number(x.quantity) > 1 ? Number(x.quantity) : null, picture: itemPicture.get(x.item!.id) ?? null })),
           pictures: picturesOf(c.id),
           decisions: decisionRows.filter((d) => d.scope_item_id === c.id).map((d) => d.body),
         })),
