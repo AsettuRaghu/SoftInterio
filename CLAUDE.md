@@ -886,12 +886,14 @@ rule was seeded where such types existed; the tenant edits or replaces it.
   one-①-one-② rule is applied locally (mirroring the trigger), the save goes
   out behind it, only a failure re-reads, and the list behind the sheet is
   told once the tapping has paused (900 ms), not per tap.
-- **Drawers and shelves are counts on the rule; the KIND of drawer is a
-  decision.** `Shelves: 5` prices Shelf automatically; `Drawers: 4` plus
-  Wooden Drawer / Tandem Box as an exclusive pair priced per `drawers`
-  gives four of whichever is ①. Pull-outs and trays stay counted extras.
-  An internal mirror is per door (`nos`), because a sqft item with no rule
-  quantity is priced on the whole front.
+- **Internals are counted accessories, never a preference** (2026-09-21,
+  reversing "the kind of drawer is a decision" from the day before after
+  the user saw it on the sheet). Every drawer type - wooden, tandem box,
+  trouser pull-out - is added and counted like a tray; there is no drawers
+  blank. `Shelves: 5` stays a count in Measurements and Shelf prices itself
+  from it, which is automatic, not a choice. An internal mirror is per door
+  (`nos`), because a sqft item with no rule quantity is priced on the whole
+  front.
 
 ### The seeded catalogue is complete enough to quote a whole home
 

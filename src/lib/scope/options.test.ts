@@ -22,8 +22,8 @@ const offer = [
   { cost_item_id: "hinge-std", quantity_key: "hinges" },
   { cost_item_id: "hinge-prem", quantity_key: "hinges" },
   { cost_item_id: "shelf", quantity_key: "shelves" },
-  { cost_item_id: "wooden-drawer", quantity_key: "drawers" },
-  { cost_item_id: "tandem-box", quantity_key: "drawers" },
+  { cost_item_id: "wooden-drawer", quantity_key: null },
+  { cost_item_id: "tandem-box", quantity_key: null },
   { cost_item_id: "tray", quantity_key: null },
   { cost_item_id: "exposed-side", quantity_key: "exposed_side_sqft" },
   { cost_item_id: "installation", quantity_key: "shutter_sqft" },
@@ -44,9 +44,9 @@ describe("shapeOptions - what a tap on the room sheet means", () => {
     expect(s.get("hinge-std")!.group_key).not.toBe(s.get("carcass-std")!.group_key);
   });
 
-  it("the kind of drawer is a decision priced per the drawer count", () => {
-    expect(s.get("wooden-drawer")!.group_key).toBe(s.get("tandem-box")!.group_key);
-    expect(s.get("wooden-drawer")!.auto).toBe(false);
+  it("every drawer type is a counted accessory, not a decision - two wooden and one tandem are two rows with counts", () => {
+    expect(s.get("wooden-drawer")).toMatchObject({ counted: true, group_key: null, auto: false });
+    expect(s.get("tandem-box")).toMatchObject({ counted: true, group_key: null, auto: false });
   });
 
   it("a per-piece item with no rule quantity is counted, with no preference", () => {
