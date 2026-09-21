@@ -299,6 +299,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     const { lead_id, project_id, template_id , from_scope } = body;
+    // Two ways of starting from the scope besides the plain one:
+    //   variation   (project only) a quotation of only what the scope has
+    //               gained since the project's approved quotations - the
+    //               extra work after sign-off, priced on its own.
+    //   preference  "p2": the alternative - each decision's ② where it has
+    //               one, else its ①. "Option 2" beside the first quotation.
+    const variation = body.variation === true && !!project_id;
+    const preference: "p1" | "p2" = body.preference === "p2" ? "p2" : "p1";
 
     // Standalone quotations are allowed (no lead_id or project_id required).
     // They carry the customer the person typed: a clients row, created here
@@ -482,7 +490,11 @@ export async function POST(request: NextRequest) {
       clientName = typedClient.name;
     }
 
-    const quotationTitle = `Quotation for ${clientName || "New Client"}`;
+    const quotationTitle = variation
+      ? `Variation for ${clientName || "New Client"}`
+      : preference === "p2"
+      ? `Option 2 for ${clientName || "New Client"}`
+      : `Quotation for ${clientName || "New Client"}`;
 
     const { data: newQuotation, error: createError } = await supabase
       .from("quotations")
@@ -533,14 +545,20 @@ export async function POST(request: NextRequest) {
     // Otherwise, build it from the property's Spaces if asked to. Templates
     // win when both are given: a template is a deliberate choice of contents,
     // while scope is the fallback structure.
-    let generated: ScopeCopyResult = { spaces: 0, components: 0, lines: 0, skipped: 0, already: 0 };
+    let generated: ScopeCopyResult = { spaces: 0, components: 0, lines: 0, skipped: 0, already: 0, added: { spaces: [], components: [], lines: [] } };
     if (!template_id && from_scope && newQuotation) {
+      let pricedOn: string[] | undefined;
+      if (variation) {
+        const { data: approved } = await supabase.from("quotations").select("id").eq("project_id", project_id).eq("status", "approved");
+        pricedOn = (approved ?? []).map((q) => q.id as string);
+      }
       generated = await copyScopeToQuotation(
         supabase,
         userData.tenant_id,
         newQuotation.id,
         lead_id || null,
-        project_id || null
+        project_id || null,
+        { pricedOn, preference }
       );
     }
 
@@ -551,7 +569,7 @@ export async function POST(request: NextRequest) {
       description: template_id
         ? "Created from a template"
         : from_scope
-        ? `Started from the scope - ${generated.spaces} space(s), ${generated.components} component(s), ${generated.lines} item(s)${
+        ? `${variation ? "Variation - only what the scope gained since approval" : preference === "p2" ? "Option 2 - second preferences from the scope" : "Started from the scope"} - ${generated.spaces} space(s), ${generated.components} component(s), ${generated.lines} item(s)${
             generated.skipped ? `; ${generated.skipped} not ours to price` : ""
           }`
         : undefined,

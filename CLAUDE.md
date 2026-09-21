@@ -33,6 +33,37 @@ along so the builder can mark a space "rough size" until the scope row is
 confirmed on site. Still absent, still on purpose: no "scope changed, review
 the quotation" prompt, no deactivation tier.
 
+### The scope tells the quotation it has moved; it never moves it
+
+Built 2026-09-21, closing the loose end named in the architecture review:
+the pull was one-way and silent, so a tall unit added at the site visit
+reached nobody holding the sent quotation.
+
+`lib/quotations/scope-drift.ts` reads, for one quotation, how far the
+scope has moved: **additions** (a dry run of `copyScopeToQuotation` -
+rooms, components and chosen items it would add), **resized** components
+(the quotation's width × height and stored measures against the scope
+row's), **dropped** lines (their scope row is no longer ① or is gone),
+**not_ours** (the scope row now says client / vendor), the last history
+timestamp, and how many ② the scope holds. `GET /api/quotations/[id]/
+scope-drift`; `ScopeDriftNotice` above the document on the summary page
+and in the builder - one amber line, detail on click, nothing when nothing
+moved. Sizes and drops are reported, never applied: the person judges.
+
+What it offers depends on the quotation: a **draft** gets *Bring in*; a
+sent one is told to revise; an **approved quotation on a project** gets
+**Raise a variation** - `POST /api/quotations` with `variation: true`,
+which copies with `pricedOn` = the project's approved quotations so only
+what the scope gained since sign-off is priced, and removes any component
+or room it made that ended up carrying nothing new. **Option 2** on the
+summary header (shown when the scope holds any ②) posts `preference: "p2"`:
+per decision the ② where there is one, else the ①. Both are ordinary
+quotations with new numbers, titled "Variation for …" / "Option 2 for …".
+
+`copyScopeToQuotation` grew three options for this - `dryRun`,
+`preference`, `pricedOn` - and its result carries `added` names. It still
+only ever adds.
+
 ### Quotations are auto-created by a database trigger
 `trg_lead_stage_change` calls `create_quotation_for_lead()` when a lead reaches
 `proposal_discussion` — **inside the UPDATE**, before any application code

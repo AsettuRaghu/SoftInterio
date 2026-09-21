@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { ShareQuotationModal } from "@/components/quotations/ShareQuotationModal";
 import { PrintQuotationModal } from "@/components/quotations/PrintQuotationModal";
 import { SpaceCard } from "@/components/quotations/SpaceCard";
+import { ScopeDriftNotice } from "@/components/quotations/ScopeDriftNotice";
 import { toBuilderSpaces } from "@/lib/quotations/to-builder-spaces";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -547,6 +548,10 @@ export default function QuotationDetailPage() {
 
   // Revision state
   const [isCreatingRevision, setIsCreatingRevision] = useState(false);
+  // "Option 2": the alternative quotation from the scope's second
+  // preferences. Offered only when the scope holds any.
+  const [secondPreferences, setSecondPreferences] = useState(0);
+  const [isCreatingOption2, setIsCreatingOption2] = useState(false);
 
   // PDF and Share state
   /**
@@ -567,6 +572,35 @@ export default function QuotationDetailPage() {
     message: string;
     variant: "success" | "error";
   } | null>(null);
+
+  useEffect(() => {
+    if (!quotation?.id || (!quotation.lead_id && !quotation.project_id)) return;
+    let live = true;
+    fetch(`/api/quotations/${quotation.id}/scope-drift`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (live) setSecondPreferences(Number(j?.data?.second_preferences) || 0); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [quotation?.id, quotation?.lead_id, quotation?.project_id, quotation?.version]);
+
+  const handleCreateOption2 = async () => {
+    if (!quotation || isCreatingOption2) return;
+    setIsCreatingOption2(true);
+    try {
+      const response = await fetch("/api/quotations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lead_id: quotation.lead_id || null, project_id: quotation.project_id || null, from_scope: true, preference: "p2" }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Could not create Option 2");
+      router.push(`/dashboard/quotations/${data.quotation.id}?edit=1`);
+    } catch (err) {
+      setNotice({ message: err instanceof Error ? err.message : "Could not create Option 2", variant: "error" });
+    } finally {
+      setIsCreatingOption2(false);
+    }
+  };
 
   // Create a new revision and open it for editing
   const handleCreateRevision = async () => {
@@ -1016,6 +1050,16 @@ export default function QuotationDetailPage() {
                   )}
                   {isCreatingRevision ? "Creating..." : "Revise"}
                 </button>
+                {secondPreferences > 0 && (
+                  <button
+                    onClick={handleCreateOption2}
+                    disabled={isCreatingOption2}
+                    title={`A second quotation built from the scope's ${secondPreferences} second preference${secondPreferences === 1 ? "" : "s"} - the fallback the customer discussed, priced beside this one`}
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm border border-emerald-300 text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors font-medium disabled:opacity-50"
+                  >
+                    {isCreatingOption2 ? "Creating..." : "Option 2"}
+                  </button>
+                )}
               </>
             )}
             <button
@@ -1138,6 +1182,11 @@ export default function QuotationDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Has the Scope tab moved on since this document? */}
+          {(quotation.lead_id || quotation.project_id) && (
+            <ScopeDriftNotice quotationId={quotation.id} status={quotation.status} projectId={quotation.project_id ?? null} refreshKey={`${quotation.status}:${quotation.version}`} />
+          )}
 
           {/* Cost Breakdown - V2 Structure */}
           <div className="bg-white rounded-lg border border-slate-200 p-5">

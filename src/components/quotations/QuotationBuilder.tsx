@@ -33,6 +33,7 @@ import { SaveAsTemplateModal } from "@/components/quotations/SaveAsTemplateModal
 import { NewVersionModal } from "@/components/quotations/NewVersionModal";
 import { DEFAULT_TAX_PERCENT } from "@/utils/quotations";
 import { toBuilderSpaces } from "@/lib/quotations/to-builder-spaces";
+import { ScopeDriftNotice } from "@/components/quotations/ScopeDriftNotice";
 
 interface QuotationBuilderProps {
   quotationId: string;
@@ -101,6 +102,7 @@ export function QuotationBuilder({
   // Quotation data
   const [quotationNumber, setQuotationNumber] = useState("");
   const [source, setSource] = useState<{ label: string; href: string } | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
   // "Bring in from scope": pull on demand, adds only what is missing. Local
   // edits are saved first so the re-read after it cannot lose them.
   const [bringingScope, setBringingScope] = useState(false);
@@ -258,6 +260,7 @@ export function QuotationBuilder({
             href: `/dashboard/projects/${q.project_id}`,
           });
         }
+        setProjectId(q.project_id ?? null);
         setQuotationName(q.title || q.name || "");
         setVersion(q.version || 1);
         setNotes(q.notes || "");
@@ -2208,6 +2211,11 @@ export function QuotationBuilder({
                 </button>
               </div>
             </div>
+          )}
+
+          {/* Has the Scope tab moved on since this document? */}
+          {quotationId && source && (
+            <ScopeDriftNotice quotationId={quotationId} status={status} projectId={projectId ?? null} onBringIn={bringInFromScope} bringingIn={bringingScope} refreshKey={spaces} className="mb-4" />
           )}
 
           {/* Spaces */}
