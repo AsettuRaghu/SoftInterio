@@ -2889,6 +2889,37 @@ falls back to the Auth server, so the change is safe either way. The other
 eighteen `getUser()` calls (client hooks, settings pages, a few routes) are
 not on the hot path and were left alone.
 
+## Tests
+
+`npm test` runs vitest over `src/**/*.test.ts` - the pure pieces that turn a
+customer's measurement into a price, none of which touch the database:
+the formula evaluator (`lib/costing/formula`), the costing rule
+(`quantify`, `validateCosting`, `mergeMeasures`) and the option shapes
+(`lib/scope/options`). Added 2026-09-21; the first run found that
+`validateCosting` refused a quantity sharing a field's key, which every
+seeded rule does (`shelves: shelves`), so the wardrobe calculator could not
+have been saved as seeded. When a rule about pricing changes, change its
+test in the same commit; a wrong hinge formula ships straight to a
+customer's number.
+
+## A new tenant starts with the starter catalogue
+
+`seed_tenant_catalogue(target, source)` (`20260921090000`, service role
+only) copies a tenant's space types, component types with their rules and
+applicable spaces, categories, cost items (rates as starting values; vendor
+links and purchase history left behind), offers and presets into a tenant
+that has none, remapping every id, and refuses a tenant that already has
+component types. `createTenant()` calls it at signup with
+`STARTER_CATALOGUE_TENANT_ID` - today the dev tenant; a tenant kept as the
+platform's starter is the right owner of that id. **Before this, signup
+made a tenant with no catalogue at all**: a blank Scope tab, a blank
+quotation, nothing to pick on the lead form - and the seed script only ever
+ran against tenants that already had items. Verified by seeding a
+throwaway tenant (694 offers, 29 types, remaps checked) and deleting it.
+Shipped rows with `tenant_id NULL`, as roles and playbooks do it, would be
+the fuller answer; it needs six tables' RLS and copy-on-edit and was not
+worth it before a second subscriber exists.
+
 ## Traps that have already cost time
 
 - **`QuotationPDF.tsx` must not be a client component.** Marking it

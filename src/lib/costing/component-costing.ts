@@ -96,17 +96,21 @@ export function quantify(
 /** Problems a person should fix before the rule is used. */
 export function validateCosting(c: ComponentCosting): string[] {
   const problems: string[] = [];
-  const seen = new Set<string>();
+  const fieldKeys = new Set<string>();
   for (const f of c.fields) {
     if (!KEY_RE.test(f.key)) problems.push(`Field key "${f.key}" - lowercase letters, digits and _ only, starting with a letter`);
-    if (seen.has(f.key)) problems.push(`"${f.key}" is used twice`);
-    seen.add(f.key);
+    if (fieldKeys.has(f.key)) problems.push(`"${f.key}" is used twice`);
+    fieldKeys.add(f.key);
   }
-  const known = new Set(c.fields.map((f) => f.key));
+  // A quantity may share a field's key - "shelves: shelves" passes the count
+  // typed on the sheet through as the quantity a line is priced per, and is
+  // the natural way to write it. Two quantities may not share a key.
+  const known = new Set(fieldKeys);
+  const quantityKeys = new Set<string>();
   for (const q of c.quantities) {
     if (!KEY_RE.test(q.key)) problems.push(`Quantity key "${q.key}" - lowercase letters, digits and _ only`);
-    if (seen.has(q.key)) problems.push(`"${q.key}" is used twice`);
-    seen.add(q.key);
+    if (quantityKeys.has(q.key)) problems.push(`"${q.key}" is used twice`);
+    quantityKeys.add(q.key);
     for (const n of namesIn(q.formula)) {
       if (!known.has(n)) problems.push(`${q.label || q.key}: "${n}" is not a field or an earlier quantity`);
     }

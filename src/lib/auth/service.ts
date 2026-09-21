@@ -342,6 +342,20 @@ export async function createTenant(data: CreateTenantInput): Promise<Tenant> {
   }
   console.log("[AUTH SERVICE] Tenant settings created successfully");
 
+  // The starter catalogue: space types, component types with their costing
+  // rules, categories, cost items, what each component offers, presets -
+  // copied from the tenant kept for that purpose. Without it the first Scope
+  // tab and the first quotation are blank. Best effort: a company without a
+  // catalogue is a seed away from one, a signup that failed is not.
+  const starter = process.env.STARTER_CATALOGUE_TENANT_ID;
+  if (starter) {
+    const { data: seeded, error: seedError } = await supabase.rpc("seed_tenant_catalogue", { p_target: tenant.id, p_source: starter });
+    if (seedError) console.error("[AUTH SERVICE] Starter catalogue not seeded:", seedError.message);
+    else console.log("[AUTH SERVICE] Starter catalogue:", JSON.stringify(seeded));
+  } else {
+    console.warn("[AUTH SERVICE] STARTER_CATALOGUE_TENANT_ID is not set - the new tenant has no catalogue");
+  }
+
   // Create tenant subscription record if plan was selected
   if (subscriptionPlanId) {
     console.log("[AUTH SERVICE] Creating tenant subscription with 30-day trial...");

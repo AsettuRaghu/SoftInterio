@@ -8,13 +8,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
     "security:audit": "node scripts/audit-api-security.js",
     "security:views": "node scripts/check-view-rls.js",
     "db:orphans": "node scripts/find-orphan-tenants.js",
-    "security:check": "node scripts/audit-api-security.js || (echo '\\n❌ Security check failed! Run npm run security:audit for details.' && exit 1)",
+    "security:check": "node scripts/audit-api-security.js || (echo '\\n\u274c Security check failed! Run npm run security:audit for details.' && exit 1)",
     "perms:check": "node scripts/audit-permission-keys.js",
-    "perms:generate": "node scripts/generate-permission-types.js"
+    "perms:generate": "node scripts/generate-permission-types.js",
+    "test:watch": "vitest"
   },
   "keywords": [
     "nextjs",
@@ -51,6 +52,7 @@
     "typescript": "^5.9.3"
   },
   "devDependencies": {
-    "eslint-plugin-unused-imports": "^4.4.1"
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "vitest": "^5.0.1"
   }
 }
