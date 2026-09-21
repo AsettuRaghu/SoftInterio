@@ -183,7 +183,7 @@ function Options({
   // once per component: a chip with pictures shows a thumbnail, and opens
   // the viewer - acrylic against laminate, while the customer is choosing.
   const [pictures, setPictures] = useState<Record<string, { entry_id: string; url: string; title: string }[]>>({});
-  const [viewing, setViewing] = useState<{ items: { id: string; name: string; url: string; type: string }[]; index: number } | null>(null);
+  const [viewing, setViewing] = useState<{ items: { id: string; name: string; url: string; type: string; caption?: string | null }[]; index: number } | null>(null);
   const seq = useRef(0);
   const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -263,6 +263,12 @@ function Options({
     if (!pics.length) return;
     setViewing({ items: pics.map((p) => ({ id: p.entry_id, name: o.name, url: p.url, type: "image/jpeg" })), index: 0 });
   };
+  // Every picture of every option in a group, captioned by the option - the
+  // finishes side by side, for the conversation at the showroom table.
+  const compare = (g: OptionGroup) => {
+    const items = g.items.flatMap((o) => (pictures[o.cost_item_id] ?? []).map((p) => ({ id: p.entry_id, name: o.name, url: p.url, type: "image/jpeg", caption: o.status === "p1" ? "First preference" : o.status === "p2" ? "Second preference" : null })));
+    if (items.length) setViewing({ items, index: 0 });
+  };
   // A small thumbnail beside an item that has pictures; tap to see them all.
   const thumb = (o: OptionItem) => {
     const pics = pictures[o.cost_item_id];
@@ -311,6 +317,16 @@ function Options({
             <span className="text-[11px] font-medium text-slate-500 pt-1 truncate" title={g.category.name}>
               {g.category.name}
               {oneOf && <span className="block text-[9px] font-normal text-slate-400">one of these</span>}
+              {g.items.some((o) => pictures[o.cost_item_id]?.length) && (
+                <span className="block mt-0.5 flex items-center gap-1.5 text-[9px] font-normal">
+                  <button type="button" onClick={() => compare(g)} className="text-blue-600 hover:underline" title="Every picture of every option here, one after another">
+                    Compare
+                  </button>
+                  <a href={`/dashboard/library?cost_category=${g.category.id}&customer=1`} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-blue-600 hover:underline" title="The Design Library on this category, in customer view">
+                    Library
+                  </a>
+                </span>
+              )}
             </span>
             <div className="space-y-1.5">
               {exclusive.length > 0 && (

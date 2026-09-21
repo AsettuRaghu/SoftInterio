@@ -89,6 +89,17 @@ export default function LibraryPage() {
   const [collectionId, setCollectionId] = useState<string | null>(null);
   const [customerView, setCustomerView] = useState(false);
 
+  // Opened with a question already asked - from the room sheet: "show me
+  // the shutter finishes", in customer view. Read once, on arrival.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("cost_category")) setCostCategory(q.get("cost_category")!);
+    if (q.get("cost_item")) setCostItem(q.get("cost_item")!);
+    if (q.get("component")) setComponent(q.get("component")!);
+    if (q.get("kind")) setKind(q.get("kind") as LibraryKind);
+    if (q.get("customer") === "1") setCustomerView(true);
+  }, []);
+
   const [open, setOpen] = useState<LibraryEntryShape | null>(null);
   const [imageIndex, setImageIndex] = useState(0);
   const [editing, setEditing] = useState<LibraryEntryShape | null>(null);
