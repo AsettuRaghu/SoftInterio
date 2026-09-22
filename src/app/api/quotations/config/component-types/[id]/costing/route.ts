@@ -100,12 +100,20 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
   if (add.length) {
     const [{ data: items }, { data: present }] = await Promise.all([
-      supabase.from("quotation_cost_items").select("id").eq("tenant_id", guard.user.tenantId).in("id", add),
-      supabase.from("component_type_offers").select("cost_item_id, display_order").eq("component_type_id", id),
+      supabase.from("quotation_cost_items").select("id, category_id").eq("tenant_id", guard.user.tenantId).in("id", add),
+      supabase.from("component_type_offers").select("cost_item_id, display_order, quantity_key, cost_item:quotation_cost_items(category_id)").eq("component_type_id", id),
     ]);
     const have = new Set((present ?? []).map((p) => p.cost_item_id as string));
     let order = Math.max(0, ...(present ?? []).map((p) => Number(p.display_order) || 0));
-    const rows = (items ?? []).filter((i) => !have.has(i.id as string)).map((i) => ({ tenant_id: guard.user.tenantId, component_type_id: id, cost_item_id: i.id, display_order: ++order, quantity_key: null as string | null }));
+    // A new item is priced the way its category-mates already are on this
+    // component - a third profile follows the counter run like the other
+    // two - so it behaves alike without anyone knowing the dropdown exists.
+    const keyByCategory = new Map<string, string>();
+    for (const p of present ?? []) {
+      const cat = (p.cost_item as unknown as { category_id: string | null } | null)?.category_id;
+      if (cat && p.quantity_key && !keyByCategory.has(cat)) keyByCategory.set(cat, p.quantity_key as string);
+    }
+    const rows = (items ?? []).filter((i) => !have.has(i.id as string)).map((i) => ({ tenant_id: guard.user.tenantId, component_type_id: id, cost_item_id: i.id, display_order: ++order, quantity_key: (i.category_id && keyByCategory.get(i.category_id as string)) ?? null }));
     if (rows.length) {
       const { error } = await supabase.from("component_type_offers").insert(rows);
       if (error) return NextResponse.json({ error: "Could not add to the offer" }, { status: 500 });

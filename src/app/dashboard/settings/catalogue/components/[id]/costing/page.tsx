@@ -95,7 +95,9 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
     return { label: "One of these", hint: "An alternative among the items of its category priced the same way - one ① and one ② between them", tone: "text-blue-700 bg-blue-50 border-blue-200" };
   };
 
-  const changeMenu = async (patch: { add?: string[]; remove?: string[] }) => {
+  // Adding and removing take effect at once - the offer is not part of Save,
+  // which covers the rule and the priced-per dropdowns - so say so.
+  const changeMenu = async (patch: { add?: string[]; remove?: string[] }, itemName?: string) => {
     const res = await fetch(`/api/quotations/config/component-types/${id}/costing`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -105,6 +107,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
     if (!res.ok) return setNotice({ message: json.error || "Could not change the offer", variant: "error" });
     invalidateQuotationConfig();
     await load();
+    if (itemName) setNotice({ message: patch.add ? `${itemName} added - offered on every ${name || "component"} of this type from now` : `${itemName} taken off this component's offer`, variant: "success" });
   };
   const offered = useMemo(() => new Set(lines.map((l) => l.cost_item_id)), [lines]);
   const pickable = useMemo(() => {
@@ -272,7 +275,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
                   <div className="flex-1">
                     <h2 className="text-sm font-semibold text-slate-900">What it offers on the room sheet</h2>
                     <p className="text-xs text-slate-500">
-                      The cost items a seller can pick for a {name || "component"} of this type, and what each is priced per. Items of one category priced the same way are alternatives; a per-piece item is counted; the only item following a quantity prices itself.
+                      The cost items a seller can pick for a {name || "component"} of this type, and what each is priced per. Items of one category priced the same way are alternatives; a per-piece item is counted; the only item following a quantity prices itself. Adding and removing take effect at once; Save is for the rule and the priced-per dropdowns.
                     </p>
                   </div>
                   <button type="button" onClick={() => setPicking((p) => !p)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0">
@@ -290,7 +293,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
                     ) : (
                       <div className="max-h-64 overflow-y-auto flex flex-wrap gap-1.5">
                         {pickable.map((c) => (
-                          <button key={c.id} type="button" onClick={() => void changeMenu({ add: [c.id] })} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-full border border-dashed border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:text-slate-800" title={`${c.category ?? "Uncategorised"} · ${c.unit_code}`}>
+                          <button key={c.id} type="button" onClick={() => void changeMenu({ add: [c.id] }, c.name)} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-full border border-dashed border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:text-slate-800" title={`${c.category ?? "Uncategorised"} · ${c.unit_code}`}>
                             <PlusIcon className="w-3 h-3" />
                             {c.name}
                             <span className="text-[9px] text-slate-400">{c.category}</span>
@@ -326,7 +329,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
                               <option key={q.key} value={q.key}>per {q.label || q.key} ({q.unit_code})</option>
                             ))}
                           </select>
-                          <button type="button" onClick={() => void changeMenu({ remove: [l.cost_item_id] })} className="p-1 text-slate-400 hover:text-red-600 rounded" title="Take off this component's offer">
+                          <button type="button" onClick={() => void changeMenu({ remove: [l.cost_item_id] }, l.name)} className="p-1 text-slate-400 hover:text-red-600 rounded" title="Take off this component's offer">
                             <XMarkIcon className="w-4 h-4" />
                           </button>
                         </li>
