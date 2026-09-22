@@ -13,7 +13,10 @@ type RouteParams = { params: Promise<{ id: string }> };
  *
  * GET  -> { costing, lines: [{ cost_item_id, name, unit_code, category, category_id, quantity_key }],
  *           catalogue: [{ id, name, unit_code, category, category_id }] }
- * PUT  { costing?, lines?: [{ cost_item_id, quantity_key | null }], add?: [cost_item_id], remove?: [cost_item_id] }
+ * PUT  { costing?, lines?: [{ cost_item_id, quantity_key | null, auto? }], add?: [cost_item_id], remove?: [cost_item_id] }
+ *         `auto`: the item prices itself from the measurement with nothing
+ *         to tap - only meaningful with a quantity_key, and only right for
+ *         a quantity that can be 0 (a count, a typed area), never the size.
  *         The rule is validated; a line's quantity_key must be one of its
  *         quantities.
  */
@@ -29,7 +32,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const [{ data: offers }, { data: catalogue }] = await Promise.all([
     supabase
       .from("component_type_offers")
-      .select("cost_item_id, quantity_key, display_order, cost_item:quotation_cost_items(id, name, unit_code, category_id, is_active, category:quotation_cost_item_categories(name, display_order))")
+      .select("cost_item_id, quantity_key, auto, display_order, cost_item:quotation_cost_items(id, name, unit_code, category_id, is_active, category:quotation_cost_item_categories(name, display_order))")
       .eq("component_type_id", id)
       .order("display_order"),
     supabase
@@ -45,9 +48,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     .map((o) => {
       const ci = o.cost_item as unknown as { id: string; name: string; unit_code: string; category_id: string | null; is_active: boolean; category: Cat } | null;
       if (!ci || ci.is_active === false) return null;
-      return { cost_item_id: ci.id, name: ci.name, unit_code: ci.unit_code, category: ci.category?.name ?? null, category_id: ci.category_id, category_order: ci.category?.display_order ?? 999, quantity_key: (o.quantity_key as string | null) ?? null };
+      return { cost_item_id: ci.id, name: ci.name, unit_code: ci.unit_code, category: ci.category?.name ?? null, category_id: ci.category_id, category_order: ci.category?.display_order ?? 999, quantity_key: (o.quantity_key as string | null) ?? null, auto: !!o.auto };
     })
-    .filter(Boolean) as { cost_item_id: string; name: string; unit_code: string; category: string | null; category_id: string | null; category_order: number; quantity_key: string | null }[];
+    .filter(Boolean) as { cost_item_id: string; name: string; unit_code: string; category: string | null; category_id: string | null; category_order: number; quantity_key: string | null; auto: boolean }[];
 
   return NextResponse.json({
     data: {
@@ -126,11 +129,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
   if (Array.isArray(body.lines)) {
     const known = new Set(costing.quantities.map((q) => q.key));
-    for (const l of body.lines as { cost_item_id?: string; quantity_key?: string | null }[]) {
+    for (const l of body.lines as { cost_item_id?: string; quantity_key?: string | null; auto?: boolean }[]) {
       if (!l.cost_item_id) continue;
       const key = l.quantity_key && known.has(l.quantity_key) ? l.quantity_key : null;
       if (l.quantity_key && !key) return NextResponse.json({ error: `"${l.quantity_key}" is not a quantity of this component type` }, { status: 400 });
-      const { error } = await supabase.from("component_type_offers").update({ quantity_key: key }).eq("component_type_id", id).eq("cost_item_id", l.cost_item_id);
+      const { error } = await supabase.from("component_type_offers").update({ quantity_key: key, auto: !!key && l.auto === true }).eq("component_type_id", id).eq("cost_item_id", l.cost_item_id);
       if (error) return NextResponse.json({ error: "Could not save the line" }, { status: 500 });
     }
   }

@@ -916,12 +916,17 @@ rule was seeded where such types existed; the tenant edits or replaces it.
   - *counted* - per piece and not quantified by the rule (a tray, a
     pull-out): a list with a × n stepper and a ✕; "+ Tray" chips to add. No
     preference - a tray is not an answer to a question.
-  - *auto* - the only menu item that follows a rule quantity (Shelf per
-    `shelves`, Exposed Side Finish per `exposed_side_sqft`, Installation
-    per front area): a decision with one answer is not a decision, so it
-    shows as "✓ Shelf · follows Shelves", nothing to tap, and the copy
-    prices it from the measurement, skipping it at quantity 0. The way to
-    not have one is to take it off the menu.
+  - *auto* - **marked so on the offer** (`component_type_offers.auto`, the
+    Automatic checkbox on the component page; Shelf per `shelves`,
+    Exposed Side Finish per `exposed_side_sqft`): shows as "✓ Shelf ·
+    follows Shelves", nothing to tap, priced from the measurement, skipped
+    at quantity 0. Until 2026-09-22 it was *inferred* from being the only
+    item following a quantity - which made Under-cabinet Light automatic
+    on every wall unit because it was the only lighting item and followed
+    the width, never zero. Lighting is the customer's choice. Rule: auto
+    only for a quantity that can be 0 (a count, a typed area); an optional
+    extra that follows the size is a tap. An item alone in its group and
+    not auto is *optional* - tap to include, tap again to leave out.
   Every tap changes the screen at once and nothing repaints afterwards: the
   one-①-one-② rule is applied locally (mirroring the trigger), the save goes
   out behind it, only a failure re-reads, and the list behind the sheet is

@@ -14,11 +14,11 @@
  *              category priced per the same quantity (four carcass grades,
  *              all per front area). They share a `group_key`; a component
  *              holds one ① and at most one ② among them.
- *   auto       the only item that follows a rule quantity (Shelf per
- *              shelves, Exposed Side Finish per exposed side area): a
- *              decision with one answer is not a decision, so it prices
- *              itself from the measurement and there is nothing to tap.
- *              It is skipped when its quantity is 0.
+ *   auto       marked so on the offer (Shelf per shelves, Exposed Side
+ *              Finish per exposed side area): it prices itself from the
+ *              measurement and there is nothing to tap, and is skipped
+ *              when its quantity is 0. Only right for a quantity that can
+ *              be 0; an optional extra that follows the size is a tap.
  */
 
 export const PER_PIECE_UNITS = new Set(["nos", "set", "kg", "ltr", "pcs"]);
@@ -26,6 +26,8 @@ export const PER_PIECE_UNITS = new Set(["nos", "set", "kg", "ltr", "pcs"]);
 export interface Offer {
   cost_item_id: string;
   quantity_key: string | null;
+  /** Prices itself from the measurement with nothing to tap - set on the offer, never inferred. */
+  auto?: boolean;
 }
 export interface MenuItem {
   id: string;
@@ -42,7 +44,11 @@ export interface OptionShape {
 
 export function shapeOptions(lines: Offer[], items: MenuItem[]): Map<string, OptionShape> {
   const keyByItem = new Map<string, string | null>();
-  for (const l of lines) if (!keyByItem.has(l.cost_item_id) || l.quantity_key) keyByItem.set(l.cost_item_id, l.quantity_key);
+  const autoByItem = new Map<string, boolean>();
+  for (const l of lines) {
+    if (!keyByItem.has(l.cost_item_id) || l.quantity_key) keyByItem.set(l.cost_item_id, l.quantity_key);
+    if (l.auto) autoByItem.set(l.cost_item_id, true);
+  }
   const shapes = new Map<string, OptionShape>();
   const groupSize = new Map<string, number>();
   for (const it of items) {
@@ -52,8 +58,12 @@ export function shapeOptions(lines: Offer[], items: MenuItem[]): Map<string, Opt
     shapes.set(it.id, { quantity_key: key, counted, group_key, auto: false });
     if (group_key) groupSize.set(group_key, (groupSize.get(group_key) ?? 0) + 1);
   }
-  for (const s of shapes.values()) {
-    s.auto = !!s.quantity_key && !!s.group_key && groupSize.get(s.group_key) === 1;
+  // Automatic is a flag on the offer, never inferred from being alone in a
+  // group: the only lighting item on a wall unit is an optional extra, not
+  // something every wall unit gets. It was inferred until 2026-09-22.
+  for (const [id, s] of shapes) {
+    s.auto = !!s.quantity_key && !s.counted && !!autoByItem.get(id);
   }
+  void groupSize;
   return shapes;
 }

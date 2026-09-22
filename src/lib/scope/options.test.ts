@@ -21,11 +21,11 @@ const offer = [
   { cost_item_id: "carcass-prem", quantity_key: "shutter_sqft" },
   { cost_item_id: "hinge-std", quantity_key: "hinges" },
   { cost_item_id: "hinge-prem", quantity_key: "hinges" },
-  { cost_item_id: "shelf", quantity_key: "shelves" },
+  { cost_item_id: "shelf", quantity_key: "shelves", auto: true },
   { cost_item_id: "wooden-drawer", quantity_key: null },
   { cost_item_id: "tandem-box", quantity_key: null },
   { cost_item_id: "tray", quantity_key: null },
-  { cost_item_id: "exposed-side", quantity_key: "exposed_side_sqft" },
+  { cost_item_id: "exposed-side", quantity_key: "exposed_side_sqft", auto: true },
   { cost_item_id: "installation", quantity_key: "shutter_sqft" },
   { cost_item_id: "rod", quantity_key: null },
 ];
@@ -53,13 +53,19 @@ describe("shapeOptions - what a tap on the room sheet means", () => {
     expect(s.get("tray")).toMatchObject({ counted: true, group_key: null, auto: false });
   });
 
-  it("the only item following a quantity prices itself", () => {
+  it("an item marked automatic on the offer prices itself", () => {
     expect(s.get("shelf")!.auto).toBe(true);
     expect(s.get("exposed-side")!.auto).toBe(true);
   });
 
-  it("which is why a lone installation line would be automatic - the reason it came off the menu", () => {
-    expect(s.get("installation")!.auto).toBe(true);
+  it("being alone in a group never makes an item automatic - a lone installation line, or the only light on a wall unit, is a tap", () => {
+    expect(s.get("installation")!.auto).toBe(false);
+    expect(s.get("installation")!.counted).toBe(false);
+  });
+
+  it("automatic needs a quantity to follow", () => {
+    const t = shapeOptions([{ cost_item_id: "tray", quantity_key: null, auto: true }], [items[7]]);
+    expect(t.get("tray")!.auto).toBe(false);
   });
 
   it("an area or length item with no rule quantity is priced on the one face and is not counted", () => {

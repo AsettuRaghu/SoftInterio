@@ -39,6 +39,8 @@ interface LineRow {
   category_id: string | null;
   category_order: number;
   quantity_key: string | null;
+  /** Prices itself with nothing to tap - the tenant's call, per item. */
+  auto: boolean;
 }
 interface CatalogueItem {
   id: string;
@@ -84,19 +86,26 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
   // How each offered item will behave on the room sheet, from the same
   // rule the sheet and the quotation use.
   const shapes = useMemo(
-    () => shapeOptions(lines.map((l) => ({ cost_item_id: l.cost_item_id, quantity_key: l.quantity_key })), lines.map((l) => ({ id: l.cost_item_id, category_id: l.category_id, unit_code: l.unit_code }))),
+    () => shapeOptions(lines.map((l) => ({ cost_item_id: l.cost_item_id, quantity_key: l.quantity_key, auto: l.auto })), lines.map((l) => ({ id: l.cost_item_id, category_id: l.category_id, unit_code: l.unit_code }))),
     [lines],
   );
   const behaviour = (costItemId: string) => {
     const sh = shapes.get(costItemId);
     if (!sh) return null;
-    if (sh.auto) return { label: "Automatic", hint: "The only item that follows this quantity - priced from the measurement, nothing to tap", tone: "text-emerald-700 bg-emerald-50 border-emerald-200" };
+    if (sh.auto) return { label: "Automatic", hint: "Priced from the measurement, nothing to tap - skipped when its quantity is 0", tone: "text-emerald-700 bg-emerald-50 border-emerald-200" };
     if (sh.counted) return { label: "Counted", hint: "In or out, with a × n", tone: "text-slate-600 bg-slate-50 border-slate-200" };
+    const alone = !lines.some((o) => o.cost_item_id !== costItemId && shapes.get(o.cost_item_id)?.group_key === sh.group_key);
+    if (alone) return { label: "Optional", hint: "Tap to include, tap again to leave out - the customer's choice", tone: "text-slate-700 bg-slate-50 border-slate-200" };
     return { label: "One of these", hint: "An alternative among the items of its category priced the same way - one ① and one ② between them", tone: "text-blue-700 bg-blue-50 border-blue-200" };
   };
 
   // Adding and removing take effect at once - the offer is not part of Save,
   // which covers the rule and the priced-per dropdowns - so say so.
+  const setLine = (costItemId: string, patch: Partial<Pick<LineRow, "quantity_key" | "auto">>) => {
+    setLines((prev) => prev.map((x) => (x.cost_item_id === costItemId ? { ...x, ...patch } : x)));
+    setDirty(true);
+  };
+
   const changeMenu = async (patch: { add?: string[]; remove?: string[] }, itemName?: string) => {
     const res = await fetch(`/api/quotations/config/component-types/${id}/costing`, {
       method: "PUT",
@@ -140,7 +149,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
     const res = await fetch(`/api/quotations/config/component-types/${id}/costing`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ costing, lines: lines.map((l) => ({ cost_item_id: l.cost_item_id, quantity_key: l.quantity_key })) }),
+      body: JSON.stringify({ costing, lines: lines.map((l) => ({ cost_item_id: l.cost_item_id, quantity_key: l.quantity_key, auto: l.auto })) }),
     });
     const json = await res.json().catch(() => ({}));
     setSaving(false);
@@ -280,7 +289,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
                   <div className="flex-1">
                     <h2 className="text-sm font-semibold text-slate-900">What it offers on the room sheet</h2>
                     <p className="text-xs text-slate-500">
-                      The cost items a seller can pick for a {name || "component"} of this type, and what each is priced per. Items of one category priced the same way are alternatives; a per-piece item is counted; the only item following a quantity prices itself. Adding and removing take effect at once; Save is for the rule and the priced-per dropdowns.
+                      The cost items a seller can pick for a {name || "component"} of this type, and what each is priced per. Items of one category priced the same way are alternatives; a per-piece item is counted; an item alone is optional unless marked Automatic, which prices it from the measurement with nothing to tap. Adding and removing take effect at once; Save is for the rule, the priced-per dropdowns and Automatic.
                     </p>
                   </div>
                   <button type="button" onClick={() => setPicking((p) => !p)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0">
@@ -323,10 +332,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
                           {b && <span className={cn("shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded border", b.tone)} title={b.hint}>{b.label}</span>}
                           <select
                             value={l.quantity_key ?? ""}
-                            onChange={(e) => {
-                              setLines((prev) => prev.map((x) => (x.cost_item_id === l.cost_item_id ? { ...x, quantity_key: e.target.value || null } : x)));
-                              setDirty(true);
-                            }}
+                            onChange={(e) => setLine(l.cost_item_id, { quantity_key: e.target.value || null, ...(e.target.value ? {} : { auto: false }) })}
                             className="px-2 py-1.5 text-xs border border-slate-200 rounded-md bg-white min-w-[14rem]"
                           >
                             <option value="">Per piece / one face</option>
@@ -334,6 +340,14 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
                               <option key={q.key} value={q.key}>per {q.label || q.key} ({q.unit_code})</option>
                             ))}
                           </select>
+                          {/* Automatic: prices itself with nothing to tap. Right
+                              for a quantity that can be 0 (shelves, exposed
+                              sides); wrong for an optional extra that follows
+                              the size - lighting on every wall unit. */}
+                          <label className={cn("inline-flex items-center gap-1 text-[11px] whitespace-nowrap", l.quantity_key ? "text-slate-600" : "text-slate-300")} title="Priced from the measurement without a tap. Only for a quantity that can be 0; an extra the customer chooses stays a tap.">
+                            <input type="checkbox" checked={!!l.auto} disabled={!l.quantity_key} onChange={(e) => setLine(l.cost_item_id, { auto: e.target.checked })} className="rounded border-slate-300" />
+                            Automatic
+                          </label>
                           <button type="button" onClick={() => void changeMenu({ remove: [l.cost_item_id] }, l.name)} className="p-1 text-slate-400 hover:text-red-600 rounded" title="Take off this component's offer">
                             <XMarkIcon className="w-4 h-4" />
                           </button>

@@ -314,14 +314,14 @@ export async function copyScopeToQuotation(
     const [{ data: types }, { data: offerRows }] = await Promise.all([
       typeIds.length ? supabase.from("component_types").select("id, config_schema").in("id", typeIds) : Promise.resolve({ data: [] as { id: string; config_schema: unknown }[] }),
       typeIds.length
-        ? supabase.from("component_type_offers").select("component_type_id, cost_item_id, quantity_key").in("component_type_id", typeIds)
-        : Promise.resolve({ data: [] as { component_type_id: string; cost_item_id: string; quantity_key: string | null }[] }),
+        ? supabase.from("component_type_offers").select("component_type_id, cost_item_id, quantity_key, auto").in("component_type_id", typeIds)
+        : Promise.resolve({ data: [] as { component_type_id: string; cost_item_id: string; quantity_key: string | null; auto: boolean }[] }),
     ]);
     const ruleByType = new Map((types ?? []).map((t) => [t.id as string, readCosting(t.config_schema)]));
     // What each type offers, and what each item is priced per on it.
-    const menuByType = new Map<string, { cost_item_id: string; quantity_key: string | null }[]>();
+    const menuByType = new Map<string, { cost_item_id: string; quantity_key: string | null; auto: boolean }[]>();
     for (const typeId of typeIds) {
-      menuByType.set(typeId, (offerRows ?? []).filter((r) => r.component_type_id === typeId).map((r) => ({ cost_item_id: r.cost_item_id as string, quantity_key: (r.quantity_key as string | null) ?? null })));
+      menuByType.set(typeId, (offerRows ?? []).filter((r) => r.component_type_id === typeId).map((r) => ({ cost_item_id: r.cost_item_id as string, quantity_key: (r.quantity_key as string | null) ?? null, auto: !!r.auto })));
     }
     const menuIds = [...new Set([...menuByType.values()].flat().map((l) => l.cost_item_id))];
     const wantedIds = [...new Set([...picked.map((r) => r.cost_item_id as string), ...menuIds])];

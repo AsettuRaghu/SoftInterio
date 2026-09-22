@@ -91,8 +91,8 @@ type Db = Awaited<ReturnType<typeof createClient>>;
 
 /** What the type offers, and what each item is priced per. */
 async function offersOf(supabase: Db, componentTypeId: string) {
-  const { data } = await supabase.from("component_type_offers").select("cost_item_id, quantity_key").eq("component_type_id", componentTypeId).order("display_order");
-  return { lines: (data ?? []).map((r) => ({ cost_item_id: r.cost_item_id as string, quantity_key: (r.quantity_key as string | null) ?? null })) };
+  const { data } = await supabase.from("component_type_offers").select("cost_item_id, quantity_key, auto").eq("component_type_id", componentTypeId).order("display_order");
+  return { lines: (data ?? []).map((r) => ({ cost_item_id: r.cost_item_id as string, quantity_key: (r.quantity_key as string | null) ?? null, auto: !!r.auto })) };
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
