@@ -26,6 +26,7 @@ import {
 import { uiLogger } from "@/lib/logger";
 import { invalidateQuotationConfig } from "@/lib/quotations/config-cache";
 import { CostItemPicturesDialog } from "@/components/catalogue/CostItemPictures";
+import { ScopePresetsPanel } from "@/components/catalogue/ScopePresetsPanel";
 
 interface SpaceType {
   id: string;
@@ -66,7 +67,7 @@ interface QuotationCostItem {
   category?: { id: string; name: string } | null;
 }
 
-type TabType = "spaces" | "components" | "categories" | "costItems";
+type TabType = "spaces" | "components" | "categories" | "costItems" | "presets";
 type SortDirection = "asc" | "desc" | null;
 type SortColumn =
   | "name"
@@ -98,6 +99,16 @@ interface DeleteModalState {
 
 export default function QuotationsConfigPage() {
   const [activeTab, setActiveTab] = useState<TabType>("spaces");
+  // Presets live in their own panel; the header's New button reaches it
+  // through a counter, and it reports its count for the tab badge.
+  const [presetCount, setPresetCount] = useState(0);
+  const [presetNew, setPresetNew] = useState(0);
+
+  // Arrive on a tab by URL - the old /catalogue/presets address forwards here.
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab") as TabType | null;
+    if (tab && ["spaces", "components", "categories", "costItems", "presets"].includes(tab)) setActiveTab(tab);
+  }, []);
   // Set from the cost items response. Users without cost_items.pricing get no
   // company cost at all, so the column and its form field are hidden rather
   // than shown empty - a blank column invites people to fill it in.
@@ -588,6 +599,10 @@ export default function QuotationsConfigPage() {
   };
 
   const openAddModal = () => {
+    if (activeTab === "presets") {
+      setPresetNew((n) => n + 1);
+      return;
+    }
     setFormName("");
     setFormDescription("");
     setFormCategoryId("");
@@ -808,6 +823,7 @@ export default function QuotationsConfigPage() {
     if (activeTab === "spaces") return "Add Space";
     if (activeTab === "components") return "Add Component";
     if (activeTab === "categories") return "Add Category";
+    if (activeTab === "presets") return "New Preset";
     return "Add Cost Item";
   };
 
@@ -850,6 +866,12 @@ export default function QuotationsConfigPage() {
       label: "Cost Items",
       icon: CurrencyDollarIcon,
       count: costItems.length,
+    },
+    {
+      id: "presets" as TabType,
+      label: "Presets",
+      icon: RectangleStackIcon,
+      count: presetCount,
     },
   ];
 
@@ -1430,20 +1452,12 @@ export default function QuotationsConfigPage() {
                     </button>
                   );
                 })}
-                {/* Presets are a page of their own - a different shape of
-                    thing (a list of spaces with components), not a fifth
-                    table - but they belong in this row. */}
-                <Link
-                  href="/dashboard/settings/catalogue/presets"
-                  className="relative flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
-                >
-                  <RectangleStackIcon className="w-4 h-4" />
-                  Presets
-                </Link>
               </div>
 
-              {/* Status applies to every tab; the pills match the notes and
-                  tasks tables so the whole app filters the same way. */}
+              {/* Status applies to every table tab; the pills match the notes
+                  and tasks tables so the whole app filters the same way. */}
+              {activeTab !== "presets" && (
+              <div className="flex items-center gap-3">
               <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-lg shrink-0">
                 {(["all", "active", "inactive"] as const).map((key) => {
                   const isActive = statusFilter === key;
@@ -1513,6 +1527,8 @@ export default function QuotationsConfigPage() {
                   className="w-52 pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
                 />
               </div>
+              </div>
+              )}
             </div>
           </div>
 
@@ -1541,13 +1557,13 @@ export default function QuotationsConfigPage() {
             </div>
           )}
 
-          {/* Table Content */}
-          {renderTable()}
+          {/* Table Content - or the presets panel, which is not a table */}
+          {activeTab === "presets" ? <ScopePresetsPanel newTrigger={presetNew} onCount={setPresetCount} /> : renderTable()}
 
           {/* Pagination, in the same shape as the notes, tasks, calendar and
               timeline tables. Shown whenever there are rows, so a short list
               still reports its total and the page size stays reachable. */}
-          {activeRows.length > 0 && (
+          {activeTab !== "presets" && activeRows.length > 0 && (
             <div className="border-t border-slate-200 px-4 py-2 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-slate-500">
