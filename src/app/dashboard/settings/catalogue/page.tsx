@@ -57,6 +57,7 @@ interface CostItemCategory {
   description: string | null;
   is_active: boolean;
   created_at: string;
+  is_charge?: boolean;
 }
 
 interface QuotationCostItem {
@@ -67,6 +68,7 @@ interface QuotationCostItem {
   unit_code: string;
   company_cost: number | null;
   default_rate: number | null;
+  quality_tier?: string | null;
   is_active: boolean;
   created_at: string;
   category?: { id: string; name: string } | null;
@@ -301,50 +303,43 @@ export default function QuotationsConfigPage() {
     statusFilter === "all" ||
     (statusFilter === "active" ? isActive : !isActive);
 
+  // The search covers every column a row shows - name, description, the
+  // spaces a component belongs in, a preset's spaces, a cost item's
+  // category, unit and tier, and the status word - so what is on screen is
+  // what is searched. "general" used to miss every component that belonged
+  // in Home General because only name and description were read.
+  const q = searchQuery.trim().toLowerCase();
+  const matchesSearch = (...fields: (string | null | undefined)[]) => !q || fields.some((f) => !!f && f.toLowerCase().includes(q));
+  const spaceName = (id: string) => spaces.find((sp) => sp.id === id)?.name ?? "";
+  const statusWord = (isActive: boolean) => (isActive ? "active" : "inactive");
+
   const filteredSpaces = spaces.filter(
-    (s) =>
-      matchesStatus(s.is_active) &&
-      (s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        !!s.description?.toLowerCase().includes(searchQuery.toLowerCase()))
+    (s) => matchesStatus(s.is_active) && matchesSearch(s.name, s.description, statusWord(s.is_active))
   );
 
   const filteredPresets = presets.filter(
-    (p) =>
-      matchesStatus(p.is_active) &&
-      (p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        !!p.description?.toLowerCase().includes(searchQuery.toLowerCase()))
+    (p) => matchesStatus(p.is_active) && matchesSearch(p.name, p.description, statusWord(p.is_active), ...p.items.map((it) => spaceName(it.space_type_id)))
   );
 
   const filteredComponents = components.filter((c) => {
     if (!matchesStatus(c.is_active)) return false;
+    const ids = c.applicable_space_types || [];
     if (spaceFilter !== "all") {
-      const ids =
-        (c as { applicable_space_types?: string[] | null })
-          .applicable_space_types || [];
       // Unrestricted components suit every space, so they match any filter.
       if (ids.length > 0 && !ids.includes(spaceFilter)) return false;
     }
-    return (
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      !!c.description?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    return matchesSearch(c.name, c.description, statusWord(c.is_active), ids.length ? undefined : "any space", ...ids.map(spaceName));
   });
 
   const filteredCategories = categories.filter(
-    (c) =>
-      matchesStatus(c.is_active) &&
-      (c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        !!c.description?.toLowerCase().includes(searchQuery.toLowerCase()))
+    (c) => matchesStatus(c.is_active) && matchesSearch(c.name, c.description, statusWord(c.is_active), c.is_charge ? "charge" : undefined)
   );
 
   const filteredCostItems = costItems.filter(
     (item) =>
       matchesStatus(item.is_active) &&
       (categoryFilter === "all" || item.category_id === categoryFilter) &&
-      (item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.category?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.unit_code.toLowerCase().includes(searchQuery.toLowerCase()))
+      matchesSearch(item.name, item.description, item.category?.name, item.unit_code, item.quality_tier, statusWord(item.is_active), item.default_rate != null ? String(item.default_rate) : undefined)
   );
 
   // Sorting functions
@@ -1226,7 +1221,7 @@ export default function QuotationsConfigPage() {
                           {names.slice(0, 3).map((n) => (
                             <span
                               key={n}
-                              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200"
+                              className="inline-flex items-center px-1 py-px rounded text-[9px] font-medium bg-blue-50 text-blue-700 border border-blue-200 leading-4"
                             >
                               {n}
                             </span>
