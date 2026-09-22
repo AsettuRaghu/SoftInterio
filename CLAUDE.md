@@ -970,6 +970,41 @@ which is a row in a list. Later, each with its module: vendor price lists
 or segment and price history (when a second card is wanted), brand
 variants (when the library or procurement needs them by make).
 
+### The seeded rates are market rates, and every priced-per agrees on units
+
+Audited 2026-09-22 after the first quotation came out at ₹62 lakh for a
+3 BHK, roughly three times the market.
+
+**Units.** A rate is in the item's own unit and must be multiplied by a
+quantity in that same unit. Twenty-six offers were not: a countertop at
+₹250 per **sqft** was multiplied by the counter's **running feet**, and a
+per-piece cut-out by feet as well. `counter_sqft` (run × depth) and
+`dado_sqft` (run × its own height, 600 mm by default) were added and the
+per-piece items went back to counted (`20260922180000`). **The check to
+run when adding an offer**: the cost item's `unit_code` and the
+quantity's `unit_code` must match; anything else silently prices the
+wrong number.
+
+**Rates** (`20260922190000`). The December seed priced each *part* as
+though it were the whole job - a carcass at ₹2,000/sqft and a shutter at
+₹2,500/sqft together exceed what a finished kitchen sells for, and a
+hinge at ₹1,000 is four times a fitted soft-close hinge. Now, per square
+foot of front elevation, supply and fit: carcass 750 / 950 / 1,250 /
+1,600; graded shutters 550 / 750 / 1,200 / 1,700; by finish laminate 600,
+membrane 650, acrylic 1,150, PU 1,350, lacquered glass 1,450, veneer
+1,600; hinges 150 / 250 / 400 / 650 each. A standard run is then about
+₹1,700/sqft of front before hardware and a premium one ₹2,400, against a
+market of ₹1,600-2,600 and ₹2,500-3,500 all in. Still starting rates -
+the point is that a tenant who never edits them quotes in the right order
+of magnitude. **Ladders must climb**; the migration reports any that do
+not, and *Profiles* was made untiered because two of its five items had
+picked up "standard" from the create form's default, which would have let
+Reprice swap one profile for another.
+
+**A quotation keeps the rates it was made with** - they are snapshotted on
+the line. Changing the catalogue never moves a quotation that exists; a
+new one, or a revision, picks the new rates up.
+
 ### The seeded catalogue is complete enough to quote a whole home
 
 `20260919110000_catalogue_completion.sql` (2026-09-19) took the shipped
