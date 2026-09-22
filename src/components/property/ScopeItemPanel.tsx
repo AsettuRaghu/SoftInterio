@@ -258,10 +258,10 @@ function Options({
     apply((items) => items.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, scope_owner } : x)), { cost_item_id: o.cost_item_id, status: o.status, scope_owner });
   };
   const quantityLabel = (key: string | null) => costing?.quantities.find((q) => q.key === key)?.label ?? key ?? "";
-  const showPictures = (o: OptionItem) => {
+  const showPictures = (o: OptionItem, index = 0) => {
     const pics = pictures[o.cost_item_id] ?? [];
     if (!pics.length) return;
-    setViewing({ items: pics.map((p) => ({ id: p.entry_id, name: o.name, url: p.url, type: "image/jpeg" })), index: 0 });
+    setViewing({ items: pics.map((p) => ({ id: p.entry_id, name: o.name, url: p.url, type: "image/jpeg" })), index });
   };
   // Every picture of every option in a group, captioned by the option - the
   // finishes side by side, for the conversation at the showroom table.
@@ -269,14 +269,27 @@ function Options({
     const items = g.items.flatMap((o) => (pictures[o.cost_item_id] ?? []).map((p) => ({ id: p.entry_id, name: o.name, url: p.url, type: "image/jpeg", caption: o.status === "p1" ? "First preference" : o.status === "p2" ? "Second preference" : null })));
     if (items.length) setViewing({ items, index: 0 });
   };
-  // A small thumbnail beside an item that has pictures; tap to see them all.
+  // The item's pictures, each its own small thumbnail (three at most, then
+  // "+n"); tap one and the viewer opens on that picture. One thumbnail said
+  // "there is a picture" but not "there are five".
+  const SHOWN = 3;
   const thumb = (o: OptionItem) => {
     const pics = pictures[o.cost_item_id];
     if (!pics?.length) return null;
+    const more = pics.length - SHOWN;
     return (
-      <button type="button" onClick={(e) => { e.stopPropagation(); showPictures(o); }} title={`${pics.length} picture${pics.length === 1 ? "" : "s"} - tap to view`} className="shrink-0 w-6 h-6 rounded overflow-hidden border border-slate-200 hover:ring-2 hover:ring-blue-300">
-        <img src={pics[0].url} alt="" className="w-full h-full object-cover" />
-      </button>
+      <span className="shrink-0 inline-flex items-center gap-0.5">
+        {pics.slice(0, SHOWN).map((p, i) => (
+          <button key={p.entry_id} type="button" onClick={(e) => { e.stopPropagation(); showPictures(o, i); }} title={`${o.name} - picture ${i + 1} of ${pics.length}`} className="w-6 h-6 rounded overflow-hidden border border-slate-200 hover:ring-2 hover:ring-blue-300">
+            <img src={p.url} alt="" className="w-full h-full object-cover" />
+          </button>
+        ))}
+        {more > 0 && (
+          <button type="button" onClick={(e) => { e.stopPropagation(); showPictures(o, SHOWN); }} title={`${more} more - tap to view`} className="w-6 h-6 rounded border border-slate-200 bg-slate-50 text-[9px] font-medium text-slate-600 hover:ring-2 hover:ring-blue-300">
+            +{more}
+          </button>
+        )}
+      </span>
     );
   };
 
