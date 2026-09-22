@@ -1616,8 +1616,8 @@ export default function QuotationsConfigPage() {
 
               {activeTab === "components" && (
                 <SearchSelect
-                  value={spaceFilter}
-                  onChange={setSpaceFilter}
+                  value={spaceFilter === "all" ? "" : spaceFilter}
+                  onChange={(v) => setSpaceFilter(v || "all")}
                   emptyLabel="All spaces"
                   options={spaces.filter((sp) => sp.is_active).map((sp) => ({ value: sp.id, label: sp.name }))}
                   className="w-44"
@@ -1627,8 +1627,8 @@ export default function QuotationsConfigPage() {
 
               {activeTab === "costItems" && (
                 <SearchSelect
-                  value={categoryFilter}
-                  onChange={setCategoryFilter}
+                  value={categoryFilter === "all" ? "" : categoryFilter}
+                  onChange={(v) => setCategoryFilter(v || "all")}
                   emptyLabel="All categories"
                   options={categories.map((c) => ({ value: c.id, label: c.name }))}
                   className="w-48"
