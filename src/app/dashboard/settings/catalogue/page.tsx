@@ -70,6 +70,8 @@ interface QuotationCostItem {
   company_cost: number | null;
   default_rate: number | null;
   quality_tier?: string | null;
+  /** Pictures in the Design Library under this item. */
+  picture_count?: number;
   is_active: boolean;
   created_at: string;
   category?: { id: string; name: string } | null;
@@ -342,7 +344,7 @@ export default function QuotationsConfigPage() {
     (item) =>
       matchesStatus(item.is_active) &&
       (categoryFilter === "all" || item.category_id === categoryFilter) &&
-      matchesSearch(item.name, item.description, item.category?.name, item.unit_code, item.quality_tier, statusWord(item.is_active), item.default_rate != null ? String(item.default_rate) : undefined)
+      matchesSearch(item.name, item.description, item.category?.name, item.unit_code, item.quality_tier, statusWord(item.is_active), item.default_rate != null ? String(item.default_rate) : undefined, item.picture_count ? "with pictures" : "no pictures")
   );
 
   // Sorting functions
@@ -1500,12 +1502,20 @@ export default function QuotationsConfigPage() {
                 </td>
                 <td className="px-4 py-2.5 text-right">
                   <div className="flex items-center justify-end gap-1">
+                    {/* Green with a count when the item has pictures, grey
+                        when it has none - so the ones still to photograph
+                        stand out in the list. */}
                     <button
                       onClick={() => setPicturesOf({ id: item.id, name: item.name })}
-                      title="Pictures - shown on the room sheet while choosing"
-                      className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                      title={item.picture_count ? `${item.picture_count} picture${item.picture_count === 1 ? "" : "s"} - shown on the room sheet while choosing` : "No pictures yet - add some for the room sheet"}
+                      className={`relative p-1.5 rounded-lg transition-colors ${item.picture_count ? "text-emerald-600 hover:bg-emerald-50" : "text-slate-300 hover:text-slate-600 hover:bg-slate-200"}`}
                     >
                       <PhotoIcon className="w-4 h-4" />
+                      {!!item.picture_count && (
+                        <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-emerald-600 text-white text-[9px] font-semibold leading-[14px] text-center">
+                          {item.picture_count}
+                        </span>
+                      )}
                     </button>
                     <button
                       onClick={() => openEditModal(item)}
@@ -1954,7 +1964,7 @@ export default function QuotationsConfigPage() {
       )}
 
       {/* Delete Confirmation Modal */}
-      {picturesOf && <CostItemPicturesDialog item={picturesOf} onClose={() => setPicturesOf(null)} />}
+      {picturesOf && <CostItemPicturesDialog item={picturesOf} onClose={() => setPicturesOf(null)} onChanged={() => void fetchCostItems()} />}
       {presetEditing && (
         <PresetEditor
           preset={presetEditing === "new" ? null : presetEditing}

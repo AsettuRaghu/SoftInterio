@@ -31,7 +31,8 @@ export async function GET(request: NextRequest) {
       .select(
         `
         *,
-        category:quotation_cost_item_categories(id, name, slug, color, icon)
+        category:quotation_cost_item_categories(id, name, slug, color, icon),
+        pictures:library_entries(count)
       `,
         { count: "exact" }
       )
@@ -77,7 +78,11 @@ export async function GET(request: NextRequest) {
     // quote without it.
     const showCosts = await canViewCosts();
 
-    const itemsWithMargin = (costItems || []).map((item) => {
+    const itemsWithMargin = (costItems || []).map((raw) => {
+      // How many pictures the item has (Design Library entries under it),
+      // flattened from the embedded count so the Catalogue can show it.
+      const { pictures, ...rest } = raw as Record<string, unknown> & { pictures?: { count: number }[] };
+      const item = { ...rest, picture_count: pictures?.[0]?.count ?? 0 } as typeof raw & { picture_count: number };
       if (!showCosts) {
         const {
           company_cost: _c,
