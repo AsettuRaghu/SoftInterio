@@ -935,6 +935,40 @@ rule was seeded where such types existed; the tenant edits or replaces it.
   (`nos`), because a sqft item with no rule quantity is priced on the whole
   front.
 
+### A cost item is one thing with one selling rate; its costs are stand-ins
+
+Decided 2026-09-22 from a brainstorm on where the cost item is used and
+what it will carry. **The vocabulary** - use these words and no others:
+
+- **rate** - what we sell it at. `quotation_cost_items.default_rate`.
+- **vendor price** - what a vendor charges, on a date, at a quantity. A
+  *list* (vendor, price, unit with a conversion to the selling unit, MOQ,
+  valid from), not a column. `vendor_cost` is its one-number stand-in
+  until procurement keeps the list.
+- **landed cost** - vendor price × unit conversion + wastage + labour.
+  Derived when the list exists; `company_cost` is the typed stand-in.
+- **margin** - (rate − landed cost) / landed cost. Computed, never typed.
+
+Two rules that already hold and must keep holding: **a quotation line
+snapshots rate and cost at copy time** (`scope-to-quotation` writes
+`rate`, `company_cost`, `vendor_cost` onto the line), so "margin on this
+quote" and "margin now that costs moved" are both answerable; and **cost
+and margin reach only holders of `cost_items.pricing`**
+(`lib/quotations/cost-visibility.ts`, stripped server-side).
+
+**There is one cost item table.** `cost_items` was renamed
+`quotation_cost_items` before the baseline and every stock table points at
+the new name; what survived under the old one was code that could never
+run - Stock → Cost items and its API (deleted 2026-09-22), the stock
+overview's counts (re-pointed), and two functions (a PO trigger attached
+to nothing, a seed superseded by `seed_tenant_catalogue`; dropped,
+`20260922130000`). Do not add another numeric column to the item row when
+a need appears - each new number wants *from whom* and *since when*,
+which is a row in a list. Later, each with its module: vendor price lists
+(procurement), HSN and GST rate per item (invoicing), rate cards per tier
+or segment and price history (when a second card is wanted), brand
+variants (when the library or procurement needs them by make).
+
 ### The seeded catalogue is complete enough to quote a whole home
 
 `20260919110000_catalogue_completion.sql` (2026-09-19) took the shipped

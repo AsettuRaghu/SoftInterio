@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     // Get total stockable items count
     const { count: totalItems } = await supabase
-      .from("cost_items")
+      .from("quotation_cost_items")
       .select("*", { count: "exact", head: true })
       .eq("is_stockable", true)
       .eq("is_active", true);
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
 
     // Get low stock items (for the list)
     const { data: lowStockList } = await supabase
-      .from("cost_items")
+      .from("quotation_cost_items")
       .select(
         `
         id,
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
         unit_code,
         default_rate,
         reorder_level,
-        category:cost_item_categories(id, name)
+        category:quotation_cost_item_categories(id, name)
       `
       )
       .eq("is_stockable", true)
