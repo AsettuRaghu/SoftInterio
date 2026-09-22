@@ -1003,6 +1003,15 @@ account of what and why is the Scope to Quotation Handbook artifact
   Bottle Pull-out, Plate Rack, Pantry Pull-out). The rule of thumb in the
   handbook: derivable from the measurement -> costing rule; decided with
   the customer -> a counted option.
+- **Blind corners are counted, and the corner solution is a decision**
+  (`20260922150000`). A `corners` count on the kitchen base and wall unit
+  rules; Magic Corner, Blind Corner Pull-out, Corner Drawer and Corner
+  Carousel (moved from Accessories to Internals) are alternatives priced
+  per corner - "one of these", because a run has one kind of corner
+  solution; Corner Filler Panel is automatic per corner, which is the
+  honest use of auto (a corner always needs one, and the count can be 0).
+  Before this a corner was a hint on the run field and one carousel on the
+  base unit, and the wall unit had nothing - a wall run turns as often.
 - **The kitchen components are measured as themselves** (`20260922100000`).
   The sample kitchen rule of the 19th was a whole-kitchen rule (counter
   run, base height, wall height, tall units) pasted onto every type named
