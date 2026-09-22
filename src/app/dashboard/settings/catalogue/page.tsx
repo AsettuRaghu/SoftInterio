@@ -278,6 +278,11 @@ export default function QuotationsConfigPage() {
       to: tabId,
     });
     setActiveTab(tabId);
+    // The address follows the tab, so a reload, the back button and a
+    // shared link all land on the tab that was being looked at.
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tabId);
+    window.history.replaceState(window.history.state, "", url);
   };
 
   /** Active / inactive, applied the same way on every tab. */
