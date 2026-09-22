@@ -156,7 +156,12 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
         title={name || "Component"}
         subtitle="How this component is measured, what it offers on the room sheet, and what each item is priced per. Lengths are in feet inside a formula, whatever unit was typed."
         basePath={{ label: "Settings", href: "/dashboard/settings" }}
-        breadcrumbs={[{ label: "Catalogue", href: "/dashboard/settings/catalogue" }, { label: name || "Component" }]}
+        breadcrumbs={[
+          { label: "Catalogue", href: "/dashboard/settings/catalogue" },
+          // Back to the tab this page was opened from, not the Catalogue's first tab.
+          { label: "Components", href: "/dashboard/settings/catalogue?tab=components" },
+          { label: name || "Component" },
+        ]}
         icon={<CalculatorIcon className="w-4 h-4 text-white" />}
         iconBgClass="from-blue-500 to-blue-600"
         actions={
