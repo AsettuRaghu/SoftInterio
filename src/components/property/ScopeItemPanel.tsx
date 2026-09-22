@@ -269,27 +269,23 @@ function Options({
     const items = g.items.flatMap((o) => (pictures[o.cost_item_id] ?? []).map((p) => ({ id: p.entry_id, name: o.name, url: p.url, type: "image/jpeg", caption: o.status === "p1" ? "First preference" : o.status === "p2" ? "Second preference" : null })));
     if (items.length) setViewing({ items, index: 0 });
   };
-  // The item's pictures, each its own small thumbnail (three at most, then
-  // "+n"); tap one and the viewer opens on that picture. One thumbnail said
-  // "there is a picture" but not "there are five".
-  const SHOWN = 3;
+  // Pictures stay out of the way: a small "N pictures" link shows when the
+  // pointer is over the item (always, where there is no pointer to hover),
+  // and opens the viewer. Thumbnails in the row were tried and read as
+  // clutter next to forty options.
   const thumb = (o: OptionItem) => {
     const pics = pictures[o.cost_item_id];
     if (!pics?.length) return null;
-    const more = pics.length - SHOWN;
     return (
-      <span className="shrink-0 inline-flex items-center gap-0.5">
-        {pics.slice(0, SHOWN).map((p, i) => (
-          <button key={p.entry_id} type="button" onClick={(e) => { e.stopPropagation(); showPictures(o, i); }} title={`${o.name} - picture ${i + 1} of ${pics.length}`} className="w-6 h-6 rounded overflow-hidden border border-slate-200 hover:ring-2 hover:ring-blue-300">
-            <img src={p.url} alt="" className="w-full h-full object-cover" />
-          </button>
-        ))}
-        {more > 0 && (
-          <button type="button" onClick={(e) => { e.stopPropagation(); showPictures(o, SHOWN); }} title={`${more} more - tap to view`} className="w-6 h-6 rounded border border-slate-200 bg-slate-50 text-[9px] font-medium text-slate-600 hover:ring-2 hover:ring-blue-300">
-            +{more}
-          </button>
-        )}
-      </span>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); showPictures(o); }}
+        title={`See ${pics.length} picture${pics.length === 1 ? "" : "s"} of ${o.name}`}
+        className="shrink-0 inline-flex items-center gap-0.5 text-[10px] text-blue-600 hover:underline opacity-0 group-hover/opt:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity"
+      >
+        <PhotoIcon className="w-3 h-3" />
+        {pics.length}
+      </button>
     );
   };
 
@@ -345,8 +341,7 @@ function Options({
               {exclusive.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {exclusive.map((o) => (
-                    <span key={o.cost_item_id} className="inline-flex items-center gap-1">
-                      {thumb(o)}
+                    <span key={o.cost_item_id} className="group/opt inline-flex items-center gap-1">
                       <button
                         type="button"
                         disabled={readOnly}
@@ -362,30 +357,31 @@ function Options({
                         {o.name}
                         {tier(o, o.status === "p1")}
                       </button>
+                      {thumb(o)}
                       {owner(o)}
                     </span>
                   ))}
                 </div>
               )}
               {autos.map((o) => (
-                <p key={o.cost_item_id} className="text-[11px] text-slate-500 flex items-center gap-1">
-                  {thumb(o)}
+                <p key={o.cost_item_id} className="group/opt text-[11px] text-slate-500 flex items-center gap-1">
                   <CheckIcon className="w-3 h-3 text-emerald-600" />
                   <span className="text-slate-700">{o.name}</span>
                   <span className="text-slate-400">· follows {quantityLabel(o.quantity_key)}</span>
+                  {thumb(o)}
                 </p>
               ))}
               {counted.length > 0 && (
                 <div className="space-y-1">
                   {counted.filter((o) => o.status).map((o) => (
-                    <div key={o.cost_item_id} className="flex items-center gap-2 text-[11px]">
+                    <div key={o.cost_item_id} className="group/opt flex items-center gap-2 text-[11px]">
                       <span className="inline-flex items-center rounded border border-slate-200 bg-white text-slate-700 tabular-nums">
                         <button type="button" disabled={readOnly} onClick={() => setCounted(o, Math.max(1, (o.quantity ?? 1) - 1))} className="px-1.5 py-0.5 hover:bg-slate-100 disabled:opacity-40" title="One fewer">−</button>
                         <span className="px-1.5 min-w-[1.6rem] text-center">{o.quantity ?? 1}</span>
                         <button type="button" disabled={readOnly} onClick={() => setCounted(o, (o.quantity ?? 1) + 1)} className="px-1.5 py-0.5 hover:bg-slate-100 disabled:opacity-40" title="One more">+</button>
                       </span>
-                      {thumb(o)}
                       <span className="text-slate-800">{o.name}</span>
+                      {thumb(o)}
                       {owner(o)}
                       {!readOnly && (
                         <button type="button" onClick={() => setCounted(o, null)} className="text-slate-400 hover:text-red-600" title="Remove">
@@ -397,12 +393,12 @@ function Options({
                   {!readOnly && counted.some((o) => !o.status) && (
                     <div className="flex flex-wrap gap-1.5">
                       {counted.filter((o) => !o.status).map((o) => (
-                        <span key={o.cost_item_id} className="inline-flex items-center gap-1">
-                          {thumb(o)}
+                        <span key={o.cost_item_id} className="group/opt inline-flex items-center gap-1">
                           <button type="button" onClick={() => setCounted(o, 1)} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-full border border-dashed border-slate-300 text-slate-500 hover:border-slate-400 hover:text-slate-700">
                             <PlusIcon className="w-3 h-3" />
                             {o.name}
                           </button>
+                          {thumb(o)}
                         </span>
                       ))}
                     </div>
