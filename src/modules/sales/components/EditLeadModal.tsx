@@ -13,6 +13,7 @@ import {
 } from "@/types/leads";
 import React, { useEffect, useState } from "react";
 import { todayISO } from "@/lib/dates/lead-dates";
+import { SearchSelect } from "@/components/ui/SearchSelect";
 import { ConfigurationField, FloorPlanField } from "@/components/leads/ConfigurationAndPlanFields";
 
 /**
@@ -248,40 +249,23 @@ export function EditLeadModal({
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Assigned to <RequiredStar show={lead.stage !== "new"} />
                 </label>
-                <select
+                {/* A lead past New has an owner; only a new lead may sit
+                    unassigned - past New there is no "Unassigned" row.
+                    Whoever owns it now might no longer hold a sales role;
+                    they stay listed so a save cannot silently drop them. */}
+                <SearchSelect
                   value={editForm.assigned_to || ""}
-                  required={lead.stage !== "new"}
-                  onChange={(e) =>
-                    setEditForm({
-                      ...editForm,
-                      assigned_to: e.target.value || undefined,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white"
-                >
-                  {/* A lead past New has an owner; only a new lead may sit
-                      unassigned. Past New the placeholder is hidden from the
-                      list, so "Unassigned" is not a choice at all. */}
-                  {lead.stage === "new" ? (
-                    <option value="">Unassigned</option>
-                  ) : (
-                    <option value="" hidden>Choose an owner</option>
-                  )}
-                  {assignableUsers.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name || u.email}
-                    </option>
-                  ))}
-                  {/* Whoever owns it now might no longer hold a sales role.
-                      Without this the select would fall back to Unassigned and
-                      silently drop the owner on save. */}
-                  {editForm.assigned_to &&
-                    !assignableUsers.some((u) => u.id === editForm.assigned_to) && (
-                      <option value={editForm.assigned_to}>
-                        Current owner (no longer in a sales role)
-                      </option>
-                    )}
-                </select>
+                  onChange={(v) => setEditForm({ ...editForm, assigned_to: v || undefined })}
+                  emptyLabel={lead.stage === "new" ? "Unassigned" : undefined}
+                  placeholder="Choose an owner"
+                  options={[
+                    ...assignableUsers.map((u) => ({ value: u.id, label: u.name || u.email })),
+                    ...(editForm.assigned_to && !assignableUsers.some((u) => u.id === editForm.assigned_to)
+                      ? [{ value: editForm.assigned_to, label: "Current owner (no longer in a sales role)" }]
+                      : []),
+                  ]}
+                  buttonClassName="px-3 py-2"
+                />
               </div>
 
               <div>

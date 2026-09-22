@@ -6,6 +6,7 @@ import {
   PropertySubtypeLabels,
 } from "@/types/leads";
 import { Project, ProjectStatusLabels } from "@/types/projects";
+import { SearchSelect } from "@/components/ui/SearchSelect";
 import { X } from "lucide-react";
 
 // Property type options (aligned with property_type_v2 enum)
@@ -614,23 +615,16 @@ export function EditProjectDetailsModal({
                     <label className="block text-sm font-medium text-slate-700 mb-2">
                       Project Manager<Star field="project_manager_id" />
                     </label>
-                    <select
+                    {/* Not "Nobody assigned", which reads as a choice
+                        somebody made. This is required, so the empty state
+                        is a prompt. */}
+                    <SearchSelect
                       value={editForm.project_manager_id}
-                      onChange={(e) =>
-                        handleInputChange("project_manager_id", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      {/* Not "Nobody assigned", which reads as a choice
-                          somebody made. This is now required, so the empty
-                          option is a prompt. */}
-                      <option value="">Select a project manager</option>
-                      {teamMembers.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(v) => handleInputChange("project_manager_id", v)}
+                      placeholder="Select a project manager"
+                      options={teamMembers.map((m) => ({ value: m.id, label: m.name }))}
+                      buttonClassName="px-3 py-2 border-slate-300"
+                    />
                     {teamMembers.length === 0 && (
                       <p className="mt-1 text-xs text-slate-400">
                         No team members loaded, so there is nobody to choose.

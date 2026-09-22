@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { todayISO } from "@/lib/dates/lead-dates";
+import { SearchSelect } from "@/components/ui/SearchSelect";
 import { uiLogger } from "@/lib/logger";
 import { ConfigurationField, FloorPlanField } from "@/components/leads/ConfigurationAndPlanFields";
 
@@ -1109,28 +1110,14 @@ export function StageTransitionModal({
                     Assign Project Manager
                     <span className="text-red-500"> *</span>
                   </label>
-                  <select
+                  <SearchSelect
                     value={formData.project_manager_id}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        project_manager_id: e.target.value,
-                      })
-                    }
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                    onChange={(v) => setFormData({ ...formData, project_manager_id: v })}
                     disabled={loadingManagers}
-                  >
-                    <option value="">
-                      {loadingManagers
-                        ? "Loading..."
-                        : "Select a project manager"}
-                    </option>
-                    {projectManagers.map((pm) => (
-                      <option key={pm.id} value={pm.id}>
-                        {pm.full_name || pm.email}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder={loadingManagers ? "Loading..." : "Select a project manager"}
+                    options={projectManagers.map((pm) => ({ value: pm.id, label: pm.full_name || pm.email }))}
+                    buttonClassName="px-4 py-2.5"
+                  />
                 </div>
 
                 <div>

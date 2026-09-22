@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { KnownPartnerHint, type KnownPartner } from "@/components/partners/KnownPartnerHint";
+import { SearchSelect } from "@/components/ui/SearchSelect";
 import type {
   PropertyType,
   PropertyCategory,
@@ -300,24 +301,15 @@ export function CreateLeadModal({
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 Assign To
               </label>
-              <select
+              <SearchSelect
                 value={formData.assigned_to}
-                onChange={(e) => updateField("assigned_to", e.target.value)}
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white disabled:bg-slate-50"
+                onChange={(v) => updateField("assigned_to", v)}
                 disabled={loadingTeamMembers}
-              >
-                <option value="">
-                  {loadingTeamMembers
-                    ? "Loading team..."
-                    : "Select team member"}
-                </option>
-                {teamMembers.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.name}
-                    {user?.id === member.id ? " (You)" : ""}
-                  </option>
-                ))}
-              </select>
+                placeholder={loadingTeamMembers ? "Loading team..." : "Select team member"}
+                emptyLabel="Select team member"
+                options={teamMembers.map((member) => ({ value: member.id, label: `${member.name}${user?.id === member.id ? " (You)" : ""}` }))}
+                buttonClassName="px-4 py-2.5"
+              />
               <p className="text-xs text-slate-500 mt-1">
                 Defaults to you if not selected
               </p>

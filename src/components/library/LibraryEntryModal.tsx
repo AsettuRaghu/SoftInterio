@@ -11,6 +11,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { SearchSelect } from "@/components/ui/SearchSelect";
 import { buttonVariants } from "@/components/ui/Button";
 import { TagInput } from "@/components/ui/TagInput";
 import { cn } from "@/utils/cn";
@@ -197,53 +198,44 @@ export function LibraryEntryModal({ isOpen, onClose, catalogue, styles, tagSugge
             {kind !== "material" && kind !== "process" && (
               <div>
                 <label className={label}>Space</label>
-                <select value={spaceTypeId} onChange={(e) => setSpaceTypeId(e.target.value)} className={input}>
-                  <option value="">—</option>
-                  {spaceTypes.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+                <SearchSelect value={spaceTypeId} onChange={setSpaceTypeId} emptyLabel="—" options={spaceTypes.map((s) => ({ value: s.id, label: s.name }))} buttonClassName="px-4 py-2.5" />
               </div>
             )}
             {(kind === "our_work" || kind === "drawing" || kind === "product" || kind === "inspiration") && (
               <div>
                 <label className={label}>Component</label>
-                <select value={componentTypeId} onChange={(e) => setComponentTypeId(e.target.value)} className={input}>
-                  <option value="">—</option>
-                  {catalogue.component_types.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                <SearchSelect value={componentTypeId} onChange={setComponentTypeId} emptyLabel="—" options={catalogue.component_types.map((c) => ({ value: c.id, label: c.name }))} buttonClassName="px-4 py-2.5" />
               </div>
             )}
             {(kind === "material" || kind === "product") && (
               <>
                 <div>
                   <label className={label}>Category</label>
-                  <select
+                  <SearchSelect
                     value={costCategoryId}
-                    onChange={(e) => {
-                      setCostCategoryId(e.target.value);
+                    onChange={(v) => {
+                      setCostCategoryId(v);
                       setCostItemId("");
                     }}
-                    className={input}
-                  >
-                    <option value="">—</option>
-                    {catalogue.cost_categories.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                    emptyLabel="—"
+                    options={catalogue.cost_categories.map((c) => ({ value: c.id, label: c.name }))}
+                    buttonClassName="px-4 py-2.5"
+                  />
                 </div>
                 <div>
                   <label className={label}>Cost item</label>
-                  <select value={costItemId} onChange={(e) => setCostItemId(e.target.value)} className={input} disabled={!costCategoryId && catalogue.cost_items.length > 60}>
-                    <option value="">{costCategoryId ? "—" : "Pick a category first"}</option>
-                    {catalogue.cost_items
+                  {/* Searchable, so the whole catalogue is fine to list; a
+                      category narrows it, and the category name rides along
+                      as the hint so the search finds either. */}
+                  <SearchSelect
+                    value={costItemId}
+                    onChange={setCostItemId}
+                    emptyLabel="—"
+                    options={catalogue.cost_items
                       .filter((i) => !costCategoryId || i.category_id === costCategoryId)
-                      .map((i) => (
-                        <option key={i.id} value={i.id}>{i.name}{i.quality_tier ? ` · ${i.quality_tier}` : ""}</option>
-                      ))}
-                  </select>
+                      .map((i) => ({ value: i.id, label: `${i.name}${i.quality_tier ? ` · ${i.quality_tier}` : ""}`, hint: catalogue.cost_categories.find((c) => c.id === i.category_id)?.name }))}
+                    buttonClassName="px-4 py-2.5"
+                  />
                 </div>
                 {catalogue.quality_tiers.length > 0 && (
                   <div>

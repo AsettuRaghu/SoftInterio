@@ -15,6 +15,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { SearchSelect } from "@/components/ui/SearchSelect";
 import { buttonVariants } from "@/components/ui/Button";
 import { TagInput } from "@/components/ui/TagInput";
 import { cn } from "@/utils/cn";
@@ -53,38 +54,30 @@ export function LinkFields({
       {showSpace && (
         <div>
           <label className={label}>Space</label>
-          <select value={value.space_type_id ?? ""} onChange={(e) => set("space_type_id", e.target.value)} className={input}>
-            <option value="">{blank}</option>
-            {catalogue.space_types.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
+          <SearchSelect value={value.space_type_id ?? ""} onChange={(v) => set("space_type_id", v)} emptyLabel={blank} options={catalogue.space_types.map((s) => ({ value: s.id, label: s.name }))} buttonClassName="px-4 py-2.5" />
         </div>
       )}
       {showComponent && (
         <div>
           <label className={label}>Component</label>
-          <select value={value.component_type_id ?? ""} onChange={(e) => set("component_type_id", e.target.value)} className={input}>
-            <option value="">{blank}</option>
-            {catalogue.component_types.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <SearchSelect value={value.component_type_id ?? ""} onChange={(v) => set("component_type_id", v)} emptyLabel={blank} options={catalogue.component_types.map((c) => ({ value: c.id, label: c.name }))} buttonClassName="px-4 py-2.5" />
         </div>
       )}
       {showCatalogue && (
         <>
           <div>
             <label className={label}>Category</label>
-            <select value={value.cost_category_id ?? ""} onChange={(e) => onChange({ ...value, cost_category_id: e.target.value, cost_item_id: "" })} className={input}>
-              <option value="">{blank}</option>
-              {catalogue.cost_categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <SearchSelect value={value.cost_category_id ?? ""} onChange={(v) => onChange({ ...value, cost_category_id: v, cost_item_id: "" })} emptyLabel={blank} options={catalogue.cost_categories.map((c) => ({ value: c.id, label: c.name }))} buttonClassName="px-4 py-2.5" />
           </div>
           <div>
             <label className={label}>Cost item</label>
-            <select value={value.cost_item_id ?? ""} onChange={(e) => set("cost_item_id", e.target.value)} className={input}>
-              <option value="">{blank}</option>
-              {catalogue.cost_items.filter((i) => !value.cost_category_id || i.category_id === value.cost_category_id).map((i) => (
-                <option key={i.id} value={i.id}>{i.name}{i.quality_tier ? ` · ${i.quality_tier}` : ""}</option>
-              ))}
-            </select>
+            <SearchSelect
+              value={value.cost_item_id ?? ""}
+              onChange={(v) => set("cost_item_id", v)}
+              emptyLabel={blank}
+              options={catalogue.cost_items.filter((i) => !value.cost_category_id || i.category_id === value.cost_category_id).map((i) => ({ value: i.id, label: `${i.name}${i.quality_tier ? ` · ${i.quality_tier}` : ""}`, hint: catalogue.cost_categories.find((c) => c.id === i.category_id)?.name }))}
+              buttonClassName="px-4 py-2.5"
+            />
           </div>
           {catalogue.quality_tiers.length > 0 && (
             <div>

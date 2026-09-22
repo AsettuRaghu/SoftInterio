@@ -12,6 +12,7 @@
 import React, { useState } from "react";
 import { PlusIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { Modal } from "@/components/ui/Modal";
+import { SearchSelect } from "@/components/ui/SearchSelect";
 import { buttonVariants } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
 import type { ScopePreset, ScopePresetItem } from "@/types/property-scope";
@@ -97,11 +98,13 @@ export function PresetEditor({
               return (
                 <div key={i} className="px-3 py-2">
                   <div className="flex items-center gap-2">
-                    <select value={it.space_type_id} onChange={(e) => update(i, { space_type_id: e.target.value, component_type_ids: null })} className="flex-1 px-2 py-1.5 text-sm border border-slate-200 rounded-md bg-white outline-none focus:border-blue-400">
-                      {spaceTypes.map((t) => (
-                        <option key={t.id} value={t.id}>{t.name}</option>
-                      ))}
-                    </select>
+                    <SearchSelect
+                      value={it.space_type_id}
+                      onChange={(v) => update(i, { space_type_id: v, component_type_ids: null })}
+                      options={spaceTypes.map((t) => ({ value: t.id, label: t.name }))}
+                      className="flex-1"
+                      buttonClassName="px-2 py-1.5 rounded-md"
+                    />
                     <span className="text-xs text-slate-400">×</span>
                     <input type="number" min={1} max={20} value={it.count} onChange={(e) => update(i, { count: Math.max(1, Math.min(20, Number(e.target.value) || 1)) })} className="w-16 px-2 py-1.5 text-sm text-right border border-slate-200 rounded-md outline-none focus:border-blue-400" />
                     <button

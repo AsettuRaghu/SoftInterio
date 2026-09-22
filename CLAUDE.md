@@ -809,6 +809,21 @@ built with its own header and filter row):
   bar of the lead and project pages (`px-4 py-3 text-sm font-medium
   border-b-2`, active `border-blue-600 text-blue-600`).
 
+### A dropdown with more than a handful of entries is a `SearchSelect`
+
+`components/ui/SearchSelect` (2026-09-22): a single-choice dropdown you
+can type into - options sorted A→Z unless `sort={false}`, a search box
+that takes focus, ↑ ↓ Enter Esc, a tick on the chosen row, an optional
+`emptyLabel` row for "all / none", and `hint` as a searched second line.
+The native `<select>` cannot be searched and lists options in the order
+given; a category filter with 25 entries was where that stopped being
+fine. Used for the Catalogue's filters and category field, the preset
+editor's space picker, the lead and stage dialogs' assignee and project
+manager, the project dialog's manager, and the Design Library's space /
+component / category / cost item facets. A native `<select>` is still
+right for five fixed values (priority, status, unit) and for lists whose
+order means something (pipeline stages). Convert others as they are met.
+
 ### Every list is built from the same cells
 
 `components/ui/list-cells` - `Headline` (name in bold, then one or two
