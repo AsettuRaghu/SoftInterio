@@ -42,6 +42,8 @@ let globalState: UserPermissionsState = {
 };
 let globalFetchPromise: Promise<void> | null = null;
 let hasFetched = false;
+/** Whose permissions are held - so a SIGNED_IN from the same person is a refresh, not a new login. */
+let globalUserId: string | null = null;
 const subscribers: Set<() => void> = new Set();
 
 function notifySubscribers() {
@@ -85,6 +87,7 @@ export function useUserPermissions(): UseUserPermissionsReturn {
           error: userError,
         } = await supabase.auth.getUser();
 
+        globalUserId = user?.id ?? null;
         if (!user) {
           authLogger.debug("No user found for permissions", { action: "FETCH_PERMISSIONS" });
           globalState = {
@@ -216,28 +219,31 @@ export function useUserPermissions(): UseUserPermissionsReturn {
     // Listen for auth state changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_IN") {
-        // Only refetch on actual sign-in (not token refresh)
-        if (hasFetched) {
-          authLogger.debug("User signed in, refetching permissions", {
-            action: "AUTH_STATE",
-            event,
-          });
-          // Reset and refetch
-          globalState = {
-            permissions: [],
-            roles: [],
-            hierarchyLevel: 999,
-            isLoading: true,
-            error: null,
-          };
-          hasFetched = false;
-          globalFetchPromise = null;
-          fetchPermissions();
-        }
-        // If !hasFetched, the initial useEffect fetch is already handling it
-      } else if (event === "TOKEN_REFRESHED") {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // supabase-js fires SIGNED_IN when a tab comes back after being idle
+      // and re-validates the session - the same event as a real login. It
+      // used to be treated as one: every permission wiped, the sidebar
+      // emptied and refilled, every gated block re-rendered - "the page
+      // refreshes whenever I come back to the tab". Only a DIFFERENT person
+      // signing in resets; the same person gets a quiet background refetch.
+      const sameUser = !!session?.user?.id && session.user.id === globalUserId;
+      if (event === "SIGNED_IN" && hasFetched && !sameUser) {
+        authLogger.debug("User signed in, refetching permissions", {
+          action: "AUTH_STATE",
+          event,
+        });
+        // Reset and refetch
+        globalState = {
+          permissions: [],
+          roles: [],
+          hierarchyLevel: 999,
+          isLoading: true,
+          error: null,
+        };
+        hasFetched = false;
+        globalFetchPromise = null;
+        fetchPermissions();
+      } else if ((event === "TOKEN_REFRESHED" || event === "SIGNED_IN") && hasFetched) {
         // On token refresh, silently refetch without showing loading state
         // This prevents the sidebar flash when switching browser tabs
         if (hasFetched) {

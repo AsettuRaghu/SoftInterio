@@ -2943,6 +2943,17 @@ worth it before a second subscriber exists.
 
 ## Traps that have already cost time
 
+- **supabase-js fires `SIGNED_IN` when an idle tab comes back**, the same
+  event as a real login. `useUserPermissions` treated it as one - wiped
+  every permission, emptied and refilled the sidebar, re-rendered every
+  gated block - and `useCurrentUser` flipped to loading on any refetch, so
+  everything showing the user blinked too: "the page refreshes whenever I
+  come back to the tab" (2026-09-22). Now a `SIGNED_IN` for the **same user
+  id** is a quiet background refetch, like `TOKEN_REFRESHED`; only a
+  different person resets. A refetch behind a user already on screen never
+  sets loading. The Tasks page's own visibility refetch is quiet for the
+  same reason. Any new hook listening to auth events must follow this.
+
 - **`QuotationPDF.tsx` must not be a client component.** Marking it
   `"use client"` makes route handlers import a client-reference proxy, and
   react-pdf dies with `Cannot read properties of null (reading 'props')`. PDF

@@ -59,9 +59,15 @@ export function useCurrentUser(): UseCurrentUserReturn {
 
     globalFetchPromise = (async () => {
       try {
-        globalIsLoading = true;
+        // Loading only when there is nothing on screen yet. A refetch behind
+        // a user already shown (the tab coming back, a token refresh) keeps
+        // them on screen - flipping to loading here is what made every
+        // "welcome, Raghu" and every gated block blink.
+        if (!globalUser) {
+          globalIsLoading = true;
+          notifySubscribers();
+        }
         globalError = null;
-        notifySubscribers();
 
         authLogger.info("Fetching current user data", { action: "FETCH_USER" });
 

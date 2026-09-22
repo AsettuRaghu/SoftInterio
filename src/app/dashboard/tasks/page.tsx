@@ -206,9 +206,11 @@ export default function TasksPage() {
   const [pageSize, setPageSize] = useState(25);
 
   // Fetch tasks
-  const fetchTasks = useCallback(async () => {
+  const fetchTasks = useCallback(async (opts: { quiet?: boolean } = {}) => {
     try {
-      setIsLoading(true);
+      // Quiet: keep the table on screen while it re-reads - the return to
+      // the tab, not the first load.
+      if (!opts.quiet) setIsLoading(true);
       setError(null);
 
       const response = await fetch("/api/tasks?parent_only=true");
@@ -256,7 +258,7 @@ export default function TasksPage() {
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        fetchTasks();
+        void fetchTasks({ quiet: true });
       }
     };
 
