@@ -945,6 +945,16 @@ account of what and why is the Scope to Quotation Handbook artifact
   Bottle Pull-out, Plate Rack, Pantry Pull-out). The rule of thumb in the
   handbook: derivable from the measurement -> costing rule; decided with
   the customer -> a counted option.
+- **The kitchen components are measured as themselves** (`20260922100000`).
+  The sample kitchen rule of the 19th was a whole-kitchen rule (counter
+  run, base height, wall height, tall units) pasted onto every type named
+  "kitchen", so a Base Unit asked for the wall unit's height and none of
+  them had `width`/`height` for the Scope list's size to bind to. Each unit
+  now has its own rule - run (width), height, depth, shutters, exposed
+  sides → front area, counter length, hinges, exposed side - and its offers
+  follow it. A business that quotes a kitchen as one thing would make a
+  *Kitchen* component type with a whole-kitchen rule, not four unit types
+  wearing one.
 - **A wardrobe's two height offers are the same rule with different
   numbers**: wardrobe + loft is `height 7, loft_height 2.5`; floor to
   ceiling is `height 9.5, loft_height 0`. The separate `loft` component
