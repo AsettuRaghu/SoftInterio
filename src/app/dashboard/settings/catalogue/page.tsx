@@ -121,7 +121,9 @@ export default function QuotationsConfigPage() {
   // than shown empty - a blank column invites people to fill it in.
   const [canViewCosts, setCanViewCosts] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  // Active only, until asked: an inactive item is one somebody retired, and
+  // showing it beside the live ones on every visit is noise (2026-09-22).
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("active");
   // Extra filters, each only meaningful on one tab.
   const [spaceFilter, setSpaceFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -883,31 +885,31 @@ export default function QuotationsConfigPage() {
       id: "spaces" as TabType,
       label: "Spaces",
       icon: Squares2X2Icon,
-      count: spaces.length,
+      count: spaces.filter((x) => matchesStatus(x.is_active)).length,
     },
     {
       id: "components" as TabType,
       label: "Components",
       icon: CubeIcon,
-      count: components.length,
+      count: components.filter((x) => matchesStatus(x.is_active)).length,
     },
     {
       id: "categories" as TabType,
       label: "Cost Item Categories",
       icon: TagIcon,
-      count: categories.length,
+      count: categories.filter((x) => matchesStatus(x.is_active)).length,
     },
     {
       id: "costItems" as TabType,
       label: "Cost Items",
       icon: CurrencyDollarIcon,
-      count: costItems.length,
+      count: costItems.filter((x) => matchesStatus(x.is_active)).length,
     },
     {
       id: "presets" as TabType,
       label: "Presets",
       icon: RectangleStackIcon,
-      count: presets.length,
+      count: presets.filter((x) => matchesStatus(x.is_active)).length,
     },
   ];
 
