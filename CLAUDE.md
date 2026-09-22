@@ -970,6 +970,16 @@ account of what and why is the Scope to Quotation Handbook artifact
   areas rather than `width × height`, which is the honest measurement for a
   paint job. The duplicate Cove Light under Lighting was retired for the
   one under False Ceiling.
+- **Every active component type has a rule** (`20260922120000`). The
+  thirteen that had none priced everything on the component's face. Four
+  shapes cover them - *cabinet* (pooja, shoe rack, TV, crockery, bar:
+  width × height, depth, shutters, exposed sides → front area, hinges by
+  door height, handles, exposed side, strip length), *shelving*
+  (bookshelf, no doors), *counter* (utility, vanity, breakfast counter:
+  the cabinet plus counter length), *table* (study, console, dressing:
+  front and top area) and *bed* (headboard area, storage base area). A new
+  component type still starts with no rule and behaves as before; give it
+  one on its page.
 - **A wardrobe's two height offers are the same rule with different
   numbers**: wardrobe + loft is `height 7, loft_height 2.5`; floor to
   ceiling is `height 9.5, loft_height 0`. The separate `loft` component
