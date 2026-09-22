@@ -128,23 +128,15 @@ export default function QuotationsConfigPage() {
   const [categories, setCategories] = useState<CostItemCategory[]>([]);
   const [costItems, setCostItems] = useState<QuotationCostItem[]>([]);
 
-  // Sorting state for each tab
-  const [spacesSort, setSpacesSort] = useState<SortState>({
-    column: null,
-    direction: null,
-  });
-  const [componentsSort, setComponentsSort] = useState<SortState>({
-    column: null,
-    direction: null,
-  });
-  const [categoriesSort, setCategoriesSort] = useState<SortState>({
-    column: null,
-    direction: null,
-  });
-  const [costItemsSort, setCostItemsSort] = useState<SortState>({
-    column: null,
-    direction: null,
-  });
+  // Sorting state for each tab: alphabetical by name until a column is
+  // clicked, the same on every tab (2026-09-22). The unsorted default was
+  // the API's order - display_order, then whatever the seed inserted - which
+  // differed from tab to tab and read as random once the catalogue grew.
+  const BY_NAME: SortState = { column: "name", direction: "asc" };
+  const [spacesSort, setSpacesSort] = useState<SortState>(BY_NAME);
+  const [componentsSort, setComponentsSort] = useState<SortState>(BY_NAME);
+  const [categoriesSort, setCategoriesSort] = useState<SortState>(BY_NAME);
+  const [costItemsSort, setCostItemsSort] = useState<SortState>(BY_NAME);
 
   const [modal, setModal] = useState<ModalState>({
     isOpen: false,
@@ -568,10 +560,9 @@ export default function QuotationsConfigPage() {
       else if (currentSort.direction === "desc") newDirection = null;
     }
 
-    setSortState({
-      column: newDirection ? column : null,
-      direction: newDirection,
-    });
+    // A third click clears the column; the list goes back to alphabetical
+    // rather than to no order at all.
+    setSortState(newDirection ? { column, direction: newDirection } : BY_NAME);
   };
 
   // Sort indicator component
