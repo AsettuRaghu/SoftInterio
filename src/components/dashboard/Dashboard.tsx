@@ -317,7 +317,7 @@ export function Dashboard() {
 
   if (permsLoading || loading) {
     return (
-      <div className="-m-3 min-h-[calc(100vh-80px)] bg-linear-to-br from-indigo-50 via-white to-amber-50 p-6 space-y-5 animate-pulse">
+      <div className="-m-3 min-h-[calc(100vh-64px)] bg-linear-to-br from-indigo-50 via-white to-amber-50 p-6 space-y-5 animate-pulse">
         <div className="h-24 bg-white/60 rounded-xl" />
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           <div className="xl:col-span-2 h-72 bg-white/60 rounded-xl" />
@@ -333,7 +333,7 @@ export function Dashboard() {
     // The whole page is the canvas: a soft gradient with a few colour washes
     // behind everything, cards sitting on it as frosted glass. The shell
     // pads content by p-3, so the wrapper pulls out to the edges first.
-    <div className="relative -m-3 min-h-[calc(100vh-80px)] overflow-hidden bg-linear-to-br from-indigo-50 via-white to-amber-50">
+    <div className="relative -m-3 min-h-[calc(100vh-64px)] overflow-hidden bg-linear-to-br from-indigo-50 via-white to-amber-50">
       <div className="pointer-events-none absolute -top-24 -left-24 w-[28rem] h-[28rem] rounded-full bg-violet-200/50 blur-3xl" />
       <div className="pointer-events-none absolute top-40 -right-32 w-[30rem] h-[30rem] rounded-full bg-sky-200/50 blur-3xl" />
       <div className="pointer-events-none absolute bottom-0 left-1/3 w-[26rem] h-[26rem] rounded-full bg-amber-200/50 blur-3xl" />

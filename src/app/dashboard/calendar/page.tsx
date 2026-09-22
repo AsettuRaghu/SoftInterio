@@ -337,10 +337,10 @@ export default function CalendarPage() {
 
   return (
     // The whole calendar in the viewable area, no page scroll: the shell
-    // leaves 100vh minus its top bar (pt-20) and padding (p-3 above and
+    // leaves 100vh minus its top bar (64px, pt-16) and padding (p-3 above and
     // below), and this fills exactly that. No page header - the month name
     // is the title, and the toolbar carries the one action.
-    <div className="h-[calc(100vh-104px)] flex flex-col min-h-0">
+    <div className="h-[calc(100vh-88px)] flex flex-col min-h-0">
       {error && (
         <div className="shrink-0 mb-2 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">{error}</div>
       )}

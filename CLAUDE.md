@@ -751,9 +751,13 @@ Manager, Stock Manager; delete: Owner, Admin, Senior Designer).
 
 ### Calendar and Documents fill the viewport, and have no page header
 
-Both use `h-[calc(100vh-104px)]` - the shell's `pt-20` plus its `p-3` above
-and below - and let only their own inner areas scroll (2026-09-17: "we do
-not need the header section here"). The calendar's month is six equal rows
+Both use `h-[calc(100vh-88px)]` - the 64px header the shell's `pt-16`
+clears, plus its `p-3` above and below - and let only their own inner
+areas scroll (2026-09-17: "we do not need the header section here"). The
+shell was `pt-20` over `p-3` over `PageLayout`'s own `p-4` until
+2026-09-22 - 44px above and 28px beside every page ("larger gap ... reduce
+that gap"); now the shell's `p-3` is the only gap and `PageLayout` adds
+none. The calendar's month is six equal rows
 of that height; its week columns and side panels scroll on their own. The
 documents page's facet rail carries the title and count. Change the shell's
 padding and this constant has to follow.

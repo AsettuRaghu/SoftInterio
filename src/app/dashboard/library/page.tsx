@@ -249,7 +249,7 @@ export default function LibraryPage() {
     cn("w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors", on ? "bg-blue-50 text-blue-800 font-medium" : "text-slate-600 hover:bg-slate-100");
 
   return (
-    <div className={cn("h-[calc(100vh-104px)] flex flex-col min-h-0", customerView && "bg-white")}>
+    <div className={cn("h-[calc(100vh-88px)] flex flex-col min-h-0", customerView && "bg-white")}>
       <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[230px_1fr] gap-6">
         {/* Facet rail */}
         {!customerView && (

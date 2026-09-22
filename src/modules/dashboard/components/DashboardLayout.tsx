@@ -31,7 +31,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           {/* Content */}
           <main
             className={cn(
-              "flex-1 min-h-screen pt-20 transition-all duration-300 ease-in-out",
+              // Right under the 64px header; the p-3 below is the only gap the
+              // content gets on every side. It was pt-20 over p-3 over the
+              // page's own p-4 - 44px above and 28px beside every page.
+              "flex-1 min-h-screen pt-16 transition-all duration-300 ease-in-out",
               isSidebarExpanded ? "ml-60" : "ml-14",
             )}
           >

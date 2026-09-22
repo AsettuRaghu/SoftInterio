@@ -476,7 +476,7 @@ export default function DocumentsPage() {
     // column, the toolbar carries the one action, and only the file area
     // scrolls. Same height arithmetic as the calendar (100vh minus the
     // shell's top bar and padding).
-    <div className="h-[calc(100vh-104px)] flex flex-col min-h-0">
+    <div className="h-[calc(100vh-88px)] flex flex-col min-h-0">
       {isLoading && documents.length === 0 && (
         <div className="shrink-0 text-xs text-slate-400 px-1 pb-2">Loading documents…</div>
       )}
