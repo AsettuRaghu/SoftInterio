@@ -1,11 +1,10 @@
 "use client";
 
 import React from "react";
+import { lineAmount } from "@/lib/quotations/line-amount";
 import {
   BuilderSpace,
   formatCurrency,
-  calculateSqft,
-  convertToFeet,
 } from "./types";
 
 interface BuilderSidebarProps {
@@ -85,32 +84,8 @@ export function BuilderSidebar({
     costedRevenue > 0 ? (totalMargin / costedRevenue) * 100 : null;
 
   // Calculate space totals for quotation mode
-  const getSpaceTotal = (space: BuilderSpace) => {
-    return space.components.reduce((spaceSum, comp) => {
-      return (
-        spaceSum +
-        comp.lineItems.reduce((compSum, item) => {
-          const measureType = getMeasurementType(item.unitCode);
-          const unit = item.measurementUnit || "mm";
-
-          switch (measureType) {
-            case "area":
-              const sqft = calculateSqft(item.length, item.width, unit);
-              return compSum + sqft * item.rate;
-            case "length":
-              const lengthInFeet = convertToFeet(item.length || 0, unit);
-              return compSum + lengthInFeet * item.rate;
-            case "quantity":
-              return compSum + (item.quantity || 0) * item.rate;
-            case "fixed":
-              return compSum + item.rate;
-            default:
-              return compSum + (item.quantity || 0) * item.rate;
-          }
-        }, 0)
-      );
-    }, 0);
-  };
+  const getSpaceTotal = (space: BuilderSpace) =>
+    space.components.reduce((sum, comp) => sum + comp.lineItems.reduce((c, i) => c + lineAmount(i), 0), 0);
 
   if (mode === "template") {
     return (
@@ -370,16 +345,3 @@ export function BuilderSidebar({
 }
 
 // Helper function
-function getMeasurementType(unitCode: string): string {
-  const mapping: Record<string, string> = {
-    sqft: "area",
-    rft: "length",
-    nos: "quantity",
-    set: "quantity",
-    lot: "fixed",
-    lumpsum: "fixed",
-    kg: "quantity",
-    ltr: "quantity",
-  };
-  return mapping[unitCode?.toLowerCase()] || "quantity";
-}

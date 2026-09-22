@@ -1,13 +1,12 @@
 "use client";
 
+import { lineAmount, lineSqft } from "@/lib/quotations/line-amount";
 import React from "react";
 import {
   BuilderComponent,
   LineItem,
   MeasurementUnit,
   MEASUREMENT_UNITS,
-  calculateSqft,
-  convertToFeet,
   getMeasurementInfo,
 } from "./types";
 import { LineItemRow } from "./LineItemRow";
@@ -83,38 +82,13 @@ export function ComponentCard({
   ).length;
 
   // Calculate component total and sqft
+  // One arithmetic for every total - see lib/quotations/line-amount.
   const calculateTotalAndSqft = () => {
     if (mode === "template") return { total: 0, sqft: 0 };
-
-    let totalAmount = 0;
-    let totalSqft = 0;
-
-    component.lineItems.forEach((item) => {
-      const measureType = getMeasurementType(item.unitCode);
-      const unit = item.measurementUnit || "mm";
-
-      switch (measureType) {
-        case "area":
-          const sqft = calculateSqft(item.length, item.width, unit);
-          totalAmount += sqft * item.rate;
-          totalSqft += sqft; // Accumulate sqft
-          break;
-        case "length":
-          const lengthInFeet = convertToFeet(item.length || 0, unit);
-          totalAmount += lengthInFeet * item.rate;
-          break;
-        case "quantity":
-          totalAmount += (item.quantity || 0) * item.rate;
-          break;
-        case "fixed":
-          totalAmount += item.rate;
-          break;
-        default:
-          totalAmount += (item.quantity || 0) * item.rate;
-      }
-    });
-
-    return { total: totalAmount, sqft: totalSqft };
+    return {
+      total: component.lineItems.reduce((sum, i) => sum + lineAmount(i), 0),
+      sqft: component.lineItems.reduce((sum, i) => sum + lineSqft(i), 0),
+    };
   };
 
   const { total, sqft: totalSqft } = calculateTotalAndSqft();
@@ -603,16 +577,3 @@ export function ComponentCard({
 }
 
 // Helper function
-function getMeasurementType(unitCode: string): string {
-  const mapping: Record<string, string> = {
-    sqft: "area",
-    rft: "length",
-    nos: "quantity",
-    set: "quantity",
-    lot: "fixed",
-    lumpsum: "fixed",
-    kg: "quantity",
-    ltr: "quantity",
-  };
-  return mapping[unitCode?.toLowerCase()] || "quantity";
-}

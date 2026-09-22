@@ -1,5 +1,6 @@
 "use client";
 
+import { lineAmount } from "@/lib/quotations/line-amount";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -14,8 +15,6 @@ import {
   generateId,
   formatCurrency,
   getMeasurementInfo,
-  calculateSqft,
-  convertToFeet,
   MeasurementUnit,
 } from "@/components/quotations";
 import { AddSpaceModal } from "@/components/quotations/AddSpaceModal";
@@ -327,7 +326,7 @@ export function QuotationBuilder({
     viewSpaces.forEach((space) => {
       space.components.forEach((comp) => {
         comp.lineItems.forEach((item) => {
-          subtotal += calculateItemAmount(item);
+          subtotal += lineAmount(item);
         });
       });
     });
@@ -336,30 +335,7 @@ export function QuotationBuilder({
     return { subtotal, taxAmount, total };
   }, [viewSpaces, taxPercent]);
 
-  // Calculate single item amount
-  const calculateItemAmount = (item: LineItem): number => {
-    // A line priced per one of the component's quantities follows that
-    // quantity; deriveQuantities put it on the line.
-    if (item.quantityKey) return (item.derivedQuantity ?? 0) * item.rate;
-    const measureType = getMeasurementInfo(item.unitCode).type;
-    const unit = item.measurementUnit || "mm"; // Use stored unit, default to mm for legacy data
-    switch (measureType) {
-      case "area":
-        // Use calculateSqft to properly convert from selected unit to sqft
-        const sqft = calculateSqft(item.length, item.width, unit);
-        return sqft * item.rate;
-      case "length":
-        // Convert length to feet then multiply by rate
-        const lengthInFeet = convertToFeet(item.length || 0, unit);
-        return lengthInFeet * item.rate;
-      case "quantity":
-        return (item.quantity || 0) * item.rate;
-      case "fixed":
-        return item.rate;
-      default:
-        return (item.quantity || 0) * item.rate;
-    }
-  };
+  // One arithmetic for every total - see lib/quotations/line-amount.
 
   // Space operations
   const addSpace = (spaceType: SpaceType) => {
@@ -1390,7 +1366,7 @@ export function QuotationBuilder({
               return (
                 spaceTotal +
                 comp.lineItems.reduce((compTotal, item) => {
-                  return compTotal + calculateItemAmount(item);
+                  return compTotal + lineAmount(item);
                 }, 0)
               );
             }, 0)
@@ -1446,7 +1422,7 @@ export function QuotationBuilder({
             },
             lineItems: comp.lineItems.map((item, itemIndex) => {
               // Calculate amount on frontend based on measurement unit
-              const calculatedAmount = calculateItemAmount(item);
+              const calculatedAmount = lineAmount(item);
 
               return {
                 id: item.id.startsWith("new-") ? undefined : item.id,
@@ -2455,7 +2431,7 @@ export function QuotationBuilder({
         {/* Sidebar */}
         <BuilderSidebar
           mode="quotation"
-          spaces={spaces}
+          spaces={viewSpaces}
           subtotal={totals.subtotal}
           taxAmount={totals.taxAmount}
           total={totals.total}

@@ -2241,6 +2241,24 @@ Approving still asks for no confirmation, on either path. It supersedes another
 quotation silently, so one is arguable - but it belongs on both the detail page
 and the builder or not at all.
 
+### One line, one arithmetic
+
+`lib/quotations/line-amount.ts` `lineAmount()` is the only place a line's
+money is worked out - the builder's totals, the space and component cards,
+the sidebar, the row and Reprice all call it. **Five copies existed and
+four ignored `quantityKey`**, so every line priced per a costing rule
+counted as zero in a component total, a space total and the sidebar: the
+first real quotation read ₹52 lakh in the header and ~₹14 lakh down the
+side, the same document disagreeing with itself (2026-09-22). `lineSqft()`
+is the same for area.
+
+A rule-priced line needs `deriveQuantities` to have run over its space, or
+its derived quantity is missing and it is worth **zero** - deliberately,
+because falling back to the stored amount would hide that the rule had not
+been applied. The builder passes `viewSpaces` everywhere for this reason,
+and the quotation summary page derives too (it rendered the cards from raw
+rows until the same day).
+
 ### A quotation has one rendering, and `readOnly` decides if you may change it
 
 The summary page (`/dashboard/quotations/[id]`) used to hand-write its own

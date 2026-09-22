@@ -6,6 +6,9 @@ import { PrintQuotationModal } from "@/components/quotations/PrintQuotationModal
 import { SpaceCard } from "@/components/quotations/SpaceCard";
 import { ScopeDriftNotice } from "@/components/quotations/ScopeDriftNotice";
 import { toBuilderSpaces } from "@/lib/quotations/to-builder-spaces";
+import { deriveQuantities } from "@/lib/costing/derive-quantities";
+import { fetchConfigOnce } from "@/lib/quotations/config-cache";
+import type { ComponentType } from "@/types/quotations";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { QuotationBuilder } from "@/components/quotations/QuotationBuilder";
@@ -361,9 +364,18 @@ export default function QuotationDetailPage() {
    * Expansion is this page's own - `SpaceCard` reads it off each node, so the
    * existing Expand all / Collapse all keeps working untouched.
    */
+  // Through deriveQuantities like the builder's, or every rule-priced line
+  // reads as zero in a component and space total.
+  const [componentTypes, setComponentTypes] = useState<ComponentType[]>([]);
+  useEffect(() => {
+    fetchConfigOnce<{ data?: ComponentType[] }>("/api/quotations/config/component-types")
+      .then((r) => setComponentTypes(r?.data ?? []))
+      .catch(() => {});
+  }, []);
+
   const documentSpaces = useMemo(
     () =>
-      toBuilderSpaces(spaces).map((space) => ({
+      deriveQuantities(toBuilderSpaces(spaces), componentTypes).map((space) => ({
         ...space,
         expanded: expandedSpaces.has(space.id),
         components: space.components.map((component) => ({
@@ -371,7 +383,7 @@ export default function QuotationDetailPage() {
           expanded: expandedComponents.has(component.id),
         })),
       })),
-    [spaces, expandedSpaces, expandedComponents]
+    [spaces, componentTypes, expandedSpaces, expandedComponents]
   );
 
   /**
