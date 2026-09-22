@@ -29,6 +29,7 @@ import { uiLogger } from "@/lib/logger";
 import { invalidateQuotationConfig } from "@/lib/quotations/config-cache";
 import { CostItemPicturesDialog } from "@/components/catalogue/CostItemPictures";
 import { PresetEditor } from "@/components/catalogue/PresetEditor";
+import { SearchSelect } from "@/components/ui/SearchSelect";
 import type { ScopePreset } from "@/types/property-scope";
 
 interface SpaceType {
@@ -1614,35 +1615,25 @@ export default function QuotationsConfigPage() {
               </div>
 
               {activeTab === "components" && (
-                <select
+                <SearchSelect
                   value={spaceFilter}
-                  onChange={(e) => setSpaceFilter(e.target.value)}
-                  className="px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-                >
-                  <option value="all">All spaces</option>
-                  {spaces
-                    .filter((sp) => sp.is_active)
-                    .map((sp) => (
-                      <option key={sp.id} value={sp.id}>
-                        {sp.name}
-                      </option>
-                    ))}
-                </select>
+                  onChange={setSpaceFilter}
+                  emptyLabel="All spaces"
+                  options={spaces.filter((sp) => sp.is_active).map((sp) => ({ value: sp.id, label: sp.name }))}
+                  className="w-44"
+                  buttonClassName="px-2.5 py-1.5 text-xs"
+                />
               )}
 
               {activeTab === "costItems" && (
-                <select
+                <SearchSelect
                   value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-                >
-                  <option value="all">All categories</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setCategoryFilter}
+                  emptyLabel="All categories"
+                  options={categories.map((c) => ({ value: c.id, label: c.name }))}
+                  className="w-48"
+                  buttonClassName="px-2.5 py-1.5 text-xs"
+                />
               )}
 
               {/* Search */}
@@ -1800,20 +1791,12 @@ export default function QuotationsConfigPage() {
                     <label className="block text-xs font-medium text-slate-700 mb-1.5">
                       Category
                     </label>
-                    <select
+                    <SearchSelect
                       value={formCategoryId}
-                      onChange={(e) => setFormCategoryId(e.target.value)}
-                      className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-                    >
-                      <option value="">No Category</option>
-                      {categories
-                        .filter((c) => c.is_active)
-                        .map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                    </select>
+                      onChange={setFormCategoryId}
+                      emptyLabel="No Category"
+                      options={categories.filter((c) => c.is_active).map((c) => ({ value: c.id, label: c.name }))}
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1.5">
