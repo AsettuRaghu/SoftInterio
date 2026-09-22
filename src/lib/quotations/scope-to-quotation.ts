@@ -85,6 +85,8 @@ export interface ScopeCopyResult {
   already: number;
   /** What was (or, dry, would be) added, by name. */
   added: { spaces: string[]; components: string[]; lines: string[] };
+  /** Lines that priced to nothing - a measurement the rule needs is missing. */
+  unsized: string[];
 }
 
 const OURS = (owner: string | null | undefined) => !owner || owner === "us";
@@ -97,7 +99,7 @@ export async function copyScopeToQuotation(
   projectId: string | null,
   options: ScopeCopyOptions = {},
 ): Promise<ScopeCopyResult> {
-  const empty: ScopeCopyResult = { spaces: 0, components: 0, lines: 0, skipped: 0, already: 0, added: { spaces: [], components: [], lines: [] } };
+  const empty: ScopeCopyResult = { spaces: 0, components: 0, lines: 0, skipped: 0, already: 0, added: { spaces: [], components: [], lines: [] }, unsized: [] };
   const dry = !!options.dryRun;
   const preference = options.preference ?? "p1";
 
@@ -177,7 +179,7 @@ export async function copyScopeToQuotation(
       }
     }
 
-    const result: ScopeCopyResult = { ...empty, added: { spaces: [], components: [], lines: [] } };
+    const result: ScopeCopyResult = { ...empty, added: { spaces: [], components: [], lines: [] }, unsized: [] };
     const createdSpaces = new Set<string>();
     const createdComps = new Set<string>();
     const spaceRows = scope.filter((r) => !r.component_type_id && !r.parent_id);
@@ -388,10 +390,16 @@ export async function copyScopeToQuotation(
         if (r.id === null && !(derived && derived > 0)) continue;
         // A per-piece item carries how many were chosen (two wooden drawers).
         const count = kind === "quantity" ? Number(r.choice_quantity) || 1 : 1;
+        // The quantity a line carries must be the one its amount was worked
+        // out from. A face-priced line stored 1 while the amount came from
+        // the component's size, so "1 sqft × 4000 = 488,251" sat in the
+        // first real quotation - the builder recomputed it on screen and
+        // nothing else could (2026-09-22).
+        const faceQty = kind === "area" ? calculateSqft(target.width, target.height, unit) : kind === "length" ? convertToFeet(target.width || 0, unit) : null;
+        const quantity = ruled ? Math.round((derived ?? 0) * 100) / 100 : faceQty != null ? Math.round(faceQty * 100) / 100 : count;
         const amount = ruled
           ? (derived ?? 0) * rate
-          : kind === "area" ? calculateSqft(target.width, target.height, unit) * rate
-          : kind === "length" ? convertToFeet(target.width || 0, unit) * rate
+          : faceQty != null ? faceQty * rate
           : kind === "fixed" ? rate
           : count * rate;
         lineRows.push({
@@ -401,7 +409,7 @@ export async function copyScopeToQuotation(
           name: ci.name,
           length: !ruled && (kind === "area" || kind === "length") ? target.width : null,
           width: !ruled && kind === "area" ? target.height : null,
-          quantity: ruled ? Math.round((derived ?? 0) * 100) / 100 : count,
+          quantity,
           unit_code: ci.unit_code,
           rate,
           amount: Math.round(amount * 100) / 100,
@@ -413,6 +421,10 @@ export async function copyScopeToQuotation(
         });
         target.lines.add(ci.id);
         result.added.lines.push(`${ci.name} (${scope.find((x) => x.id === r.parent_id)?.name ?? ""})`);
+        // A chosen item that prices to nothing is almost always a
+        // measurement nobody typed - hinges with no shutter count. The line
+        // is kept, so the choice is not lost, and reported.
+        if (!(Number(quantity) > 0)) result.unsized.push(`${ci.name} (${scope.find((x) => x.id === r.parent_id)?.name ?? ""})`);
       }
       if (dry) {
         result.lines = lineRows.length;

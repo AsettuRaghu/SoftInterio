@@ -45,5 +45,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       : `Brought in ${result.spaces} space${result.spaces === 1 ? "" : "s"}, ${result.components} component${result.components === 1 ? "" : "s"} and ${result.lines} chosen item${result.lines === 1 ? "" : "s"}${
           result.skipped ? `; ${result.skipped} left out as not ours` : ""
         }.`;
-  return NextResponse.json({ success: true, result, message });
+  const note = result.unsized.length
+    ? ` ${result.unsized.length} line${result.unsized.length === 1 ? "" : "s"} priced at nothing - a measurement is missing: ${result.unsized.slice(0, 3).join(", ")}${result.unsized.length > 3 ? "…" : ""}.`
+    : "";
+  return NextResponse.json({ success: true, result, message: message + note });
 }

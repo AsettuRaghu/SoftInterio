@@ -545,7 +545,7 @@ export async function POST(request: NextRequest) {
     // Otherwise, build it from the property's Spaces if asked to. Templates
     // win when both are given: a template is a deliberate choice of contents,
     // while scope is the fallback structure.
-    let generated: ScopeCopyResult = { spaces: 0, components: 0, lines: 0, skipped: 0, already: 0, added: { spaces: [], components: [], lines: [] } };
+    let generated: ScopeCopyResult = { spaces: 0, components: 0, lines: 0, skipped: 0, already: 0, added: { spaces: [], components: [], lines: [] }, unsized: [] };
     if (!template_id && from_scope && newQuotation) {
       let pricedOn: string[] | undefined;
       if (variation) {
