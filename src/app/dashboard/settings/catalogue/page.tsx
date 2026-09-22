@@ -17,6 +17,8 @@ import {
   RectangleStackIcon,
   CalculatorIcon,
   PhotoIcon,
+  EyeIcon,
+  EyeSlashIcon,
 } from "@heroicons/react/24/outline";
 import {
   SettingsPageLayout,
@@ -26,7 +28,8 @@ import {
 import { uiLogger } from "@/lib/logger";
 import { invalidateQuotationConfig } from "@/lib/quotations/config-cache";
 import { CostItemPicturesDialog } from "@/components/catalogue/CostItemPictures";
-import { ScopePresetsPanel } from "@/components/catalogue/ScopePresetsPanel";
+import { PresetEditor } from "@/components/catalogue/PresetEditor";
+import type { ScopePreset } from "@/types/property-scope";
 
 interface SpaceType {
   id: string;
@@ -44,6 +47,8 @@ interface ComponentType {
   created_at: string;
   /** The tenant's costing rule; see lib/costing. */
   config_schema?: Record<string, unknown> | null;
+  /** Space types it declares it belongs in; empty = any. */
+  applicable_space_types?: string[] | null;
 }
 
 interface CostItemCategory {
@@ -93,16 +98,16 @@ interface ModalState {
 
 interface DeleteModalState {
   isOpen: boolean;
-  item: SpaceType | ComponentType | CostItemCategory | QuotationCostItem | null;
+  item: SpaceType | ComponentType | CostItemCategory | QuotationCostItem | ScopePreset | null;
   type: TabType;
 }
 
 export default function QuotationsConfigPage() {
   const [activeTab, setActiveTab] = useState<TabType>("spaces");
-  // Presets live in their own panel; the header's New button reaches it
-  // through a counter, and it reports its count for the tab badge.
-  const [presetCount, setPresetCount] = useState(0);
-  const [presetNew, setPresetNew] = useState(0);
+  // Presets are a table like the other four; only their editor is their
+  // own, because a preset is a list of spaces × counts, not a form of fields.
+  const [presets, setPresets] = useState<ScopePreset[]>([]);
+  const [presetEditing, setPresetEditing] = useState<ScopePreset | "new" | null>(null);
 
   // Arrive on a tab by URL - the old /catalogue/presets address forwards here.
   useEffect(() => {
@@ -137,6 +142,7 @@ export default function QuotationsConfigPage() {
   const [componentsSort, setComponentsSort] = useState<SortState>(BY_NAME);
   const [categoriesSort, setCategoriesSort] = useState<SortState>(BY_NAME);
   const [costItemsSort, setCostItemsSort] = useState<SortState>(BY_NAME);
+  const [presetsSort, setPresetsSort] = useState<SortState>(BY_NAME);
 
   const [modal, setModal] = useState<ModalState>({
     isOpen: false,
@@ -246,6 +252,18 @@ export default function QuotationsConfigPage() {
     }
   }, []);
 
+  const fetchPresets = useCallback(async () => {
+    try {
+      const res = await fetch("/api/scope-presets?all=1");
+      if (!res.ok) throw new Error("Failed to fetch presets");
+      const data = await res.json();
+      setPresets(data.data || []);
+    } catch (err) {
+      uiLogger.error("Error fetching presets", { error: err });
+      setError("Failed to load presets");
+    }
+  }, []);
+
   const fetchAllData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -255,10 +273,11 @@ export default function QuotationsConfigPage() {
       fetchComponents(),
       fetchCategories(),
       fetchCostItems(),
+      fetchPresets(),
     ]);
     setIsLoading(false);
     uiLogger.info("Quotation configuration data loaded");
-  }, [fetchSpaces, fetchComponents, fetchCategories, fetchCostItems]);
+  }, [fetchSpaces, fetchComponents, fetchCategories, fetchCostItems, fetchPresets]);
 
   useEffect(() => {
     fetchAllData();
@@ -287,6 +306,13 @@ export default function QuotationsConfigPage() {
       matchesStatus(s.is_active) &&
       (s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         !!s.description?.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const filteredPresets = presets.filter(
+    (p) =>
+      matchesStatus(p.is_active) &&
+      (p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        !!p.description?.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const filteredComponents = components.filter((c) => {
@@ -488,6 +514,16 @@ export default function QuotationsConfigPage() {
   };
 
   // Sorted and filtered data
+  const sortPresets = (data: ScopePreset[], sort: SortState): ScopePreset[] => {
+    if (!sort.column || !sort.direction) return data;
+    return [...data].sort((a, b) => {
+      const pick = (x: ScopePreset) => (sort.column === "name" ? x.name : sort.column === "description" ? x.description ?? "" : sort.column === "is_active" ? String(x.is_active) : "");
+      const cmp = pick(a).localeCompare(pick(b));
+      return sort.direction === "asc" ? cmp : -cmp;
+    });
+  };
+
+  const sortedPresets = useMemo(() => sortPresets(filteredPresets, presetsSort), [filteredPresets, presetsSort]);
   const sortedSpaces = useMemo(
     () => sortSpaces(filteredSpaces, spacesSort),
     [filteredSpaces, spacesSort]
@@ -519,6 +555,8 @@ export default function QuotationsConfigPage() {
       ? sortedComponents
       : activeTab === "categories"
       ? sortedCategories
+      : activeTab === "presets"
+      ? sortedPresets
       : sortedCostItems;
 
   const totalPages = Math.max(1, Math.ceil(activeRows.length / pageSize));
@@ -543,6 +581,7 @@ export default function QuotationsConfigPage() {
       if (activeTab === "spaces") return spacesSort;
       if (activeTab === "components") return componentsSort;
       if (activeTab === "categories") return categoriesSort;
+      if (activeTab === "presets") return presetsSort;
       return costItemsSort;
     };
 
@@ -550,6 +589,7 @@ export default function QuotationsConfigPage() {
       if (activeTab === "spaces") setSpacesSort(state);
       else if (activeTab === "components") setComponentsSort(state);
       else if (activeTab === "categories") setCategoriesSort(state);
+      else if (activeTab === "presets") setPresetsSort(state);
       else setCostItemsSort(state);
     };
     const currentSort = getSortState();
@@ -596,7 +636,7 @@ export default function QuotationsConfigPage() {
 
   const openAddModal = () => {
     if (activeTab === "presets") {
-      setPresetNew((n) => n + 1);
+      setPresetEditing("new");
       return;
     }
     setFormName("");
@@ -764,6 +804,8 @@ export default function QuotationsConfigPage() {
         endpoint = `/api/settings/quotation-cost-item-categories/${deleteModal.item.id}`;
       else if (deleteModal.type === "costItems")
         endpoint = `/api/settings/quotation-cost-items/${deleteModal.item.id}`;
+      else if (deleteModal.type === "presets")
+        endpoint = `/api/scope-presets/${deleteModal.item.id}`;
 
       uiLogger.info("Deleting item", {
         type: deleteModal.type,
@@ -775,7 +817,8 @@ export default function QuotationsConfigPage() {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         ...(deleteModal.type !== "categories" &&
-        deleteModal.type !== "costItems"
+        deleteModal.type !== "costItems" &&
+        deleteModal.type !== "presets"
           ? { body: JSON.stringify({ id: deleteModal.item.id }) }
           : {}),
       });
@@ -797,6 +840,7 @@ export default function QuotationsConfigPage() {
       });
       closeDeleteModal();
       if (deleteModal.type === "spaces") await fetchSpaces();
+      else if (deleteModal.type === "presets") await fetchPresets();
       else if (deleteModal.type === "components") await fetchComponents();
       else if (deleteModal.type === "categories") await fetchCategories();
       else if (deleteModal.type === "costItems") await fetchCostItems();
@@ -835,6 +879,7 @@ export default function QuotationsConfigPage() {
     if (deleteModal.type === "spaces") return "space";
     if (deleteModal.type === "components") return "component";
     if (deleteModal.type === "categories") return "category";
+    if (deleteModal.type === "presets") return "preset";
     return "cost item";
   };
 
@@ -867,7 +912,7 @@ export default function QuotationsConfigPage() {
       id: "presets" as TabType,
       label: "Presets",
       icon: RectangleStackIcon,
-      count: presetCount,
+      count: presets.length,
     },
   ];
 
@@ -890,7 +935,9 @@ export default function QuotationsConfigPage() {
         ? sortedComponents
         : activeTab === "categories"
         ? sortedCategories
-        : sortedCostItems;
+        : activeTab === "presets"
+          ? sortedPresets
+          : sortedCostItems;
 
     if (currentData.length === 0) {
       return (
@@ -913,6 +960,96 @@ export default function QuotationsConfigPage() {
             <PlusIcon className="w-3.5 h-3.5" />
             {getAddButtonLabel()}
           </button>
+        </div>
+      );
+    }
+
+    if (activeTab === "presets") {
+      const spaceNameById = new Map(spaces.map((sp) => [sp.id, sp.name]));
+      const togglePreset = async (p: ScopePreset) => {
+        const res = await fetch(`/api/scope-presets/${p.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_active: !p.is_active }),
+        });
+        if (!res.ok) setError("Could not save the preset");
+        invalidateQuotationConfig();
+        await fetchPresets();
+      };
+      const th = (label: string, column: SortColumn) => (
+        <th onClick={() => handleSort(column)} className="px-4 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors select-none">
+          <span className="flex items-center">
+            {label}
+            <SortIndicator column={column} sortState={presetsSort} />
+          </span>
+        </th>
+      );
+      return (
+        <div className="flex-1 overflow-auto min-h-0">
+          <table className="w-full table-auto">
+            <thead className="sticky top-0 bg-slate-50 z-10">
+              <tr className="border-b border-slate-200">
+                {th("Name", "name")}
+                {th("Description", "description")}
+                <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Spaces</th>
+                {th("Status", "is_active")}
+                <th className="px-4 py-2 text-right text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginate(sortedPresets).map((p) => (
+                <tr key={p.id} className="group border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+                  <td className="px-4 py-2.5 text-xs font-medium text-slate-800">{p.name}</td>
+                  <td className="px-4 py-2.5 text-xs text-slate-600">{p.description || "-"}</td>
+                  <td className="px-4 py-2.5 text-xs text-slate-600">
+                    {p.items.length === 0
+                      ? "-"
+                      : p.items.map((it, i) => (
+                          <span key={i}>
+                            {i > 0 && <span className="text-slate-300"> · </span>}
+                            {spaceNameById.get(it.space_type_id) ?? "Unknown space"}
+                            {it.count > 1 && <span className="text-slate-400"> ×{it.count}</span>}
+                          </span>
+                        ))}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${p.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                      {p.is_active ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => void togglePreset(p)}
+                        title={p.is_active ? "Hide from sellers" : "Show to sellers"}
+                        className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-white text-slate-500 border-slate-200 hover:bg-slate-50 transition-all"
+                      >
+                        {p.is_active ? <EyeSlashIcon className="w-3.5 h-3.5" /> : <EyeIcon className="w-3.5 h-3.5" />}
+                      </button>
+                      <button
+                        onClick={() => setPresetEditing(p)}
+                        title="Edit"
+                        className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-all"
+                      >
+                        <PencilSquareIcon className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setDeleteError(null);
+                          setNotice(null);
+                          setDeleteModal({ isOpen: true, item: p, type: "presets" });
+                        }}
+                        title="Delete"
+                        className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 transition-all"
+                      >
+                        <TrashIcon className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       );
     }
@@ -1452,7 +1589,6 @@ export default function QuotationsConfigPage() {
 
               {/* Status applies to every table tab; the pills match the notes
                   and tasks tables so the whole app filters the same way. */}
-              {activeTab !== "presets" && (
               <div className="flex items-center gap-3">
               <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-lg shrink-0">
                 {(["all", "active", "inactive"] as const).map((key) => {
@@ -1524,7 +1660,6 @@ export default function QuotationsConfigPage() {
                 />
               </div>
               </div>
-              )}
             </div>
           </div>
 
@@ -1553,13 +1688,13 @@ export default function QuotationsConfigPage() {
             </div>
           )}
 
-          {/* Table Content - or the presets panel, which is not a table */}
-          {activeTab === "presets" ? <ScopePresetsPanel newTrigger={presetNew} onCount={setPresetCount} /> : renderTable()}
+          {/* Table Content */}
+          {renderTable()}
 
           {/* Pagination, in the same shape as the notes, tasks, calendar and
               timeline tables. Shown whenever there are rows, so a short list
               still reports its total and the page size stays reachable. */}
-          {activeTab !== "presets" && activeRows.length > 0 && (
+          {activeRows.length > 0 && (
             <div className="border-t border-slate-200 px-4 py-2 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-slate-500">
@@ -1840,6 +1975,19 @@ export default function QuotationsConfigPage() {
 
       {/* Delete Confirmation Modal */}
       {picturesOf && <CostItemPicturesDialog item={picturesOf} onClose={() => setPicturesOf(null)} />}
+      {presetEditing && (
+        <PresetEditor
+          preset={presetEditing === "new" ? null : presetEditing}
+          spaceTypes={spaces.filter((sp) => sp.is_active).map((sp) => ({ id: sp.id, name: sp.name }))}
+          componentTypes={components.filter((c) => c.is_active).map((c) => ({ id: c.id, name: c.name, applicable_space_types: c.applicable_space_types ?? null }))}
+          onClose={() => setPresetEditing(null)}
+          onSaved={async () => {
+            setPresetEditing(null);
+            invalidateQuotationConfig();
+            await fetchPresets();
+          }}
+        />
+      )}
       {deleteModal.isOpen && deleteModal.item && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div

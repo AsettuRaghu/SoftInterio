@@ -1,34 +1,19 @@
 "use client";
 
 /**
- * Presets, as a tab of the Catalogue: the curated starting points for a
- * scope. A preset is a name and a list of "space type × count", each
+ * The preset editor: a name and a list of "space type × count", each
  * optionally naming the components to put in every one of those spaces -
- * blank means "whatever declares it belongs there". Sellers pick one on an
- * empty scope and adjust; they cannot save one from a lead (decided
- * 2026-09-18, docs/plans/scope.md).
- *
- * It was a page of its own until 2026-09-22 ("can we have that behave just
- * like other tabs"); the Catalogue page hosts it now and owns the header's
- * New preset button, which reaches in through `newTrigger`.
+ * blank means "whatever declares it belongs there". Opened from the
+ * Presets tab of the Catalogue, which lists presets in the same table as
+ * the other tabs (2026-09-22). Sellers pick a preset on an empty scope and
+ * adjust; they cannot save one from a lead (docs/plans/scope.md).
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  PencilSquareIcon,
-  PlusIcon,
-  TrashIcon,
-  RectangleStackIcon,
-  XMarkIcon,
-  EyeSlashIcon,
-  EyeIcon,
-} from "@heroicons/react/24/outline";
+import React, { useState } from "react";
+import { PlusIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { Modal } from "@/components/ui/Modal";
-import { Toast } from "@/components/ui/Toast";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { buttonVariants } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
-import { fetchConfigOnce, invalidateQuotationConfig } from "@/lib/quotations/config-cache";
 import type { ScopePreset, ScopePresetItem } from "@/types/property-scope";
 
 interface TypeOption {
@@ -37,136 +22,7 @@ interface TypeOption {
   applicable_space_types?: string[] | null;
 }
 
-export function ScopePresetsPanel({ newTrigger = 0, onCount }: { newTrigger?: number; onCount?: (n: number) => void }) {
-  const { confirm, confirmDialog } = useConfirm();
-  const [presets, setPresets] = useState<ScopePreset[]>([]);
-  const [spaceTypes, setSpaceTypes] = useState<TypeOption[]>([]);
-  const [componentTypes, setComponentTypes] = useState<TypeOption[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<ScopePreset | "new" | null>(null);
-  const [notice, setNotice] = useState<{ message: string; variant: "success" | "error" } | null>(null);
-
-  const load = useCallback(async () => {
-    const [p, st, ct] = await Promise.all([
-      fetch("/api/scope-presets?all=1").then((r) => r.json()).catch(() => null),
-      fetchConfigOnce<{ data?: TypeOption[] }>("/api/quotations/config/space-types").catch(() => null),
-      fetchConfigOnce<{ data?: TypeOption[] }>("/api/quotations/config/component-types").catch(() => null),
-    ]);
-    if (p?.data) {
-      setPresets(p.data);
-      onCount?.(p.data.length);
-    }
-    if (st?.data) setSpaceTypes(st.data);
-    if (ct?.data) setComponentTypes(ct.data);
-    setLoading(false);
-  }, [onCount]);
-
-  useEffect(() => {
-    // setState happens after the fetches resolve; the rule cannot see through `load`.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load]);
-
-  // The Catalogue header's New preset button.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- a counter from the parent opens the editor
-    if (newTrigger > 0) setEditing("new");
-  }, [newTrigger]);
-
-  const spaceName = useMemo(() => new Map(spaceTypes.map((t) => [t.id, t.name])), [spaceTypes]);
-
-  const afterChange = async () => {
-    invalidateQuotationConfig();
-    await load();
-  };
-
-  const toggleActive = async (p: ScopePreset) => {
-    const res = await fetch(`/api/scope-presets/${p.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_active: !p.is_active }),
-    });
-    if (!res.ok) setNotice({ message: "Could not save", variant: "error" });
-    await afterChange();
-  };
-
-  const remove = async (p: ScopePreset) => {
-    if (!(await confirm({ title: `Delete "${p.name}"?`, message: "Scopes already started from it are untouched.", confirmLabel: "Delete", tone: "danger" }))) return;
-    const res = await fetch(`/api/scope-presets/${p.id}`, { method: "DELETE" });
-    if (!res.ok) setNotice({ message: "Could not delete", variant: "error" });
-    else setNotice({ message: "Preset deleted", variant: "success" });
-    await afterChange();
-  };
-
-  return (
-    <div className="flex-1 overflow-auto p-4">
-      <p className="text-xs text-slate-500 mb-4">One click lays down the usual spaces and their components. Sellers pick one on an empty scope and adjust from there.</p>
-      {loading ? (
-        <div className="h-40 rounded-lg bg-slate-100 animate-pulse" />
-      ) : presets.length === 0 ? (
-        <div className="rounded-lg border border-slate-200 bg-white px-6 py-14 text-center">
-          <RectangleStackIcon className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-          <p className="text-sm font-medium text-slate-700">No presets yet</p>
-          <p className="text-xs text-slate-500 mt-1">Start with the configurations you sell most - a 2 BHK, a kitchen on its own.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {presets.map((p) => (
-            <section key={p.id} className={cn("rounded-lg border bg-white", p.is_active ? "border-slate-200" : "border-slate-200 opacity-60")}>
-              <div className="px-4 py-3 border-b border-slate-100 flex items-start gap-2">
-                <div className="min-w-0 flex-1">
-                  <h2 className="text-sm font-semibold text-slate-900 truncate">{p.name}</h2>
-                  {p.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{p.description}</p>}
-                  {!p.is_active && <span className="inline-block mt-1 text-[10px] font-medium uppercase tracking-wider text-slate-400">Hidden</span>}
-                </div>
-                <button type="button" title={p.is_active ? "Hide from sellers" : "Show to sellers"} onClick={() => void toggleActive(p)} className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100">
-                  {p.is_active ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
-                </button>
-                <button type="button" title="Edit" onClick={() => setEditing(p)} className="p-1.5 rounded-md text-slate-400 hover:text-blue-700 hover:bg-blue-50">
-                  <PencilSquareIcon className="w-4 h-4" />
-                </button>
-                <button type="button" title="Delete" onClick={() => void remove(p)} className="p-1.5 rounded-md text-slate-400 hover:text-red-700 hover:bg-red-50">
-                  <TrashIcon className="w-4 h-4" />
-                </button>
-              </div>
-              <ul className="px-4 py-3 space-y-1">
-                {p.items.map((it, i) => (
-                  <li key={i} className="flex items-center justify-between text-sm">
-                    <span className="text-slate-700">
-                      {spaceName.get(it.space_type_id) ?? "Unknown space"}
-                      <span className="text-slate-400"> ×{it.count}</span>
-                    </span>
-                    <span className="text-[11px] text-slate-400">
-                      {it.component_type_ids ? `${it.component_type_ids.length} component${it.component_type_ids.length === 1 ? "" : "s"}` : "usual components"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
-        </div>
-      )}
-      <Toast message={notice?.message ?? null} variant={notice?.variant ?? "error"} onDismiss={() => setNotice(null)} />
-      {confirmDialog}
-
-      {editing && (
-        <PresetEditor
-          preset={editing === "new" ? null : editing}
-          spaceTypes={spaceTypes}
-          componentTypes={componentTypes}
-          onClose={() => setEditing(null)}
-          onSaved={async (msg) => {
-            setEditing(null);
-            setNotice({ message: msg, variant: "success" });
-            await afterChange();
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-function PresetEditor({
+export function PresetEditor({
   preset,
   spaceTypes,
   componentTypes,

@@ -156,7 +156,7 @@ lead or project it is viewed from, because the floor plan is an ordinary
 Document (category `floor_plan`) filed on that entity.
 
 **Presets** (`scope_presets`, Settings → Catalogue → Presets - a tab of
-the Catalogue page since 2026-09-22, `ScopePresetsPanel`; the old
+the Catalogue page since 2026-09-22, `PresetEditor` for the dialog; the old
 `/catalogue/presets` address forwards to `?tab=presets`) replaced the
 quick starts that were hard-coded by slug. A preset is spaces × counts,
 each optionally naming its components (null = whatever declares it belongs
