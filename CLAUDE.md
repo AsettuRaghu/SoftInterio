@@ -955,6 +955,17 @@ account of what and why is the Scope to Quotation Handbook artifact
   follow it. A business that quotes a kitchen as one thing would make a
   *Kitchen* component type with a whole-kitchen rule, not four unit types
   wearing one.
+- **Home General is the space for whole-home work** (`20260922110000`):
+  Painting (paintable area), Electrical Work (wiring run; points and
+  boards counted), Civil & Plumbing Work (plumbing run, demolition area),
+  False Ceiling (ceiling area, cove length; also on Full Ceiling), Curtains
+  & Blinds (width × height) and the new **Site Services** (delivery and
+  clean-up as fixed charges; floor and wall protection per area) declare
+  it, each with a rule of its own so a whole-home job is never priced on a
+  "face" it does not have. Whole-home rules use `number` fields typed as
+  areas rather than `width × height`, which is the honest measurement for a
+  paint job. The duplicate Cove Light under Lighting was retired for the
+  one under False Ceiling.
 - **A wardrobe's two height offers are the same rule with different
   numbers**: wardrobe + loft is `height 7, loft_height 2.5`; floor to
   ceiling is `height 9.5, loft_height 0`. The separate `loft` component
