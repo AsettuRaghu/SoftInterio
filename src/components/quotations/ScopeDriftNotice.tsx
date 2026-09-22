@@ -5,6 +5,10 @@
  * document, with the detail a click away. Read from
  * /api/quotations/[id]/scope-drift; nothing here changes the quotation.
  *
+ * Both directions: the scope may be ahead of the quotation (additions) or
+ * the quotation ahead of the scope (lines added in the builder), and
+ * "Add to the scope" writes those back as first preferences.
+ *
  * What it offers depends on where the quotation is:
  *   draft              Bring in (the additions; sizes and drops are for the
  *                      person to judge)
@@ -44,6 +48,7 @@ export function ScopeDriftNotice({
   const [drift, setDrift] = useState<ScopeDrift | null>(null);
   const [open, setOpen] = useState(false);
   const [raising, setRaising] = useState(false);
+  const [pushing, setPushing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -71,9 +76,21 @@ export function ScopeDriftNotice({
     ].filter(Boolean);
     parts.push(`${bits.join(", ")} not in it yet`);
   }
+  if (drift.not_in_scope.length) parts.push(`${drift.not_in_scope.length} priced here ${drift.not_in_scope.length === 1 ? "is" : "are"} not on the room sheet`);
   if (drift.resized.length) parts.push(`${drift.resized.length} component${drift.resized.length === 1 ? "" : "s"} resized`);
   if (drift.dropped.length) parts.push(`${drift.dropped.length} item${drift.dropped.length === 1 ? "" : "s"} no longer chosen`);
   if (drift.not_ours.length) parts.push(`${drift.not_ours.length} now done by someone else`);
+
+  const addToScope = async () => {
+    if (pushing) return;
+    setPushing(true);
+    setError(null);
+    const res = await fetch(`/api/quotations/${quotationId}/to-scope`, { method: "POST" });
+    const json = await res.json().catch(() => ({}));
+    setPushing(false);
+    if (!res.ok) return setError(json.error || "Could not add these to the scope");
+    await load();
+  };
 
   const raiseVariation = async () => {
     if (!projectId || raising) return;
@@ -104,6 +121,11 @@ export function ScopeDriftNotice({
         <span className="text-amber-800/80 truncate">· {parts.join(" · ")}</span>
         <span className="flex-1" />
         {error && <span className="text-red-700">{error}</span>}
+        {drift.not_in_scope.some((l) => l.cost_item_id && l.scope_item_id) && (
+          <button type="button" onClick={() => void addToScope()} disabled={pushing} className="px-2.5 py-1 rounded-md border border-amber-300 text-amber-800 font-medium hover:bg-amber-100 disabled:opacity-60" title="Put what is priced here onto the room sheet as first preferences">
+            {pushing ? "Adding…" : "Add to the scope"}
+          </button>
+        )}
         {canBring && (
           <button type="button" onClick={() => void onBringIn?.()} disabled={bringingIn} className="px-2.5 py-1 rounded-md bg-amber-600 text-white font-medium hover:bg-amber-700 disabled:opacity-60">
             {bringingIn ? "Bringing in…" : "Bring in"}
@@ -144,6 +166,14 @@ export function ScopeDriftNotice({
               </ul>
             </div>
           )}
+          {drift.not_in_scope.length > 0 && (
+            <div>
+              <p className="font-medium mb-0.5">Priced here, not on the room sheet</p>
+              <ul className="space-y-0.5 text-amber-900/90">
+                {drift.not_in_scope.map((l, i) => <li key={i}>{l.line} on {l.component}</li>)}
+              </ul>
+            </div>
+          )}
           {drift.not_ours.length > 0 && (
             <div>
               <p className="font-medium mb-0.5">Now done by someone else</p>
@@ -152,7 +182,7 @@ export function ScopeDriftNotice({
               </ul>
             </div>
           )}
-          <p className="md:col-span-2 text-amber-800/70">This quotation is not changed by any of this. Bring in what is new, or revise it; sizes and dropped items are yours to judge.</p>
+          <p className="md:col-span-2 text-amber-800/70">This quotation is not changed by any of this. Bring in what is new, add what is missing back to the room sheet, or revise it; sizes and dropped items are yours to judge.</p>
         </div>
       )}
     </div>

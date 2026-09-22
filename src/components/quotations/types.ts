@@ -60,6 +60,11 @@ export interface LineItem {
   quantityKey?: string | null;
   /** That quantity's value, derived at render from the component's measures. */
   derivedQuantity?: number | null;
+  /** Which scope choice this line came from, and whether the rule priced it
+   *  without anyone tapping. Carried through the builder so a save does not
+   *  wipe the bridge back to the room sheet. */
+  scopeItemId?: string | null;
+  auto?: boolean;
   costItemId: string;
   costItemName: string;
   categoryName: string;

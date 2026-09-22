@@ -1,5 +1,5 @@
 import type { createClient } from "@/lib/supabase/server";
-import { mergeMeasures } from "@/lib/costing/component-costing";
+import { mergeMeasures, readCosting } from "@/lib/costing/component-costing";
 import { copyScopeToQuotation } from "./scope-to-quotation";
 
 /**
@@ -19,6 +19,10 @@ import { copyScopeToQuotation } from "./scope-to-quotation";
  *               first preference, or is gone
  *   not_ours    components the quotation prices whose scope row now says
  *               the client or a vendor does it
+ *   not_in_scope  lines priced here that the room sheet does not list -
+ *               somebody added them in the builder. The other direction,
+ *               and the one that was missing: a quotation may be ahead of
+ *               the scope as easily as behind it (2026-09-22)
  *   last_change when the scope last changed, from its history
  *
  * Nothing here decides anything; the person holding the quotation does -
@@ -29,6 +33,8 @@ export interface ScopeDrift {
   resized: { component: string; space: string; from: string; to: string }[];
   dropped: { line: string; component: string }[];
   not_ours: { component: string; owner: string }[];
+  /** Priced here, not on the room sheet - with what it would take to add it back. */
+  not_in_scope: { line: string; component: string; cost_item_id: string | null; scope_item_id: string | null }[];
   last_change: string | null;
   total: number;
   /** Second preferences on the scope's components - what an "Option 2" quotation would use. */
@@ -42,22 +48,33 @@ export async function scopeDrift(
   leadId: string | null,
   projectId: string | null,
 ): Promise<ScopeDrift> {
-  const none: ScopeDrift = { additions: { spaces: [], components: [], lines: [] }, resized: [], dropped: [], not_ours: [], last_change: null, total: 0, second_preferences: 0 };
+  const none: ScopeDrift = { additions: { spaces: [], components: [], lines: [] }, resized: [], dropped: [], not_ours: [], not_in_scope: [], last_change: null, total: 0, second_preferences: 0 };
 
   let propertyId: string | null = null;
   if (leadId) propertyId = (await supabase.from("leads").select("property_id").eq("id", leadId).maybeSingle()).data?.property_id ?? null;
   else if (projectId) propertyId = (await supabase.from("projects").select("property_id").eq("id", projectId).maybeSingle()).data?.property_id ?? null;
   if (!propertyId) return none;
 
-  const [dry, { data: scopeRaw }, { data: spaces }, { data: hist }] = await Promise.all([
+  const [dry, { data: scopeRaw }, { data: spaces }, { data: hist }, { data: autoOffers }, { data: types }] = await Promise.all([
     copyScopeToQuotation(supabase, tenantId, quotationId, leadId, projectId, { dryRun: true }),
     supabase.from("property_scope_items").select("id, parent_id, name, scope_owner, choice_status, cost_item_id, width, height, length, measures, measurement_unit").eq("property_id", propertyId).eq("tenant_id", tenantId),
     supabase
       .from("quotation_spaces")
-      .select("id, name, components:quotation_components(id, name, width, height, metadata, lines:quotation_line_items(name, quotation_cost_item_id, metadata))")
+      .select("id, name, components:quotation_components(id, name, component_type_id, width, height, metadata, lines:quotation_line_items(id, name, quotation_cost_item_id, metadata))")
       .eq("quotation_id", quotationId),
     supabase.from("property_scope_item_history").select("changed_at").eq("property_id", propertyId).order("changed_at", { ascending: false }).limit(1),
+    supabase.from("component_type_offers").select("component_type_id, cost_item_id").eq("auto", true).eq("tenant_id", tenantId),
+    supabase.from("component_types").select("id, config_schema").eq("tenant_id", tenantId),
   ]);
+  // An automatic item is priced by the rule without anyone tapping, so it is
+  // never "added in the builder" even though no scope row names it.
+  const autoFor = new Set(((autoOffers ?? []) as { component_type_id: string; cost_item_id: string }[]).map((o) => `${o.component_type_id}::${o.cost_item_id}`));
+  // A count is a number; only a length carries the row's unit.
+  const lengthKeys = new Map<string, Set<string>>();
+  for (const t of (types ?? []) as { id: string; config_schema: unknown }[]) {
+    const fields = readCosting(t.config_schema).fields;
+    lengthKeys.set(t.id, new Set(fields.filter((f) => f.kind === "length").map((f) => f.key)));
+  }
 
   type S = { id: string; parent_id: string | null; name: string; scope_owner: string | null; choice_status: string | null; cost_item_id: string | null; width: number | null; height: number | null; length: number | null; measures: Record<string, number> | null; measurement_unit: string | null };
   const scope = new Map(((scopeRaw ?? []) as S[]).map((r) => [r.id, r]));
@@ -71,7 +88,7 @@ export async function scopeDrift(
   };
   const fmt = (v: number | null | undefined) => (v == null ? "—" : String(Math.round(Number(v) * 100) / 100));
 
-  for (const sp of (spaces ?? []) as Array<{ id: string; name: string; components: Array<{ id: string; name: string; width: number | null; height: number | null; metadata: { scope_item_id?: string; measurement_unit?: string; measures?: Record<string, number> } | null; lines: Array<{ name: string; quotation_cost_item_id: string | null; metadata: { scope_item_id?: string; auto?: boolean } | null }> | null }> | null }>) {
+  for (const sp of (spaces ?? []) as Array<{ id: string; name: string; components: Array<{ id: string; name: string; component_type_id: string | null; width: number | null; height: number | null; metadata: { scope_item_id?: string; measurement_unit?: string; measures?: Record<string, number> } | null; lines: Array<{ name: string; quotation_cost_item_id: string | null; metadata: { scope_item_id?: string; auto?: boolean } | null }> | null }> | null }>) {
     for (const c of sp.components ?? []) {
       const sid = c.metadata?.scope_item_id;
       const row = sid ? scope.get(sid) : undefined;
@@ -84,18 +101,33 @@ export async function scopeDrift(
         const keys = [...new Set([...Object.keys(qm), ...Object.keys(sm)])].filter((k) => (qm[k] ?? 0) !== (sm[k] ?? 0));
         if (keys.length) {
           const unit = row.measurement_unit ?? c.metadata?.measurement_unit ?? "";
-          const describe = (m: Record<string, number>) => keys.map((k) => `${k} ${fmt(m[k])}`).join(", ") + (unit ? ` ${unit}` : "");
+          const lens = lengthKeys.get(c.component_type_id ?? "") ?? new Set(["width", "height", "length"]);
+          const label = (k: string) => (lens.has(k) || ["width", "height", "length"].includes(k) ? `${k} in ${unit || "the row's unit"}` : k);
+          const describe = (m: Record<string, number>) => keys.map((k) => `${label(k)} ${fmt(m[k])}`).join(", ");
           out.resized.push({ component: c.name, space: sp.name, from: describe(qm), to: describe(sm) });
         }
       }
+      // What the component's room sheet says it carries, so a line with no
+      // provenance can still be recognised by its cost item.
+      const chosen = new Set(
+        [...scope.values()].filter((x) => x.parent_id === sid && x.cost_item_id && x.choice_status === "p1").map((x) => x.cost_item_id as string),
+      );
       for (const l of c.lines ?? []) {
         const lsid = l.metadata?.scope_item_id;
-        if (!lsid || l.metadata?.auto) continue;
+        if (l.metadata?.auto) continue;
+        if (!lsid) {
+          // Added in the builder: the quotation is ahead of the scope.
+          const isAuto = !!c.component_type_id && !!l.quotation_cost_item_id && autoFor.has(`${c.component_type_id}::${l.quotation_cost_item_id}`);
+          if (!isAuto && (!l.quotation_cost_item_id || !chosen.has(l.quotation_cost_item_id))) {
+            out.not_in_scope.push({ line: l.name, component: `${c.name} (${sp.name})`, cost_item_id: l.quotation_cost_item_id ?? null, scope_item_id: sid ?? null });
+          }
+          continue;
+        }
         const lrow = scope.get(lsid);
         if (!lrow || lrow.choice_status !== "p1") out.dropped.push({ line: l.name, component: `${c.name} (${sp.name})` });
       }
     }
   }
-  out.total = out.additions.spaces.length + out.additions.components.length + out.additions.lines.length + out.resized.length + out.dropped.length + out.not_ours.length;
+  out.total = out.additions.spaces.length + out.additions.components.length + out.additions.lines.length + out.resized.length + out.dropped.length + out.not_ours.length + out.not_in_scope.length;
   return out;
 }

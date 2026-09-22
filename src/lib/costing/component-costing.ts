@@ -25,8 +25,16 @@ export interface CostingField {
   key: string;
   label: string;
   kind: FieldKind;
-  /** Shown as a hint; not a default value. */
+  /** Shown as a hint. */
   hint?: string;
+  /**
+   * What the blank arrives filled with - in the row's own unit, so a base
+   * unit's 850 mm height is typed once by the tenant and never by the
+   * seller. A seller correcting a number beats a seller inventing one; the
+   * first real quotation had a base unit 600 mm high because the height was
+   * guessed (2026-09-22). Only a length or number field takes one.
+   */
+  default?: number;
 }
 
 export interface CostingQuantity {
@@ -51,7 +59,9 @@ export function emptyCosting(): ComponentCosting {
 export function readCosting(config: unknown): ComponentCosting {
   const c = (config ?? {}) as Partial<ComponentCosting>;
   return {
-    fields: Array.isArray(c.fields) ? c.fields.filter((f) => f && KEY_RE.test(String(f.key))) : [],
+    fields: Array.isArray(c.fields)
+      ? c.fields.filter((f) => f && KEY_RE.test(String(f.key))).map((f) => ({ ...f, default: Number.isFinite(Number(f.default)) && Number(f.default) > 0 ? Number(f.default) : undefined }))
+      : [],
     quantities: Array.isArray(c.quantities) ? c.quantities.filter((q) => q && KEY_RE.test(String(q.key))) : [],
   };
 }
@@ -130,6 +140,13 @@ export function validateCosting(c: ComponentCosting): string[] {
 export const DIMENSION_KEYS = ["width", "height", "length"] as const;
 export type DimensionKey = (typeof DIMENSION_KEYS)[number];
 export const isDimensionKey = (k: string): k is DimensionKey => (DIMENSION_KEYS as readonly string[]).includes(k);
+
+/** A rule's defaults as a measurement, for a component nobody has measured. */
+export function defaultMeasures(costing: ComponentCosting | null | undefined): Record<string, number> {
+  const m: Record<string, number> = {};
+  for (const f of costing?.fields ?? []) if (f.default != null) m[f.key] = f.default;
+  return m;
+}
 
 /** The values a rule evaluates over: the size columns laid over `measures`. */
 export function mergeMeasures(row: {

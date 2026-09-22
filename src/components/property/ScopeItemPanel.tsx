@@ -42,7 +42,8 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { scopeOwnerLabel, type PropertyScopeItem } from "@/types/property-scope";
 import { ScopeDiscussion } from "./ScopeDiscussion";
 import { MediaViewer, type MediaItem } from "@/components/ui/MediaViewer";
-import { mergeMeasures, quantify, splitMeasures, type ComponentCosting } from "@/lib/costing/component-costing";
+import { defaultMeasures, mergeMeasures, quantify, splitMeasures, type ComponentCosting } from "@/lib/costing/component-costing";
+import { missingMeasures } from "@/lib/scope/measured";
 
 
 interface RefDoc {
@@ -450,7 +451,11 @@ function ComponentCard({
   // The rule's width / height / length fields are the row's own size
   // columns - typed once, on the list or here - and `measures` holds the
   // rest. Merged for the rule, split again on save.
-  const [measures, setMeasures] = useState<Record<string, number>>(() => mergeMeasures(c));
+  // The rule's defaults fill the blanks nobody has typed - a base unit
+  // arrives 850 high and 600 deep - so the seller corrects rather than
+  // invents. What is stored on the row always wins.
+  const [measures, setMeasures] = useState<Record<string, number>>(() => ({ ...defaultMeasures(costing), ...mergeMeasures(c) }));
+  const missing = missingMeasures(c, costing);
   const derived = costing ? quantify(costing, measures, c.measurement_unit) : null;
   const ours = !c.scope_owner || c.scope_owner === "us";
   const size = c.width || c.height ? `${c.width ?? "—"} × ${c.height ?? "—"} ${c.measurement_unit}` : null;
@@ -471,6 +476,7 @@ function ComponentCard({
             {size ? ` · ${size}` : ""}
             {chosen.length > 0 ? ` · ${chosen.join(" · ")}` : ""}
             {!ours && <span className="text-amber-700 font-medium"> · {scopeOwnerLabel(c.scope_owner)}{c.scope_owner === "vendor" && c.scope_vendor_name ? ` (${c.scope_vendor_name})` : ""}</span>}
+            {ours && missing.length > 0 && <span className="text-amber-700 font-medium"> · not measured</span>}
           </span>
         </span>
       </button>
@@ -480,10 +486,15 @@ function ComponentCard({
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
                 Measurements <span className="normal-case tracking-normal font-normal text-slate-400">· lengths in {c.measurement_unit}</span>
+                {missing.length > 0 && (
+                  <span className="ml-2 normal-case tracking-normal font-medium text-amber-700">
+                    {missing.length} not measured - anything priced per {missing.length === 1 ? "it" : "them"} comes out at nothing
+                  </span>
+                )}
               </p>
               <div className="flex flex-wrap gap-x-4 gap-y-2">
                 {costing.fields.map((f) => (
-                  <label key={f.key} className="text-[11px] text-slate-600" title={f.hint}>
+                  <label key={f.key} className={cn("text-[11px]", missing.includes(f.label || f.key) ? "text-amber-700 font-medium" : "text-slate-600")} title={f.hint}>
                     {f.label}
                     <input
                       type="number"
@@ -492,7 +503,7 @@ function ComponentCard({
                       placeholder={f.kind === "count" ? "0" : "—"}
                       onChange={(e) => setMeasures((m) => ({ ...m, [f.key]: e.target.value === "" ? 0 : Number(e.target.value) }))}
                       onBlur={saveMeasures}
-                      className="mt-0.5 block w-24 px-2 py-1 text-sm border border-slate-200 rounded-md outline-none focus:border-blue-400 text-right disabled:bg-transparent"
+                      className={cn("mt-0.5 block w-24 px-2 py-1 text-sm border rounded-md outline-none focus:border-blue-400 text-right disabled:bg-transparent", missing.includes(f.label || f.key) ? "border-amber-300 bg-amber-50/60" : "border-slate-200")}
                     />
                   </label>
                 ))}

@@ -200,7 +200,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
                 ) : (
                   <ul className="divide-y divide-slate-100">
                     {costing.fields.map((f, i) => (
-                      <li key={i} className="px-4 py-2 grid grid-cols-[1fr_9rem_7rem_1fr_auto] gap-2 items-center">
+                      <li key={i} className="px-4 py-2 grid grid-cols-[1fr_9rem_7rem_5rem_1fr_auto] gap-2 items-center">
                         <input
                           value={f.label}
                           placeholder="Label - Counter run"
@@ -218,6 +218,14 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
                             <option key={k} value={k}>{KIND_LABEL[k]}</option>
                           ))}
                         </select>
+                        <input
+                          type="number"
+                          value={f.default ?? ""}
+                          placeholder="Default"
+                          title="What the blank arrives filled with, in the row's own unit - a base unit 850 high. The seller corrects it rather than inventing it."
+                          onChange={(e) => setField(i, { default: e.target.value === "" ? undefined : Number(e.target.value) })}
+                          className="w-20 px-2 py-1.5 text-xs text-right border border-slate-200 rounded-md outline-none focus:border-blue-400"
+                        />
                         <input value={f.hint ?? ""} placeholder="Hint for whoever measures (optional)" onChange={(e) => setField(i, { hint: e.target.value })} className="px-2 py-1.5 text-xs border border-slate-200 rounded-md outline-none focus:border-blue-400" />
                         <span className="inline-flex items-center gap-0.5">
                           <button type="button" onClick={() => update({ fields: move(costing.fields, i, -1) })} className="p-1 rounded text-slate-400 hover:text-slate-700"><ArrowUpIcon className="w-3.5 h-3.5" /></button>

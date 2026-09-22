@@ -33,7 +33,7 @@ interface ApiLineItem {
   quantity?: number;
   amount?: number;
   notes?: string;
-  metadata?: { follows_component?: boolean; quantity_key?: string | null } | null;
+  metadata?: { follows_component?: boolean; quantity_key?: string | null; scope_item_id?: string; auto?: boolean } | null;
   cost_item?: {
     name?: string;
     default_rate?: number;
@@ -112,6 +112,8 @@ export function toBuilderSpaces(spaces: ApiSpace[] | null | undefined): BuilderS
         // dimensions already typed into them.
         followsComponent: item.metadata?.follows_component === true,
         quantityKey: item.metadata?.quantity_key ?? null,
+        scopeItemId: item.metadata?.scope_item_id ?? null,
+        auto: item.metadata?.auto === true,
       })),
     })),
   }));

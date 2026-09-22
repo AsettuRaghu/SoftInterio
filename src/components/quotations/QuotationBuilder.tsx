@@ -1454,6 +1454,12 @@ export function QuotationBuilder({
                   ...(item as any).metadata,
                   quantity_key: item.quantityKey ?? null,
                   follows_component: item.followsComponent !== false,
+                  // Where the line came from. The save used to write a fresh
+                  // object, so opening the builder once wiped every line's
+                  // link back to the room sheet and the scope read as behind
+                  // a quotation it had produced (2026-09-22).
+                  ...(item.scopeItemId ? { scope_item_id: item.scopeItemId } : {}),
+                  ...(item.auto ? { auto: true } : {}),
                 },
               };
             }),

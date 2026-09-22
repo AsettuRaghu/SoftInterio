@@ -24,6 +24,7 @@ import { fetchConfigOnce } from "@/lib/quotations/config-cache";
 import { AddSpacesModal } from "./AddSpacesModal";
 import { CheckIcon } from "@heroicons/react/24/outline";
 import { hasCosting, readCosting, type ComponentCosting } from "@/lib/costing/component-costing";
+import { missingMeasures } from "@/lib/scope/measured";
 import { ScopeItemPanel } from "./ScopeItemPanel";
 import {
   PlusIcon,
@@ -35,6 +36,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   DocumentTextIcon,
+  ExclamationTriangleIcon,
   Bars2Icon,
 } from "@heroicons/react/24/outline";
 import {
@@ -178,6 +180,12 @@ export function ScopeTab({
     }
     return m;
   }, [componentTypes]);
+  /** What a component still needs measured - the same rule the gate uses. */
+  const notMeasured = (item: PropertyScopeItem) =>
+    item.component_type_id && (!item.scope_owner || item.scope_owner === "us")
+      ? missingMeasures(item, costingByType.get(item.component_type_id))
+      : [];
+
   const openItem = (id: string) => {
     const row = items.find((i) => i.id === id);
     if (!row) return;
@@ -614,6 +622,21 @@ export function ScopeTab({
               }}
               className="flex-1 min-w-0 w-full text-sm font-medium text-slate-800 bg-transparent border border-transparent hover:border-slate-200 focus:border-blue-400 rounded px-1.5 py-0.5 outline-none disabled:cursor-default"
             />
+            {(() => {
+              const gaps = notMeasured(item);
+              if (gaps.length === 0) return null;
+              return (
+                <button
+                  type="button"
+                  onClick={() => setOpenTarget({ spaceId: item.parent_id ?? item.id, componentId: item.id })}
+                  title={`Not measured: ${gaps.join(", ")}. Anything priced per these comes out at nothing.`}
+                  className="shrink-0 inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 hover:bg-amber-100"
+                >
+                  <ExclamationTriangleIcon className="w-3 h-3" />
+                  {gaps.length} not measured
+                </button>
+              );
+            })()}
             {item.space_type?.is_container && (
               <span className="shrink-0 text-[10px] font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5">
                 container

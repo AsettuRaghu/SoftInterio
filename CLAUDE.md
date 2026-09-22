@@ -33,55 +33,51 @@ along so the builder can mark a space "rough size" until the scope row is
 confirmed on site. Still absent, still on purpose: no "scope changed, review
 the quotation" prompt, no deactivation tier.
 
-### The scope tells the quotation it has moved; it never moves it
+### The scope tells the quotation it has moved - and the quotation tells back
 
-Built 2026-09-21, closing the loose end named in the architecture review:
-the pull was one-way and silent, so a tall unit added at the site visit
-reached nobody holding the sent quotation.
+Built 2026-09-21, the second direction added 2026-09-22 after the first
+real quotation.
 
 `lib/quotations/scope-drift.ts` reads, for one quotation, how far the
-scope has moved: **additions** (a dry run of `copyScopeToQuotation` -
-rooms, components and chosen items it would add), **resized** components
-(the quotation's width × height and stored measures against the scope
-row's), **dropped** lines (their scope row is no longer ① or is gone),
-**not_ours** (the scope row now says client / vendor), the last history
-timestamp, and how many ② the scope holds. `GET /api/quotations/[id]/
-scope-drift`; `ScopeDriftNotice` above the document on the summary page
-and in the builder - one amber line, detail on click, nothing when nothing
-moved. Sizes and drops are reported, never applied: the person judges.
+scope has moved: **additions** (a dry run of `copyScopeToQuotation`),
+**resized** components, **dropped** lines (no longer ①), **not_ours**,
+**not_in_scope** - lines priced here that the room sheet does not list,
+which is the quotation being *ahead* of the scope - the last history
+stamp, and how many ② the scope holds. `POST /api/quotations/[id]/
+to-scope` ("Add to the scope") writes those back as first-preference
+choices; like the pull the other way it only ever adds.
 
-What it offers depends on the quotation: a **draft** gets *Bring in*; a
-sent one is told to revise; an **approved quotation on a project** gets
-**Raise a variation** - `POST /api/quotations` with `variation: true`,
-which copies with `pricedOn` = the project's approved quotations so only
-what the scope gained since sign-off is priced, and removes any component
-or room it made that ended up carrying nothing new. **Option 2** on the
-summary header (shown when the scope holds any ②) posts `preference: "p2"`:
-per decision the ② where there is one, else the ①. Both are ordinary
-quotations with new numbers, titled "Variation for …" / "Option 2 for …".
+**A line carries its provenance through the builder.** `metadata.
+scope_item_id` and `auto` are mapped onto the `LineItem` and written back
+on save - the save used to build a fresh metadata object, so opening the
+builder once wiped every line's link to the room sheet and a quotation
+read as full of items "not in the scope" that the scope had produced.
+An item the offer marks `auto` is never a builder addition, even though
+no scope row names it.
 
-`copyScopeToQuotation` grew three options for this - `dryRun`,
-`preference`, `pricedOn` - and its result carries `added` names. It still
-only ever adds.
+### A measurement nobody typed is shown, and stops the stage
 
-### A cost item's pictures are library entries under it
+Built 2026-09-22 after the first real quotation carried nine unmeasured
+components and eight lines priced at nothing.
 
-Built 2026-09-21. The Design Library already linked an entry to a cost item;
-what was missing was the two ends. **Catalogue side**: the photo icon on a
-cost item row (Settings → Catalogue → Cost items) opens
-`CostItemPicturesDialog` - several files at once through
-`POST /api/library/batch` with `cost_item_id`, kind `product`, the item's
-name as every entry's title (the batch route takes a `title` override for
-this), one entry per picture so each can be hidden from the customer
-(`visible_to_customer`) or removed on its own. **Reading side**:
-`GET /api/library/cost-item-pictures?ids=` groups them by item, signed;
-gated on `leads.view`, because a seller reading a picture of a shutter is
-not browsing the library. The room sheet reads it once per component and
-shows a thumbnail beside any option that has pictures, opening the viewer
-with all of them - acrylic against laminate, while the customer chooses.
-The customer summary shows the first customer-visible picture beside each
-chosen item (`customer=1` / `visible_to_customer` is the only filter
-between internal and customer surfaces). No second file store.
+`lib/scope/measured.ts` `missingMeasures(row, rule)` is the one answer to
+"what has this component not been measured for": the rule's fields that
+have no value on the row, where width / height / length come from the
+row's own size columns and a field with a **default** counts as filled.
+Read in three places - the Scope tab's row (an amber "2 not measured"
+button that opens the room sheet), the room sheet's Measurements (amber
+label and box per blank, and "not measured" on the closed component), and
+`scopeReadiness`, which now refuses **proposal_discussion** until every
+component of ours whose type has a rule is measured.
+
+**A rule field can carry a `default`** (`CostingField.default`, the
+Default column on the component's page): the blank arrives filled - a
+kitchen base unit 850 high and 600 deep - so the seller corrects rather
+than invents. The first quotation had a base unit 600 mm high, a third
+light on every per-area line. Defaults are seeded in millimetres for the
+tenant's units (`20260922170000`); a business measuring in feet edits
+them. A default counts as measured, so it must be a value the trade
+agrees on, not a guess.
 
 ### The customer summary is the scope as a page, and it carries no price
 
