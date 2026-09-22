@@ -1475,7 +1475,7 @@ export default function TasksPage() {
               </div>
               <p className="text-sm font-medium text-red-600 mb-1">{error}</p>
               <button
-                onClick={fetchTasks}
+                onClick={() => void fetchTasks()}
                 className="px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded-lg"
               >
                 Try Again
