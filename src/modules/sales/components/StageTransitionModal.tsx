@@ -313,7 +313,12 @@ export function StageTransitionModal({
       setSuccessMessage(
         data.scope_laid_down
           ? `Lead qualified. The Scope tab now has ${data.scope_laid_down.spaces} spaces from the "${data.scope_laid_down.applied}" preset - adjust them there.`
-          : `Lead moved to ${selectedStage.replace("_", " ")} stage successfully!`
+          : data.scope_preset_missing
+            ? // A preset is found by name, so a configuration nobody has named
+              // one for leaves the Scope tab blank. Saying so beats letting the
+              // seller wonder whether something failed.
+              `Lead qualified. No preset is named for this configuration, so the Scope tab starts empty - list the rooms there, or add a preset under Settings → Catalogue → Presets.`
+            : `Lead moved to ${selectedStage.replace("_", " ")} stage successfully!`
       );
       // Call onSuccess immediately without resetting isSubmitting to keep modal disabled
       onSuccess();

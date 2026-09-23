@@ -183,6 +183,33 @@ from a lead. The empty scope shows them as cards that open the add dialog
 filled in; the dialog's chips offer them too. Five were seeded per tenant
 from the old quick starts.
 
+**A preset is found by NAME, and every configuration now has one.**
+`presetMatches()` strips the spaces and looks for the configuration inside
+the preset's name; a villa / independent house / farmhouse property type
+looks for "villa" first. So the link is the name, not a column - renaming
+"3 BHK" is enough to break the auto-apply, which is the cost of letting a
+tenant name its own presets. Of the seven configurations, **studio**,
+**5bhk_plus** and **other** matched nothing and laid down an empty scope in
+silence; Studio and 5+ BHK were seeded (`20260923210000`, per tenant, only
+where absent) and `other` matches nothing on purpose. A no-match is now
+reported rather than shrugged at - `applyPresetForConfiguration` returns a
+`reason` (`applied` / `scope_not_empty` / `no_preset`), the transition
+writes a timeline entry for `no_preset`, and the stage dialog says the Scope
+tab starts empty and where to add a preset. A scope that already has rows
+stays silent, because that case is correct.
+
+**What lands in each room has two levers.** A preset row's
+`component_type_ids` wins where it is set; where it is null the room takes
+**every active component type declaring that space**
+(`component_types.applicable_space_types`, the "Belongs in these spaces"
+control). The five shipped presets left it null everywhere, so a 3 BHK
+bedroom arrived with all eight components that declare Bedroom - both
+wardrobe kinds at once - while a Balcony arrived empty because nothing
+declares it. The tenant chose per-space lists on 2026-09-23 and a bedroom is
+now a wardrobe and a dressing table. Keep the two levers distinct: the
+preset is "what we usually quote in this kind of home", the declaration is
+"where this component can go at all", and the add dialog reads the second.
+
 **Qualifying a lead needs the configuration and the floor plan**, and lays
 the scope down (2026-09-18, third round). `properties.configuration`
 (studio · 1bhk … 5bhk_plus · other) is a property fact the lead form never

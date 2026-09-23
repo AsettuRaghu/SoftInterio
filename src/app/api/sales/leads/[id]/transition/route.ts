@@ -14,7 +14,7 @@ import { leadAccess, canWriteLead } from "@/lib/leads/access";
 import { namesOf, notify } from "@/lib/notifications/notify";
 import { scopeReadiness } from "@/lib/scope/readiness";
 import { isConfiguration } from "@/lib/scope/configuration";
-import { applyPresetForConfiguration } from "@/lib/scope/apply-preset";
+import { applyPresetForConfiguration, type ScopePresetOutcome } from "@/lib/scope/apply-preset";
 import {
   getPendingLeadWork,
   cancelPendingLeadWork,
@@ -497,7 +497,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Qualifying lays the scope down from the configuration's preset, so the
     // requirement discussion opens on rooms rather than a blank list. Only
     // on an empty scope; never overwrites what someone has listed by hand.
-    let scopeLaidDown: { applied: string | null; spaces: number; components: number } | null = null;
+    let scopeLaidDown: ScopePresetOutcome | null = null;
     if (to_stage === "qualified" && propertyId) {
       const configuration = isConfiguration(body.configuration) ? body.configuration : lead.property?.configuration;
       if (isConfiguration(configuration)) {
@@ -517,6 +517,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               type: "lead_updated",
               title: "Scope laid down",
               description: `From the "${scopeLaidDown.applied}" preset: ${scopeLaidDown.spaces} space(s), ${scopeLaidDown.components} component(s). Adjust on the Scope tab.`,
+            });
+          } else if (scopeLaidDown.reason === "no_preset") {
+            // Worth a timeline entry: the seller is about to open a blank
+            // Requirement discussion and the only honest explanation is that
+            // no preset is named for this configuration.
+            await logLeadActivity(supabase, {
+              leadId: id,
+              tenantId: lead.tenant_id,
+              userId: user.id,
+              type: "lead_updated",
+              title: "No preset for this configuration",
+              description: `Nothing matches "${configuration}", so the Scope tab starts empty. Add a preset under Settings → Catalogue → Presets, or list the rooms by hand.`,
             });
           }
         } catch (e) {
@@ -1022,6 +1034,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       project_id: projectId,
       project_created: projectId !== null,
       scope_laid_down: scopeLaidDown?.applied ? scopeLaidDown : null,
+      scope_preset_missing: scopeLaidDown?.reason === "no_preset" ? true : undefined,
     });
   } catch (error) {
     log.error("Stage transition API error", error);
