@@ -1007,8 +1007,9 @@ procedure: 27 visible strings changed, the schema untouched
 (`quotation_cost_items`, `quotation_cost_item_categories`, `cost_item_id`
 on offers, scope rows, line items, the library and five stock tables -
 761 identifiers and 34 columns that buy nothing by moving). Settings ->
-Catalogue now reads **Spaces · Components · Categories · Items ·
-Presets**, four of five being plain plurals of what they hold.
+Catalogue now reads **Spaces · Components · Item Categories · Items ·
+Presets** - the categories tab keeps "Item" because "Categories"
+alone does not say what it categorises.
 
 **The old name was wrong about the row's main number.** `default_rate` is
 what the *customer pays*; the costs on the same row - `company_cost`,

@@ -909,7 +909,7 @@ export default function QuotationsConfigPage() {
     },
     {
       id: "categories" as TabType,
-      label: "Categories",
+      label: "Item Categories",
       icon: TagIcon,
       count: categories.filter((x) => matchesStatus(x.is_active)).length,
     },
