@@ -42,7 +42,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { scopeOwnerLabel, type PropertyScopeItem } from "@/types/property-scope";
 import { ScopeDiscussion } from "./ScopeDiscussion";
 import { MediaViewer, type MediaItem } from "@/components/ui/MediaViewer";
-import { defaultMeasures, mergeMeasures, quantify, splitMeasures, type ComponentCosting } from "@/lib/costing/component-costing";
+import { defaultMeasures, mergeMeasures, overrideKey, quantify, splitMeasures, type ComponentCosting } from "@/lib/costing/component-costing";
 import { missingMeasures } from "@/lib/scope/measured";
 import { questionsOf, stillToAsk } from "@/lib/scope/questions";
 
@@ -644,6 +644,27 @@ function ComponentCard({
   // close it. Held as `adjusting || touched` it could not - touched stays
   // true for ever, so hide did nothing (2026-09-23).
   const [adjusting, setAdjusting] = useState<boolean | null>(null);
+  /** What is being typed into a derived number, before it is saved. */
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
+  /**
+   * Overruling a quantity, or putting the rule back. Stored beside the
+   * measurements under `over:<key>`, and cleared when the typed value is
+   * blank or is what the rule said anyway - an "override" equal to the
+   * formula is not an override, and would sit there in amber for ever.
+   */
+  const saveOverride = (key: string, raw: string, ruled: number) => {
+    const text = raw.trim();
+    const n = Number(text);
+    const same = text !== "" && Number.isFinite(n) && Math.abs(n - ruled) < 0.005;
+    const next = { ...measures };
+    if (text === "" || !Number.isFinite(n) || same) delete next[overrideKey(key)];
+    else next[overrideKey(key)] = n;
+    setOverrides((p) => { const q = { ...p }; delete q[key]; return q; });
+    if (JSON.stringify(next) === JSON.stringify(measures)) return;
+    setMeasures(next);
+    const { dims, measures: rest } = splitMeasures(next);
+    void onPatch(c, { ...dims, measures: rest });
+  };
   // From the list until the sheet is opened, then from the sheet itself.
   const [toAsk, setToAsk] = useState<number>(c.still_to_ask ?? 0);
   const onQuestions = useCallback((n: number) => setToAsk(n), []);
@@ -758,10 +779,51 @@ function ComponentCard({
                     {(adjusting ?? touched) && <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">{assumed.map(show)}</div>}
                   </div>
                 )}
+                {/* What the rule worked out - and the person in the room may
+                    overrule any of it. A tall pair of doors takes six hinges
+                    whatever the formula says. The rule's own answer stays
+                    beside the override in amber, so nobody has to remember
+                    that a number was changed, and one press puts it back
+                    (2026-09-23). */}
                 {derived && Object.keys(derived.values).length > 0 && (
-                  <p className="mt-1.5 text-[11px] text-slate-500">
-                    {costing.quantities.map((q) => `${q.label}: ${Math.round((derived.values[q.key] ?? 0) * 100) / 100} ${q.unit_code}`).join(" · ")}
-                  </p>
+                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+                    {costing.quantities.map((q) => {
+                      const over = derived.overridden.includes(q.key);
+                      const round = (n: number) => Math.round(n * 100) / 100;
+                      return (
+                        <span key={q.key} className={cn("inline-flex items-center gap-1", over && "text-amber-700")}>
+                          <span>{q.label}:</span>
+                          {readOnly ? (
+                            <span className="tabular-nums font-medium">{round(derived.values[q.key] ?? 0)}</span>
+                          ) : (
+                            <input
+                              type="number"
+                              step="any"
+                              value={overrides[q.key] ?? round(derived.values[q.key] ?? 0)}
+                              onChange={(e) => setOverrides((p) => ({ ...p, [q.key]: e.target.value }))}
+                              onBlur={(e) => saveOverride(q.key, e.target.value, derived.ruled[q.key] ?? 0)}
+                              title={over ? `The rule says ${round(derived.ruled[q.key] ?? 0)}` : "Change it if this one is different"}
+                              className={cn(
+                                "w-14 px-1 py-0.5 text-[11px] tabular-nums text-right rounded border bg-white outline-none focus:border-blue-400",
+                                over ? "border-amber-300 bg-amber-50 text-amber-800 font-medium" : "border-transparent hover:border-slate-200 text-slate-600",
+                              )}
+                            />
+                          )}
+                          <span>{q.unit_code}</span>
+                          {over && (
+                            <button
+                              type="button"
+                              onClick={() => saveOverride(q.key, "", derived.ruled[q.key] ?? 0)}
+                              className="underline decoration-dotted hover:text-amber-900"
+                              title="Put the rule's answer back"
+                            >
+                              rule says {round(derived.ruled[q.key] ?? 0)}
+                            </button>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             );

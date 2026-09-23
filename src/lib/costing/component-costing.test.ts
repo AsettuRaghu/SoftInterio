@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeMeasures, quantify, readCosting, splitMeasures, validateCosting, type ComponentCosting } from "./component-costing";
+import { mergeMeasures, quantify, readCosting, splitMeasures, validateCosting, type ComponentCosting, overrideKey } from "./component-costing";
 
 // The seeded Wardrobe - Openable rule, as a tenant would have it.
 const wardrobe: ComponentCosting = {
@@ -91,5 +91,55 @@ describe("mergeMeasures / splitMeasures - a size is typed once", () => {
   });
   it("splits an edited set back into columns and the rest", () => {
     expect(splitMeasures({ width: 8, height: 10, depth: 2, shutters: 4 })).toEqual({ dims: { width: 8, height: 10 }, measures: { depth: 2, shutters: 4 } });
+  });
+});
+
+describe("quantify: overruling what the rule worked out", () => {
+  const costing = {
+    fields: [
+      { key: "width", label: "Width", kind: "length" as const },
+      { key: "height", label: "Height", kind: "length" as const },
+      { key: "shutters", label: "Shutters", kind: "count" as const, default: "ceil(width / 2)" },
+    ],
+    quantities: [
+      { key: "hinges_per_door", label: "Hinges per door", unit_code: "nos", formula: "max(2, ceil(height / 2))" },
+      { key: "hinges", label: "Hinges", unit_code: "nos", formula: "shutters * hinges_per_door" },
+    ],
+  };
+  const m = { width: 10.83, height: 8.86 };
+
+  it("uses the rule when nothing is overruled", () => {
+    const out = quantify(costing, m, "ft");
+    expect(out.values.hinges_per_door).toBe(5);
+    expect(out.values.hinges).toBe(30);
+    expect(out.overridden).toEqual([]);
+  });
+
+  it("takes the person's number over the formula, and keeps what the rule said", () => {
+    const out = quantify(costing, { ...m, [overrideKey("hinges")]: 36 }, "ft");
+    expect(out.values.hinges).toBe(36);
+    expect(out.ruled.hinges).toBe(30);
+    expect(out.overridden).toEqual(["hinges"]);
+  });
+
+  it("carries an override into the quantities that build on it", () => {
+    // Six hinges a door rather than five: the total follows, and the total
+    // is NOT itself marked overridden - nobody typed it, the rule produced
+    // it from the number that now applies. Only what a person changed is
+    // shown as changed.
+    const out = quantify(costing, { ...m, [overrideKey("hinges_per_door")]: 6 }, "ft");
+    expect(out.values.hinges).toBe(36);
+    expect(out.ruled.hinges).toBe(36);
+    expect(out.overridden).toEqual(["hinges_per_door"]);
+  });
+
+  it("ignores a blank or unreadable override", () => {
+    expect(quantify(costing, { ...m, [overrideKey("hinges")]: null }, "ft").values.hinges).toBe(30);
+    expect(quantify(costing, { ...m, [overrideKey("hinges")]: NaN }, "ft").values.hinges).toBe(30);
+  });
+
+  it("does not mistake an override key for a field", () => {
+    const out = quantify(costing, { ...m, [overrideKey("shutters")]: 99 }, "ft");
+    expect(out.values.hinges).toBe(30); // shutters is a field, not a quantity
   });
 });

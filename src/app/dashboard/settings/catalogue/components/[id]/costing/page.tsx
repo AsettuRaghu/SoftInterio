@@ -126,7 +126,10 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
       .filter((c) => !q || c.name.toLowerCase().includes(q) || (c.category ?? "").toLowerCase().includes(q))
       .sort((a, b) => a.category_order - b.category_order || (a.category ?? "").localeCompare(b.category ?? "") || a.name.localeCompare(b.name));
   }, [catalogue, offered, pickSearch]);
-  const live = useMemo(() => (costing ? quantify(costing, sample, "ft") : { values: {}, errors: {} }), [costing, sample]);
+  const live = useMemo(
+    () => (costing ? quantify(costing, sample, "ft") : { values: {} as Record<string, number>, errors: {} as Record<string, string>, ruled: {} as Record<string, number>, overridden: [] as string[] }),
+    [costing, sample],
+  );
 
   const update = (patch: Partial<ComponentCosting>) => {
     setCosting((c) => (c ? { ...c, ...patch } : c));

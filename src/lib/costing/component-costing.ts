@@ -92,11 +92,27 @@ const TO_FEET: Record<string, number> = { mm: 0.00328084, cm: 0.0328084, inch: 0
  * formula that fails yields 0 and its error, never a throw - a quotation
  * line must still exist even when a rule is half-written.
  */
+/**
+ * A quantity the rule worked out can be overruled by the person in the room.
+ *
+ * Kept in `measures` under a prefix no field key can carry (a key is an
+ * identifier; `:` is not), so it rides along with the measurements through
+ * `splitMeasures`, the PATCH and the jsonb column without a second store -
+ * and because every consumer already reads `quantify`, the sheet, the
+ * builder's totals and `copyScopeToQuotation` all honour it for free.
+ *
+ * The rule is still evaluated: `ruled` carries what it said, so the screen
+ * can show the override against it rather than silently replacing it
+ * (2026-09-23 - "allow the user to override ... but maybe with a warning").
+ */
+export const OVERRIDE_PREFIX = "over:";
+export const overrideKey = (quantityKey: string) => `${OVERRIDE_PREFIX}${quantityKey}`;
+
 export function quantify(
   costing: ComponentCosting,
   measures: Record<string, number | null | undefined> | null | undefined,
   unit: string,
-): { values: Record<string, number>; errors: Record<string, string> } {
+): { values: Record<string, number>; errors: Record<string, string>; ruled: Record<string, number>; overridden: string[] } {
   const factor = TO_FEET[unit] ?? 1;
   const vars: Record<string, number> = {};
   const errors: Record<string, string> = {};
@@ -117,18 +133,25 @@ export function quantify(
     } else vars[f.key] = 0;
   }
   const values: Record<string, number> = {};
+  const ruled: Record<string, number> = {};
+  const overridden: string[] = [];
   for (const q of costing.quantities) {
     const r = evaluate(q.formula, vars);
-    if (r.ok) {
-      values[q.key] = r.value;
-      vars[q.key] = r.value;
+    if (r.ok) ruled[q.key] = r.value;
+    else { ruled[q.key] = 0; errors[q.key] = r.error; }
+
+    const typed = measures?.[overrideKey(q.key)];
+    if (typed != null && String(typed) !== "" && Number.isFinite(Number(typed))) {
+      values[q.key] = Number(typed);
+      overridden.push(q.key);
     } else {
-      values[q.key] = 0;
-      vars[q.key] = 0;
-      errors[q.key] = r.error;
+      values[q.key] = ruled[q.key];
     }
+    // Later quantities build on the value that actually applies, so
+    // overruling the hinges per door carries into the hinge total.
+    vars[q.key] = values[q.key];
   }
-  return { values, errors };
+  return { values, errors, ruled, overridden };
 }
 
 /** Problems a person should fix before the rule is used. */

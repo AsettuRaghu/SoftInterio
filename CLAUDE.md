@@ -77,6 +77,32 @@ meaning "none unless somebody says") or a **formula** over the fields
 above it, in feet, like a quantity - `ceil(width / 2)` is one door per
 two feet of width, which is what the trade fits.
 
+**A derived number can be overruled, and says so.** `quantify` reads an
+override from `measures` under `over:<quantity>` (`OVERRIDE_PREFIX`, a key no
+field can carry because a field key is an identifier), so it rides along with
+the measurements through `splitMeasures`, the PATCH and the jsonb column with
+no second store - and because the sheet, the builder's totals and
+`copyScopeToQuotation` all read `quantify`, every one of them honours it for
+free. The rule is still evaluated: `ruled` carries what it said and
+`overridden` which keys were changed, so the room sheet shows the number in
+amber with **rule says 30** beside it, one press to put it back. A tall pair
+of doors takes six hinges whatever the formula says (2026-09-23).
+
+Two behaviours worth keeping: an override equal to the rule's own answer is
+**not** stored, or it would sit in amber for ever; and an override **carries
+into whatever builds on it** - overruling hinges per door moves the hinge
+total, and the total is not itself marked, because nobody typed it. Only what
+a person changed is shown as changed.
+
+**A default may invent a number, but only where the trade agrees.** Shelves
+now default to `ceil(height / 1.5)` - a shelf every eighteen inches, six on a
+2700 mm wardrobe (`20260923270000`) - because "most customers do ask for
+internals with a standard shelf height of 1-1.5 feet", so quoting every
+wardrobe with none is as wrong as inventing them. Exposed ends, blind corners
+and the loft height stay 0: those are nothing until somebody sees the room.
+The test is whether the trade would answer the same way without asking the
+customer.
+
 **A field with a default is not shown.** The room sheet asks for the size
 and anything the rule cannot work out for itself; everything else is one
 line - "Taking depth 600 mm · shutters 8 · exposed sides 0 · *adjust*" -
