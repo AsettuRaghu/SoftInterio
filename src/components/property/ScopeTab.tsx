@@ -210,7 +210,11 @@ export function ScopeTab({
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const loadedRef = useRef(false);
-  const [savingId, setSavingId] = useState<string | null>(null);
+  /**
+   * Rows removed on purpose, so a PATCH that loses the race to a DELETE
+   * does not report a failure for a row the person meant to delete.
+   */
+  const removed = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     if (!propertyId) {
@@ -326,7 +330,6 @@ export function ScopeTab({
       prev.map((i) => (i.id === item.id ? { ...i, ...updates } : i))
     );
     try {
-      setSavingId(item.id);
       flash("saving");
       const response = await fetch(
         `/api/properties/${propertyId}/scope/${item.id}`,
@@ -342,14 +345,17 @@ export function ScopeTab({
       }
       flash("saved");
     } catch (err) {
+      // Deleting a row you were editing sends the blur's PATCH and the
+      // DELETE together; whichever order they land in, the PATCH failing
+      // against a row that is gone is the expected outcome, not a fault to
+      // report over the delete that caused it.
+      if (removed.current.has(item.id)) return;
       flash("failed");
       // Put the row back the way it was rather than leaving a value on screen
       // that was never stored. Only this row is restored - reloading the whole
       // list would throw away anything else being edited.
       setItems((prev) => prev.map((i) => (i.id === item.id ? item : i)));
       setError(err instanceof Error ? err.message : "Failed to save");
-    } finally {
-      setSavingId(null);
     }
   };
 
@@ -443,6 +449,7 @@ export function ScopeTab({
     // Children go with the parent in the database, so they go here too.
     const removedIds = new Set([item.id, ...kids.map((k) => k.id)]);
     const previous = items;
+    for (const rid of removedIds) removed.current.add(rid);
     setItems((prev) => prev.filter((i) => !removedIds.has(i.id)));
 
     try {
@@ -456,6 +463,7 @@ export function ScopeTab({
       }
       onChanged?.();
     } catch (err) {
+      for (const rid of removedIds) removed.current.delete(rid);
       setItems(previous);
       setError(err instanceof Error ? err.message : "Failed to remove");
     }
@@ -828,7 +836,7 @@ export function ScopeTab({
           {!readOnly && (
             <button
               onClick={() => void removeItem(item)}
-              disabled={savingId === item.id || !!removeBlock(item)}
+              disabled={!!removeBlock(item)}
               title={removeBlock(item) ?? (item.component_type_id ? "Remove component" : "Remove space")}
               className="w-6.5 h-6.5 inline-flex items-center justify-center rounded-md border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-red-50 disabled:hover:border-red-200"
             >

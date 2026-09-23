@@ -2745,6 +2745,28 @@ the change to the task and to the running history row, and the scheduler
 re-lays the plan around the date. Until that existed the details dialog was
 unreachable.
 
+### A button must not disable itself because of the click that opened it
+
+Deleting a scope row took two clicks, and only after editing something on it
+(2026-09-23). The sequence: **mousedown** on the trash button blurs the field
+you were in, the blur fires the row's PATCH, `patchItem` sets `savingId`, and
+the delete button's `disabled={savingId === item.id}` turns it off between
+mousedown and mouseup - **a disabled button fires no click at all**. The
+second press worked because the save had finished by then.
+
+`savingId` existed for that one guard and nothing else, so it is gone; the
+Saved indicator already reports the save. Delete during an in-flight PATCH is
+safe on its own terms - the DELETE supersedes it - and the one real hazard,
+the PATCH's failure path restoring a row that has just been deleted, is
+closed by a `removed` ref: ids go in before the DELETE is sent, come back out
+if it is refused, and `patchItem` stays silent for a row that is in it rather
+than reporting a failure caused by the delete itself.
+
+The general rule, worth applying anywhere a control both saves and acts:
+**never let a control's own gesture disable it.** Blur, focus and hover all
+fire before click, so any state they set is applied before the click is
+delivered.
+
 ### Scope rows say who does them
 
 `property_scope_items.scope_owner` — `us` (default), `client`, `vendor`
