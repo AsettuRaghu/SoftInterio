@@ -1089,19 +1089,17 @@ rule was seeded where such types existed; the tenant edits or replaces it.
     only for a quantity that can be 0 (a count, a typed area); an optional
     extra that follows the size is a tap. An item alone in its group and
     not auto is *optional* - tap to include, tap again to leave out.
-  **A count is asked by whatever is priced per it**, never in a section of
-  its own (2026-09-23, the correction to the same day's first attempt).
-  "Which drawer system?" asks "How many?" on its own row, because the count
-  exists only to size that decision - drawn separately, the sheet asked
-  about drawers in two places, which is what it was meant to stop. A count
-  nothing is priced per is asked on its own, above the questions: the
-  exposed ends only an *automatic* item follows, so no question owns them.
-  `Options` places them, being the only thing that knows which question is
-  priced per which count; `ComponentCard` hands it the fields and a setter.
-  Handles got a `handles` quantity of their own for this reason
-  (`20260923240000`) - pointing them at `drawers` was right arithmetic and
-  wrong ownership, and would have had a dressing table ask "How do the doors
-  open? … how many drawers?".
+  **A count is asked as its own question**, with its own wording - "Any
+  blind corners? None · One (L-shaped) · Two (U-shaped)". Drawing it inside
+  whatever is priced per it was tried for half an hour on 2026-09-23 to hide
+  the drawer duplicate, and went when the duplicate did.
+
+  **A type that cannot say how many of something it needs must not offer it**
+  (`20260923260000`). Four types offered the Handles ladder with no quantity
+  to price it per, so the sheet drew "+ Handles - Basic × n" chips instead of
+  asking which handles. A loft's handles follow its doors like every other
+  shuttered unit; the three tables have neither doors nor a drawer count and
+  their handles come fitted to the drawer, so the offer went.
 
   **A count question carries its own wording** - `CHOICES` in
   `ScopeItemPanel`, at module level, holds the field key, the question and
@@ -1112,23 +1110,27 @@ rule was seeded where such types existed; the tenant edits or replaces it.
   one-①-one-② rule is applied locally (mirroring the trigger), the save goes
   out behind it, only a failure re-reads, and the list behind the sheet is
   told once the tapping has paused (900 ms), not per tap.
-- **A drawer has a quality and a number, and they are two questions**
-  (2026-09-23, `20260923230000`). `drawers` is a count on the rule, answered
-  on the sheet as "How many drawers? None · 1 · 2 · 3 · 4 · 6"; the graded
-  **Drawer Systems** ladder is priced per it, so "Which drawer system?" is
-  one question with one answer. Twelve types carry it, including the two
-  openable wardrobes, which had only the by-type drawers - and Wooden Drawer
-  and Tandem Box Drawer came off every menu that now sells the ladder, which
-  also retires the "asks for drawers twice" note left open the day before.
-  **The specialised pull-outs stay counted**: a trouser pull-out and a saree
-  pull-out are different THINGS, not grades of one, and "how many of these"
-  is the honest question for them.
+- **A drawer is one counted row, named by its kind** - "Tandem Box Drawer
+  × 3" says the quality AND the number, and that is the whole model
+  (`20260923250000`). The graded **Drawer Systems** ladder is retired: it
+  asked the same sentence a second way, which the user saw the moment it was
+  drawn - "how is that different from the answer we give for how many?".
+  Deactivated rather than deleted, because 26 quotation lines name Standard
+  and 92 name Premium and the printed Material column reads an item's live
+  description.
 
-  It reverses *Internals are counted accessories, never a preference*
-  (2026-09-21, itself reversing "the kind of drawer is a decision" from the
-  day before), and is better than either, because it stops asking one thing
-  in two places rather than picking which of the two places to keep. Every
-  drawer type - wooden, tandem box,
+  This settles a duplicate approached from both ends in three days: on
+  2026-09-22 the ladder sat beside the by-type drawers and was left as
+  "arguably two real axes"; on the 23rd a `drawers` count was added to the
+  rule so the ladder could be priced per it, which only moved the duplicate;
+  the same afternoon both went. **It is one axis, and the half to keep is the
+  one a seller can point at while the customer is looking.** The detour is
+  worth remembering as a shape: machinery was being added to the sheet to
+  paper over a duplicate in the catalogue, and deleting the duplicate deleted
+  the machinery with it.
+
+  So *Internals are counted accessories, never a preference* (2026-09-21)
+  stands, and is the settled reading. Every drawer type - wooden, tandem box,
   trouser pull-out - is added and counted like a tray; there is no drawers
   blank. `Shelves: 5` stays a count in Measurements and Shelf prices itself
   from it, which is automatic, not a choice. An internal mirror is per door
