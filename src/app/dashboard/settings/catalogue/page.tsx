@@ -116,7 +116,7 @@ interface ModalState {
 
 interface DeleteModalState {
   isOpen: boolean;
-  item: SpaceType | ComponentType | CostItemCategory | QuotationCostItem | ScopePreset | null;
+  item: SpaceType | ComponentType | CostItemCategory | QuotationCostItem | ScopePreset | { id: string; name: string } | null;
   type: TabType;
 }
 
@@ -863,6 +863,8 @@ export default function QuotationsConfigPage() {
         endpoint = `/api/settings/quotation-cost-items/${deleteModal.item.id}`;
       else if (deleteModal.type === "presets")
         endpoint = `/api/scope-presets/${deleteModal.item.id}`;
+      else if (deleteModal.type === "packages")
+        endpoint = `/api/scope-packages/${deleteModal.item.id}`;
 
       uiLogger.info("Deleting item", {
         type: deleteModal.type,
@@ -873,9 +875,9 @@ export default function QuotationsConfigPage() {
       const res = await fetch(endpoint, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        ...(deleteModal.type !== "categories" &&
-        deleteModal.type !== "costItems" &&
-        deleteModal.type !== "presets"
+        // The older three routes take the id in the body; the ones addressed
+        // by URL do not.
+        ...(deleteModal.type === "spaces" || deleteModal.type === "components"
           ? { body: JSON.stringify({ id: deleteModal.item.id }) }
           : {}),
       });
@@ -901,6 +903,11 @@ export default function QuotationsConfigPage() {
       else if (deleteModal.type === "components") await fetchComponents();
       else if (deleteModal.type === "categories") await fetchCategories();
       else if (deleteModal.type === "costItems") await fetchCostItems();
+      else if (deleteModal.type === "packages") {
+        // A preset that answered with it is left listing rooms only, so its
+        // row has to be re-read too.
+        await Promise.all([fetchPackages(), fetchPresets()]);
+      }
     } catch (err) {
       uiLogger.error("Error deleting item", {
         type: deleteModal.type,
@@ -1078,6 +1085,13 @@ export default function QuotationsConfigPage() {
                       <a href={`/dashboard/settings/catalogue/packages/${pk.id}`} title="What this package answers" className="p-1.5 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50">
                         <PencilSquareIcon className="w-4 h-4" />
                       </a>
+                      <button
+                        onClick={() => setDeleteModal({ isOpen: true, item: { id: pk.id, name: pk.name }, type: "packages" })}
+                        title="Delete this package"
+                        className="p-1.5 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50"
+                      >
+                        <TrashIcon className="w-4 h-4" />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -2253,6 +2267,27 @@ export default function QuotationsConfigPage() {
                 This action cannot be undone. This will permanently delete the{" "}
                 {getDeleteItemType()}.
               </p>
+              {/* Deleting a package does not break a preset - the link is set
+                  to null - but the preset silently goes back to listing rooms
+                  without answering them, which is worth knowing beforehand
+                  rather than discovering at the next qualification. */}
+              {deleteModal.type === "packages" && (() => {
+                const used = presets.filter((pr) => pr.package_id === deleteModal.item?.id);
+                if (used.length === 0) return null;
+                return (
+                  <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-left">
+                    <p className="text-xs text-amber-800">
+                      {used.length === 1 ? "The preset " : `${used.length} presets — `}
+                      <b>{used.map((pr) => pr.name).join(", ")}</b>
+                      {used.length === 1 ? " answers" : " answer"} the rooms with this package. {used.length === 1 ? "It" : "They"} will go back to
+                      listing rooms without answering them.
+                    </p>
+                    <p className="mt-1.5 text-xs text-amber-700">
+                      Making it <b>inactive</b> instead keeps those links and only hides it from sellers.
+                    </p>
+                  </div>
+                );
+              })()}
               {deleteError && (
                 <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-left">
                   <p className="text-xs text-red-700">{deleteError}</p>
