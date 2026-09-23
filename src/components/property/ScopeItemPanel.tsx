@@ -166,43 +166,6 @@ const TIER: Record<string, string> = { basic: "Basic", standard: "Standard", pre
 /** What a question is called - the same key `lib/scope/questions` counts by. */
 const keyOf = (o: { group_key: string | null; cost_item_id: string }) => o.group_key ?? o.cost_item_id;
 
-/**
- * A count with a handful of sensible answers is a question, not a number
- * box: "Any blind corners? None · One (L) · Two (U)". The seller never types
- * a number they then have to interpret.
- *
- * Module level, and it has to stay there. It was declared inside the render
- * block *below* the three lines that read it, which TypeScript cannot catch
- * - the reads are inside arrow functions, so it cannot know when they run -
- * and every expansion of a component with a costing rule threw "Cannot
- * access 'CHOICES' before initialization" (2026-09-23).
- */
-const CHOICES: Record<string, { question: string; options: { value: number; label: string }[] }> = {
-  corners: {
-    question: "Any blind corners?",
-    options: [
-      { value: 0, label: "None" },
-      { value: 1, label: "One (L-shaped)" },
-      { value: 2, label: "Two (U-shaped)" },
-    ],
-  },
-  exposed_sides: {
-    question: "Any exposed ends?",
-    options: [
-      { value: 0, label: "None" },
-      { value: 1, label: "One end" },
-      { value: 2, label: "Both ends" },
-    ],
-  },
-  wall_exposed_sides: {
-    question: "Wall units - exposed ends?",
-    options: [
-      { value: 0, label: "None" },
-      { value: 1, label: "One end" },
-      { value: 2, label: "Both ends" },
-    ],
-  },
-};
 
 function Options({
   item,
@@ -704,18 +667,22 @@ function ComponentCard({
             // "I still see a lot of text boxes ... I thought you removed them").
             const isDim = (k: string) => k === "width" || k === "height" || k === "length";
             const asked = costing.fields.filter((f) => isDim(f.key) || f.default == null);
-            const questions = costing.fields.filter((f) => CHOICES[f.key]);
-            const assumed = costing.fields.filter((f) => !isDim(f.key) && f.default != null && !CHOICES[f.key]);
+            // A count asks its own question when the rule gives it answers;
+            // everything else with a default is taken as read. Both come from
+            // the field, so a tenant's own count can ask properly too.
+            const asksItself = (f: (typeof costing.fields)[number]) => !!f.choices?.length;
+            const questions = costing.fields.filter(asksItself);
+            const assumed = costing.fields.filter((f) => !isDim(f.key) && f.default != null && !asksItself(f));
             const touched = assumed.some((f) => (c.measures as Record<string, number> | null)?.[f.key] != null);
             const ask = (f: (typeof costing.fields)[number]) => {
-              const choice = CHOICES[f.key];
-              if (!choice) return null;
+              const choices = f.choices;
+              if (!choices?.length) return null;
               const current = Number(measures[f.key] ?? 0);
               return (
                 <div key={f.key} className="grid grid-cols-[9rem_1fr] gap-x-2 items-start" title={f.hint}>
-                  <span className="text-[11px] font-medium text-slate-600 pt-1">{choice.question}</span>
+                  <span className="text-[11px] font-medium text-slate-600 pt-1">{f.question || f.label || f.key}</span>
                   <div className="flex flex-wrap gap-1.5">
-                    {choice.options.map((ch) => (
+                    {choices.map((ch) => (
                       <button
                         key={ch.value}
                         type="button"

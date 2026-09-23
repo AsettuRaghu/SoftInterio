@@ -72,7 +72,7 @@ type Db = Awaited<ReturnType<typeof createClient>>;
 async function seedFromTier(supabase: Db, tenantId: string, packageId: string, tier: string): Promise<number> {
   const want = tier.trim().toLowerCase();
   const [{ data: offers }, { data: items }] = await Promise.all([
-    supabase.from("component_type_offers").select("component_type_id, cost_item_id, quantity_key, auto").eq("tenant_id", tenantId),
+    supabase.from("component_type_offers").select("component_type_id, cost_item_id, quantity_key, auto, ask_as").eq("tenant_id", tenantId),
     supabase.from("quotation_cost_items").select("id, category_id, quality_tier, is_active").eq("tenant_id", tenantId),
   ]);
   const tierOf = new Map<string, string | null>();

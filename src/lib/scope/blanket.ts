@@ -27,7 +27,7 @@ export async function loadOfferMenu(supabase: SupabaseClient, componentTypeIds: 
 
   const { data: offers } = await supabase
     .from("component_type_offers")
-    .select("component_type_id, cost_item_id, quantity_key, auto")
+    .select("component_type_id, cost_item_id, quantity_key, auto, ask_as")
     .in("component_type_id", types);
   if (!offers?.length) return empty;
 
@@ -60,6 +60,7 @@ export async function loadOfferMenu(supabase: SupabaseClient, componentTypeIds: 
       cost_item_id: o.cost_item_id as string,
       quantity_key: (o.quantity_key as string | null) ?? null,
       auto: !!o.auto,
+      ask_as: (o.ask_as as string | null) ?? null,
     }]);
   }
   return { offersByType, items, names };

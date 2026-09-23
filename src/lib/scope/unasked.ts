@@ -38,7 +38,7 @@ export async function unaskedByComponent(
   const typeIds = [...new Set(components.map((c) => c.component_type_id as string))];
   const { data: offers } = await supabase
     .from("component_type_offers")
-    .select("component_type_id, cost_item_id, quantity_key, auto")
+    .select("component_type_id, cost_item_id, quantity_key, auto, ask_as")
     .in("component_type_id", typeIds);
   if (!offers?.length) return out;
 
@@ -64,7 +64,7 @@ export async function unaskedByComponent(
   for (const o of offers) {
     if (!menu.has(o.cost_item_id as string)) continue;
     const t = o.component_type_id as string;
-    offersByType.set(t, [...(offersByType.get(t) ?? []), { cost_item_id: o.cost_item_id as string, quantity_key: (o.quantity_key as string | null) ?? null, auto: !!o.auto }]);
+    offersByType.set(t, [...(offersByType.get(t) ?? []), { cost_item_id: o.cost_item_id as string, quantity_key: (o.quantity_key as string | null) ?? null, auto: !!o.auto, ask_as: (o.ask_as as string | null) ?? null }]);
   }
 
   const pickedByParent = new Map<string, string[]>();

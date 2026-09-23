@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { calculateSqft, convertToFeet, getMeasurementInfo, type MeasurementUnit } from "@/components/quotations/types";
 import { hasCosting, mergeMeasures, quantify, readCosting } from "@/lib/costing/component-costing";
-import { shapeOptions } from "@/lib/scope/options";
+import { shapeOptions, type Offer } from "@/lib/scope/options";
 
 /**
  * Brings the property's scope into a quotation - the rooms and components
@@ -316,14 +316,14 @@ export async function copyScopeToQuotation(
     const [{ data: types }, { data: offerRows }] = await Promise.all([
       typeIds.length ? supabase.from("component_types").select("id, config_schema").in("id", typeIds) : Promise.resolve({ data: [] as { id: string; config_schema: unknown }[] }),
       typeIds.length
-        ? supabase.from("component_type_offers").select("component_type_id, cost_item_id, quantity_key, auto").in("component_type_id", typeIds)
-        : Promise.resolve({ data: [] as { component_type_id: string; cost_item_id: string; quantity_key: string | null; auto: boolean }[] }),
+        ? supabase.from("component_type_offers").select("component_type_id, cost_item_id, quantity_key, auto, ask_as").in("component_type_id", typeIds)
+        : Promise.resolve({ data: [] as (Offer & { component_type_id: string })[] }),
     ]);
     const ruleByType = new Map((types ?? []).map((t) => [t.id as string, readCosting(t.config_schema)]));
     // What each type offers, and what each item is priced per on it.
-    const menuByType = new Map<string, { cost_item_id: string; quantity_key: string | null; auto: boolean }[]>();
+    const menuByType = new Map<string, Offer[]>();
     for (const typeId of typeIds) {
-      menuByType.set(typeId, (offerRows ?? []).filter((r) => r.component_type_id === typeId).map((r) => ({ cost_item_id: r.cost_item_id as string, quantity_key: (r.quantity_key as string | null) ?? null, auto: !!r.auto })));
+      menuByType.set(typeId, (offerRows ?? []).filter((r) => r.component_type_id === typeId).map((r) => ({ cost_item_id: r.cost_item_id as string, quantity_key: (r.quantity_key as string | null) ?? null, auto: !!r.auto, ask_as: (r.ask_as as string | null) ?? null })));
     }
     const menuIds = [...new Set([...menuByType.values()].flat().map((l) => l.cost_item_id))];
     const wantedIds = [...new Set([...picked.map((r) => r.cost_item_id as string), ...menuIds])];

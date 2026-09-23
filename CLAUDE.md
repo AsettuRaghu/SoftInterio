@@ -1224,10 +1224,28 @@ rule was seeded where such types existed; the tenant edits or replaces it.
   shuttered unit; the three tables have neither doors nor a drawer count and
   their handles come fitted to the drawer, so the offer went.
 
-  **A count question carries its own wording** - `CHOICES` in
-  `ScopeItemPanel`, at module level, holds the field key, the question and
-  its handful of answers together, so adding `drawers` needed no new branch.
-  Naming each one with another ternary is how the first two were written.
+  **A count carries its own question and answers**, on the rule field
+  (`CostingField.question` / `.choices`, edited under the field on the
+  component's page). They were a map in `ScopeItemPanel` keyed by field NAME
+  until 2026-09-24, so the three seeded counts asked properly and a tenant's
+  own `niches` field got a bare number box with no way to fix it - the
+  opposite of the rules being theirs. Backfilled onto 21 component types from
+  what the code said, then the map was deleted. **No choices means a number
+  box**, which is what every other count already showed.
+
+  **An offer says HOW it is asked** - `component_type_offers.ask_as`, one of
+  `one_of | count | auto`, chosen on the component's page and read by
+  `shapeOptions` (`20260924120000`). It was inferred from a per-piece unit
+  plus a missing priced-per, which nobody could guess from that dropdown, and
+  which **could not express a per-piece family at all**: four drawer grades,
+  all `nos`, all wanting to be one question, came out as four steppers - the
+  reason the Drawer Systems ladder had to be retired rather than fixed. Null
+  still falls back to the inference, and the backfill was verified faithful:
+  all 572 offers shape identically to before. `auto` stays as a column
+  because other code selects it, and the costing route keeps it in step with
+  `ask_as` rather than letting the two disagree. Automatic still requires a
+  quantity - something to be automatic *from* - or it would price at nothing
+  for ever, invisibly.
 
   Every tap changes the screen at once and nothing repaints afterwards: the
   one-①-one-② rule is applied locally (mirroring the trigger), the save goes

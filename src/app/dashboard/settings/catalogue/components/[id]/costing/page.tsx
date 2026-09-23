@@ -41,6 +41,7 @@ interface LineRow {
   quantity_key: string | null;
   /** Prices itself with nothing to tap - the tenant's call, per item. */
   auto: boolean;
+  ask_as: string | null;
 }
 interface CatalogueItem {
   id: string;
@@ -86,7 +87,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
   // How each offered item will behave on the room sheet, from the same
   // rule the sheet and the quotation use.
   const shapes = useMemo(
-    () => shapeOptions(lines.map((l) => ({ cost_item_id: l.cost_item_id, quantity_key: l.quantity_key, auto: l.auto })), lines.map((l) => ({ id: l.cost_item_id, category_id: l.category_id, unit_code: l.unit_code }))),
+    () => shapeOptions(lines.map((l) => ({ cost_item_id: l.cost_item_id, quantity_key: l.quantity_key, auto: l.auto, ask_as: l.ask_as })), lines.map((l) => ({ id: l.cost_item_id, category_id: l.category_id, unit_code: l.unit_code }))),
     [lines],
   );
   const behaviour = (costItemId: string) => {
@@ -101,7 +102,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
 
   // Adding and removing take effect at once - the offer is not part of Save,
   // which covers the rule and the priced-per dropdowns - so say so.
-  const setLine = (costItemId: string, patch: Partial<Pick<LineRow, "quantity_key" | "auto">>) => {
+  const setLine = (costItemId: string, patch: Partial<Pick<LineRow, "quantity_key" | "auto" | "ask_as">>) => {
     setLines((prev) => prev.map((x) => (x.cost_item_id === costItemId ? { ...x, ...patch } : x)));
     setDirty(true);
   };
@@ -152,7 +153,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
     const res = await fetch(`/api/quotations/config/component-types/${id}/costing`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ costing, lines: lines.map((l) => ({ cost_item_id: l.cost_item_id, quantity_key: l.quantity_key, auto: l.auto })) }),
+      body: JSON.stringify({ costing, lines: lines.map((l) => ({ cost_item_id: l.cost_item_id, quantity_key: l.quantity_key, auto: l.auto, ask_as: l.ask_as })) }),
     });
     const json = await res.json().catch(() => ({}));
     setSaving(false);
@@ -237,6 +238,69 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
                           <button type="button" onClick={() => update({ fields: move(costing.fields, i, 1) })} className="p-1 rounded text-slate-400 hover:text-slate-700"><ArrowDownIcon className="w-3.5 h-3.5" /></button>
                           <button type="button" onClick={() => update({ fields: costing.fields.filter((_, k) => k !== i) })} className="p-1 rounded text-slate-400 hover:text-red-600"><TrashIcon className="w-3.5 h-3.5" /></button>
                         </span>
+
+                        {/* A count with a handful of sensible answers is a
+                            question, not a number box: "Any blind corners?
+                            None · One (L-shaped) · Two (U-shaped)". The seller
+                            never types a number whose meaning they then have
+                            to work out. Only counts, because asking a width
+                            this way makes no sense. */}
+                        {f.kind === "count" && (
+                          <div className="col-span-6 pl-1 pt-1.5 mt-0.5 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-start">
+                            <input
+                              value={f.question ?? ""}
+                              placeholder='Ask it as a question, e.g. "Any blind corners?" (optional)'
+                              title="With answers below, the room sheet asks this instead of showing a number box."
+                              onChange={(e) => setField(i, { question: e.target.value || undefined })}
+                              className="px-2 py-1.5 text-xs border border-slate-200 rounded-md outline-none focus:border-blue-400"
+                            />
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {(f.choices ?? []).map((ch, ci) => (
+                                <span key={ci} className="inline-flex items-center rounded-md border border-slate-200 bg-white">
+                                  <input
+                                    type="number"
+                                    value={ch.value}
+                                    title="The number this answer means"
+                                    onChange={(e) => {
+                                      const next = [...(f.choices ?? [])];
+                                      next[ci] = { ...ch, value: Number(e.target.value) || 0 };
+                                      setField(i, { choices: next });
+                                    }}
+                                    className="w-12 px-1.5 py-1 text-xs text-right tabular-nums border-0 border-r border-slate-200 outline-none"
+                                  />
+                                  <input
+                                    value={ch.label}
+                                    placeholder="Label"
+                                    onChange={(e) => {
+                                      const next = [...(f.choices ?? [])];
+                                      next[ci] = { ...ch, label: e.target.value };
+                                      setField(i, { choices: next });
+                                    }}
+                                    className="w-28 px-1.5 py-1 text-xs outline-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    title="Remove this answer"
+                                    onClick={() => setField(i, { choices: (f.choices ?? []).filter((_, k) => k !== ci) })}
+                                    className="px-1.5 py-1 text-slate-400 hover:text-red-600"
+                                  >
+                                    <XMarkIcon className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ))}
+                              <button
+                                type="button"
+                                onClick={() => setField(i, { choices: [...(f.choices ?? []), { value: (f.choices?.length ?? 0), label: "" }] })}
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 rounded-md border border-dashed border-blue-200 hover:bg-blue-50"
+                              >
+                                <PlusIcon className="w-3 h-3" /> Answer
+                              </button>
+                              {(f.choices?.length ?? 0) === 0 && (
+                                <span className="text-[11px] text-slate-400">no answers - asked as a number box</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -302,7 +366,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
                   <div className="flex-1">
                     <h2 className="text-sm font-semibold text-slate-900">What it offers on the room sheet</h2>
                     <p className="text-xs text-slate-500">
-                      The items a seller can pick for a {name || "component"} of this type, and what each is priced per. Items of one category priced the same way are alternatives; a per-piece item is counted; an item alone is optional unless marked Automatic, which prices it from the measurement with nothing to tap. Adding and removing take effect at once; Save is for the rule, the priced-per dropdowns and Automatic.
+                      The items a seller can pick for a {name || "component"} of this type, what each is priced per, and how the room sheet asks for it. <b>One of these</b> makes the items of a group answers to one question; <b>How many</b> is a thing you count with a × n; <b>Automatic</b> prices it from the measurement with nothing to tap, and is only right for a quantity that can be 0. Left to <b>work it out</b>, a per-piece item with no quantity is counted and everything else is a question. Adding and removing take effect at once; Save is for the rule and these dropdowns.
                     </p>
                   </div>
                   <button type="button" onClick={() => setPicking((p) => !p)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0">
@@ -353,14 +417,27 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
                               <option key={q.key} value={q.key}>per {q.label || q.key} ({q.unit_code})</option>
                             ))}
                           </select>
-                          {/* Automatic: prices itself with nothing to tap. Right
-                              for a quantity that can be 0 (shelves, exposed
-                              sides); wrong for an optional extra that follows
-                              the size - lighting on every wall unit. */}
-                          <label className={cn("inline-flex items-center gap-1 text-[11px] whitespace-nowrap", l.quantity_key ? "text-slate-600" : "text-slate-300")} title="Priced from the measurement without a tap. Only for a quantity that can be 0; an extra the customer chooses stays a tap.">
-                            <input type="checkbox" checked={!!l.auto} disabled={!l.quantity_key} onChange={(e) => setLine(l.cost_item_id, { auto: e.target.checked })} className="rounded border-slate-300" />
-                            Automatic
-                          </label>
+                          {/* How the sheet asks for it, said rather than
+                              deduced from the unit and the priced-per - which
+                              nobody could guess, and which could not express a
+                              per-piece family like four drawer grades wanting
+                              to be one question (2026-09-24). Automatic needs
+                              something to be automatic from, so it is only
+                              offered once a quantity is chosen. */}
+                          <select
+                            value={l.ask_as ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value || null;
+                              setLine(l.cost_item_id, { ask_as: v, auto: v === "auto" });
+                            }}
+                            title="One of these: several answers to one question. How many: a thing you count. Automatic: priced from the measurement with nothing to tap - only right for a quantity that can be 0."
+                            className="px-2 py-1.5 text-xs border border-slate-200 rounded-md bg-white min-w-[10rem]"
+                          >
+                            <option value="">Asked as: work it out</option>
+                            <option value="one_of">One of these</option>
+                            <option value="count">How many</option>
+                            <option value="auto" disabled={!l.quantity_key}>Automatic</option>
+                          </select>
                           <button type="button" onClick={() => void changeMenu({ remove: [l.cost_item_id] }, l.name)} className="p-1 text-slate-400 hover:text-red-600 rounded" title="Take off this component's offer">
                             <XMarkIcon className="w-4 h-4" />
                           </button>

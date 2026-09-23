@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import type { Offer } from "@/lib/scope/options";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const [{ data: entries }, { data: types }, { data: offers }, { data: items }] = await Promise.all([
     supabase.from("scope_package_items").select("component_type_id, cost_item_id, quantity").eq("package_id", id),
     supabase.from("component_types").select("id, name").eq("tenant_id", user.tenantId).eq("is_active", true).order("name"),
-    supabase.from("component_type_offers").select("component_type_id, cost_item_id, quantity_key, auto").eq("tenant_id", user.tenantId),
+    supabase.from("component_type_offers").select("component_type_id, cost_item_id, quantity_key, auto, ask_as").eq("tenant_id", user.tenantId),
     supabase
       .from("quotation_cost_items")
       .select("id, name, category_id, unit_code, quality_tier, is_active, category:quotation_cost_item_categories(id, name, question, decision, display_order)")
@@ -38,11 +39,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   ]);
 
   const itemById = new Map((items ?? []).map((i) => [i.id as string, i]));
-  const byType = new Map<string, { cost_item_id: string; quantity_key: string | null; auto: boolean }[]>();
+  const byType = new Map<string, Offer[]>();
   for (const o of offers ?? []) {
     if (!itemById.has(o.cost_item_id as string)) continue;
     const k = o.component_type_id as string;
-    byType.set(k, [...(byType.get(k) ?? []), { cost_item_id: o.cost_item_id as string, quantity_key: (o.quantity_key as string | null) ?? null, auto: !!o.auto }]);
+    byType.set(k, [...(byType.get(k) ?? []), { cost_item_id: o.cost_item_id as string, quantity_key: (o.quantity_key as string | null) ?? null, auto: !!o.auto, ask_as: (o.ask_as as string | null) ?? null }]);
   }
 
   const catalogue = (types ?? [])

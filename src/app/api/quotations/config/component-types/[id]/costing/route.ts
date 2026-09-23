@@ -13,7 +13,9 @@ type RouteParams = { params: Promise<{ id: string }> };
  *
  * GET  -> { costing, lines: [{ cost_item_id, name, unit_code, category, category_id, quantity_key }],
  *           catalogue: [{ id, name, unit_code, category, category_id }] }
- * PUT  { costing?, lines?: [{ cost_item_id, quantity_key | null, auto? }], add?: [cost_item_id], remove?: [cost_item_id] }
+ * PUT  { costing?, lines?: [{ cost_item_id, quantity_key | null, ask_as?, auto? }], add?: [cost_item_id], remove?: [cost_item_id] }
+ *         `ask_as`: one_of | count | auto - how the room sheet asks for it.
+ *         Null leaves it to the old inference. `auto` is kept in step with it.
  *         `auto`: the item prices itself from the measurement with nothing
  *         to tap - only meaningful with a quantity_key, and only right for
  *         a quantity that can be 0 (a count, a typed area), never the size.
@@ -32,7 +34,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const [{ data: offers }, { data: catalogue }] = await Promise.all([
     supabase
       .from("component_type_offers")
-      .select("cost_item_id, quantity_key, auto, display_order, cost_item:quotation_cost_items(id, name, unit_code, category_id, is_active, category:quotation_cost_item_categories(name, display_order))")
+      .select("cost_item_id, quantity_key, auto, ask_as, display_order, cost_item:quotation_cost_items(id, name, unit_code, category_id, is_active, category:quotation_cost_item_categories(name, display_order))")
       .eq("component_type_id", id)
       .order("display_order"),
     supabase
@@ -48,7 +50,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     .map((o) => {
       const ci = o.cost_item as unknown as { id: string; name: string; unit_code: string; category_id: string | null; is_active: boolean; category: Cat } | null;
       if (!ci || ci.is_active === false) return null;
-      return { cost_item_id: ci.id, name: ci.name, unit_code: ci.unit_code, category: ci.category?.name ?? null, category_id: ci.category_id, category_order: ci.category?.display_order ?? 999, quantity_key: (o.quantity_key as string | null) ?? null, auto: !!o.auto };
+      return { cost_item_id: ci.id, name: ci.name, unit_code: ci.unit_code, category: ci.category?.name ?? null, category_id: ci.category_id, category_order: ci.category?.display_order ?? 999, quantity_key: (o.quantity_key as string | null) ?? null, auto: !!o.auto, ask_as: (o.ask_as as string | null) ?? null };
     })
     .filter(Boolean) as { cost_item_id: string; name: string; unit_code: string; category: string | null; category_id: string | null; category_order: number; quantity_key: string | null; auto: boolean }[];
 
@@ -86,6 +88,15 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         hint: String(f.hint ?? "").trim() || undefined,
         // A number in the row's unit, or a formula over the fields above it.
         default: f.default == null || String(f.default).trim() === "" ? undefined : Number.isFinite(Number(f.default)) ? Number(f.default) : String(f.default).trim(),
+        // How a count is asked: the wording, and the handful of answers it
+        // offers. Dropped here until 2026-09-24, which is why the three
+        // seeded counts had to be named in the component's code.
+        question: String(f.question ?? "").trim() || undefined,
+        choices: Array.isArray(f.choices)
+          ? (f.choices as { value?: unknown; label?: unknown }[])
+              .map((c) => ({ value: Number(c?.value), label: String(c?.label ?? "").trim() }))
+              .filter((c) => Number.isFinite(c.value) && c.label !== "")
+          : undefined,
       })),
       quantities: (Array.isArray(body.costing.quantities) ? body.costing.quantities : []).map((q: Record<string, unknown>) => ({
         key: String(q.key ?? "").trim(),
@@ -131,11 +142,16 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
   if (Array.isArray(body.lines)) {
     const known = new Set(costing.quantities.map((q) => q.key));
-    for (const l of body.lines as { cost_item_id?: string; quantity_key?: string | null; auto?: boolean }[]) {
+    for (const l of body.lines as { cost_item_id?: string; quantity_key?: string | null; auto?: boolean; ask_as?: string | null }[]) {
       if (!l.cost_item_id) continue;
       const key = l.quantity_key && known.has(l.quantity_key) ? l.quantity_key : null;
       if (l.quantity_key && !key) return NextResponse.json({ error: `"${l.quantity_key}" is not a quantity of this component type` }, { status: 400 });
-      const { error } = await supabase.from("component_type_offers").update({ quantity_key: key, auto: !!key && l.auto === true }).eq("component_type_id", id).eq("cost_item_id", l.cost_item_id);
+      // `ask_as` is what the sheet reads; `auto` is the older boolean other
+      // code still selects, so it is kept in step here rather than left to
+      // disagree with the dropdown that set it.
+      const ask = l.ask_as === "one_of" || l.ask_as === "count" || l.ask_as === "auto" ? l.ask_as : null;
+      const auto = ask ? ask === "auto" && !!key : !!key && l.auto === true;
+      const { error } = await supabase.from("component_type_offers").update({ quantity_key: key, auto, ask_as: ask === "auto" && !key ? null : ask }).eq("component_type_id", id).eq("cost_item_id", l.cost_item_id);
       if (error) return NextResponse.json({ error: "Could not save the line" }, { status: 500 });
     }
   }

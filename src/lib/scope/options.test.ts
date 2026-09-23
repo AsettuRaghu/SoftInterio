@@ -111,3 +111,38 @@ describe("two categories that answer one question", () => {
     expect(s.get("handle-std")!.counted).toBe(false);
   });
 });
+
+describe("an offer says how it is asked", () => {
+  const four = ["d-b", "d-s", "d-p", "d-l"].map((id) => ({ id, category_id: "drawers", unit_code: "nos", decision: null }));
+
+  it("makes a per-piece family one question when the offer says so", () => {
+    // The Drawer Systems case: four grades, all `nos`, no quantity to size
+    // them by. Inference made four steppers; saying one_of makes one question.
+    const shapes = shapeOptions(four.map((f) => ({ cost_item_id: f.id, quantity_key: null, ask_as: "one_of" })), four);
+    expect([...shapes.values()].every((s) => !s.counted)).toBe(true);
+    expect(new Set([...shapes.values()].map((s) => s.group_key)).size).toBe(1);
+  });
+
+  it("counts something that would otherwise be a question", () => {
+    const sqft = [{ id: "x", category_id: "c", unit_code: "sqft", decision: null }];
+    const shapes = shapeOptions([{ cost_item_id: "x", quantity_key: "area", ask_as: "count" }], sqft);
+    expect(shapes.get("x")!.counted).toBe(true);
+    expect(shapes.get("x")!.group_key).toBeNull();
+  });
+
+  it("falls back to the inference when the offer has not said", () => {
+    const shapes = shapeOptions(four.map((f) => ({ cost_item_id: f.id, quantity_key: null })), four);
+    expect([...shapes.values()].every((s) => s.counted)).toBe(true);
+  });
+
+  it("refuses automatic with nothing to be automatic from", () => {
+    const one = [{ id: "s", category_id: "c", unit_code: "nos", decision: null }];
+    expect(shapeOptions([{ cost_item_id: "s", quantity_key: null, ask_as: "auto" }], one).get("s")!.auto).toBe(false);
+    expect(shapeOptions([{ cost_item_id: "s", quantity_key: "shelves", ask_as: "auto" }], one).get("s")!.auto).toBe(true);
+  });
+
+  it("ignores a value it does not know", () => {
+    const shapes = shapeOptions(four.map((f) => ({ cost_item_id: f.id, quantity_key: null, ask_as: "nonsense" })), four);
+    expect([...shapes.values()].every((s) => s.counted)).toBe(true);
+  });
+});

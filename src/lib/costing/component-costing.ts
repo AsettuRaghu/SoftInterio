@@ -43,6 +43,19 @@ export interface CostingField {
    * a guess - and 0 where the honest answer is "only if somebody says so".
    */
   default?: number | string;
+  /**
+   * How the room sheet asks for a count, when a handful of answers is kinder
+   * than a number box: "Any blind corners? None · One (L-shaped) · Two
+   * (U-shaped)". The seller never types a number whose meaning they then
+   * have to work out.
+   *
+   * Both belong to the FIELD, not to the code. They were a map keyed by
+   * field name in `ScopeItemPanel` until 2026-09-24, so the three seeded
+   * counts asked properly and a tenant's own `niches` field got a bare box
+   * with no way to fix it.
+   */
+  question?: string;
+  choices?: { value: number; label: string }[];
 }
 
 export interface CostingQuantity {
@@ -68,10 +81,25 @@ export function readCosting(config: unknown): ComponentCosting {
   const c = (config ?? {}) as Partial<ComponentCosting>;
   return {
     fields: Array.isArray(c.fields)
-      ? c.fields.filter((f) => f && KEY_RE.test(String(f.key))).map((f) => ({ ...f, default: readDefault(f.default) }))
+      ? c.fields
+          .filter((f) => f && KEY_RE.test(String(f.key)))
+          .map((f) => ({ ...f, default: readDefault(f.default), choices: readChoices((f as CostingField).choices) }))
       : [],
     quantities: Array.isArray(c.quantities) ? c.quantities.filter((q) => q && KEY_RE.test(String(q.key))) : [],
   };
+}
+
+/**
+ * The answers a count offers, or nothing - in which case the sheet asks for a
+ * number. A choice needs a finite value and something to call it; anything
+ * else is dropped rather than drawn as a blank button.
+ */
+function readChoices(v: unknown): { value: number; label: string }[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out = v
+    .map((c) => ({ value: Number((c as { value?: unknown })?.value), label: String((c as { label?: unknown })?.label ?? "").trim() }))
+    .filter((c) => Number.isFinite(c.value) && c.label !== "");
+  return out.length ? out : undefined;
 }
 
 /** A default is a number (0 counts), a formula, or nothing at all. */

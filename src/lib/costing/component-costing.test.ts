@@ -143,3 +143,27 @@ describe("quantify: overruling what the rule worked out", () => {
     expect(out.values.hinges).toBe(30); // shutters is a field, not a quantity
   });
 });
+
+describe("a count carries its own question", () => {
+  it("keeps the wording and the answers off the config", () => {
+    const c = readCosting({
+      fields: [{ key: "niches", label: "Niches", kind: "count", question: "Any niches?", choices: [{ value: 0, label: "None" }, { value: 2, label: "Two" }] }],
+      quantities: [],
+    });
+    expect(c.fields[0].question).toBe("Any niches?");
+    expect(c.fields[0].choices).toEqual([{ value: 0, label: "None" }, { value: 2, label: "Two" }]);
+  });
+
+  it("drops an answer with no label or no number, rather than drawing a blank button", () => {
+    const c = readCosting({
+      fields: [{ key: "corners", label: "Corners", kind: "count", choices: [{ value: 0, label: "None" }, { value: 1, label: "  " }, { value: "x", label: "Bad" }] }],
+      quantities: [],
+    });
+    expect(c.fields[0].choices).toEqual([{ value: 0, label: "None" }]);
+  });
+
+  it("leaves choices undefined when there are none, so the sheet asks for a number", () => {
+    const c = readCosting({ fields: [{ key: "shelves", label: "Shelves", kind: "count", choices: [] }], quantities: [] });
+    expect(c.fields[0].choices).toBeUndefined();
+  });
+});
