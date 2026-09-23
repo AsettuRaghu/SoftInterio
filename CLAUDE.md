@@ -231,6 +231,31 @@ themselves; the room sheet is where choices are seen. The finish chips
 and the "preferred finish" ordering in the builder went with this; a finish
 is now one option category among the others.
 
+**The room sheet asks questions, not for data** (2026-09-23: "let us just
+have sort of questionnaire thing so that the seller can collect as much
+information as possible"). Same model, nothing new stored - the options
+ARE the answers:
+
+- **A decision reads as a question**: "Which carcass?" with the items as
+  answers and **Not needed** as one of them, so declining is recorded
+  rather than left blank.
+- **One question per DECISION, not per category.** A category can hold two
+  - a kitchen's shutter finishes and its exposed side finish are both
+  "Shutters by Finish" but are priced per different quantities, and
+  grouping by category put the exposed side among the finishes to choose
+  between.
+- **A lone optional item is yes or no**: "Wardrobe Sensor Light? No · Yes",
+  the count appearing only after Yes.
+- **A count with a handful of sensible answers is a question too**: "Any
+  blind corners? None · One (L-shaped) · Two (U-shaped)", "Any exposed
+  ends? None · One end · Both ends" - the seller never types a number
+  whose meaning they have to work out. Other counts stay boxes behind
+  "Taking …".
+
+So a wardrobe asks: its size, exposed ends, which carcass, which finish,
+which hinges, which handles, lighting yes/no, and a row of internals to
+add. Nothing else.
+
 **Each space opens out as a room sheet** (`ScopeItemPanel`, the
 speech-bubble on the row, or **Walkthrough** from the header with ←/→).
 No tabs - a tabbed version with the same four headings at two depths was
