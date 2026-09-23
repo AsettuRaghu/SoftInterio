@@ -132,7 +132,7 @@ export default function QuotationsConfigPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("active");
   // Extra filters, each only meaningful on one tab.
   const [spaceFilter, setSpaceFilter] = useState<string>("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [isLoading, setIsLoading] = useState(true);
@@ -348,7 +348,7 @@ export default function QuotationsConfigPage() {
   const filteredCostItems = costItems.filter(
     (item) =>
       matchesStatus(item.is_active) &&
-      (categoryFilter === "all" || item.category_id === categoryFilter) &&
+      (categoryFilter.length === 0 || (item.category_id ? categoryFilter.includes(item.category_id) : false)) &&
       matchesSearch(item.name, item.description, item.category?.name, item.unit_code, item.quality_tier, statusWord(item.is_active), item.default_rate != null ? String(item.default_rate) : undefined, item.picture_count ? "with pictures" : "no pictures")
   );
 
@@ -1648,8 +1648,9 @@ export default function QuotationsConfigPage() {
 
               {activeTab === "costItems" && (
                 <SearchSelect
-                  value={categoryFilter === "all" ? "" : categoryFilter}
-                  onChange={(v) => setCategoryFilter(v || "all")}
+                  multiple
+                  value={categoryFilter}
+                  onChange={setCategoryFilter}
                   emptyLabel="All categories"
                   options={categories.map((c) => ({ value: c.id, label: c.name }))}
                   className="w-48"

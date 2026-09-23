@@ -10,6 +10,12 @@
  *
  * Reach for it wherever a dropdown has more than a handful of entries or
  * could grow - a native <select> is still right for five fixed values.
+ *
+ * `multiple` makes it a checklist instead: `value` is an array, the menu
+ * stays open as rows are ticked, the "all" row clears the lot, and the
+ * button reads "Electrical +2". One component rather than two, because a
+ * multi-choice filter wants the same search, sorting and keys as a
+ * single-choice one (2026-09-23).
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -23,24 +29,10 @@ export interface SearchSelectOption {
   hint?: string;
 }
 
-export function SearchSelect({
-  value,
-  onChange,
-  options,
-  placeholder = "Choose…",
-  /** An "all / none" row shown first, with this label, for value "". */
-  emptyLabel,
-  sort = true,
-  disabled = false,
-  className,
-  buttonClassName,
-  align = "left",
-  id,
-}: {
-  value: string;
-  onChange: (value: string) => void;
+interface SearchSelectCommon {
   options: SearchSelectOption[];
   placeholder?: string;
+  /** An "all / none" row shown first, with this label. Clears the choice. */
   emptyLabel?: string;
   sort?: boolean;
   disabled?: boolean;
@@ -48,7 +40,29 @@ export function SearchSelect({
   buttonClassName?: string;
   align?: "left" | "right";
   id?: string;
-}) {
+}
+
+export type SearchSelectProps =
+  | (SearchSelectCommon & { multiple?: false; value: string; onChange: (value: string) => void })
+  | (SearchSelectCommon & { multiple: true; value: string[]; onChange: (value: string[]) => void });
+
+export function SearchSelect(props: SearchSelectProps) {
+  const {
+    options,
+    placeholder = "Choose…",
+    emptyLabel,
+    sort = true,
+    disabled = false,
+    className,
+    buttonClassName,
+    align = "left",
+    id,
+  } = props;
+  const multiple = props.multiple === true;
+  const picked = useMemo(
+    () => new Set(multiple ? (props.value as string[]) : props.value ? [props.value as string] : []),
+    [multiple, props.value],
+  );
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -73,11 +87,29 @@ export function SearchSelect({
   }, [open]);
 
   const choose = (v: string) => {
-    onChange(v);
-    setOpen(false);
-    setQuery("");
+    if (!multiple) {
+      (props.onChange as (value: string) => void)(v);
+      setOpen(false);
+      setQuery("");
+      return;
+    }
+    // The menu stays open: ticking three categories should not cost three
+    // trips back to the button.
+    const next = new Set(picked);
+    if (v === "") next.clear();
+    else if (next.has(v)) next.delete(v);
+    else next.add(v);
+    (props.onChange as (value: string[]) => void)([...next]);
   };
-  const current = value === "" && emptyLabel !== undefined ? emptyLabel : options.find((o) => o.value === value)?.label;
+
+  const labelOf = (v: string) => options.find((o) => o.value === v)?.label ?? v;
+  const chosen = [...picked];
+  const current =
+    chosen.length === 0
+      ? emptyLabel
+      : chosen.length === 1
+      ? labelOf(chosen[0])
+      : `${labelOf(chosen[0])} +${chosen.length - 1}`;
 
   return (
     <div className={cn("relative", className)} ref={ref}>
@@ -121,12 +153,12 @@ export function SearchSelect({
                 <button
                   type="button"
                   role="option"
-                  aria-selected={o.value === value}
+                  aria-selected={o.value === "" ? picked.size === 0 : picked.has(o.value)}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => choose(o.value)}
-                  className={cn("w-full text-left px-2.5 py-1.5 rounded-md text-sm flex items-center gap-2", i === active ? "bg-slate-100" : "hover:bg-slate-50", o.value === value ? "text-slate-900" : "text-slate-700")}
+                  className={cn("w-full text-left px-2.5 py-1.5 rounded-md text-sm flex items-center gap-2", i === active ? "bg-slate-100" : "hover:bg-slate-50", (o.value === "" ? picked.size === 0 : picked.has(o.value)) ? "text-slate-900" : "text-slate-700")}
                 >
-                  <CheckIcon className={cn("w-4 h-4 shrink-0", o.value === value ? "text-blue-600" : "text-transparent")} />
+                  <CheckIcon className={cn("w-4 h-4 shrink-0", (o.value === "" ? picked.size === 0 : picked.has(o.value)) ? "text-blue-600" : "text-transparent")} />
                   <span className="min-w-0">
                     <span className="block truncate">{o.label}</span>
                     {o.hint && <span className="block text-[11px] text-slate-400 truncate">{o.hint}</span>}

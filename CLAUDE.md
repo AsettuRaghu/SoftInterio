@@ -877,6 +877,16 @@ component / category / cost item facets. A native `<select>` is still
 right for five fixed values (priority, status, unit) and for lists whose
 order means something (pipeline stages). Convert others as they are met.
 
+**`multiple` makes the same component a checklist** (2026-09-23): `value`
+is an array, the menu stays open as rows are ticked - three categories
+should not cost three trips back to the button - the `emptyLabel` row
+clears the lot, and the button reads "Electrical +2". The props are a
+discriminated union on `multiple`, so a single-choice call site is
+unchanged and mixing the two is a compile error. The Catalogue's Items
+tab filters by several categories this way; `MultiSelectFilter` in
+`ListFilterBar` is the older, unsearchable answer that the leads and
+projects bars still use.
+
 ### Every list is built from the same cells
 
 `components/ui/list-cells` - `Headline` (name in bold, then one or two
