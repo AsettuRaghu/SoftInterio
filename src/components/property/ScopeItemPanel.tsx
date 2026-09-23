@@ -176,22 +176,42 @@ const keyOf = (o: { group_key: string | null; cost_item_id: string }) => o.group
  * and every expansion of a component with a costing rule threw "Cannot
  * access 'CHOICES' before initialization" (2026-09-23).
  */
-const CHOICES: Record<string, { value: number; label: string }[]> = {
-  corners: [
-    { value: 0, label: "None" },
-    { value: 1, label: "One (L-shaped)" },
-    { value: 2, label: "Two (U-shaped)" },
-  ],
-  exposed_sides: [
-    { value: 0, label: "None" },
-    { value: 1, label: "One end" },
-    { value: 2, label: "Both ends" },
-  ],
-  wall_exposed_sides: [
-    { value: 0, label: "None" },
-    { value: 1, label: "One end" },
-    { value: 2, label: "Both ends" },
-  ],
+const CHOICES: Record<string, { question: string; options: { value: number; label: string }[] }> = {
+  corners: {
+    question: "Any blind corners?",
+    options: [
+      { value: 0, label: "None" },
+      { value: 1, label: "One (L-shaped)" },
+      { value: 2, label: "Two (U-shaped)" },
+    ],
+  },
+  exposed_sides: {
+    question: "Any exposed ends?",
+    options: [
+      { value: 0, label: "None" },
+      { value: 1, label: "One end" },
+      { value: 2, label: "Both ends" },
+    ],
+  },
+  wall_exposed_sides: {
+    question: "Wall units - exposed ends?",
+    options: [
+      { value: 0, label: "None" },
+      { value: 1, label: "One end" },
+      { value: 2, label: "Both ends" },
+    ],
+  },
+  drawers: {
+    question: "How many drawers?",
+    options: [
+      { value: 0, label: "None" },
+      { value: 1, label: "1" },
+      { value: 2, label: "2" },
+      { value: 3, label: "3" },
+      { value: 4, label: "4" },
+      { value: 6, label: "6" },
+    ],
+  },
 };
 
 function Options({
@@ -453,13 +473,6 @@ function Options({
                     {v ? "Yes" : "No"}
                   </button>
                 ))}
-                {yes && single.counted && (
-                  <span className="inline-flex items-center rounded border border-slate-200 bg-white text-[10px] text-slate-700 tabular-nums">
-                    <button type="button" disabled={readOnly} onClick={() => setCounted(single, Math.max(1, (single.quantity ?? 1) - 1))} className="px-1.5 py-0.5 hover:bg-slate-100" title="One fewer">−</button>
-                    <span className="px-1.5 min-w-[1.6rem] text-center">{single.quantity ?? 1}</span>
-                    <button type="button" disabled={readOnly} onClick={() => setCounted(single, (single.quantity ?? 1) + 1)} className="px-1.5 py-0.5 hover:bg-slate-100" title="One more">+</button>
-                  </span>
-                )}
                 {thumb(single)}
                 {owner(single)}
               </div>
@@ -637,7 +650,11 @@ function ComponentCard({
   // invents. What is stored on the row always wins.
   const [measures, setMeasures] = useState<Record<string, number>>(() => ({ ...defaultMeasures(costing, c, c.measurement_unit), ...mergeMeasures(c) }));
   const missing = missingMeasures(c, costing);
-  const [adjusting, setAdjusting] = useState(false);
+  // null until somebody presses it: the fold opens itself when a value has
+  // been typed before (`touched`), and pressing hide must then be able to
+  // close it. Held as `adjusting || touched` it could not - touched stays
+  // true for ever, so hide did nothing (2026-09-23).
+  const [adjusting, setAdjusting] = useState<boolean | null>(null);
   // From the list until the sheet is opened, then from the sheet itself.
   const [toAsk, setToAsk] = useState<number>(c.still_to_ask ?? 0);
   const onQuestions = useCallback((n: number) => setToAsk(n), []);
@@ -680,12 +697,13 @@ function ComponentCard({
             const assumed = costing.fields.filter((f) => !isDim(f.key) && f.default != null && !CHOICES[f.key]);
             const touched = assumed.some((f) => (c.measures as Record<string, number> | null)?.[f.key] != null);
             const ask = (f: (typeof costing.fields)[number]) => {
-              const choices = CHOICES[f.key];
-              if (!choices) return null;
+              const choice = CHOICES[f.key];
+              if (!choice) return null;
+              const choices = choice.options;
               const current = Number(measures[f.key] ?? 0);
               return (
                 <div key={f.key} className="grid grid-cols-[9rem_1fr] gap-x-2 items-start" title={f.hint}>
-                  <span className="text-[11px] font-medium text-slate-600 pt-1">{f.key === "corners" ? "Any blind corners?" : f.key === "wall_exposed_sides" ? "Wall units - exposed ends?" : "Any exposed ends?"}</span>
+                  <span className="text-[11px] font-medium text-slate-600 pt-1">{choice.question}</span>
                   <div className="flex flex-wrap gap-1.5">
                     {choices.map((ch) => (
                       <button
@@ -742,13 +760,13 @@ function ComponentCard({
                   <div className={cn(asked.length > 0 && "mt-2")}>
                     <button
                       type="button"
-                      onClick={() => setAdjusting((v) => !v)}
+                      onClick={() => setAdjusting(!(adjusting ?? touched))}
                       className="text-[11px] text-slate-500 hover:text-blue-600 text-left"
                       title="Change what we have assumed for this one"
                     >
-                      Taking {summary} · <span className="text-blue-600">{adjusting || touched ? "hide" : "adjust"}</span>
+                      Taking {summary} · <span className="text-blue-600">{(adjusting ?? touched) ? "hide" : "adjust"}</span>
                     </button>
-                    {(adjusting || touched) && <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">{assumed.map(show)}</div>}
+                    {(adjusting ?? touched) && <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">{assumed.map(show)}</div>}
                   </div>
                 )}
                 {questions.length > 0 && <div className="mt-2 space-y-1.5">{questions.map(ask)}</div>}
