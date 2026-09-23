@@ -3553,6 +3553,13 @@ worth it before a second subscriber exists.
   sets loading. The Tasks page's own visibility refetch is quiet for the
   same reason. Any new hook listening to auth events must follow this.
 
+- **A new API route directory can leave the dev server 404ing.** Turbopack did
+  not register `src/app/api/scope-packages/` until a file inside it changed:
+  `curl` gave 404 while the sibling `scope-presets` gave a clean 401, and
+  `touch`ing the route file fixed it. Nothing is wrong with the code and the
+  production build has it. **Before debugging a route that "does not work",
+  curl it** - a 404 beside a 401 on its neighbour is the whole diagnosis, and
+  a restart is the fix.
 - **A `const` read inside an arrow function is not checked for use-before-
   declaration.** `CHOICES` sat in the room sheet's render block six lines
   *below* the three `costing.fields.filter((f) => CHOICES[f.key])` calls that

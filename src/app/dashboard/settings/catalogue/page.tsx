@@ -120,6 +120,27 @@ interface DeleteModalState {
   type: TabType;
 }
 
+/**
+ * Why a fetch failed, in words worth reading.
+ *
+ * `throw new Error("Failed to fetch packages")` is what sent somebody hunting
+ * through the database for a 404: the route existed, the dev server had simply
+ * not registered a newly created directory, and nothing on screen or in the
+ * console said which of the two it was (2026-09-24). The server answers with a
+ * sentence and a status - show them.
+ */
+async function why(res: Response, what: string): Promise<string> {
+  const said = await res
+    .json()
+    .then((j) => (typeof j?.error === "string" ? j.error : null))
+    .catch(() => null);
+  if (said) return `${said} (${res.status})`;
+  if (res.status === 404) return `The ${what} route was not found (404). If this is a dev server, it may need restarting.`;
+  if (res.status === 401) return "You are signed out - sign in again.";
+  if (res.status === 403) return `You do not have permission to read ${what}.`;
+  return `Could not load ${what} (${res.status}).`;
+}
+
 export default function QuotationsConfigPage() {
   // The address follows the tab; the hook is shared with the lead and
   // project detail pages, which wanted the same thing (2026-09-23).
@@ -291,12 +312,13 @@ export default function QuotationsConfigPage() {
   const fetchPackages = useCallback(async () => {
     try {
       const res = await fetch("/api/scope-packages?all=1");
-      if (!res.ok) throw new Error("Failed to fetch packages");
+      if (!res.ok) throw new Error(await why(res, "packages"));
       const data = await res.json();
       setPackages(data.data || []);
     } catch (err) {
-      uiLogger.error("Error fetching packages", { error: err });
-      setError("Failed to load packages");
+      const message = err instanceof Error ? err.message : "Failed to load packages";
+      uiLogger.error("Error fetching packages", { error: message });
+      setError(message);
     }
   }, []);
 
