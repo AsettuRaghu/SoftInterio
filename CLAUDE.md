@@ -930,15 +930,14 @@ rule was seeded where such types existed; the tenant edits or replaces it.
   - *exclusive* - several answers to one decision (four carcass grades, all
     per front area): chips that behave like a radio. **Your last tap is ①;
     the previous ① slides to ②** by itself; tap ① or ② again to clear. No
-    cycle to learn. **A decision can be split** (2026-09-23): *split* on a
-    chosen chip gives it a number of doors (`choice_quantity` on an
-    exclusive row - the same column a counted item uses), and then a second
-    ① stands beside it rather than demoting it. Two glass doors and four
-    leather on one six-door wardrobe are two ① with shares 2 and 4, and the
-    copy splits the quantity pro rata - a third and two thirds of the front
-    area. **At most one ① without a share**: tapping is still "this is the
-    choice", and giving a share is the deliberate act that says "part of
-    it". The trigger enforces it; the copy divides.
+    cycle to learn, and **one ① per decision, full stop**. Splitting a
+    decision across the doors - two glass, four leather, each taking its
+    share of the front area - was built on 2026-09-23 and removed the same
+    day: "the shutter split concept is looking complex, let us keep it
+    simple and make the tenant adopt without that complexity". A rare case
+    must not shape the everyday screen; a component with two finishes is
+    two components, or a line added in the builder. Do not rebuild it
+    without a real case asking.
   - *counted* - per piece and not quantified by the rule (a tray, a
     pull-out): a list with a × n stepper and a ✕; "+ Tray" chips to add. No
     preference - a tray is not an answer to a question.

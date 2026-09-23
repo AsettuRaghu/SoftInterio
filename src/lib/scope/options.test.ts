@@ -82,17 +82,3 @@ describe("shapeOptions - what a tap on the room sheet means", () => {
     expect(twice.get("shelf")!.quantity_key).toBe("shelves");
   });
 });
-
-describe("a split decision", () => {
-  // Two glass doors and four leather on one six-door wardrobe: both are
-  // first preferences, each with a share, and each takes its fraction.
-  const share = (n: number, total: number) => n / total;
-  it("splits the quantity pro rata by doors", () => {
-    expect(share(2, 6)).toBeCloseTo(0.3333, 4);
-    expect(share(4, 6)).toBeCloseTo(0.6667, 4);
-    expect(93 * share(2, 6) * 1450 + 93 * share(4, 6) * 1600).toBeCloseTo(44950 + 99200, 0);
-  });
-  it("one choice with no share takes all of it", () => {
-    expect(93 * 1 * 950).toBe(88350);
-  });
-});

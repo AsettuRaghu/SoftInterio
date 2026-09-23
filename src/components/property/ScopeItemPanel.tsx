@@ -230,18 +230,11 @@ function Options({
     })();
   };
 
-  /** A share: how many of the component's doors take this one. Splitting a
-   *  decision - two glass, four leather - lets several ① stand together. */
-  const setShare = (o: OptionItem, quantity: number | null) => {
-    if (readOnly) return;
-    apply((items) => items.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, quantity } : x)), { cost_item_id: o.cost_item_id, status: o.status ?? "p1", quantity });
-  };
-
   /** Exclusive: your last tap is ①; the previous ① becomes ②; tap ① or ② to clear. */
   const tapExclusive = (o: OptionItem) => {
     if (readOnly) return;
     if (o.status) {
-      apply((items) => items.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, status: null, quantity: null } : x)), { cost_item_id: o.cost_item_id, status: null });
+      apply((items) => items.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, status: null } : x)), { cost_item_id: o.cost_item_id, status: null });
       return;
     }
     apply(
@@ -365,22 +358,6 @@ function Options({
                         {o.name}
                         {tier(o, o.status === "p1")}
                       </button>
-                      {/* Splitting: how many doors take this one. Shown on a
-                          first preference, so a plain choice stays one tap. */}
-                      {o.status === "p1" && !readOnly && (
-                        o.quantity ? (
-                          <span className="inline-flex items-center rounded border border-emerald-200 bg-white text-[10px] text-slate-700">
-                            <button type="button" onClick={() => setShare(o, Math.max(1, (o.quantity ?? 1) - 1))} className="px-1 hover:bg-slate-100" title="One fewer door">−</button>
-                            <span className="px-1 tabular-nums">{o.quantity}</span>
-                            <button type="button" onClick={() => setShare(o, (o.quantity ?? 1) + 1)} className="px-1 hover:bg-slate-100" title="One more door">+</button>
-                            <button type="button" onClick={() => setShare(o, null)} className="px-1 text-slate-400 hover:text-red-600" title="All of them">×</button>
-                          </span>
-                        ) : (
-                          <button type="button" onClick={() => setShare(o, 1)} title="Only some of the doors take this - split the rest across another finish" className="text-[10px] text-slate-400 hover:text-blue-600 hover:underline opacity-0 group-hover/opt:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
-                            split
-                          </button>
-                        )
-                      )}
                       {thumb(o)}
                       {owner(o)}
                     </span>
