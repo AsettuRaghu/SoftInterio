@@ -41,6 +41,7 @@ import { cn } from "@/utils/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { scopeOwnerLabel, type PropertyScopeItem } from "@/types/property-scope";
 import { ScopeDiscussion } from "./ScopeDiscussion";
+import { ApplyGradeButton } from "./ApplyGradeButton";
 import { MediaViewer, type MediaItem } from "@/components/ui/MediaViewer";
 import { defaultMeasures, mergeMeasures, overrideKey, quantify, splitMeasures, type ComponentCosting } from "@/lib/costing/component-costing";
 import { missingMeasures } from "@/lib/scope/measured";
@@ -905,6 +906,8 @@ export function ScopeItemPanel({
 }) {
   const { confirm, confirmDialog } = useConfirm();
   const [openComponents, setOpenComponents] = useState<Set<string>>(() => new Set(focusComponentId ? [focusComponentId] : []));
+  /** What the last blanket grade did, including what it could not answer. */
+  const [gradeNotice, setGradeNotice] = useState<string | null>(null);
 
   const byOrder = (a: PropertyScopeItem, b: PropertyScopeItem) => a.display_order - b.display_order;
   const spaces = useMemo(() => items.filter((i) => !i.parent_id && !i.component_type_id).sort(byOrder), [items]);
@@ -972,10 +975,33 @@ export function ScopeItemPanel({
 
           {/* What goes in it. */}
           <div>
+            {gradeNotice && (
+              <div className="mb-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start justify-between gap-3">
+                <p className="text-xs text-emerald-800">{gradeNotice}</p>
+                <button type="button" onClick={() => setGradeNotice(null)} className="text-[11px] text-emerald-700 hover:text-emerald-900 shrink-0">
+                  Dismiss
+                </button>
+              </div>
+            )}
             <div className="flex items-center gap-2 mb-2">
               <h3 className="text-sm font-semibold text-slate-900">Components</h3>
               <span className="text-xs text-slate-500">{components.length}</span>
               <span className="flex-1" />
+              {/* The same blanket, for this room only - the usual shape of a
+                  conversation is one grade for the home and an argument about
+                  one bedroom. */}
+              {!readOnly && ours && components.length > 0 && (
+                <ApplyGradeButton
+                  propertyId={propertyId}
+                  scopeItemId={item.id}
+                  label="Grade this room"
+                  title="Answer every graded question in this room at one level, leaving what has been chosen alone"
+                  onApplied={async (message) => {
+                    setGradeNotice(message);
+                    await onReload();
+                  }}
+                />
+              )}
               {components.length > 1 && (
                 <button
                   type="button"

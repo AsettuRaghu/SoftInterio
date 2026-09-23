@@ -297,6 +297,47 @@ themselves; the room sheet is where choices are seen. The finish chips
 and the "preferred finish" ordering in the builder went with this; a finish
 is now one option category among the others.
 
+### A grade answers every graded question at once
+
+Built 2026-09-23, step one of "blanket first, refine later". **Apply a
+grade** on the Scope header (the whole property) or in a room sheet (that
+room) sets the first preference of every graded question to that tier -
+Budget · Standard · Premium · Luxury, or whatever words the tenant's ladder
+uses, since `quality_tier` is text. **It needs no configuration at all**: the
+tiers are already on the cost items.
+
+`lib/scope/grade.ts` `gradeChoices()` plans it and
+`POST /api/properties/[id]/scope/apply-grade` writes it. On this tenant's
+biggest scope - 42 components - Standard answers **104 questions and leaves
+76**, because a grade can only answer a *graded family*.
+
+**What it cannot answer is the point, and is reported.** A wardrobe's shutter
+finish is laminate or acrylic or veneer - chosen by kind, not grade - and at
+600 to 1,600 a square foot it is the most expensive line on the component.
+Across the catalogue a grade answers 61 of 99 questions. So the result says
+"12 answered · 3 already answered, left alone · 5 still to ask - those are
+chosen by kind, not by grade", and a seller cannot walk away thinking the
+room is finished.
+
+Three rules it keeps:
+
+- **It fills only what is unanswered.** A blanket is a starting point, not a
+  correction, which is what makes it safe to press twice - the same rule as
+  `copyScopeToQuotation`, which only ever adds. `replace: true` exists for
+  the deliberate case and nothing sends it yet.
+- **A lone yes/no is never set.** One optional item in its category is a
+  question, not a ladder, and pressing Standard must not quietly add the
+  lighting nobody asked for.
+- **The one-first-preference-per-question trigger does the rest**, so a grade
+  applied over an existing answer keeps the old one as the ② alternative
+  rather than losing it.
+
+Step two, designed and not built: a **package** - a named bundle naming the
+item per question plus accessory counts, seeded from a tier so only the
+by-kind questions are hand-picked, and hung off a preset so qualification
+lays down a scope already answered. It writes the same rows this does, so it
+is where the list comes from and not new plumbing.
+
 **The room sheet asks questions, not for data** (2026-09-23: "let us just
 have sort of questionnaire thing so that the seller can collect as much
 information as possible"). Same model, nothing new stored - the options

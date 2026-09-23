@@ -26,6 +26,7 @@ import { CheckIcon } from "@heroicons/react/24/outline";
 import { hasCosting, readCosting, type ComponentCosting } from "@/lib/costing/component-costing";
 import { missingMeasures } from "@/lib/scope/measured";
 import { ScopeItemPanel } from "./ScopeItemPanel";
+import { ApplyGradeButton } from "./ApplyGradeButton";
 import {
   PlusIcon,
   TrashIcon,
@@ -208,6 +209,8 @@ export function ScopeTab({
   const nameAtFocus = useRef<string>("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** What a blanket action just did - green, and it clears itself. */
+  const [notice, setNotice] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const loadedRef = useRef(false);
   /**
@@ -875,6 +878,16 @@ export function ScopeTab({
         >
           {saveState === "saving" ? "Saving…" : saveState === "failed" ? "Not saved - try again" : <><CheckIcon className="w-3 h-3" /> Saved</>}
         </span>
+        {roots.length > 0 && !readOnly && propertyId && (
+          <ApplyGradeButton
+            propertyId={propertyId}
+            onApplied={async (message) => {
+              setError(null);
+              setNotice(message);
+              await load();
+            }}
+          />
+        )}
         {roots.length > 0 && (
           <a
             href={`/scope-summary/${propertyId}?${linkedType}=${linkedId}`}
@@ -937,6 +950,14 @@ export function ScopeTab({
       {error && (
         <div className="m-3 p-3 bg-red-50 border border-red-200 rounded-lg">
           <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+      {notice && (
+        <div className="m-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start justify-between gap-3">
+          <p className="text-sm text-emerald-800">{notice}</p>
+          <button type="button" onClick={() => setNotice(null)} className="text-emerald-700 hover:text-emerald-900 text-xs shrink-0">
+            Dismiss
+          </button>
         </div>
       )}
 
