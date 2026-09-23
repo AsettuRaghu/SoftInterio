@@ -101,6 +101,7 @@ type SortColumn =
   | "unit_code"
   | "company_cost"
   | "default_rate"
+  | "answers"
   | null;
 
 interface SortState {
@@ -186,6 +187,7 @@ export default function QuotationsConfigPage() {
   const [categoriesSort, setCategoriesSort] = useState<SortState>(BY_NAME);
   const [costItemsSort, setCostItemsSort] = useState<SortState>(BY_NAME);
   const [presetsSort, setPresetsSort] = useState<SortState>(BY_NAME);
+  const [packagesSort, setPackagesSort] = useState<SortState>(BY_NAME);
 
   const [modal, setModal] = useState<ModalState>({
     isOpen: false,
@@ -370,7 +372,11 @@ export default function QuotationsConfigPage() {
   );
 
   const filteredPresets = presets.filter(
-    (p) => matchesStatus(p.is_active) && matchesSearch(p.name, p.description, statusWord(p.is_active), ...p.items.map((it) => spaceName(it.space_type_id)))
+    (p) => matchesStatus(p.is_active) && matchesSearch(p.name, p.description, statusWord(p.is_active))
+  );
+
+  const filteredPackages = packages.filter(
+    (pk) => matchesStatus(pk.is_active) && matchesSearch(pk.name, pk.description, statusWord(pk.is_active))
   );
 
   const filteredComponents = components.filter((c) => {
@@ -571,6 +577,21 @@ export default function QuotationsConfigPage() {
   };
 
   const sortedPresets = useMemo(() => sortPresets(filteredPresets, presetsSort), [filteredPresets, presetsSort]);
+  const sortedPackages = useMemo(() => {
+    if (!packagesSort.column || !packagesSort.direction) return filteredPackages;
+    return [...filteredPackages].sort((a, b) => {
+      // `answers` is a number and sorts as one - "12" beside "9" as text is
+      // the classic way a count column lies.
+      if (packagesSort.column === "answers") {
+        const cmp = a.answers - b.answers;
+        return packagesSort.direction === "asc" ? cmp : -cmp;
+      }
+      const pick = (x: typeof a) =>
+        packagesSort.column === "name" ? x.name : packagesSort.column === "description" ? x.description ?? "" : String(x.is_active);
+      const cmp = pick(a).localeCompare(pick(b));
+      return packagesSort.direction === "asc" ? cmp : -cmp;
+    });
+  }, [filteredPackages, packagesSort]);
   const sortedSpaces = useMemo(
     () => sortSpaces(filteredSpaces, spacesSort),
     [filteredSpaces, spacesSort]
@@ -604,6 +625,8 @@ export default function QuotationsConfigPage() {
       ? sortedCategories
       : activeTab === "presets"
       ? sortedPresets
+      : activeTab === "packages"
+      ? sortedPackages
       : sortedCostItems;
 
   const totalPages = Math.max(1, Math.ceil(activeRows.length / pageSize));
@@ -629,6 +652,7 @@ export default function QuotationsConfigPage() {
       if (activeTab === "components") return componentsSort;
       if (activeTab === "categories") return categoriesSort;
       if (activeTab === "presets") return presetsSort;
+      if (activeTab === "packages") return packagesSort;
       return costItemsSort;
     };
 
@@ -637,6 +661,7 @@ export default function QuotationsConfigPage() {
       else if (activeTab === "components") setComponentsSort(state);
       else if (activeTab === "categories") setCategoriesSort(state);
       else if (activeTab === "presets") setPresetsSort(state);
+      else if (activeTab === "packages") setPackagesSort(state);
       else setCostItemsSort(state);
     };
     const currentSort = getSortState();
@@ -865,6 +890,8 @@ export default function QuotationsConfigPage() {
         endpoint = `/api/scope-presets/${deleteModal.item.id}`;
       else if (deleteModal.type === "packages")
         endpoint = `/api/scope-packages/${deleteModal.item.id}`;
+      else if (deleteModal.type === "packages")
+        endpoint = `/api/scope-packages/${deleteModal.item.id}`;
 
       uiLogger.info("Deleting item", {
         type: deleteModal.type,
@@ -903,6 +930,11 @@ export default function QuotationsConfigPage() {
       else if (deleteModal.type === "components") await fetchComponents();
       else if (deleteModal.type === "categories") await fetchCategories();
       else if (deleteModal.type === "costItems") await fetchCostItems();
+      else if (deleteModal.type === "packages") {
+        // A preset that answered with it now lists rooms only, so its row has
+        // to be re-read too.
+        await Promise.all([fetchPackages(), fetchPresets()]);
+      }
       else if (deleteModal.type === "packages") {
         // A preset that answered with it is left listing rooms only, so its
         // row has to be re-read too.
@@ -1048,29 +1080,41 @@ export default function QuotationsConfigPage() {
         if (!res.ok) setError("Could not save the package");
         await fetchPackages();
       };
-      const q = searchQuery.trim().toLowerCase();
-      const shown = packages.filter((p) => matchesStatus(p.is_active) && (!q || `${p.name} ${p.description ?? ""}`.toLowerCase().includes(q)));
+      const th = (label: string, column: SortColumn) => (
+        <th onClick={() => handleSort(column)} className="px-4 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors select-none">
+          <span className="flex items-center">
+            {label}
+            <SortIndicator column={column} sortState={packagesSort} />
+          </span>
+        </th>
+      );
       return (
         <div className="flex-1 overflow-auto min-h-0">
           <table className="w-full table-auto">
             <thead className="sticky top-0 bg-slate-50 z-10">
               <tr className="border-b border-slate-200">
-                <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Name</th>
-                <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">What it includes</th>
-                <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Answers</th>
-                <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                {th("Name", "name")}
+                {th("What it includes", "description")}
+                {th("Answers", "answers")}
+                {th("Status", "is_active")}
                 <th className="px-4 py-2 text-right text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {shown.map((pk) => (
+              {paginate(sortedPackages).map((pk) => (
                 <tr key={pk.id} className="group border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
                   <td className="px-4 py-2.5 text-xs font-medium text-slate-800">{pk.name}</td>
                   <td className="px-4 py-2.5 text-xs text-slate-600">{pk.description || "-"}</td>
-                  {/* A package with no answers is a name and nothing else, which
-                      is the one number worth a column here. */}
+                  {/* A package with no answers is a name and nothing else,
+                      which is the one number worth a column here. */}
                   <td className="px-4 py-2.5 text-xs">
-                    {pk.answers === 0 ? <span className="text-amber-700">nothing set yet</span> : <span className="text-slate-600 tabular-nums">{pk.answers}</span>}
+                    {pk.answers === 0 ? (
+                      <span className="text-amber-700" title="This package answers nothing, so applying it does nothing. Open it and set what it includes.">
+                        nothing set yet
+                      </span>
+                    ) : (
+                      <span className="text-slate-600 tabular-nums">{pk.answers}</span>
+                    )}
                   </td>
                   <td className="px-4 py-2.5">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${pk.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
@@ -1079,26 +1123,37 @@ export default function QuotationsConfigPage() {
                   </td>
                   <td className="px-4 py-2.5 text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      <button onClick={() => void togglePackage(pk)} title={pk.is_active ? "Hide from sellers" : "Show to sellers"} className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100">
-                        {pk.is_active ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+                      <button
+                        onClick={() => void togglePackage(pk)}
+                        title={pk.is_active ? "Hide from sellers" : "Show to sellers"}
+                        className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-white text-slate-500 border-slate-200 hover:bg-slate-50 transition-all"
+                      >
+                        {pk.is_active ? <EyeSlashIcon className="w-3.5 h-3.5" /> : <EyeIcon className="w-3.5 h-3.5" />}
                       </button>
-                      <a href={`/dashboard/settings/catalogue/packages/${pk.id}`} title="What this package answers" className="p-1.5 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50">
-                        <PencilSquareIcon className="w-4 h-4" />
+                      {/* An anchor, not a button: what a package says is a page
+                          of its own, like a component's costing rule. */}
+                      <a
+                        href={`/dashboard/settings/catalogue/packages/${pk.id}`}
+                        title="What this package answers"
+                        className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-all"
+                      >
+                        <PencilSquareIcon className="w-3.5 h-3.5" />
                       </a>
                       <button
-                        onClick={() => setDeleteModal({ isOpen: true, item: { id: pk.id, name: pk.name }, type: "packages" })}
-                        title="Delete this package"
-                        className="p-1.5 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50"
+                        onClick={() => {
+                          setDeleteError(null);
+                          setNotice(null);
+                          setDeleteModal({ isOpen: true, item: { id: pk.id, name: pk.name }, type: "packages" });
+                        }}
+                        title="Delete"
+                        className="w-6.5 h-6.5 flex items-center justify-center rounded-md border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 transition-all"
                       >
-                        <TrashIcon className="w-4 h-4" />
+                        <TrashIcon className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </td>
                 </tr>
               ))}
-              {shown.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-xs text-slate-400">No packages yet. One per grade you sell is the usual shape.</td></tr>
-              )}
             </tbody>
           </table>
         </div>
@@ -2267,6 +2322,27 @@ export default function QuotationsConfigPage() {
                 This action cannot be undone. This will permanently delete the{" "}
                 {getDeleteItemType()}.
               </p>
+              {/* Deleting a package does not break a preset - the link is set
+                  to null - but the preset silently goes back to listing rooms
+                  without answering them, which is worth knowing beforehand
+                  rather than discovering at the next qualification. */}
+              {deleteModal.type === "packages" && (() => {
+                const used = presets.filter((pr) => pr.package_id === deleteModal.item?.id);
+                if (used.length === 0) return null;
+                return (
+                  <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-left">
+                    <p className="text-xs text-amber-800">
+                      {used.length === 1 ? "The preset " : `${used.length} presets — `}
+                      <b>{used.map((pr) => pr.name).join(", ")}</b>
+                      {used.length === 1 ? " answers" : " answer"} the rooms with this package. {used.length === 1 ? "It" : "They"} will go back to
+                      listing rooms without answering them.
+                    </p>
+                    <p className="mt-1.5 text-xs text-amber-700">
+                      Making it <b>inactive</b> instead keeps those links and only hides it from sellers.
+                    </p>
+                  </div>
+                );
+              })()}
               {/* Deleting a package does not break a preset - the link is set
                   to null - but the preset silently goes back to listing rooms
                   without answering them, which is worth knowing beforehand
