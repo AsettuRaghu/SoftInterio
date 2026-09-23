@@ -479,6 +479,7 @@ function ComponentCard({
   // invents. What is stored on the row always wins.
   const [measures, setMeasures] = useState<Record<string, number>>(() => ({ ...defaultMeasures(costing, c, c.measurement_unit), ...mergeMeasures(c) }));
   const missing = missingMeasures(c, costing);
+  const [adjusting, setAdjusting] = useState(false);
   const derived = costing ? quantify(costing, measures, c.measurement_unit) : null;
   const ours = !c.scope_owner || c.scope_owner === "us";
   const size = c.width || c.height ? `${c.width ?? "—"} × ${c.height ?? "—"} ${c.measurement_unit}` : null;
@@ -505,39 +506,65 @@ function ComponentCard({
       </button>
       {open && (
         <div className="px-4 pb-4 space-y-3 border-t border-slate-100 pt-3">
-          {costing && (
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                Measurements <span className="normal-case tracking-normal font-normal text-slate-400">· lengths in {c.measurement_unit}</span>
-                {missing.length > 0 && (
-                  <span className="ml-2 normal-case tracking-normal font-medium text-amber-700">
-                    {missing.length} not measured - anything priced per {missing.length === 1 ? "it" : "them"} comes out at nothing
-                  </span>
-                )}
-              </p>
-              <div className="flex flex-wrap gap-x-4 gap-y-2">
-                {costing.fields.map((f) => (
-                  <label key={f.key} className={cn("text-[11px]", missing.includes(f.label || f.key) ? "text-amber-700 font-medium" : "text-slate-600")} title={f.hint}>
-                    {f.label}
-                    <input
-                      type="number"
-                      value={measures[f.key] ?? ""}
-                      disabled={readOnly}
-                      placeholder={f.kind === "count" ? "0" : "—"}
-                      onChange={(e) => setMeasures((m) => ({ ...m, [f.key]: e.target.value === "" ? 0 : Number(e.target.value) }))}
-                      onBlur={saveMeasures}
-                      className={cn("mt-0.5 block w-24 px-2 py-1 text-sm border rounded-md outline-none focus:border-blue-400 text-right disabled:bg-transparent", missing.includes(f.label || f.key) ? "border-amber-300 bg-amber-50/60" : "border-slate-200")}
-                    />
-                  </label>
-                ))}
-              </div>
-              {derived && Object.keys(derived.values).length > 0 && (
-                <p className="mt-1.5 text-[11px] text-slate-500">
-                  {costing.quantities.map((q) => `${q.label}: ${Math.round((derived.values[q.key] ?? 0) * 100) / 100} ${q.unit_code}`).join(" · ")}
+          {costing && (() => {
+            // Only what this job needs answering: the size, and anything the
+            // rule cannot work out for itself. Everything with a default -
+            // depth, doors, exposed sides - is taken as read and shown as one
+            // line, opened only if somebody wants to change it (2026-09-23:
+            // "I still see a lot of text boxes ... I thought you removed them").
+            const isDim = (k: string) => k === "width" || k === "height" || k === "length";
+            const asked = costing.fields.filter((f) => isDim(f.key) || f.default == null);
+            const assumed = costing.fields.filter((f) => !isDim(f.key) && f.default != null);
+            const touched = assumed.some((f) => (c.measures as Record<string, number> | null)?.[f.key] != null);
+            const show = (f: (typeof costing.fields)[number]) => (
+              <label key={f.key} className={cn("text-[11px]", missing.includes(f.label || f.key) ? "text-amber-700 font-medium" : "text-slate-600")} title={f.hint}>
+                {f.label}
+                <input
+                  type="number"
+                  value={measures[f.key] ?? ""}
+                  disabled={readOnly}
+                  placeholder={f.kind === "count" ? "0" : "—"}
+                  onChange={(e) => setMeasures((m) => ({ ...m, [f.key]: e.target.value === "" ? 0 : Number(e.target.value) }))}
+                  onBlur={saveMeasures}
+                  className={cn("mt-0.5 block w-24 px-2 py-1 text-sm border rounded-md outline-none focus:border-blue-400 text-right disabled:bg-transparent", missing.includes(f.label || f.key) ? "border-amber-300 bg-amber-50/60" : "border-slate-200")}
+                />
+              </label>
+            );
+            const summary = assumed
+              .map((f) => `${f.label.toLowerCase()} ${measures[f.key] ?? 0}${f.kind === "length" ? ` ${c.measurement_unit}` : ""}`)
+              .join(" · ");
+            return (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                  Measurements <span className="normal-case tracking-normal font-normal text-slate-400">· lengths in {c.measurement_unit}</span>
+                  {missing.length > 0 && (
+                    <span className="ml-2 normal-case tracking-normal font-medium text-amber-700">
+                      {missing.length} not measured - anything priced per {missing.length === 1 ? "it" : "them"} comes out at nothing
+                    </span>
+                  )}
                 </p>
-              )}
-            </div>
-          )}
+                {asked.length > 0 && <div className="flex flex-wrap gap-x-4 gap-y-2">{asked.map(show)}</div>}
+                {assumed.length > 0 && (
+                  <div className={cn(asked.length > 0 && "mt-2")}>
+                    <button
+                      type="button"
+                      onClick={() => setAdjusting((v) => !v)}
+                      className="text-[11px] text-slate-500 hover:text-blue-600 text-left"
+                      title="Change what we have assumed for this one"
+                    >
+                      Taking {summary} · <span className="text-blue-600">{adjusting || touched ? "hide" : "adjust"}</span>
+                    </button>
+                    {(adjusting || touched) && <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">{assumed.map(show)}</div>}
+                  </div>
+                )}
+                {derived && Object.keys(derived.values).length > 0 && (
+                  <p className="mt-1.5 text-[11px] text-slate-500">
+                    {costing.quantities.map((q) => `${q.label}: ${Math.round((derived.values[q.key] ?? 0) * 100) / 100} ${q.unit_code}`).join(" · ")}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
           {ours ? (
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Options</p>

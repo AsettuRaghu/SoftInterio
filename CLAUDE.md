@@ -77,7 +77,15 @@ meaning "none unless somebody says") or a **formula** over the fields
 above it, in feet, like a quantity - `ceil(width / 2)` is one door per
 two feet of width, which is what the trade fits.
 
-**A field with a default is never asked for.** That is the whole point:
+**A field with a default is not shown.** The room sheet asks for the size
+and anything the rule cannot work out for itself; everything else is one
+line - "Taking depth 600 mm · shutters 8 · exposed sides 0 · *adjust*" -
+which opens the boxes only when somebody wants to change them, and opens
+itself when a value has been typed before. Pre-filling them was not enough:
+"I still see a lot of text boxes ... I thought you removed them"
+(2026-09-23).
+
+**A field with a default is also never counted as missing.** That is the whole point:
 after `20260923090000` every seeded rule defaults everything a trade
 constant or the size can answer, and a wardrobe asks for nothing beyond
 the width and height the Scope list already holds. Eight fields are still
