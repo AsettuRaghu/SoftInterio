@@ -1048,6 +1048,38 @@ proposal:
   and vendor negotiation possible later.
 - **not a cost**, despite the name it carried for nine months.
 
+**An item is an answer, not a thing in a warehouse** (2026-09-23, the audit
+of all 110). Three kinds of row are legitimate: a **decision** the customer
+makes, an **automatic** one that follows the measurement with nothing to tap
+(`component_type_offers.auto`), and a priced line that is **not the
+customer's business at all** - labour, delivery - which is simply offered on
+no component. Anything else is a part of something already priced, and the
+audit found fourteen: a tandem runner inside a Tandem Box Drawer, end caps
+that come with the profile, a toe board on every base unit, a sink cut-out
+that is a fabrication step; Roller Set + Sliding Track + Soft-close Damper
+made the seller assemble a sliding system from three taps and became one
+graded family (3000/4500/6500/9500 a door, against the ~4450 the parts came
+to); and three more second answers to a live question - Cove Light was
+Profile Lighting - Standard to the rupee on the same ceiling, Under-cabinet
+Light the same ladder on the same counter run, and the graded Shutters
+family duplicates the Shutters by Finish set every menu actually uses.
+**Appliances keep their rows and lose their offers**: products with brands,
+billed on their own quotation. 110 active became 100.
+
+**Deleted where nothing used the row, deactivated where a quotation line
+points at it.** The printed document reads its Material column from the
+item's *live* description, so deleting a quoted item silently rewrites a
+document already sent. `20260923190000` raises rather than guesses if
+anything on the delete list has gained history since.
+
+Still duplicated and deliberately left: the graded **Drawer Systems** ladder
+(nos, 11 types) sits beside the by-type drawers in Internals (Wooden, Tandem
+Box, pull-outs), so a wardrobe asks for drawers twice. Grade-of-runner and
+kind-of-drawer are arguably two real axes, unlike the cases above - decide it
+before the next catalogue pass. **Dado & Backsplash** is empty while the
+kitchen base unit's rule derives `dado_sqft`, so a backsplash cannot be
+priced at all.
+
 **A size never goes in the name.** The test: is the difference a number
 the measurement already knows, or a decision the customer makes? Length,
 area and count are measured - they belong in the `unit_code` and the
