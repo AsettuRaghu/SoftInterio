@@ -328,11 +328,11 @@ export async function copyScopeToQuotation(
     const menuIds = [...new Set([...menuByType.values()].flat().map((l) => l.cost_item_id))];
     const wantedIds = [...new Set([...picked.map((r) => r.cost_item_id as string), ...menuIds])];
     if (wantedIds.length) {
-      const { data: costItems } = await supabase.from("quotation_cost_items").select("id, name, unit_code, default_rate, company_cost, vendor_cost, category_id").in("id", wantedIds);
+      const { data: costItems } = await supabase.from("quotation_cost_items").select("id, name, unit_code, default_rate, company_cost, vendor_cost, category_id, category:quotation_cost_item_categories(decision)").in("id", wantedIds);
       const byId = new Map((costItems ?? []).map((c) => [c.id as string, c]));
       const shapesByType = new Map<string, ReturnType<typeof shapeOptions>>();
       for (const [typeId, lines] of menuByType) {
-        const items = lines.map((l) => byId.get(l.cost_item_id)).filter(Boolean).map((c) => ({ id: c!.id as string, category_id: (c!.category_id as string | null) ?? null, unit_code: c!.unit_code as string }));
+        const items = lines.map((l) => byId.get(l.cost_item_id)).filter(Boolean).map((c) => ({ id: c!.id as string, category_id: (c!.category_id as string | null) ?? null, unit_code: c!.unit_code as string, decision: (c!.category as unknown as { decision?: string | null } | null)?.decision ?? null }));
         shapesByType.set(typeId, shapeOptions(lines, items));
       }
       const keyFor = new Map<string, string>();

@@ -238,7 +238,17 @@ ARE the answers:
 
 - **A decision reads as a question**: "Which carcass?" with the items as
   answers and **Not needed** as one of them, so declining is recorded
-  rather than left blank.
+  rather than left blank. **The wording is the category's**
+  (`quotation_cost_item_categories.question`, a field on the Categories
+  tab; blank falls back to "Which <name>?"), because "Which shutters by
+  finish?" is a column heading, not a question.
+- **Two categories can answer one question.** A category naming a
+  `decision` is merged with the others naming it: handles and profiles are
+  both **"How do the doors open?"**, so choosing a profile demotes the
+  handle and the seller is asked the question once instead of answering
+  two unrelated ones or neither. The decision beats the category in
+  `shapeOptions`'s group key and in `scope_item_group_key`, so the sheet,
+  the copy and the trigger agree.
 - **One question per DECISION, not per category.** A category can hold two
   - a kitchen's shutter finishes and its exposed side finish are both
   "Shutters by Finish" but are priced per different quantities, and

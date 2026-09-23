@@ -154,7 +154,8 @@ interface OptionItem {
   scope_owner: string | null;
 }
 interface OptionGroup {
-  category: { id: string; name: string };
+  /** `question` is how the sheet asks for it; blank falls back to "Which <name>?". */
+  category: { id: string; name: string; question?: string | null; decision?: string | null };
   items: OptionItem[];
 }
 
@@ -340,7 +341,7 @@ function Options({
             single.counted ? setCounted(single, on ? 1 : null) : apply((items) => items.map((x) => (x.cost_item_id === single.cost_item_id ? { ...x, status: on ? "p1" : null } : x)), { cost_item_id: single.cost_item_id, status: on ? "p1" : null });
           return (
             <div key={g.category.id} className="grid grid-cols-[9rem_1fr] gap-x-2 items-start">
-              <span className="text-[11px] font-medium text-slate-600 pt-1">{single.name}?</span>
+              <span className="text-[11px] font-medium text-slate-600 pt-1">{g.category.question || `${single.name}?`}</span>
               <div className="flex flex-wrap gap-1.5 items-center">
                 {[false, true].map((v) => (
                   <button
@@ -373,8 +374,10 @@ function Options({
           <div key={g.category.id} className="grid grid-cols-[9rem_1fr] gap-x-2 items-start">
             <span className="text-[11px] font-medium text-slate-600 pt-1" title={g.category.name}>
               {/* A question rather than a heading: the sheet is a
-                  conversation with the customer, not a form (2026-09-23). */}
-              {oneOf ? `Which ${g.category.name.toLowerCase()}?` : g.category.name}
+                  conversation with the customer, not a form (2026-09-23).
+                  The wording is the category's, so a tenant can say "How do
+                  the doors open?" rather than "Which handles?". */}
+              {g.category.question || (oneOf ? `Which ${g.category.name.toLowerCase()}?` : g.category.name)}
               {g.items.some((o) => pictures[o.cost_item_id]?.length) && (
                 <span className="block mt-0.5 flex items-center gap-1.5 text-[9px] font-normal">
                   <button type="button" onClick={() => compare(g)} className="text-blue-600 hover:underline" title="Every picture of every option here, one after another">

@@ -56,6 +56,9 @@ interface CostItemCategory {
   id: string;
   name: string;
   description: string | null;
+  /** How the room sheet asks for it, and the decision it shares with others. */
+  question?: string | null;
+  decision?: string | null;
   is_active: boolean;
   created_at: string;
   is_charge?: boolean;
@@ -167,6 +170,8 @@ export default function QuotationsConfigPage() {
   const [formName, setFormName] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [formCategoryId, setFormCategoryId] = useState("");
+  const [formQuestion, setFormQuestion] = useState("");
+  const [formDecision, setFormDecision] = useState("");
   const [formUnitCode, setFormUnitCode] = useState("sqft");
   const [formCompanyCost, setFormCompanyCost] = useState("");
   const [formDefaultRate, setFormDefaultRate] = useState("");
@@ -645,6 +650,8 @@ export default function QuotationsConfigPage() {
     setFormUnitCode("sqft");
     setFormCompanyCost("");
     setFormDefaultRate("");
+    setFormQuestion("");
+    setFormDecision("");
     setFormIsActive(true);
     setFormSpaceTypeIds([]);
     setModalError(null);
@@ -656,6 +663,8 @@ export default function QuotationsConfigPage() {
   ) => {
     setFormName(item.name);
     setFormDescription(item.description || "");
+    setFormQuestion((item as { question?: string | null }).question || "");
+    setFormDecision((item as { decision?: string | null }).decision || "");
     setFormIsActive(item.is_active);
     setFormSpaceTypeIds(
       (item as { applicable_space_types?: string[] | null })
@@ -707,6 +716,8 @@ export default function QuotationsConfigPage() {
         body.applicable_space_types = formSpaceTypeIds;
       } else if (activeTab === "categories") {
         endpoint = "/api/settings/quotation-cost-item-categories";
+        body.question = formQuestion;
+        body.decision = formDecision;
       } else if (activeTab === "costItems") {
         endpoint = "/api/settings/quotation-cost-items";
         body.category_id = formCategoryId || null;
@@ -1623,6 +1634,39 @@ export default function QuotationsConfigPage() {
                   );
                 })}
               </div>
+
+              {activeTab === "categories" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                      Question on the room sheet
+                      <span className="ml-1 font-normal text-slate-400">optional</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formQuestion}
+                      onChange={(e) => setFormQuestion(e.target.value)}
+                      placeholder={formName ? `Which ${formName.toLowerCase()}?` : "Which …?"}
+                      title="How the seller is asked for this while sitting with the customer. Blank falls back to 'Which <name>?'."
+                      className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                      Asked together with
+                      <span className="ml-1 font-normal text-slate-400">optional</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formDecision}
+                      onChange={(e) => setFormDecision(e.target.value)}
+                      placeholder="e.g. door_opening"
+                      title="Categories sharing this word are asked as one question - handles and profiles are both 'How do the doors open?'. Leave blank for its own question."
+                      className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                    />
+                  </div>
+                </div>
+              )}
 
               {activeTab === "components" && (
                 <SearchSelect

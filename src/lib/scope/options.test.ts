@@ -82,3 +82,32 @@ describe("shapeOptions - what a tap on the room sheet means", () => {
     expect(twice.get("shelf")!.quantity_key).toBe("shelves");
   });
 });
+
+describe("two categories that answer one question", () => {
+  // Handles and profiles are both "How do the doors open?", so a profile
+  // chosen must demote a handle - one decision, not two.
+  const items = [
+    { id: "handle-std", category_id: "cat-handles", unit_code: "nos", decision: "door_opening" },
+    { id: "handle-prem", category_id: "cat-handles", unit_code: "nos", decision: "door_opening" },
+    { id: "gola", category_id: "cat-profiles", unit_code: "rft", decision: "door_opening" },
+    { id: "carcass", category_id: "cat-carcass", unit_code: "sqft", decision: null },
+  ];
+  const offer = [
+    { cost_item_id: "handle-std", quantity_key: "handles" },
+    { cost_item_id: "handle-prem", quantity_key: "handles" },
+    { cost_item_id: "gola", quantity_key: "counter_rft" },
+    { cost_item_id: "carcass", quantity_key: "shutter_sqft" },
+  ];
+  const s = shapeOptions(offer, items);
+
+  it("puts them in one group though they are different categories and different units", () => {
+    expect(s.get("handle-std")!.group_key).toBe(s.get("gola")!.group_key);
+    expect(s.get("handle-std")!.group_key).toBe("d:door_opening");
+  });
+  it("leaves a category with no decision as its own question", () => {
+    expect(s.get("carcass")!.group_key).not.toBe(s.get("gola")!.group_key);
+  });
+  it("a per-piece handle in a decision is still a choice, not a counted extra", () => {
+    expect(s.get("handle-std")!.counted).toBe(false);
+  });
+});

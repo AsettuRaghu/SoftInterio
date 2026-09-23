@@ -87,6 +87,8 @@ export async function PUT(
     if (body.icon !== undefined) updateData.icon = body.icon;
     if (body.color !== undefined) updateData.color = body.color;
     if (body.display_order !== undefined) updateData.display_order = body.display_order;
+    if (body.question !== undefined) updateData.question = String(body.question ?? "").trim() || null;
+    if (body.decision !== undefined) updateData.decision = String(body.decision ?? "").trim() || null;
     if (body.is_active !== undefined) updateData.is_active = body.is_active;
 
     const { data: category, error } = await supabase

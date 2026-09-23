@@ -85,6 +85,10 @@ export async function POST(request: NextRequest) {
         icon: body.icon || null,
         color: body.color || null,
         display_order: body.display_order || 0,
+        // How the room sheet asks for it, and the decision it shares - see
+        // the column comments and lib/scope/options.
+        question: body.question?.trim() || null,
+        decision: body.decision?.trim() || null,
         is_active: body.is_active !== false,
         is_system: false,
       })

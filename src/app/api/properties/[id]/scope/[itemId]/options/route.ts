@@ -56,7 +56,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   const { data: costItems } = await supabase
     .from("quotation_cost_items")
-    .select("id, name, category_id, quality_tier, unit_code, display_order, category:quotation_cost_item_categories(id, name, display_order)")
+    .select("id, name, category_id, quality_tier, unit_code, display_order, category:quotation_cost_item_categories(id, name, display_order, question, decision)")
     .in("id", ids)
     .eq("is_active", true)
     .order("display_order")
@@ -66,12 +66,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   // outside the offer is shown, but it neither joins a group nor prices itself.
   const shapes = shapeOptions(
     templated.lines,
-    (costItems ?? []).filter((c) => templateIds.has(c.id)).map((c) => ({ id: c.id as string, category_id: (c.category_id as string | null) ?? null, unit_code: c.unit_code as string })),
+    (costItems ?? []).filter((c) => templateIds.has(c.id)).map((c) => ({
+      id: c.id as string,
+      category_id: (c.category_id as string | null) ?? null,
+      unit_code: c.unit_code as string,
+      decision: (c.category as unknown as { decision?: string | null } | null)?.decision ?? null,
+    })),
   );
-  const groups = new Map<string, { category: { id: string; name: string; order: number }; items: { cost_item_id: string; name: string; tier: string | null; unit_code: string; counted: boolean; group_key: string | null; quantity_key: string | null; auto: boolean; quantity: number | null; status: string | null; row_id: string | null; scope_owner: string | null }[] }>();
+  const groups = new Map<string, { category: { id: string; name: string; order: number; question: string | null; decision: string | null }; items: { cost_item_id: string; name: string; tier: string | null; unit_code: string; counted: boolean; group_key: string | null; quantity_key: string | null; auto: boolean; quantity: number | null; status: string | null; row_id: string | null; scope_owner: string | null }[] }>();
   for (const c of costItems ?? []) {
-    const cat = (c.category as unknown as { id: string; name: string; display_order: number | null } | null) ?? { id: "other", name: "Other", display_order: 999 };
-    const g = groups.get(cat.id) ?? { category: { id: cat.id, name: cat.name, order: cat.display_order ?? 999 }, items: [] };
+    const cat = (c.category as unknown as { id: string; name: string; display_order: number | null; question: string | null; decision: string | null } | null) ?? { id: "other", name: "Other", display_order: 999, question: null, decision: null };
+    const g = groups.get(cat.id) ?? { category: { id: cat.id, name: cat.name, order: cat.display_order ?? 999, question: cat.question ?? null, decision: cat.decision ?? null }, items: [] };
     const p = pickedByItem.get(c.id);
     const shape = shapes.get(c.id) ?? { quantity_key: null, counted: PER_PIECE.has(String(c.unit_code).toLowerCase()), group_key: null, auto: false };
     g.items.push({
@@ -82,9 +87,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
     groups.set(cat.id, g);
   }
+  // Two categories with the same decision are one question: the doors take
+  // handles or a profile, and that is one thing to decide (2026-09-23).
+  const merged = new Map<string, ReturnType<typeof groups.get>>();
+  for (const g of [...groups.values()].sort((a, b) => a.category.order - b.category.order || a.category.name.localeCompare(b.category.name))) {
+    const key = g!.category.decision ? `d:${g!.category.decision}` : `c:${g!.category.id}`;
+    const seen = merged.get(key);
+    if (seen) seen!.items.push(...g!.items);
+    else merged.set(key, g);
+  }
   return NextResponse.json({
     data: {
-      groups: [...groups.values()].sort((a, b) => a.category.order - b.category.order || a.category.name.localeCompare(b.category.name)),
+      groups: [...merged.values()],
       from_templates: templateIds.size > 0,
     },
   });

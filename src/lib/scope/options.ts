@@ -33,6 +33,8 @@ export interface MenuItem {
   id: string;
   category_id: string | null;
   unit_code: string;
+  /** The category's decision, where it shares one with another category. */
+  decision?: string | null;
 }
 export interface OptionShape {
   quantity_key: string | null;
@@ -54,7 +56,7 @@ export function shapeOptions(lines: Offer[], items: MenuItem[]): Map<string, Opt
   for (const it of items) {
     const key = keyByItem.get(it.id) ?? null;
     const counted = PER_PIECE_UNITS.has(String(it.unit_code).toLowerCase()) && !key;
-    const group_key = counted ? null : `${it.category_id ?? "other"}:${key ?? "face"}`;
+    const group_key = counted ? null : it.decision ? `d:${it.decision}` : `${it.category_id ?? "other"}:${key ?? "face"}`;
     shapes.set(it.id, { quantity_key: key, counted, group_key, auto: false });
     if (group_key) groupSize.set(group_key, (groupSize.get(group_key) ?? 0) + 1);
   }
