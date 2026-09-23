@@ -109,7 +109,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const questions = questionsOf(
     templated.lines,
     menu,
-    (picked ?? []).filter((p) => p.choice_status).map((p) => p.cost_item_id as string),
+    // Only a ① answers a question; a ② is the alternative Option 2 prices.
+    (picked ?? []).filter((p) => p.choice_status === "p1").map((p) => p.cost_item_id as string),
     declined,
   );
 

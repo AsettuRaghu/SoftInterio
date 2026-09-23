@@ -389,7 +389,6 @@ export async function copyScopeToQuotation(
         // An auto item with nothing to measure against is not a line.
         if (r.id === null && !(derived && derived > 0)) continue;
         // A per-piece item carries how many were chosen (two wooden drawers).
-        // A per-piece item carries how many were chosen (two wooden drawers).
         const count = kind === "quantity" ? Number(r.choice_quantity) || 1 : 1;
         // The quantity a line carries must be the one its amount was worked
         // out from. A face-priced line stored 1 while the amount came from

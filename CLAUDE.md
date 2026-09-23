@@ -60,6 +60,16 @@ no scope row names it.
 Built 2026-09-22 after the first real quotation carried nine unmeasured
 components and eight lines priced at nothing.
 
+**Only a FIRST preference answers a question.** A ② becomes a line on Option
+2 and nowhere else, so a question holding nothing but a ② produces no line on
+the quotation being built - and both `unaskedByComponent` and the options
+route counted any `choice_status` as answered, so it was invisible. Found
+reviewing LD-202609-005 before it moved (2026-09-24): a 75 sqft TV unit was
+about to be quoted with one line of four - no hinges, no handles - while the
+sheet read "nothing left to ask". The state is reachable by ordinary use,
+because clearing a ① deliberately does not promote the ②, so it was waiting
+for whoever changed their mind twice.
+
 `lib/scope/measured.ts` `missingMeasures(row, rule)` is the one answer to
 "what has this component not been measured for": the rule's fields that
 have no value on the row, where width / height / length come from the

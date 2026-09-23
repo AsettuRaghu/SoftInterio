@@ -67,9 +67,14 @@ export async function unaskedByComponent(
     offersByType.set(t, [...(offersByType.get(t) ?? []), { cost_item_id: o.cost_item_id as string, quantity_key: (o.quantity_key as string | null) ?? null, auto: !!o.auto, ask_as: (o.ask_as as string | null) ?? null }]);
   }
 
+  // Only a FIRST preference answers a question. A ② is the alternative and
+  // becomes a line only on Option 2, so a question holding nothing but a ②
+  // produces no line on the quotation being built - and read as answered it
+  // was invisible: a TV unit came out with one line of four while the sheet
+  // said nothing was left to ask (2026-09-24, found on LD-202609-005).
   const pickedByParent = new Map<string, string[]>();
   for (const r of all) {
-    if (!r.cost_item_id || !r.choice_status || !r.parent_id) continue;
+    if (!r.cost_item_id || r.choice_status !== "p1" || !r.parent_id) continue;
     pickedByParent.set(r.parent_id as string, [...(pickedByParent.get(r.parent_id as string) ?? []), r.cost_item_id as string]);
   }
 

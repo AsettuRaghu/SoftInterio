@@ -72,3 +72,16 @@ describe("questionsOf", () => {
 function qKey(items: { id: string; category_id: string | null }[]) {
   return `${items[0].category_id}:shutter_sqft`;
 }
+
+describe("only an answer answers", () => {
+  const carcass = ["c1", "c2"].map((id) => ({ id, category_id: "cat-carcass", unit_code: "sqft", decision: null }));
+  const offers = carcass.map((i) => ({ cost_item_id: i.id, quantity_key: "shutter_sqft" }));
+
+  it("counts a question with only an alternative as still to ask", () => {
+    // `questionsOf` is told the FIRST preferences only - a ② becomes a line
+    // on Option 2 and nowhere else, so a question holding one alone produces
+    // no line on the quotation being built.
+    expect(stillToAsk(questionsOf(offers, carcass, []))).toBe(1);
+    expect(stillToAsk(questionsOf(offers, carcass, ["c1"]))).toBe(0);
+  });
+});
