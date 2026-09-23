@@ -1089,13 +1089,32 @@ rule was seeded where such types existed; the tenant edits or replaces it.
     only for a quantity that can be 0 (a count, a typed area); an optional
     extra that follows the size is a tap. An item alone in its group and
     not auto is *optional* - tap to include, tap again to leave out.
+  **A count question carries its own wording** - `CHOICES` in
+  `ScopeItemPanel`, at module level, holds the field key, the question and
+  its handful of answers together, so adding `drawers` needed no new branch.
+  Naming each one with another ternary is how the first two were written.
+
   Every tap changes the screen at once and nothing repaints afterwards: the
   one-①-one-② rule is applied locally (mirroring the trigger), the save goes
   out behind it, only a failure re-reads, and the list behind the sheet is
   told once the tapping has paused (900 ms), not per tap.
-- **Internals are counted accessories, never a preference** (2026-09-21,
-  reversing "the kind of drawer is a decision" from the day before after
-  the user saw it on the sheet). Every drawer type - wooden, tandem box,
+- **A drawer has a quality and a number, and they are two questions**
+  (2026-09-23, `20260923230000`). `drawers` is a count on the rule, answered
+  on the sheet as "How many drawers? None · 1 · 2 · 3 · 4 · 6"; the graded
+  **Drawer Systems** ladder is priced per it, so "Which drawer system?" is
+  one question with one answer. Twelve types carry it, including the two
+  openable wardrobes, which had only the by-type drawers - and Wooden Drawer
+  and Tandem Box Drawer came off every menu that now sells the ladder, which
+  also retires the "asks for drawers twice" note left open the day before.
+  **The specialised pull-outs stay counted**: a trouser pull-out and a saree
+  pull-out are different THINGS, not grades of one, and "how many of these"
+  is the honest question for them.
+
+  It reverses *Internals are counted accessories, never a preference*
+  (2026-09-21, itself reversing "the kind of drawer is a decision" from the
+  day before), and is better than either, because it stops asking one thing
+  in two places rather than picking which of the two places to keep. Every
+  drawer type - wooden, tandem box,
   trouser pull-out - is added and counted like a tray; there is no drawers
   blank. `Shelves: 5` stays a count in Measurements and Shelf prices itself
   from it, which is automatic, not a choice. An internal mirror is per door
