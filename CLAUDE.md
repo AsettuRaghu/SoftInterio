@@ -3431,6 +3431,18 @@ when they were live.
 
 ## Still open
 
+- **The quotation client link has never been reachable.** `/quotation/[token]`,
+  its `client_access_token` column, the share route, the approve and reject
+  routes and `QuotationClientView` all exist - and the middleware redirects
+  every unauthenticated request that is not `/auth/*` or `/` to sign-in, so a
+  customer opening the link lands on a login page. Found 2026-09-23 while
+  sizing a customer intake form. Making it work needs an **explicit public
+  path allowlist** in `lib/supabase/middleware.ts` - exact prefixes, never a
+  pattern - and the routes behind it must use the admin client, because RLS
+  correctly returns nothing to `anon` on `quotations`, `leads`, `properties`,
+  `documents` and `clients` (probed, all zero rows). It would be the product's
+  first public write path; the token is the authentication, so single use, an
+  expiry, a rate limit, and nothing on the page beyond the customer's own name
 - **No email is sent anywhere.** The stub service was dead code and was
   deleted; there is no send path at all. `api/team/members/[id]/reset-password`
   still takes a `sendEmail` flag in its body that controls nothing
