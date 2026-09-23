@@ -318,15 +318,63 @@ function Options({
   return (
     <div className="space-y-2.5">
       {groups.map((g) => {
-        const exclusive = g.items.filter((o) => !o.counted && !o.auto);
         const autos = g.items.filter((o) => o.auto);
         const counted = g.items.filter((o) => o.counted);
+        // A category can hold more than one decision - a kitchen's shutters
+        // and its exposed side finish are both "Shutters by finish" but are
+        // priced per different quantities, so they are two questions. Group
+        // by the decision, not the category (2026-09-23).
+        const decisions = new Map<string, OptionItem[]>();
+        for (const o of g.items.filter((x) => !x.counted && !x.auto)) {
+          const k = o.group_key ?? o.cost_item_id;
+          decisions.set(k, [...(decisions.get(k) ?? []), o]);
+        }
+        const exclusive = g.items.filter((o) => !o.counted && !o.auto);
         const oneOf = exclusive.length > 1 && exclusive.every((o) => o.group_key === exclusive[0].group_key);
+        // One optional thing on its own is a yes-or-no question, not a chip
+        // among others: "Internal lighting? No · Yes" (2026-09-23).
+        const single = decisions.size === 1 && exclusive.length === 1 && counted.length === 0 && autos.length === 0 ? exclusive[0] : counted.length === 1 && exclusive.length === 0 && autos.length === 0 ? counted[0] : null;
+        if (single) {
+          const yes = !!single.status;
+          const set = (on: boolean) =>
+            single.counted ? setCounted(single, on ? 1 : null) : apply((items) => items.map((x) => (x.cost_item_id === single.cost_item_id ? { ...x, status: on ? "p1" : null } : x)), { cost_item_id: single.cost_item_id, status: on ? "p1" : null });
+          return (
+            <div key={g.category.id} className="grid grid-cols-[9rem_1fr] gap-x-2 items-start">
+              <span className="text-[11px] font-medium text-slate-600 pt-1">{single.name}?</span>
+              <div className="flex flex-wrap gap-1.5 items-center">
+                {[false, true].map((v) => (
+                  <button
+                    key={String(v)}
+                    type="button"
+                    disabled={readOnly}
+                    onClick={() => set(v)}
+                    className={cn(
+                      "px-2 py-0.5 text-[11px] font-medium rounded-full border transition-colors disabled:cursor-default",
+                      yes === v ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400",
+                    )}
+                  >
+                    {v ? "Yes" : "No"}
+                  </button>
+                ))}
+                {yes && single.counted && (
+                  <span className="inline-flex items-center rounded border border-slate-200 bg-white text-[10px] text-slate-700 tabular-nums">
+                    <button type="button" disabled={readOnly} onClick={() => setCounted(single, Math.max(1, (single.quantity ?? 1) - 1))} className="px-1.5 py-0.5 hover:bg-slate-100" title="One fewer">−</button>
+                    <span className="px-1.5 min-w-[1.6rem] text-center">{single.quantity ?? 1}</span>
+                    <button type="button" disabled={readOnly} onClick={() => setCounted(single, (single.quantity ?? 1) + 1)} className="px-1.5 py-0.5 hover:bg-slate-100" title="One more">+</button>
+                  </span>
+                )}
+                {thumb(single)}
+                {owner(single)}
+              </div>
+            </div>
+          );
+        }
         return (
-          <div key={g.category.id} className="grid grid-cols-[6rem_1fr] gap-x-2 items-start">
-            <span className="text-[11px] font-medium text-slate-500 pt-1 truncate" title={g.category.name}>
-              {g.category.name}
-              {oneOf && <span className="block text-[9px] font-normal text-slate-400">one of these</span>}
+          <div key={g.category.id} className="grid grid-cols-[9rem_1fr] gap-x-2 items-start">
+            <span className="text-[11px] font-medium text-slate-600 pt-1" title={g.category.name}>
+              {/* A question rather than a heading: the sheet is a
+                  conversation with the customer, not a form (2026-09-23). */}
+              {oneOf ? `Which ${g.category.name.toLowerCase()}?` : g.category.name}
               {g.items.some((o) => pictures[o.cost_item_id]?.length) && (
                 <span className="block mt-0.5 flex items-center gap-1.5 text-[9px] font-normal">
                   <button type="button" onClick={() => compare(g)} className="text-blue-600 hover:underline" title="Every picture of every option here, one after another">
@@ -339,9 +387,17 @@ function Options({
               )}
             </span>
             <div className="space-y-1.5">
-              {exclusive.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {exclusive.map((o) => (
+              {[...decisions.entries()].map(([key, items], di) => (
+                <div key={key} className={cn("flex flex-wrap gap-1.5 items-center", di > 0 && "pt-1")}>
+                  {/* A second decision inside one category names itself by
+                      what it is priced per - the exposed side finish beside
+                      the shutters. */}
+                  {decisions.size > 1 && (
+                    <span className="text-[10px] text-slate-400 mr-0.5">
+                      {items.length === 1 ? items[0].name : quantityLabel(items[0].quantity_key) || g.category.name}:
+                    </span>
+                  )}
+                  {items.map((o) => (
                     <span key={o.cost_item_id} className="group/opt inline-flex items-center gap-1">
                       <button
                         type="button"
@@ -362,8 +418,19 @@ function Options({
                       {owner(o)}
                     </span>
                   ))}
+                  {/* Declining is an answer too, and leaves a record of it. */}
+                  {!readOnly && items.some((o) => o.status === "p1") && (
+                    <button
+                      type="button"
+                      onClick={() => items.filter((o) => o.status).forEach((o) => apply((list) => list.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, status: null } : x)), { cost_item_id: o.cost_item_id, status: null }))}
+                      className="px-2 py-0.5 text-[11px] rounded-full border border-slate-200 text-slate-400 hover:border-slate-400 hover:text-slate-600"
+                      title="Clear this answer"
+                    >
+                      Not needed
+                    </button>
+                  )}
                 </div>
-              )}
+              ))}
               {autos.map((o) => (
                 <p key={o.cost_item_id} className="group/opt text-[11px] text-slate-500 flex items-center gap-1">
                   <CheckIcon className="w-3 h-3 text-emerald-600" />
@@ -392,7 +459,8 @@ function Options({
                     </div>
                   ))}
                   {!readOnly && counted.some((o) => !o.status) && (
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                      <span className="text-[10px] text-slate-400">Add:</span>
                       {counted.filter((o) => !o.status).map((o) => (
                         <span key={o.cost_item_id} className="group/opt inline-flex items-center gap-1">
                           <button type="button" onClick={() => setCounted(o, 1)} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-full border border-dashed border-slate-300 text-slate-500 hover:border-slate-400 hover:text-slate-700">
@@ -491,8 +559,60 @@ function ComponentCard({
             // "I still see a lot of text boxes ... I thought you removed them").
             const isDim = (k: string) => k === "width" || k === "height" || k === "length";
             const asked = costing.fields.filter((f) => isDim(f.key) || f.default == null);
-            const assumed = costing.fields.filter((f) => !isDim(f.key) && f.default != null);
+            const questions = costing.fields.filter((f) => CHOICES[f.key]);
+            const assumed = costing.fields.filter((f) => !isDim(f.key) && f.default != null && !CHOICES[f.key]);
             const touched = assumed.some((f) => (c.measures as Record<string, number> | null)?.[f.key] != null);
+            // A count with a handful of sensible answers is a question, not
+            // a number box: "Any blind corners? None · One (L) · Two (U)".
+            // The seller never types a number they have to interpret.
+            const CHOICES: Record<string, { value: number; label: string }[]> = {
+              corners: [
+                { value: 0, label: "None" },
+                { value: 1, label: "One (L-shaped)" },
+                { value: 2, label: "Two (U-shaped)" },
+              ],
+              exposed_sides: [
+                { value: 0, label: "None" },
+                { value: 1, label: "One end" },
+                { value: 2, label: "Both ends" },
+              ],
+              wall_exposed_sides: [
+                { value: 0, label: "None" },
+                { value: 1, label: "One end" },
+                { value: 2, label: "Both ends" },
+              ],
+            };
+            const ask = (f: (typeof costing.fields)[number]) => {
+              const choices = CHOICES[f.key];
+              if (!choices) return null;
+              const current = Number(measures[f.key] ?? 0);
+              return (
+                <div key={f.key} className="grid grid-cols-[9rem_1fr] gap-x-2 items-start" title={f.hint}>
+                  <span className="text-[11px] font-medium text-slate-600 pt-1">{f.key === "corners" ? "Any blind corners?" : f.key === "wall_exposed_sides" ? "Wall units - exposed ends?" : "Any exposed ends?"}</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {choices.map((ch) => (
+                      <button
+                        key={ch.value}
+                        type="button"
+                        disabled={readOnly}
+                        onClick={() => {
+                          const next = { ...measures, [f.key]: ch.value };
+                          setMeasures(next);
+                          const { dims, measures: rest } = splitMeasures(next);
+                          void onPatch(c, { ...dims, measures: rest });
+                        }}
+                        className={cn(
+                          "px-2 py-0.5 text-[11px] font-medium rounded-full border transition-colors disabled:cursor-default",
+                          current === ch.value ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400",
+                        )}
+                      >
+                        {ch.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            };
             const show = (f: (typeof costing.fields)[number]) => (
               <label key={f.key} className={cn("text-[11px]", missing.includes(f.label || f.key) ? "text-amber-700 font-medium" : "text-slate-600")} title={f.hint}>
                 {f.label}
@@ -534,6 +654,7 @@ function ComponentCard({
                     {(adjusting || touched) && <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">{assumed.map(show)}</div>}
                   </div>
                 )}
+                {questions.length > 0 && <div className="mt-2 space-y-1.5">{questions.map(ask)}</div>}
                 {derived && Object.keys(derived.values).length > 0 && (
                   <p className="mt-1.5 text-[11px] text-slate-500">
                     {costing.quantities.map((q) => `${q.label}: ${Math.round((derived.values[q.key] ?? 0) * 100) / 100} ${q.unit_code}`).join(" · ")}
