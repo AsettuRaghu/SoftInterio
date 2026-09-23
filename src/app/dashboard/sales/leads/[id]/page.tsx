@@ -52,6 +52,7 @@ import {
 import {
   formatDateTime,
 } from "@/modules/sales/utils/formatters";
+import { useUrlTab } from "@/hooks/useUrlTab";
 
 export default function LeadDetailPage() {
   const router = useRouter();
@@ -85,7 +86,9 @@ export default function LeadDetailPage() {
   } = useLeadDetail();
 
   // Local UI state
-  const [activeTab, setActiveTab] = useState<TabType>("overview");
+  // The address follows the tab, so refreshing on Documents reopens
+  // Documents and a link sent to a colleague lands where you were.
+  const [activeTab, setActiveTab] = useUrlTab<TabType>(LEAD_DETAIL_TABS, "overview");
   // Failures reach the person in the app's own voice. These were browser
   // alerts, which cannot be styled and stop the page behind them repainting.
   const [notice, setNotice] = useState<string | null>(null);

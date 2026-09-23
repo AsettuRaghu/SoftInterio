@@ -44,12 +44,29 @@ import type { PlanGate } from "@/components/tasks/TaskTableReusable";
 import { ProjectStatusAction } from "@/components/projects/ProjectStatusAction";
 import { defaultTaskOrder } from "@/lib/tasks/order";
 import { EditTaskModal } from "@/components/tasks";
+import { useUrlTab } from "@/hooks/useUrlTab";
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
 type TabKey = ProjectDetailTab;
+
+// Hoisted so the tab bar and the URL read one list. Payments is deliberately
+// absent - a delivery team should not be shown what the client has paid.
+const PROJECT_TABS: { key: TabKey; label: string }[] = [
+  { key: "overview", label: "Overview" },
+  { key: "scope", label: "Scope" },
+  { key: "project-mgmt", label: "Plan" },
+  { key: "quotations", label: "Quotations" },
+  { key: "tasks", label: "Tasks" },
+  { key: "notes", label: "Notes" },
+  { key: "documents", label: "Documents" },
+  { key: "calendar", label: "Calendar" },
+  { key: "timeline", label: "Timeline" },
+  { key: "procurement", label: "Procurement" },
+];
+const PROJECT_TAB_KEYS = PROJECT_TABS.map((t) => t.key);
 
 export default function ProjectDetailPage({ params }: PageProps) {
   const { id } = use(params);
@@ -58,7 +75,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  // The address follows the tab, so refreshing on Plan reopens Plan.
+  const [activeTab, setActiveTab] = useUrlTab<TabKey>(PROJECT_TAB_KEYS, "overview");
   const [showEditDetailsModal, setShowEditDetailsModal] = useState(false);
 
   // Project editing state
@@ -619,19 +637,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
    * No icons and no count badges: the lead tab bar has neither, and the two
    * sitting side by side is what made them look like different products.
    */
-  const tabs: { key: TabKey; label: string }[] = [
-    { key: "overview", label: "Overview" },
-    { key: "scope", label: "Scope" },
-    { key: "project-mgmt", label: "Plan" },
-    { key: "quotations", label: "Quotations" },
-    { key: "tasks", label: "Tasks" },
-    { key: "notes", label: "Notes" },
-    { key: "documents", label: "Documents" },
-    { key: "calendar", label: "Calendar" },
-    { key: "timeline", label: "Timeline" },
-    { key: "procurement", label: "Procurement" },
-  ];
-
   return (
     <PageLayout>
       <PageHeader
@@ -733,7 +738,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
       <PageContent>
         {/* Same markup as the lead detail page. */}
         <div className="flex border-b border-slate-200 mb-6 -mx-6 px-6 overflow-x-auto">
-          {tabs.map((tab) => (
+          {PROJECT_TABS.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}

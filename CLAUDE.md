@@ -955,6 +955,30 @@ tab filters by several categories this way; `MultiSelectFilter` in
 `ListFilterBar` is the older, unsearchable answer that the leads and
 projects bars still use.
 
+### A detail page's tab is in the address
+
+`hooks/useUrlTab` (2026-09-23): `?tab=documents`, written with
+`replaceState` and read once on mount. Every detail page held its tab in
+state alone, so the address never moved off the record's URL - pressing
+refresh on a lead's Documents tab reopened Overview, and a link sent to a
+colleague landed them on Overview too. The Catalogue had solved it for
+itself; the hook is that solution shared by the lead page, the project page
+and the Catalogue, which now all read one implementation.
+
+Three decisions inside it, each with a reason: the URL is read in an
+**effect**, not in the initial state, because `window` does not exist during
+the server render and a first paint that disagrees with the markup is a
+hydration error; it is **`replaceState`, not push**, because switching tabs
+is looking around a record rather than navigating, and pushing would make
+Back walk every tab you glanced at - it also avoids Next's router, which
+would refetch the route on every tab click; and the URL is read **only on
+mount**, because afterwards the hook is what writes it and re-reading would
+fight the tab just pressed. An unknown or not-rendered tab (`?tab=payments`
+on a project) falls back rather than showing nothing.
+
+The project page's tab list was hoisted to `PROJECT_TABS` so the bar and the
+URL validate against one array.
+
 ### Every list is built from the same cells
 
 `components/ui/list-cells` - `Headline` (name in bold, then one or two

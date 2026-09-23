@@ -33,6 +33,7 @@ import { SearchSelect } from "@/components/ui/SearchSelect";
 import type { ScopePreset } from "@/types/property-scope";
 import { CONFIGURATION_LABELS, isConfiguration } from "@/lib/scope/configuration";
 import { PropertyTypeLabels } from "@/types/leads";
+import { useUrlTab } from "@/hooks/useUrlTab";
 
 interface SpaceType {
   id: string;
@@ -83,6 +84,9 @@ interface QuotationCostItem {
 }
 
 type TabType = "spaces" | "components" | "categories" | "costItems" | "presets";
+
+/** The old /catalogue/presets address forwards to ?tab=presets. */
+const CATALOGUE_TABS: TabType[] = ["spaces", "components", "categories", "costItems", "presets"];
 type SortDirection = "asc" | "desc" | null;
 type SortColumn =
   | "name"
@@ -113,17 +117,14 @@ interface DeleteModalState {
 }
 
 export default function QuotationsConfigPage() {
-  const [activeTab, setActiveTab] = useState<TabType>("spaces");
+  // The address follows the tab; the hook is shared with the lead and
+  // project detail pages, which wanted the same thing (2026-09-23).
+  const [activeTab, setActiveTab] = useUrlTab<TabType>(CATALOGUE_TABS, "spaces");
   // Presets are a table like the other four; only their editor is their
   // own, because a preset is a list of spaces × counts, not a form of fields.
   const [presets, setPresets] = useState<ScopePreset[]>([]);
   const [presetEditing, setPresetEditing] = useState<ScopePreset | "new" | null>(null);
 
-  // Arrive on a tab by URL - the old /catalogue/presets address forwards here.
-  useEffect(() => {
-    const tab = new URLSearchParams(window.location.search).get("tab") as TabType | null;
-    if (tab && ["spaces", "components", "categories", "costItems", "presets"].includes(tab)) setActiveTab(tab);
-  }, []);
   // Set from the cost items response. Users without cost_items.pricing get no
   // company cost at all, so the column and its form field are hidden rather
   // than shown empty - a blank column invites people to fill it in.
@@ -303,11 +304,6 @@ export default function QuotationsConfigPage() {
       to: tabId,
     });
     setActiveTab(tabId);
-    // The address follows the tab, so a reload, the back button and a
-    // shared link all land on the tab that was being looked at.
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", tabId);
-    window.history.replaceState(window.history.state, "", url);
   };
 
   /** Active / inactive, applied the same way on every tab. */
