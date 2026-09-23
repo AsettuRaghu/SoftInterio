@@ -1048,6 +1048,20 @@ proposal:
   and vendor negotiation possible later.
 - **not a cost**, despite the name it carried for nine months.
 
+**A size never goes in the name.** The test: is the difference a number
+the measurement already knows, or a decision the customer makes? Length,
+area and count are measured - they belong in the `unit_code` and the
+costing rule. "LED Light Strip - 3ft" (nos, 900) and "- 6ft" (nos, 1500)
+were the same product sold twice and did not agree with each other -
+300 a foot against 250 - while a 7ft run had no honest answer at all, and
+both sat on the Kitchen Base Unit's offers *beside* the Profile Lighting
+ladder (rft, 150/220/320/450 per `counter_rft`), so that one component
+offered six ways to buy one strip of light. Retired `20260923180000`,
+which refuses if any quotation line or scope row still uses them.
+"Organizer Basket - Large / Small" and "Hob - 4 burner" are decisions
+nobody derives from a plan, and stay. Those five were the only names of
+112 carrying a size.
+
 **A thing the business does not sell is simply not offered** - remove it
 from the component type's offers, or mark the scope row Done by: Client.
 Billing appliances separately needs no flag either: a lead already carries
