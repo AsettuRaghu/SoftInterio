@@ -1089,6 +1089,20 @@ rule was seeded where such types existed; the tenant edits or replaces it.
     only for a quantity that can be 0 (a count, a typed area); an optional
     extra that follows the size is a tap. An item alone in its group and
     not auto is *optional* - tap to include, tap again to leave out.
+  **A count is asked by whatever is priced per it**, never in a section of
+  its own (2026-09-23, the correction to the same day's first attempt).
+  "Which drawer system?" asks "How many?" on its own row, because the count
+  exists only to size that decision - drawn separately, the sheet asked
+  about drawers in two places, which is what it was meant to stop. A count
+  nothing is priced per is asked on its own, above the questions: the
+  exposed ends only an *automatic* item follows, so no question owns them.
+  `Options` places them, being the only thing that knows which question is
+  priced per which count; `ComponentCard` hands it the fields and a setter.
+  Handles got a `handles` quantity of their own for this reason
+  (`20260923240000`) - pointing them at `drawers` was right arithmetic and
+  wrong ownership, and would have had a dressing table ask "How do the doors
+  open? … how many drawers?".
+
   **A count question carries its own wording** - `CHOICES` in
   `ScopeItemPanel`, at module level, holds the field key, the question and
   its handful of answers together, so adding `drawers` needed no new branch.

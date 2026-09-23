@@ -222,6 +222,8 @@ function Options({
   showOwner,
   costing = null,
   onQuestions,
+  counts = [],
+  onCount,
 }: {
   item: PropertyScopeItem;
   propertyId: string;
@@ -234,6 +236,9 @@ function Options({
   costing?: ComponentCosting | null;
   /** How many questions are still to ask, as the taps happen. */
   onQuestions?: (n: number) => void;
+  /** The rule's count fields, asked beside whatever is priced per them. */
+  counts?: { key: string; hint?: string; value: number }[];
+  onCount?: (key: string, value: number) => void;
 }) {
   const [groups, setGroups] = useState<OptionGroup[] | null>(null);
   const [fromTemplates, setFromTemplates] = useState(true);
@@ -283,6 +288,43 @@ function Options({
   useEffect(() => {
     if (toAsk !== null) onQuestions?.(toAsk);
   }, [toAsk, onQuestions]);
+
+  /**
+   * A count, drawn as the handful of answers it has.
+   *
+   * It is asked by whatever is priced per it - "Which drawer system?" owns
+   * "How many?" - because a count exists only to size something, and asking
+   * it in a section of its own made the sheet ask about drawers twice
+   * (2026-09-23). A count nothing is priced per, like the exposed ends that
+   * only an automatic item follows, is asked on its own above the questions.
+   */
+  const askCount = (c: { key: string; hint?: string; value: number }, inline = false) => {
+    const choice = CHOICES[c.key];
+    if (!choice) return null;
+    return (
+      <div key={c.key} className={cn(inline ? "flex flex-wrap gap-1.5 items-center pt-1" : "grid grid-cols-[9rem_1fr] gap-x-2 items-start")} title={c.hint}>
+        <span className={cn("text-[11px] font-medium", inline ? "text-slate-400 mr-0.5" : "text-slate-600 pt-1")}>
+          {inline ? "How many?" : choice.question}
+        </span>
+        <div className="flex flex-wrap gap-1.5">
+          {choice.options.map((ch) => (
+            <button
+              key={ch.value}
+              type="button"
+              disabled={readOnly}
+              onClick={() => onCount?.(c.key, ch.value)}
+              className={cn(
+                "px-2 py-0.5 text-[11px] font-medium rounded-full border transition-colors disabled:cursor-default",
+                c.value === ch.value ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400",
+              )}
+            >
+              {ch.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   /** Applies a local change to every item at once, then saves the one that was tapped. */
   const apply = (
@@ -425,8 +467,14 @@ function Options({
       </select>
     );
 
+  // A count is placed by the group priced per it; whatever is left over is
+  // asked on its own, first.
+  const pricedPer = new Set((groups ?? []).flatMap((g) => g.items.filter((o) => !o.auto).map((o) => o.quantity_key)).filter(Boolean) as string[]);
+  const loose = counts.filter((c) => !pricedPer.has(c.key));
+
   return (
     <div className="space-y-2.5">
+      {loose.length > 0 && <div className="space-y-1.5">{loose.map((c) => askCount(c))}</div>}
       {groups.map((g) => {
         const autos = g.items.filter((o) => o.auto);
         const counted = g.items.filter((o) => o.counted);
@@ -475,6 +523,13 @@ function Options({
                 ))}
                 {thumb(single)}
                 {owner(single)}
+                {/* A lone yes/no priced per a count still owns that count -
+                    without this the count would belong to no question and
+                    vanish from the sheet entirely. */}
+                {yes &&
+                  counts
+                    .filter((cn) => single.quantity_key === cn.key && !single.auto)
+                    .map((cn) => askCount(cn, true))}
               </div>
             </div>
           );
@@ -555,6 +610,12 @@ function Options({
                       Not needed
                     </button>
                   )}
+                  {/* The count this decision is priced per - "Which drawer
+                      system?" asks "How many?" itself, rather than a section
+                      of its own elsewhere on the sheet. */}
+                  {counts
+                    .filter((cn) => items.some((o) => o.quantity_key === cn.key && !o.auto))
+                    .map((cn) => askCount(cn, true))}
                 </div>
               ))}
               {autos.map((o) => (
@@ -693,41 +754,8 @@ function ComponentCard({
             // "I still see a lot of text boxes ... I thought you removed them").
             const isDim = (k: string) => k === "width" || k === "height" || k === "length";
             const asked = costing.fields.filter((f) => isDim(f.key) || f.default == null);
-            const questions = costing.fields.filter((f) => CHOICES[f.key]);
             const assumed = costing.fields.filter((f) => !isDim(f.key) && f.default != null && !CHOICES[f.key]);
             const touched = assumed.some((f) => (c.measures as Record<string, number> | null)?.[f.key] != null);
-            const ask = (f: (typeof costing.fields)[number]) => {
-              const choice = CHOICES[f.key];
-              if (!choice) return null;
-              const choices = choice.options;
-              const current = Number(measures[f.key] ?? 0);
-              return (
-                <div key={f.key} className="grid grid-cols-[9rem_1fr] gap-x-2 items-start" title={f.hint}>
-                  <span className="text-[11px] font-medium text-slate-600 pt-1">{choice.question}</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {choices.map((ch) => (
-                      <button
-                        key={ch.value}
-                        type="button"
-                        disabled={readOnly}
-                        onClick={() => {
-                          const next = { ...measures, [f.key]: ch.value };
-                          setMeasures(next);
-                          const { dims, measures: rest } = splitMeasures(next);
-                          void onPatch(c, { ...dims, measures: rest });
-                        }}
-                        className={cn(
-                          "px-2 py-0.5 text-[11px] font-medium rounded-full border transition-colors disabled:cursor-default",
-                          current === ch.value ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400",
-                        )}
-                      >
-                        {ch.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            };
             const show = (f: (typeof costing.fields)[number]) => (
               <label key={f.key} className={cn("text-[11px]", missing.includes(f.label || f.key) ? "text-amber-700 font-medium" : "text-slate-600")} title={f.hint}>
                 {f.label}
@@ -769,7 +797,6 @@ function ComponentCard({
                     {(adjusting ?? touched) && <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">{assumed.map(show)}</div>}
                   </div>
                 )}
-                {questions.length > 0 && <div className="mt-2 space-y-1.5">{questions.map(ask)}</div>}
                 {derived && Object.keys(derived.values).length > 0 && (
                   <p className="mt-1.5 text-[11px] text-slate-500">
                     {costing.quantities.map((q) => `${q.label}: ${Math.round((derived.values[q.key] ?? 0) * 100) / 100} ${q.unit_code}`).join(" · ")}
@@ -781,7 +808,25 @@ function ComponentCard({
           {ours ? (
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Options</p>
-              <Options item={c} propertyId={propertyId} readOnly={readOnly} onChanged={onChoicesChanged} showOwner={linkedType === "project"} costing={costing} onQuestions={onQuestions} />
+              <Options
+                item={c}
+                propertyId={propertyId}
+                readOnly={readOnly}
+                onChanged={onChoicesChanged}
+                showOwner={linkedType === "project"}
+                costing={costing}
+                onQuestions={onQuestions}
+                // The counts are asked by the question that is priced per
+                // them, so Options draws them - it is the only place that
+                // knows which question that is.
+                counts={(costing?.fields ?? []).filter((f) => CHOICES[f.key]).map((f) => ({ key: f.key, hint: f.hint, value: Number(measures[f.key] ?? 0) }))}
+                onCount={(key, value) => {
+                  const next = { ...measures, [key]: value };
+                  setMeasures(next);
+                  const { dims, measures: rest } = splitMeasures(next);
+                  void onPatch(c, { ...dims, measures: rest });
+                }}
+              />
             </div>
           ) : c.scope_owner === "excluded" ? (
             <p className="text-xs text-slate-500">Not part of this scope.</p>
