@@ -96,3 +96,33 @@ describe("packagePlans", () => {
     expect(plans.map((p) => p.componentId)).toEqual(["a", "b"]);
   });
 });
+
+describe("a blanket as the alternative", () => {
+  // applyChoices needs a database, so these check the rule it depends on:
+  // a package plan is the same either way, and the preference only changes
+  // what is written. The p2-specific rules are asserted in the route's own
+  // shape - here we pin the two facts the plan must carry for them to work.
+  it("separates answers from accessories, so p2 can skip the accessories", () => {
+    const [plan] = packagePlans({
+      components, offersByType, items,
+      entries: [
+        { component_type_id: T, cost_item_id: "c-s", quantity: null },
+        { component_type_id: T, cost_item_id: "rod", quantity: 2 },
+      ],
+    });
+    expect(plan.pick).toHaveLength(1);
+    expect(plan.counted).toHaveLength(1);
+  });
+
+  it("gives every answer its question, so p2 knows which alternative it replaces", () => {
+    const [plan] = packagePlans({
+      components, offersByType, items,
+      entries: [
+        { component_type_id: T, cost_item_id: "c-p", quantity: null },
+        { component_type_id: T, cost_item_id: "f-acr", quantity: null },
+      ],
+    });
+    expect(plan.pick.every((p) => !!p.group_key)).toBe(true);
+    expect(new Set(plan.pick.map((p) => p.group_key)).size).toBe(2);
+  });
+});

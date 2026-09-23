@@ -37,6 +37,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   DocumentTextIcon,
+  ArrowPathIcon,
   ExclamationTriangleIcon,
   QuestionMarkCircleIcon,
   Bars2Icon,
@@ -129,7 +130,7 @@ export function ScopeTab({
       ? `${parent.name} keeps at least one component. Mark the space as the client's or excluded if nothing there is ours.`
       : null;
   };
-  const { confirmDialog } = useConfirm();
+  const { confirm, confirmDialog } = useConfirm();
   /**
    * ↑ / ↓ / Enter in a name or size field move to the same field on the
    * previous / next visible row, so a list can be filled top to bottom
@@ -878,6 +879,40 @@ export function ScopeTab({
         >
           {saveState === "saving" ? "Saving…" : saveState === "failed" ? "Not saved - try again" : <><CheckIcon className="w-3 h-3" /> Saved</>}
         </span>
+        {/* Picking the wrong preset used to mean deleting rooms one at a
+            time. Refused once a quotation exists - by then changing what is
+            built is a variation, not a restart. */}
+        {roots.length > 0 && !readOnly && propertyId && (
+          <button
+            type="button"
+            onClick={async () => {
+              if (
+                !(await confirm({
+                  title: "Start the scope again?",
+                  message: `This removes all ${items.length} rows - every room, component and choice - and offers the presets again. The pictures filed against these rooms stay on the Documents tab.`,
+                  confirmLabel: "Clear and start again",
+                  tone: "danger",
+                }))
+              )
+                return;
+              const res = await fetch(`/api/properties/${propertyId}/scope/clear`, { method: "POST" });
+              const json = await res.json().catch(() => ({}));
+              if (!res.ok) {
+                setNotice(null);
+                setError(json.error || "Could not clear the scope");
+                return;
+              }
+              setError(null);
+              setNotice(`Cleared ${json.data?.cleared ?? 0} rows. Pick a preset to start again.`);
+              await load();
+            }}
+            title="Remove every room and start from a preset again"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-red-50 hover:text-red-700 hover:border-red-200 transition-colors"
+          >
+            <ArrowPathIcon className="w-3.5 h-3.5" />
+            Start again
+          </button>
+        )}
         {roots.length > 0 && !readOnly && propertyId && (
           <ApplyGradeButton
             propertyId={propertyId}

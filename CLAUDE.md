@@ -386,6 +386,26 @@ questions still to ask**: Budget 1,31,850 · Standard 1,65,400 · Premium
 2,49,400 · Luxury 3,37,201. Every preset answers with **Standard** unless the
 tenant says otherwise.
 
+**Either blanket can be laid down as the ALTERNATIVE** (`preference: "p2"`,
+the checkbox in the menu), which is how one customer is shown two levels:
+Standard as the ①, Budget as the ②, then **Option 2** on the quotation builds
+the whole second document from the ②s (2026-09-24). Three rules differ and
+all three matter: an item already chosen as the ① is skipped, because nothing
+is its own alternative and the row is one per item - writing p2 on it would
+demote the answer; **counted accessories are skipped entirely**, since two
+tandem drawers are not an alternative to anything; and "already answered"
+means the question already has a ②, not a ①.
+
+**"Start again" empties the scope**, because picking the wrong preset used to
+mean deleting rooms one at a time and the row delete correctly refuses to
+remove the last space. `POST /api/properties/[id]/scope/clear` is **refused
+once a quotation exists** (`quotation_exists`) - not by stage: a quotation is
+built from the scope and then frozen, so emptying the scope underneath one
+leaves a priced document whose every line reads "not in the scope". After a
+price has been given, changing what is built is a variation. Documents filed
+against a room are left alone - the pictures a customer sent are theirs, not
+the room list's.
+
 **A package cannot record a "no", and that shapes what belongs in one.**
 There is no way to say *decline this question*, so profile lighting below
 Premium, panelling below Luxury, appliances and the specialised pull-outs are

@@ -11,7 +11,9 @@ type RouteParams = { params: Promise<{ id: string }> };
  * Apply a package - the business's own "Standard wardrobe" - to a component,
  * a room, or the whole scope.
  *
- * POST { package_id, scope_item_id?, replace? }
+ * POST { package_id, scope_item_id?, replace?, preference? }
+ *   preference: p1 answers the questions, p2 records the alternative - which
+ *   is how two levels are shown to one customer.
  * -> { components, answered, kept, unanswered, package }
  *
  * The same writer as a grade, because the difference between the two is only
@@ -60,7 +62,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     const out = await applyChoices(supabase, {
-      tenantId: user.tenantId, userId: user.id, propertyId, plans, rows, names: menu.names, replace: body.replace === true,
+      tenantId: user.tenantId, userId: user.id, propertyId, plans, rows, names: menu.names,
+      replace: body.replace === true,
+      // "p2" records the alternative instead of the answer, which is how a
+      // customer is shown two levels: Standard as the ①, Budget as the ②,
+      // then Option 2 builds the whole second quotation from the ②s.
+      preference: body.preference === "p2" ? "p2" : "p1",
     });
     return NextResponse.json({ data: { ...out, package: pkg.name } });
   } catch (e) {

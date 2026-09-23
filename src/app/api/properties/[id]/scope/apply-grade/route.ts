@@ -18,6 +18,7 @@ type RouteParams = { params: Promise<{ id: string }> };
  *   scope_item_id a component (just it), a space (its components), or absent
  *                 (every component of ours on the property).
  *   replace       false by default; see `applyChoices`.
+ *   preference    p1 answers the questions, p2 records the alternative.
  *
  * -> { components, answered, kept, unanswered }. A grade cannot choose a
  *    shutter finish, so `unanswered` is what the screen must still say.
@@ -51,7 +52,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     const out = await applyChoices(supabase, {
-      tenantId: user.tenantId, userId: user.id, propertyId, plans, rows, names: menu.names, replace: body.replace === true,
+      tenantId: user.tenantId, userId: user.id, propertyId, plans, rows, names: menu.names,
+      replace: body.replace === true,
+      // "p2" records the alternative instead of the answer, which is how a
+      // customer is shown two levels: Standard as the ①, Budget as the ②,
+      // then Option 2 builds the whole second quotation from the ②s.
+      preference: body.preference === "p2" ? "p2" : "p1",
     });
     return NextResponse.json({ data: out });
   } catch (e) {
