@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { missingMeasures, rulesByType } from "./measured";
+import { unaskedByComponent } from "./unasked";
 
 /**
  * Is the scope complete enough for the next stage of the sale?
@@ -15,7 +16,11 @@ import { missingMeasures, rulesByType } from "./measured";
  *                            - and every component of ours whose type has a
  *                            costing rule has that rule's measurements
  *                            (2026-09-22): without them the quotation prices
- *                            hinges, corners and internals at nothing
+ *                            hinges, corners and internals at nothing, and
+ *                            every question on it has been either answered
+ *                            or marked not needed (2026-09-23) - an
+ *                            unasked question is a line the quotation will
+ *                            simply be missing
  *
  * Sizes need only be rough; confirming them is the site visit's job.
  */
@@ -23,7 +28,7 @@ import { missingMeasures, rulesByType } from "./measured";
 export interface ScopeReadiness {
   requirement_discussion: { ok: boolean; missing: string[] };
   proposal_discussion: { ok: boolean; missing: string[] };
-  facts: { floorPlans: number; configuration: string | null; spaces: number; spacesWithoutSize: string[]; emptySpaces: string[]; components: number; unmeasured: { id: string; name: string; missing: string[] }[] };
+  facts: { floorPlans: number; configuration: string | null; spaces: number; spacesWithoutSize: string[]; emptySpaces: string[]; components: number; unmeasured: { id: string; name: string; missing: string[] }[]; unasked: { id: string; name: string; count: number }[] };
 }
 
 export async function scopeReadiness(
@@ -43,6 +48,7 @@ export async function scopeReadiness(
       : Promise.resolve({ count: 0 }),
     supabase.from("component_types").select("id, config_schema"),
   ]);
+  const unasked = await unaskedByComponent(supabase, args.propertyId);
 
   const items = rows ?? [];
   const ours = (o: string | null) => !o || o === "us";
@@ -56,6 +62,10 @@ export async function scopeReadiness(
     .filter((c) => ours(c.scope_owner))
     .map((c) => ({ id: c.id as string, name: c.name as string, missing: missingMeasures(c, rules.get(c.component_type_id as string)) }))
     .filter((c) => c.missing.length > 0);
+  const stillToAsk = components
+    .filter((c) => ours(c.scope_owner))
+    .map((c) => ({ id: c.id as string, name: c.name as string, count: unasked.get(c.id as string)?.unanswered ?? 0 }))
+    .filter((c) => c.count > 0);
   const facts = {
     floorPlans: (docs as { count: number | null }).count ?? 0,
     configuration: property?.configuration ?? null,
@@ -64,6 +74,7 @@ export async function scopeReadiness(
     emptySpaces,
     components: components.length,
     unmeasured,
+    unasked: stillToAsk,
   };
 
   const few = (names: string[], what = "spaces") => (names.length <= 3 ? names.join(", ") : `${names.length} ${what} (${names.slice(0, 2).join(", ")}…)`);
@@ -79,6 +90,15 @@ export async function scopeReadiness(
     prop.push(
       `Measure ${few(unmeasured.map((c) => c.name), "components")} - ${unmeasured.length === 1 ? "it needs" : "they need"} ${[...new Set(unmeasured.flatMap((c) => c.missing))].slice(0, 4).join(", ")}`,
     );
+  // A question nobody asked is a line the quotation will not carry, and
+  // nothing else would ever say so. "Not needed" clears it as surely as an
+  // answer does - the point is that somebody decided.
+  if (stillToAsk.length) {
+    const total = stillToAsk.reduce((n, c) => n + c.count, 0);
+    prop.push(
+      `Finish the walkthrough - ${total} question${total === 1 ? "" : "s"} still to ask on ${few(stillToAsk.map((c) => c.name), "components")}`,
+    );
+  }
 
   return {
     requirement_discussion: { ok: req.length === 0, missing: req },

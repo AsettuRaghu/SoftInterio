@@ -266,6 +266,34 @@ So a wardrobe asks: its size, exposed ends, which carcass, which finish,
 which hinges, which handles, lighting yes/no, and a row of internals to
 add. Nothing else.
 
+**A decline is an answer, and an unasked question stops the stage**
+(2026-09-23). The sheet is a questionnaire, so "we asked, they said no" and
+"nobody has asked yet" must be different things - and they were the same
+blank. "Not needed" and "No" only cleared the picks, so a wardrobe nobody
+had discussed read exactly like one whose customer wanted no lighting, and
+the quotation came out a line short with nothing on any screen saying so.
+
+`property_scope_items.declined_decisions` (text[], on the component row)
+stores the question declined, keyed `group_key ?? cost_item_id` - the same
+key the sheet groups by, so a decision two categories share is declined
+once. Text, not a foreign key, for the reason `hold_reason_code` is:
+retiring a category must not erase the record that somebody was asked.
+**Not needed** is now offered whether or not anything is picked, so it can
+be the first tap, and it fills in when it is the answer; answering
+afterwards lifts the decline in the same request.
+
+**`lib/scope/questions.ts` is the one rule** - a question is a group of
+options that are neither counted nor automatic, plus the lone counted item
+a category holds on its own, which the sheet draws as "Sensor light? No ·
+Yes". Counted accessories are an "Add:" row, not a question; an automatic
+item states itself. `lib/scope/unasked.ts` runs it over a whole property in
+one read, and the Scope list's amber **"2 to ask"**, the room sheet's
+header, the unanswered question in amber, and `scopeReadiness` all count
+through it - so the row, the sheet and the refusal can never disagree.
+Proposal discussion now refuses with "Finish the walkthrough - 7 questions
+still to ask on …" beside the measurement gate. On this tenant a wardrobe
+asks 5, a kitchen base unit 7, a TV unit 8.
+
 **Each space opens out as a room sheet** (`ScopeItemPanel`, the
 speech-bubble on the row, or **Walkthrough** from the header with ←/→).
 No tabs - a tabbed version with the same four headings at two depths was

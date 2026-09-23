@@ -4,6 +4,7 @@ import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { logLeadActivity } from "@/lib/activity/log";
 import { getDefaultMeasurementUnit } from "@/lib/settings/measurement-unit";
 import type { ScopeBulkEntry } from "@/types/property-scope";
+import { unaskedByComponent } from "@/lib/scope/unasked";
 
 /**
  * Scope for one property: the rooms and areas a client wants work in.
@@ -90,7 +91,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    return NextResponse.json({ items: data || [] });
+    // What each component still has to be asked, so the list can show it
+    // without opening every room sheet.
+    const unasked = await unaskedByComponent(supabase, propertyId);
+    const items = (data || []).map((r) => {
+      const q = unasked.get(r.id as string);
+      return q ? { ...r, still_to_ask: q.unanswered, questions: q.total } : r;
+    });
+
+    return NextResponse.json({ items });
   } catch (error) {
     console.error("Property scope GET error:", error);
     return NextResponse.json(

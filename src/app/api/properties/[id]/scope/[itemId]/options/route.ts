@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import { shapeOptions } from "@/lib/scope/options";
+import { questionsOf, stillToAsk } from "@/lib/scope/questions";
 
 type RouteParams = { params: Promise<{ id: string; itemId: string }> };
 
@@ -39,11 +40,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   const { data: component } = await supabase
     .from("property_scope_items")
-    .select("id, component_type_id")
+    .select("id, component_type_id, declined_decisions")
     .eq("id", itemId)
     .eq("property_id", id)
     .maybeSingle();
   if (!component?.component_type_id) return NextResponse.json({ error: "Not a component" }, { status: 400 });
+  const declined = (component.declined_decisions as string[] | null) ?? [];
 
   const [templated, { data: picked }] = await Promise.all([
     offersOf(supabase, component.component_type_id),
@@ -52,7 +54,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const templateIds = new Set(templated.lines.map((l) => l.cost_item_id));
   const pickedByItem = new Map((picked ?? []).map((p) => [p.cost_item_id as string, p]));
   const ids = [...new Set([...templateIds, ...pickedByItem.keys()])];
-  if (ids.length === 0) return NextResponse.json({ data: { groups: [], from_templates: false } });
+  if (ids.length === 0) return NextResponse.json({ data: { groups: [], from_templates: false, declined, still_to_ask: 0 } });
 
   const { data: costItems } = await supabase
     .from("quotation_cost_items")
@@ -96,10 +98,27 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (seen) seen!.items.push(...g!.items);
     else merged.set(key, g);
   }
+  // What is still to ask is answered here rather than in the browser, so
+  // the sheet, the list behind it and the stage gate all count the same way.
+  const menu = (costItems ?? []).filter((c) => templateIds.has(c.id)).map((c) => ({
+    id: c.id as string,
+    category_id: (c.category_id as string | null) ?? null,
+    unit_code: c.unit_code as string,
+    decision: (c.category as unknown as { decision?: string | null } | null)?.decision ?? null,
+  }));
+  const questions = questionsOf(
+    templated.lines,
+    menu,
+    (picked ?? []).filter((p) => p.choice_status).map((p) => p.cost_item_id as string),
+    declined,
+  );
+
   return NextResponse.json({
     data: {
       groups: [...merged.values()],
       from_templates: templateIds.size > 0,
+      declined,
+      still_to_ask: stillToAsk(questions),
     },
   });
 }
@@ -125,15 +144,29 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   const OWNERS = new Set(["us", "client", "vendor", "excluded"]);
   const owner = typeof body.scope_owner === "string" && OWNERS.has(body.scope_owner) ? body.scope_owner : undefined;
   const quantity = body.quantity === null ? null : Number.isFinite(Number(body.quantity)) && Number(body.quantity) > 0 ? Math.round(Number(body.quantity) * 100) / 100 : undefined;
-  if (!body.cost_item_id) return NextResponse.json({ error: "cost_item_id is required" }, { status: 400 });
+  const decisionKey = typeof body.decision_key === "string" && body.decision_key.trim() ? body.decision_key.trim() : null;
+  if (!body.cost_item_id && !decisionKey) return NextResponse.json({ error: "cost_item_id is required" }, { status: 400 });
 
   const { data: component } = await supabase
     .from("property_scope_items")
-    .select("id, component_type_id, display_order")
+    .select("id, component_type_id, display_order, declined_decisions")
     .eq("id", itemId)
     .eq("property_id", id)
     .maybeSingle();
   if (!component?.component_type_id) return NextResponse.json({ error: "Not a component" }, { status: 400 });
+
+  // "Not needed" / "No": the answer is that there is no answer, and it is
+  // recorded so the question stops reading as unasked. Picking any option
+  // afterwards lifts it, which the client does by sending declined: false.
+  if (decisionKey) {
+    const was = ((component.declined_decisions as string[] | null) ?? []).filter(Boolean);
+    const next = body.declined === false ? was.filter((k) => k !== decisionKey) : [...new Set([...was, decisionKey])];
+    if (next.length !== was.length) {
+      const { error } = await supabase.from("property_scope_items").update({ declined_decisions: next }).eq("id", itemId);
+      if (error) return NextResponse.json({ error: "Could not record that" }, { status: 500 });
+    }
+    if (!body.cost_item_id) return NextResponse.json({ data: { declined: next } });
+  }
 
   const { data: existing } = await supabase
     .from("property_scope_items")

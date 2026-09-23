@@ -37,6 +37,7 @@ import {
   ChevronUpIcon,
   DocumentTextIcon,
   ExclamationTriangleIcon,
+  QuestionMarkCircleIcon,
   Bars2Icon,
 } from "@heroicons/react/24/outline";
 import {
@@ -637,6 +638,17 @@ export function ScopeTab({
                 </button>
               );
             })()}
+            {(item.still_to_ask ?? 0) > 0 && (
+              <button
+                type="button"
+                onClick={() => setOpenTarget({ spaceId: item.parent_id ?? item.id, componentId: item.id })}
+                title="Questions nobody has answered or marked not needed. Anything not chosen is a line the quotation will not carry."
+                className="shrink-0 inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 hover:bg-amber-100"
+              >
+                <QuestionMarkCircleIcon className="w-3 h-3" />
+                {item.still_to_ask} to ask
+              </button>
+            )}
             {item.space_type?.is_container && (
               <span className="shrink-0 text-[10px] font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5">
                 container

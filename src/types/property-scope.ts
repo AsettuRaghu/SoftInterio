@@ -76,6 +76,9 @@ export const scopeOwnerLabel = (owner: ScopeOwner | null | undefined) => SCOPE_O
 export interface PropertyScopeItem {
   /** Field values under the component type's costing rule (lib/costing). */
   measures?: Record<string, number> | null;
+  /** Questions on this component with neither an answer nor a "not needed" - sent by the scope GET. */
+  still_to_ask?: number;
+  questions?: number;
   /** Set on a cost-item row under a component: which catalogue item, and
    *  whether it is the customer's first or second preference. Never a price. */
   cost_item_id?: string | null;

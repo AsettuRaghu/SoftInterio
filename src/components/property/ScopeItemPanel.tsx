@@ -44,6 +44,7 @@ import { ScopeDiscussion } from "./ScopeDiscussion";
 import { MediaViewer, type MediaItem } from "@/components/ui/MediaViewer";
 import { defaultMeasures, mergeMeasures, quantify, splitMeasures, type ComponentCosting } from "@/lib/costing/component-costing";
 import { missingMeasures } from "@/lib/scope/measured";
+import { questionsOf, stillToAsk } from "@/lib/scope/questions";
 
 
 interface RefDoc {
@@ -161,6 +162,9 @@ interface OptionGroup {
 
 const TIER: Record<string, string> = { basic: "Basic", standard: "Standard", premium: "Premium", luxury: "Luxury" };
 
+/** What a question is called - the same key `lib/scope/questions` counts by. */
+const keyOf = (o: { group_key: string | null; cost_item_id: string }) => o.group_key ?? o.cost_item_id;
+
 function Options({
   item,
   propertyId,
@@ -168,6 +172,7 @@ function Options({
   onChanged,
   showOwner,
   costing = null,
+  onQuestions,
 }: {
   item: PropertyScopeItem;
   propertyId: string;
@@ -178,9 +183,13 @@ function Options({
   showOwner: boolean;
   /** The rule, for naming what an auto item follows. */
   costing?: ComponentCosting | null;
+  /** How many questions are still to ask, as the taps happen. */
+  onQuestions?: (n: number) => void;
 }) {
   const [groups, setGroups] = useState<OptionGroup[] | null>(null);
   const [fromTemplates, setFromTemplates] = useState(true);
+  /** Questions answered with "no". Stored, so an unasked question is tellable from a declined one. */
+  const [declined, setDeclined] = useState<Set<string>>(new Set());
   // Pictures of the offered items (Design Library entries under them), read
   // once per component: a chip with pictures shows a thumbnail, and opens
   // the viewer - acrylic against laminate, while the customer is choosing.
@@ -196,6 +205,7 @@ function Options({
       const gs: OptionGroup[] = json.data?.groups ?? [];
       setGroups(gs);
       setFromTemplates(json.data?.from_templates !== false);
+      setDeclined(new Set<string>(json.data?.declined ?? []));
       const ids = gs.flatMap((g) => g.items.map((o) => o.cost_item_id));
       if (ids.length) {
         const pr = await fetch(`/api/library/cost-item-pictures?ids=${ids.join(",")}`);
@@ -211,9 +221,35 @@ function Options({
     void load();
   }, [load]);
 
+  // Counted here from what is drawn, but by `lib/scope/questions` - the
+  // same rules the Scope list and the stage gate use, so the amber number
+  // on the row and the refusal at the gate cannot disagree with the sheet.
+  const toAsk = useMemo(() => {
+    if (!groups) return null;
+    const offers = groups.flatMap((g) => g.items.map((o) => ({ cost_item_id: o.cost_item_id, quantity_key: o.quantity_key, auto: o.auto })));
+    const menu = groups.flatMap((g) => g.items.map((o) => ({ id: o.cost_item_id, category_id: g.category.id, unit_code: o.unit_code, decision: g.category.decision ?? null })));
+    const picked = groups.flatMap((g) => g.items.filter((o) => o.status).map((o) => o.cost_item_id));
+    return stillToAsk(questionsOf(offers, menu, picked, declined));
+  }, [groups, declined]);
+  useEffect(() => {
+    if (toAsk !== null) onQuestions?.(toAsk);
+  }, [toAsk, onQuestions]);
+
   /** Applies a local change to every item at once, then saves the one that was tapped. */
-  const apply = (next: (items: OptionItem[]) => OptionItem[], tapped: { cost_item_id: string; status: "p1" | "p2" | null; scope_owner?: string; quantity?: number | null }) => {
+  const apply = (
+    next: (items: OptionItem[]) => OptionItem[],
+    tapped: { cost_item_id?: string; status?: "p1" | "p2" | null; scope_owner?: string; quantity?: number | null; decision_key?: string; declined?: boolean },
+  ) => {
     setGroups((prev) => (prev ?? []).map((g) => ({ ...g, items: next(g.items) })));
+    if (tapped.decision_key) {
+      const key = tapped.decision_key;
+      setDeclined((prev) => {
+        const n = new Set(prev);
+        if (tapped.declined === false) n.delete(key);
+        else n.add(key);
+        return n;
+      });
+    }
     const mine = ++seq.current;
     void (async () => {
       const res = await fetch(`/api/properties/${propertyId}/scope/${item.id}/options`, {
@@ -247,14 +283,38 @@ function Options({
           if (x.status === "p2") return { ...x, status: null };
           return x;
         }),
-      { cost_item_id: o.cost_item_id, status: "p1" },
+      { cost_item_id: o.cost_item_id, status: "p1", decision_key: keyOf(o), declined: false },
     );
   };
   /** Counted: in with a count, or out. */
   const setCounted = (o: OptionItem, quantity: number | null) => {
     if (readOnly) return;
     const status = quantity ? ("p1" as const) : null;
-    apply((items) => items.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, status, quantity } : x)), { cost_item_id: o.cost_item_id, status, quantity });
+    apply(
+      (items) => items.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, status, quantity } : x)),
+      { cost_item_id: o.cost_item_id, status, quantity, ...(quantity ? { decision_key: keyOf(o), declined: false } : {}) },
+    );
+  };
+
+  /** "Not needed" / "No": record the decline and clear whatever was picked. */
+  const decline = (key: string, items: OptionItem[]) => {
+    if (readOnly) return;
+    const ids = new Set(items.map((x) => x.cost_item_id));
+    const picked = items.filter((x) => x.status);
+    apply(
+      (all) => all.map((x) => (ids.has(x.cost_item_id) ? { ...x, status: null, quantity: null } : x)),
+      picked.length
+        ? { cost_item_id: picked[0].cost_item_id, status: null, decision_key: key, declined: true }
+        : { decision_key: key, declined: true },
+    );
+    // More than one was picked: clear the rest too.
+    for (const extra of picked.slice(1)) {
+      void fetch(`/api/properties/${propertyId}/scope/${item.id}/options`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cost_item_id: extra.cost_item_id, status: null }),
+      });
+    }
   };
   const setOwner = (o: OptionItem, scope_owner: string) => {
     apply((items) => items.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, scope_owner } : x)), { cost_item_id: o.cost_item_id, status: o.status, scope_owner });
@@ -337,11 +397,18 @@ function Options({
         const single = decisions.size === 1 && exclusive.length === 1 && counted.length === 0 && autos.length === 0 ? exclusive[0] : counted.length === 1 && exclusive.length === 0 && autos.length === 0 ? counted[0] : null;
         if (single) {
           const yes = !!single.status;
-          const set = (on: boolean) =>
-            single.counted ? setCounted(single, on ? 1 : null) : apply((items) => items.map((x) => (x.cost_item_id === single.cost_item_id ? { ...x, status: on ? "p1" : null } : x)), { cost_item_id: single.cost_item_id, status: on ? "p1" : null });
+          const no = declined.has(keyOf(single));
+          const set = (on: boolean) => {
+            if (!on) return decline(keyOf(single), [single]);
+            if (single.counted) return setCounted(single, 1);
+            apply(
+              (items) => items.map((x) => (x.cost_item_id === single.cost_item_id ? { ...x, status: "p1" as const } : x)),
+              { cost_item_id: single.cost_item_id, status: "p1", decision_key: keyOf(single), declined: false },
+            );
+          };
           return (
             <div key={g.category.id} className="grid grid-cols-[9rem_1fr] gap-x-2 items-start">
-              <span className="text-[11px] font-medium text-slate-600 pt-1">{g.category.question || `${single.name}?`}</span>
+              <span className={cn("text-[11px] font-medium pt-1", yes || no ? "text-slate-600" : "text-amber-700")}>{g.category.question || `${single.name}?`}</span>
               <div className="flex flex-wrap gap-1.5 items-center">
                 {[false, true].map((v) => (
                   <button
@@ -351,7 +418,7 @@ function Options({
                     onClick={() => set(v)}
                     className={cn(
                       "px-2 py-0.5 text-[11px] font-medium rounded-full border transition-colors disabled:cursor-default",
-                      yes === v ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400",
+                      (v ? yes : no) ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400",
                     )}
                   >
                     {v ? "Yes" : "No"}
@@ -372,7 +439,13 @@ function Options({
         }
         return (
           <div key={g.category.id} className="grid grid-cols-[9rem_1fr] gap-x-2 items-start">
-            <span className="text-[11px] font-medium text-slate-600 pt-1" title={g.category.name}>
+            <span
+              className={cn(
+                "text-[11px] font-medium pt-1",
+                [...decisions.entries()].some(([k, its]) => !declined.has(k) && !its.some((o) => o.status)) ? "text-amber-700" : "text-slate-600",
+              )}
+              title={g.category.name}
+            >
               {/* A question rather than a heading: the sheet is a
                   conversation with the customer, not a form (2026-09-23).
                   The wording is the category's, so a tenant can say "How do
@@ -421,13 +494,21 @@ function Options({
                       {owner(o)}
                     </span>
                   ))}
-                  {/* Declining is an answer too, and leaves a record of it. */}
-                  {!readOnly && items.some((o) => o.status === "p1") && (
+                  {/* Declining is an answer, and is stored: a question nobody
+                      has asked must not look like one the customer turned
+                      down (2026-09-23). Offered whether or not anything is
+                      picked, so it can be the first tap. */}
+                  {!readOnly && (
                     <button
                       type="button"
-                      onClick={() => items.filter((o) => o.status).forEach((o) => apply((list) => list.map((x) => (x.cost_item_id === o.cost_item_id ? { ...x, status: null } : x)), { cost_item_id: o.cost_item_id, status: null }))}
-                      className="px-2 py-0.5 text-[11px] rounded-full border border-slate-200 text-slate-400 hover:border-slate-400 hover:text-slate-600"
-                      title="Clear this answer"
+                      onClick={() => decline(key, items)}
+                      className={cn(
+                        "px-2 py-0.5 text-[11px] rounded-full border transition-colors",
+                        declined.has(key)
+                          ? "bg-slate-700 text-white border-slate-700"
+                          : "border-slate-200 text-slate-400 hover:border-slate-400 hover:text-slate-600",
+                      )}
+                      title={declined.has(key) ? "Asked, and not wanted" : "Record that this is not wanted"}
                     >
                       Not needed
                     </button>
@@ -528,6 +609,9 @@ function ComponentCard({
   const [measures, setMeasures] = useState<Record<string, number>>(() => ({ ...defaultMeasures(costing, c, c.measurement_unit), ...mergeMeasures(c) }));
   const missing = missingMeasures(c, costing);
   const [adjusting, setAdjusting] = useState(false);
+  // From the list until the sheet is opened, then from the sheet itself.
+  const [toAsk, setToAsk] = useState<number>(c.still_to_ask ?? 0);
+  const onQuestions = useCallback((n: number) => setToAsk(n), []);
   const derived = costing ? quantify(costing, measures, c.measurement_unit) : null;
   const ours = !c.scope_owner || c.scope_owner === "us";
   const size = c.width || c.height ? `${c.width ?? "—"} × ${c.height ?? "—"} ${c.measurement_unit}` : null;
@@ -549,6 +633,7 @@ function ComponentCard({
             {chosen.length > 0 ? ` · ${chosen.join(" · ")}` : ""}
             {!ours && <span className="text-amber-700 font-medium"> · {scopeOwnerLabel(c.scope_owner)}{c.scope_owner === "vendor" && c.scope_vendor_name ? ` (${c.scope_vendor_name})` : ""}</span>}
             {ours && missing.length > 0 && <span className="text-amber-700 font-medium"> · not measured</span>}
+            {ours && toAsk > 0 && <span className="text-amber-700 font-medium"> · {toAsk} to ask</span>}
           </span>
         </span>
       </button>
@@ -669,7 +754,7 @@ function ComponentCard({
           {ours ? (
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Options</p>
-              <Options item={c} propertyId={propertyId} readOnly={readOnly} onChanged={onChoicesChanged} showOwner={linkedType === "project"} costing={costing} />
+              <Options item={c} propertyId={propertyId} readOnly={readOnly} onChanged={onChoicesChanged} showOwner={linkedType === "project"} costing={costing} onQuestions={onQuestions} />
             </div>
           ) : c.scope_owner === "excluded" ? (
             <p className="text-xs text-slate-500">Not part of this scope.</p>
