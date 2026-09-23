@@ -899,6 +899,7 @@ export default function QuotationsConfigPage() {
     if (activeTab === "components") return "Add Component";
     if (activeTab === "categories") return "Add Category";
     if (activeTab === "presets") return "New Preset";
+    if (activeTab === "packages") return "New Package";
     return "Add Item";
   };
 
@@ -909,12 +910,15 @@ export default function QuotationsConfigPage() {
     if (activeTab === "categories") return action + " Category";
     return action + " Item";
   };
+  // Packages and presets have editors of their own; the shared modal above
+  // is only ever opened for the four table tabs.
 
   const getDeleteItemType = () => {
     if (deleteModal.type === "spaces") return "space";
     if (deleteModal.type === "components") return "component";
     if (deleteModal.type === "categories") return "category";
     if (deleteModal.type === "presets") return "preset";
+    if (deleteModal.type === "packages") return "package";
     return "item";
   };
 
