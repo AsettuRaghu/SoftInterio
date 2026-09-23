@@ -126,7 +126,7 @@ export async function PUT(
 
         return NextResponse.json(
 
-          { error: "Another cost item already uses that name" },
+          { error: "Another item already uses that name" },
 
           { status: 409 }
 

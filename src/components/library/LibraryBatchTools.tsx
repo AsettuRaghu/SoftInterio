@@ -70,7 +70,7 @@ export function LinkFields({
             <SearchSelect value={value.cost_category_id ?? ""} onChange={(v) => onChange({ ...value, cost_category_id: v, cost_item_id: "" })} emptyLabel={blank} options={catalogue.cost_categories.map((c) => ({ value: c.id, label: c.name }))} buttonClassName="px-4 py-2.5" />
           </div>
           <div>
-            <label className={label}>Cost item</label>
+            <label className={label}>Item</label>
             <SearchSelect
               value={value.cost_item_id ?? ""}
               onChange={(v) => set("cost_item_id", v)}

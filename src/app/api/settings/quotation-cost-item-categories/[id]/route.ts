@@ -165,7 +165,7 @@ export async function DELETE(
 
     if (itemCount && itemCount > 0) {
       return NextResponse.json(
-        { error: `Cannot delete category with ${itemCount} cost items. Please reassign or delete them first.` },
+        { error: `Cannot delete category with ${itemCount} items. Please reassign or delete them first.` },
         { status: 400 }
       );
     }

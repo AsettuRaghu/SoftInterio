@@ -131,7 +131,7 @@ export function SaveAsTemplateModal({
           </div>
 
           <p className="text-[11px] text-slate-400">
-            Cost items and their quantities are saved. Rates are not: applying
+            Items and their quantities are saved. Rates are not: applying
             this later uses whatever the cost item library charges then, so the
             template cannot go stale after a price revision.
           </p>

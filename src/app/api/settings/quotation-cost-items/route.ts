@@ -188,7 +188,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json(
 
-          { error: "A cost item with that name already exists" },
+          { error: "An item with that name already exists" },
 
           { status: 409 }
 

@@ -1000,6 +1000,50 @@ rule was seeded where such types existed; the tenant edits or replaces it.
   (`nos`), because a sqft item with no rule quantity is priced on the whole
   front.
 
+### The screen says Item; the database says cost item
+
+Renamed in the words only on 2026-09-23, the same bargain as Playbook /
+procedure: 27 visible strings changed, the schema untouched
+(`quotation_cost_items`, `quotation_cost_item_categories`, `cost_item_id`
+on offers, scope rows, line items, the library and five stock tables -
+761 identifiers and 34 columns that buy nothing by moving). Settings ->
+Catalogue now reads **Spaces · Components · Categories · Items ·
+Presets**, four of five being plain plurals of what they hold.
+
+**The old name was wrong about the row's main number.** `default_rate` is
+what the *customer pays*; the costs on the same row - `company_cost`,
+`vendor_cost` - are stand-ins until procurement keeps a real vendor list.
+So the table was named after its least important and least reliable
+field, and "Cost Items" read as a list of what things cost us.
+
+**What one is, in a sentence: one thing you sell, in one unit, at one
+rate.** It wears three hats and they are the same row - an **answer** on
+the room sheet ("Which carcass?" -> BWP Ply), a **line** on the quotation
+with a quantity and a snapshotted rate, and a **description** in the
+printed document's Material column.
+
+Three things it is deliberately **not**, each settled against a real
+proposal:
+
+- **not a product.** No brand, no model, no MRP. Hob and Chimney stay
+  generic. Brands already have a home - `stock_materials` carries
+  `brand_id` and a `cost_item_id` pointing back here, seeded with Faber,
+  Elica, Bosch and Kaff at real prices - and wiring it to the quotation
+  belongs with procurement. Brand is **not a tier**: the seeded data has
+  Faber's hob under Bosch's and Faber's chimney over it, so a ladder would
+  make "upgrade the appliances" fit a worse one.
+- **not a package.** Never "modular kitchen @ 1800/sqft"; that is a print
+  format question (`itemise_to`), and granularity is what makes a take-off
+  and vendor negotiation possible later.
+- **not a cost**, despite the name it carried for nine months.
+
+**A thing the business does not sell is simply not offered** - remove it
+from the component type's offers, or mark the scope row Done by: Client.
+Billing appliances separately needs no flag either: a lead already carries
+several quotations, each with its own number, each approved on its own,
+and winning sums them (2026-09-23 - a `bill_group` on the category was
+proposed and declined as complexity ahead of a real case).
+
 ### A cost item is one thing with one selling rate; its costs are stand-ins
 
 Decided 2026-09-22 from a brainstorm on where the cost item is used and

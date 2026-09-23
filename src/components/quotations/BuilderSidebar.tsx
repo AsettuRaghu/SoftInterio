@@ -111,7 +111,7 @@ export function BuilderSidebar({
             <div className="text-3xl font-bold text-amber-600">
               {totalLineItems}
             </div>
-            <div className="text-sm text-amber-700">Cost Items</div>
+            <div className="text-sm text-amber-700">Items</div>
           </div>
         </div>
 
@@ -335,7 +335,7 @@ export function BuilderSidebar({
             <span className="font-medium text-blue-900">{totalComponents}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-blue-700">Total Cost Items</span>
+            <span className="text-blue-700">Total items</span>
             <span className="font-medium text-blue-900">{totalLineItems}</span>
           </div>
         </div>

@@ -741,7 +741,7 @@ export default function NewTemplatePage() {
                 <span>→</span>
               </span>
               <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded">
-                Cost Items
+                Items
               </span>
             </div>
           </div>

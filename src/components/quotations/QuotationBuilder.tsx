@@ -985,7 +985,7 @@ export function QuotationBuilder({
                   id: `new-${generateId()}`,
                   costItemId: item.cost_item_id,
                   costItemName:
-                    costItem?.name || item.cost_item?.name || "Cost Item",
+                    costItem?.name || item.cost_item?.name || "Item",
                   categoryName:
                     category?.name || item.cost_item?.category?.name || "Other",
                   categoryColor:

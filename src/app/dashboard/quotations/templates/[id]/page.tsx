@@ -34,7 +34,7 @@ const LEVEL_LABELS: Record<string, string> = {
   quotation: "Quotation",
   space: "Space",
   component: "Component",
-  cost_items: "Cost items",
+  cost_items: "Items",
 };
 
 export default function EditTemplatePage() {
@@ -295,7 +295,7 @@ export default function EditTemplatePage() {
           component.lineItems.push({
             id: generateId(),
             costItemId: item.cost_item_id,
-            costItemName: costItem?.name || item.cost_item?.name || "Cost Item",
+            costItemName: costItem?.name || item.cost_item?.name || "Item",
             categoryName:
               category?.name ||
               item.cost_item?.category?.name ||
@@ -1210,7 +1210,7 @@ export default function EditTemplatePage() {
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-slate-600">Cost items</span>
+                <span className="text-slate-600">Items</span>
                 <span className="font-medium text-slate-900 bg-slate-100 px-2 py-0.5 rounded tabular-nums">
                   {spaces.reduce(
                     (n, s) =>

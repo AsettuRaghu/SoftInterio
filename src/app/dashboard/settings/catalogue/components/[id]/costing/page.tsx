@@ -299,7 +299,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
                   <div className="flex-1">
                     <h2 className="text-sm font-semibold text-slate-900">What it offers on the room sheet</h2>
                     <p className="text-xs text-slate-500">
-                      The cost items a seller can pick for a {name || "component"} of this type, and what each is priced per. Items of one category priced the same way are alternatives; a per-piece item is counted; an item alone is optional unless marked Automatic, which prices it from the measurement with nothing to tap. Adding and removing take effect at once; Save is for the rule, the priced-per dropdowns and Automatic.
+                      The items a seller can pick for a {name || "component"} of this type, and what each is priced per. Items of one category priced the same way are alternatives; a per-piece item is counted; an item alone is optional unless marked Automatic, which prices it from the measurement with nothing to tap. Adding and removing take effect at once; Save is for the rule, the priced-per dropdowns and Automatic.
                     </p>
                   </div>
                   <button type="button" onClick={() => setPicking((p) => !p)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0">

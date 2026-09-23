@@ -223,7 +223,7 @@ export function LibraryEntryModal({ isOpen, onClose, catalogue, styles, tagSugge
                   />
                 </div>
                 <div>
-                  <label className={label}>Cost item</label>
+                  <label className={label}>Item</label>
                   {/* Searchable, so the whole catalogue is fine to list; a
                       category narrows it, and the category name rides along
                       as the hint so the search finds either. */}

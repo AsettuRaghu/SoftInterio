@@ -1274,7 +1274,7 @@ export default function QuotationDetailPage() {
                 </h4>
                 <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
                   Start building your quotation by adding spaces (like Bedroom,
-                  Kitchen) and then add components and cost items to each space.
+                  Kitchen) and then add components and items to each space.
                 </p>
                 <div className="flex items-center justify-center gap-3">
                   {canEdit && (
@@ -1459,7 +1459,7 @@ export default function QuotationDetailPage() {
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-slate-600">Total Cost Items</span>
+                <span className="text-slate-600">Total items</span>
                 <span className="font-medium text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
                   {totalLineItems}
                 </span>

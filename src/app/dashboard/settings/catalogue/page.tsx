@@ -13,7 +13,7 @@ import {
   ChevronUpIcon,
   ChevronDownIcon,
   TagIcon,
-  CurrencyDollarIcon,
+  ListBulletIcon,
   RectangleStackIcon,
   CalculatorIcon,
   PhotoIcon,
@@ -260,7 +260,7 @@ export default function QuotationsConfigPage() {
       uiLogger.info("Cost items fetched successfully", { count: all.length });
     } catch (err) {
       uiLogger.error("Error fetching cost items", { error: err });
-      setError("Failed to load cost items");
+      setError("Failed to load items");
     }
   }, []);
 
@@ -875,7 +875,7 @@ export default function QuotationsConfigPage() {
     if (activeTab === "components") return "Add Component";
     if (activeTab === "categories") return "Add Category";
     if (activeTab === "presets") return "New Preset";
-    return "Add Cost Item";
+    return "Add Item";
   };
 
   const getModalTitle = () => {
@@ -883,7 +883,7 @@ export default function QuotationsConfigPage() {
     if (activeTab === "spaces") return action + " Space";
     if (activeTab === "components") return action + " Component";
     if (activeTab === "categories") return action + " Category";
-    return action + " Cost Item";
+    return action + " Item";
   };
 
   const getDeleteItemType = () => {
@@ -891,7 +891,7 @@ export default function QuotationsConfigPage() {
     if (deleteModal.type === "components") return "component";
     if (deleteModal.type === "categories") return "category";
     if (deleteModal.type === "presets") return "preset";
-    return "cost item";
+    return "item";
   };
 
   const tabs = [
@@ -909,14 +909,14 @@ export default function QuotationsConfigPage() {
     },
     {
       id: "categories" as TabType,
-      label: "Cost Item Categories",
+      label: "Categories",
       icon: TagIcon,
       count: categories.filter((x) => matchesStatus(x.is_active)).length,
     },
     {
       id: "costItems" as TabType,
-      label: "Cost Items",
-      icon: CurrencyDollarIcon,
+      label: "Items",
+      icon: ListBulletIcon,
       count: costItems.filter((x) => matchesStatus(x.is_active)).length,
     },
     {
@@ -957,7 +957,7 @@ export default function QuotationsConfigPage() {
             <Squares2X2Icon className="w-6 h-6 text-slate-400" />
           </div>
           <p className="text-sm font-medium text-slate-700 mb-1">
-            No {activeTab === "costItems" ? "cost items" : activeTab} found
+            No {activeTab === "costItems" ? "items" : activeTab} found
           </p>
           <p className="text-xs text-slate-500 mb-3">
             {searchQuery
@@ -1554,7 +1554,7 @@ export default function QuotationsConfigPage() {
     <SettingsPageLayout isLoading={isLoading} isSaving={isSaving}>
       <SettingsPageHeader
         title="Catalogue"
-        subtitle="What this business builds and sells: spaces, components, categories and cost items. The quotation, the Scope tab and the Design Library all read from here."
+        subtitle="What this business builds and sells: spaces, components, categories and items. The quotation, the Scope tab and the Design Library all read from here."
         breadcrumbs={[{ label: "Catalogue" }]}
         icon={<Squares2X2Icon className="w-4 h-4 text-white" />}
         iconBgClass="from-blue-500 to-blue-600"
@@ -1634,39 +1634,6 @@ export default function QuotationsConfigPage() {
                   );
                 })}
               </div>
-
-              {activeTab === "categories" && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                      Question on the room sheet
-                      <span className="ml-1 font-normal text-slate-400">optional</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formQuestion}
-                      onChange={(e) => setFormQuestion(e.target.value)}
-                      placeholder={formName ? `Which ${formName.toLowerCase()}?` : "Which …?"}
-                      title="How the seller is asked for this while sitting with the customer. Blank falls back to 'Which <name>?'."
-                      className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                      Asked together with
-                      <span className="ml-1 font-normal text-slate-400">optional</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formDecision}
-                      onChange={(e) => setFormDecision(e.target.value)}
-                      placeholder="e.g. door_opening"
-                      title="Categories sharing this word are asked as one question - handles and profiles are both 'How do the doors open?'. Leave blank for its own question."
-                      className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-                    />
-                  </div>
-                </div>
-              )}
 
               {activeTab === "components" && (
                 <SearchSelect
@@ -1979,6 +1946,48 @@ export default function QuotationsConfigPage() {
                         }.`}
                   </p>
                 </div>
+              )}
+
+              {/* How the room sheet asks for this category, and which other
+                  categories it is asked alongside. Both belong to the
+                  category record, so they are edited here - they were once
+                  rendered in the filter bar by mistake. */}
+              {activeTab === "categories" && (
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                      Question on the room sheet
+                      <span className="ml-1 font-normal text-slate-400">optional</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formQuestion}
+                      onChange={(e) => setFormQuestion(e.target.value)}
+                      placeholder={formName ? `Which ${formName.toLowerCase()}?` : "Which …?"}
+                      className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                    />
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      How the seller is asked for this while sitting with the customer.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                      Asked together with
+                      <span className="ml-1 font-normal text-slate-400">optional</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formDecision}
+                      onChange={(e) => setFormDecision(e.target.value)}
+                      placeholder="e.g. door_opening"
+                      className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                    />
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Categories sharing this word are asked as one question - handles and
+                      profiles are both &quot;How do the doors open?&quot;. Blank gives it its own.
+                    </p>
+                  </div>
+                </>
               )}
             </div>
 

@@ -154,7 +154,7 @@ export default function PrintLibraryPage() {
             space: "spaces",
             component: "spaces + components",
             category: "spaces + components + categories",
-            cost_item: "spaces + components + every cost item",
+            cost_item: "spaces + components + every item",
           };
           const extras = [
             f.show_descriptions && "descriptions",

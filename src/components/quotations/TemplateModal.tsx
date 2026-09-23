@@ -229,7 +229,7 @@ export function TemplateModal({
               {target.level === "component"
                 ? "No component templates yet. Create one from Templates, choosing the Component level."
                 : target.level === "cost_items"
-                ? "No cost item bundles yet. Create one from Templates, choosing the Cost item bundle level."
+                ? "No item bundles yet. Create one from Templates, choosing the Item bundle level."
                 : "No templates found"}
             </p>
           ) : (

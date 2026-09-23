@@ -97,7 +97,7 @@ export function AddCostItemModal({
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">
-              Add Cost Item
+              Add Item
             </h2>
             <p className="text-sm text-slate-500">
               {totalFilteredItems} items available

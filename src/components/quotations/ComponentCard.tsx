@@ -474,7 +474,7 @@ export function ComponentCard({
             <div className="space-y-2">
               {mode === "template" && (
                 <div className="grid grid-cols-12 gap-2 text-xs text-slate-500 mb-2 px-2">
-                  <span className="col-span-4">Cost Item</span>
+                  <span className="col-span-4">Item</span>
                   <span className="col-span-2">Category</span>
                   <span className="col-span-3">Unit / Measure</span>
                   <span className="col-span-2">Rate (₹)</span>
@@ -537,7 +537,7 @@ export function ComponentCard({
                 d="M12 4v16m8-8H4"
               />
             </svg>
-            Add Cost Item
+            Add Item
           </button>
           {/* A saved set of items that always go together - drawer hardware,
               say - rather than picking them one at a time. */}
