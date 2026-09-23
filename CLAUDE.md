@@ -368,6 +368,32 @@ says "12 spaces from the 3 BHK preset, with 47 questions already answered".
 No rates anywhere in a package. It says WHICH items; the price stays on the
 item, or a package quietly becomes a second price list.
 
+**A grade is not a package, and the first one made proved it.** A tenant's
+first attempt was named "My Budget" and held 68 **Premium** answers - the
+seed-from-a-grade shortcut and nothing else, so it did exactly what the
+Apply-a-grade button already does for free. The gap is the money:
+
+    a wardrobe 3600 x 2400, 93 sqft of front
+      graded part   Budget 74,850 · Standard 97,350 · Premium 1,30,350 · Luxury 1,71,600
+      the finish    Laminate 55,800 ... Veneer 1,48,800
+
+**The finish is about half the wardrobe and no grade touches it**, because a
+finish is a kind and not a level. Four packages were seeded
+(`20260924100000`) that each answer three things - the graded families at
+their level, the by-kind questions that carry the money (finish, countertop),
+and the accessories given as standard - and each takes a wardrobe to **zero
+questions still to ask**: Budget 1,31,850 · Standard 1,65,400 · Premium
+2,49,400 · Luxury 3,37,201. Every preset answers with **Standard** unless the
+tenant says otherwise.
+
+**A package cannot record a "no", and that shapes what belongs in one.**
+There is no way to say *decline this question*, so profile lighting below
+Premium, panelling below Luxury, appliances and the specialised pull-outs are
+deliberately left unanswered and show as still-to-ask. Under-selling by
+default is a conversation; over-selling by default is a quotation nobody can
+defend. If declining ever needs to be expressible, that is a real feature and
+not a workaround.
+
 **The room sheet asks questions, not for data** (2026-09-23: "let us just
 have sort of questionnaire thing so that the seller can collect as much
 information as possible"). Same model, nothing new stored - the options
