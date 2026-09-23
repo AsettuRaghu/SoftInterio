@@ -28,13 +28,21 @@ export interface CostingField {
   /** Shown as a hint. */
   hint?: string;
   /**
-   * What the blank arrives filled with - in the row's own unit, so a base
-   * unit's 850 mm height is typed once by the tenant and never by the
-   * seller. A seller correcting a number beats a seller inventing one; the
-   * first real quotation had a base unit 600 mm high because the height was
-   * guessed (2026-09-22). Only a length or number field takes one.
+   * What the field is when nobody types anything - so the seller answers
+   * only what is particular to this job. Two kinds:
+   *
+   *   a number     in the row's own unit, like the typed value: a base
+   *                unit's 850 mm height, a wardrobe's 600 mm depth. 0 is a
+   *                real default, meaning "none unless you say".
+   *   a formula    worked out from the fields above it, IN FEET, like a
+   *                quantity: `ceil(width / 2)` is one door per two feet.
+   *
+   * A field with a default is never "not measured" (lib/scope/measured),
+   * which is what keeps a wardrobe down to the two numbers the list
+   * already holds. So a default must be a value the trade agrees on, not
+   * a guess - and 0 where the honest answer is "only if somebody says so".
    */
-  default?: number;
+  default?: number | string;
 }
 
 export interface CostingQuantity {
@@ -60,10 +68,18 @@ export function readCosting(config: unknown): ComponentCosting {
   const c = (config ?? {}) as Partial<ComponentCosting>;
   return {
     fields: Array.isArray(c.fields)
-      ? c.fields.filter((f) => f && KEY_RE.test(String(f.key))).map((f) => ({ ...f, default: Number.isFinite(Number(f.default)) && Number(f.default) > 0 ? Number(f.default) : undefined }))
+      ? c.fields.filter((f) => f && KEY_RE.test(String(f.key))).map((f) => ({ ...f, default: readDefault(f.default) }))
       : [],
     quantities: Array.isArray(c.quantities) ? c.quantities.filter((q) => q && KEY_RE.test(String(q.key))) : [],
   };
+}
+
+/** A default is a number (0 counts), a formula, or nothing at all. */
+function readDefault(v: unknown): number | string | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  const t = String(v ?? "").trim();
+  if (!t) return undefined;
+  return Number.isFinite(Number(t)) ? Number(t) : t;
 }
 
 export const hasCosting = (c: ComponentCosting | null | undefined) => !!c && c.fields.length > 0 && c.quantities.length > 0;
@@ -83,12 +99,24 @@ export function quantify(
 ): { values: Record<string, number>; errors: Record<string, string> } {
   const factor = TO_FEET[unit] ?? 1;
   const vars: Record<string, number> = {};
+  const errors: Record<string, string> = {};
   for (const f of costing.fields) {
-    const raw = Number(measures?.[f.key] ?? 0) || 0;
-    vars[f.key] = f.kind === "length" ? raw * factor : raw;
+    const typed = measures?.[f.key];
+    if (typed != null && String(typed) !== "") {
+      const raw = Number(typed) || 0;
+      vars[f.key] = f.kind === "length" ? raw * factor : raw;
+      continue;
+    }
+    // Nothing typed: the default stands in. A number is in the row's unit
+    // like a typed value; a formula is already in feet, like a quantity.
+    if (typeof f.default === "number") vars[f.key] = f.kind === "length" ? f.default * factor : f.default;
+    else if (typeof f.default === "string") {
+      const r = evaluate(f.default, vars);
+      if (r.ok) vars[f.key] = r.value;
+      else { vars[f.key] = 0; errors[f.key] = r.error; }
+    } else vars[f.key] = 0;
   }
   const values: Record<string, number> = {};
-  const errors: Record<string, string> = {};
   for (const q of costing.quantities) {
     const r = evaluate(q.formula, vars);
     if (r.ok) {
@@ -115,6 +143,14 @@ export function validateCosting(c: ComponentCosting): string[] {
   // A quantity may share a field's key - "shelves: shelves" passes the count
   // typed on the sheet through as the quantity a line is priced per, and is
   // the natural way to write it. Two quantities may not share a key.
+  // A formula default may use the fields above it, like a quantity.
+  const above = new Set<string>();
+  for (const f of c.fields) {
+    if (typeof f.default === "string") {
+      for (const n of namesIn(f.default)) if (!above.has(n)) problems.push(`${f.label || f.key}'s default: "${n}" is not a field above it`);
+    }
+    above.add(f.key);
+  }
   const known = new Set(fieldKeys);
   const quantityKeys = new Set<string>();
   for (const q of c.quantities) {
@@ -142,9 +178,21 @@ export type DimensionKey = (typeof DIMENSION_KEYS)[number];
 export const isDimensionKey = (k: string): k is DimensionKey => (DIMENSION_KEYS as readonly string[]).includes(k);
 
 /** A rule's defaults as a measurement, for a component nobody has measured. */
-export function defaultMeasures(costing: ComponentCosting | null | undefined): Record<string, number> {
+export function defaultMeasures(costing: ComponentCosting | null | undefined, row?: { width?: number | null; height?: number | null; length?: number | null; measures?: Record<string, number> | null }, unit = "mm"): Record<string, number> {
   const m: Record<string, number> = {};
-  for (const f of costing?.fields ?? []) if (f.default != null) m[f.key] = f.default;
+  if (!costing) return m;
+  // A formula default needs the other measurements, so work them all out
+  // together and hand back only what a person would have typed.
+  const { values } = quantify({ fields: costing.fields, quantities: costing.fields.filter((f) => typeof f.default === "string").map((f) => ({ key: `_${f.key}`, label: "", unit_code: "", formula: f.key })) }, row ? mergeMeasures(row) : {}, unit);
+  const back = TO_FEET[unit] ?? 1;
+  for (const f of costing.fields) {
+    if (f.default == null) continue;
+    if (typeof f.default === "number") m[f.key] = f.default;
+    else {
+      const v = values[`_${f.key}`] ?? 0;
+      m[f.key] = f.kind === "length" ? Math.round((v / back) * 100) / 100 : Math.round(v * 100) / 100;
+    }
+  }
   return m;
 }
 

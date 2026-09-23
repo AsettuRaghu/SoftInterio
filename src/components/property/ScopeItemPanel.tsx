@@ -454,7 +454,7 @@ function ComponentCard({
   // The rule's defaults fill the blanks nobody has typed - a base unit
   // arrives 850 high and 600 deep - so the seller corrects rather than
   // invents. What is stored on the row always wins.
-  const [measures, setMeasures] = useState<Record<string, number>>(() => ({ ...defaultMeasures(costing), ...mergeMeasures(c) }));
+  const [measures, setMeasures] = useState<Record<string, number>>(() => ({ ...defaultMeasures(costing, c, c.measurement_unit), ...mergeMeasures(c) }));
   const missing = missingMeasures(c, costing);
   const derived = costing ? quantify(costing, measures, c.measurement_unit) : null;
   const ours = !c.scope_owner || c.scope_owner === "us";

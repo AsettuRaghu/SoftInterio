@@ -200,7 +200,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
                 ) : (
                   <ul className="divide-y divide-slate-100">
                     {costing.fields.map((f, i) => (
-                      <li key={i} className="px-4 py-2 grid grid-cols-[1fr_9rem_7rem_5rem_1fr_auto] gap-2 items-center">
+                      <li key={i} className="px-4 py-2 grid grid-cols-[1fr_9rem_7rem_7rem_1fr_auto] gap-2 items-center">
                         <input
                           value={f.label}
                           placeholder="Label - Counter run"
@@ -219,12 +219,14 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
                           ))}
                         </select>
                         <input
-                          type="number"
                           value={f.default ?? ""}
                           placeholder="Default"
-                          title="What the blank arrives filled with, in the row's own unit - a base unit 850 high. The seller corrects it rather than inventing it."
-                          onChange={(e) => setField(i, { default: e.target.value === "" ? undefined : Number(e.target.value) })}
-                          className="w-20 px-2 py-1.5 text-xs text-right border border-slate-200 rounded-md outline-none focus:border-blue-400"
+                          title="What it is when nobody types anything: a number in the row's unit (a base unit 850 high, 0 for none), or a formula over the fields above it in feet (ceil(width / 2) is one door per two feet). A field with a default is never asked for."
+                          onChange={(e) => {
+                            const t = e.target.value.trim();
+                            setField(i, { default: t === "" ? undefined : Number.isFinite(Number(t)) ? Number(t) : t });
+                          }}
+                          className={cn("w-28 px-2 py-1.5 text-xs border rounded-md outline-none focus:border-blue-400", typeof f.default === "string" ? "font-mono border-slate-200" : "text-right border-slate-200")}
                         />
                         <input value={f.hint ?? ""} placeholder="Hint for whoever measures (optional)" onChange={(e) => setField(i, { hint: e.target.value })} className="px-2 py-1.5 text-xs border border-slate-200 rounded-md outline-none focus:border-blue-400" />
                         <span className="inline-flex items-center gap-0.5">

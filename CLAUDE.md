@@ -70,14 +70,28 @@ label and box per blank, and "not measured" on the closed component), and
 `scopeReadiness`, which now refuses **proposal_discussion** until every
 component of ours whose type has a rule is measured.
 
-**A rule field can carry a `default`** (`CostingField.default`, the
-Default column on the component's page): the blank arrives filled - a
-kitchen base unit 850 high and 600 deep - so the seller corrects rather
-than invents. The first quotation had a base unit 600 mm high, a third
-light on every per-area line. Defaults are seeded in millimetres for the
-tenant's units (`20260922170000`); a business measuring in feet edits
-them. A default counts as measured, so it must be a value the trade
-agrees on, not a guess.
+**A rule field can carry a `default`, and it may be a formula**
+(`CostingField.default`, the Default column on the component's page):
+a **number** in the row's own unit (a base unit 850 high, 600 deep; `0`
+meaning "none unless somebody says") or a **formula** over the fields
+above it, in feet, like a quantity - `ceil(width / 2)` is one door per
+two feet of width, which is what the trade fits.
+
+**A field with a default is never asked for.** That is the whole point:
+after `20260923090000` every seeded rule defaults everything a trade
+constant or the size can answer, and a wardrobe asks for nothing beyond
+the width and height the Scope list already holds. Eight fields are still
+asked for across all 28 types, all of them areas nobody can derive - a
+paintable area, a ceiling area, the floor to protect. Before it, twenty-one
+components on one lead read "not measured".
+
+So a default must be a value the trade agrees on, not a guess, and **0
+where the honest answer is "only if somebody says so"** - exposed sides,
+blind corners, shelves and a wardrobe's loft height are all 0, because
+defaulting them to 1 invents money. The hints say how the awkward ones are
+counted: exposed sides are "ends you can see from the room - a run between
+two walls is 0, one open end 1, an island 2", blind corners "right-angle
+turns in this run - an L-shaped kitchen has 1, a U-shaped one 2".
 
 ### The customer summary is the scope as a page, and it carries no price
 

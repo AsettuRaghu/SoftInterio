@@ -27,6 +27,9 @@ export function missingMeasures(row: MeasureRow, costing: ComponentCosting | nul
   const have = mergeMeasures(row);
   return costing.fields
     .filter((f) => {
+      // A field with a default is never blank - the default is what the
+      // seller would have typed, which is the whole point of having one.
+      if (f.default != null) return false;
       const v = have[f.key];
       if (v != null && Number(v) > 0) return false;
       // A count may legitimately be zero, but only when somebody said so:

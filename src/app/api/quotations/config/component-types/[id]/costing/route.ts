@@ -84,7 +84,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         label: String(f.label ?? "").trim(),
         kind: f.kind === "count" || f.kind === "number" ? f.kind : "length",
         hint: String(f.hint ?? "").trim() || undefined,
-        default: Number.isFinite(Number(f.default)) && Number(f.default) > 0 ? Number(f.default) : undefined,
+        // A number in the row's unit, or a formula over the fields above it.
+        default: f.default == null || String(f.default).trim() === "" ? undefined : Number.isFinite(Number(f.default)) ? Number(f.default) : String(f.default).trim(),
       })),
       quantities: (Array.isArray(body.costing.quantities) ? body.costing.quantities : []).map((q: Record<string, unknown>) => ({
         key: String(q.key ?? "").trim(),
