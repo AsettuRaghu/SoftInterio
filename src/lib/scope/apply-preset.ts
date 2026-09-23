@@ -17,6 +17,40 @@ import { getDefaultMeasurementUnit } from "@/lib/settings/measurement-unit";
  * renaming "3 BHK" is enough to cause it - and `other` matches nothing by
  * design. The transition reports it (2026-09-23).
  */
+/**
+ * Which preset answers this home.
+ *
+ * A preset SAYS which configurations it is for (`configurations`) and may
+ * narrow itself to villas and independent houses (`property_types`). That
+ * replaced matching the preset's NAME, which made the link between the
+ * Configuration dropdown and the preset a naming convention nobody was
+ * told about - renaming "3 BHK" stopped qualification laying a scope down,
+ * silently (2026-09-23).
+ *
+ * Order: a preset naming this property type wins (a Villa beats the plain
+ * 4 BHK for the same configuration), then one naming the configuration,
+ * then - only for presets that declare neither - the old name match, so a
+ * tenant who never opens the editor keeps working. Ties go to the lower
+ * `display_order`, which is the order the list is already read in.
+ */
+export function pickPreset(
+  presets: ScopePreset[],
+  configuration: Configuration,
+  propertyType: string | null,
+): ScopePreset | undefined {
+  const saysConfig = (p: ScopePreset) => (p.configurations ?? []).includes(configuration);
+  const saysType = (p: ScopePreset) => !!propertyType && (p.property_types ?? []).includes(propertyType);
+  const declares = (p: ScopePreset) => (p.configurations ?? []).length > 0 || (p.property_types ?? []).length > 0;
+
+  return (
+    // Narrowed to this kind of building, and either silent about the
+    // configuration or naming it.
+    presets.find((p) => saysType(p) && (saysConfig(p) || (p.configurations ?? []).length === 0)) ??
+    presets.find((p) => saysConfig(p) && (p.property_types ?? []).length === 0) ??
+    presets.find((p) => !declares(p) && presetMatches(p.name, configuration, propertyType))
+  );
+}
+
 export interface ScopePresetOutcome {
   applied: string | null;
   spaces: number;
@@ -33,7 +67,7 @@ export async function applyPresetForConfiguration(
   if ((count ?? 0) > 0) return none("scope_not_empty");
 
   const { data: presets } = await supabase.from("scope_presets").select("*").eq("tenant_id", args.tenantId).eq("is_active", true).order("display_order");
-  const preset = ((presets ?? []) as ScopePreset[]).find((p) => presetMatches(p.name, args.configuration, args.propertyType));
+  const preset = pickPreset((presets ?? []) as ScopePreset[], args.configuration, args.propertyType ?? null);
   if (!preset || preset.items.length === 0) return none("no_preset");
 
   const spaceTypeIds = [...new Set(preset.items.map((i) => i.space_type_id))];

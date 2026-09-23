@@ -31,6 +31,8 @@ import { CostItemPicturesDialog } from "@/components/catalogue/CostItemPictures"
 import { PresetEditor } from "@/components/catalogue/PresetEditor";
 import { SearchSelect } from "@/components/ui/SearchSelect";
 import type { ScopePreset } from "@/types/property-scope";
+import { CONFIGURATION_LABELS, isConfiguration } from "@/lib/scope/configuration";
+import { PropertyTypeLabels } from "@/types/leads";
 
 interface SpaceType {
   id: string;
@@ -1001,6 +1003,7 @@ export default function QuotationsConfigPage() {
             <thead className="sticky top-0 bg-slate-50 z-10">
               <tr className="border-b border-slate-200">
                 {th("Name", "name")}
+                <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Used For</th>
                 {th("Description", "description")}
                 <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Spaces</th>
                 {th("Status", "is_active")}
@@ -1011,6 +1014,29 @@ export default function QuotationsConfigPage() {
               {paginate(sortedPresets).map((p) => (
                 <tr key={p.id} className="group border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
                   <td className="px-4 py-2.5 text-xs font-medium text-slate-800">{p.name}</td>
+                  {/* Which homes qualification lays it down on. A preset that
+                      names none is still matched by its name, which is the
+                      old behaviour and worth saying out loud. */}
+                  <td className="px-4 py-2.5 text-xs">
+                    {(p.configurations ?? []).length === 0 && (p.property_types ?? []).length === 0 ? (
+                      <span className="text-amber-700" title="Matched by its name, so renaming it would stop it being used. Open it and choose.">
+                        by name
+                      </span>
+                    ) : (
+                      <span className="flex flex-wrap gap-1">
+                        {(p.configurations ?? []).map((c) => (
+                          <span key={c} className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-medium">
+                            {isConfiguration(c) ? CONFIGURATION_LABELS[c] : c}
+                          </span>
+                        ))}
+                        {(p.property_types ?? []).map((t) => (
+                          <span key={t} className="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
+                            {PropertyTypeLabels[t as keyof typeof PropertyTypeLabels] ?? t}
+                          </span>
+                        ))}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-2.5 text-xs text-slate-600">{p.description || "-"}</td>
                   <td className="px-4 py-2.5 text-xs text-slate-600">
                     {p.items.length === 0

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
-import { cleanPresetItems } from "@/lib/scope/presets";
+import { cleanPresetItems, cleanConfigurations, cleanPropertyTypes } from "@/lib/scope/presets";
 
 /**
  * Scope presets - curated starting points for a scope.
@@ -11,7 +11,10 @@ import { cleanPresetItems } from "@/lib/scope/presets";
  * lets somebody write one. RLS scopes every query to the caller's tenant.
  *
  * GET  ?all=1 to include inactive (the settings page); default is active only.
- * POST { name, description?, items }
+ * POST { name, description?, items, configurations?, property_types? }
+ *
+ * `configurations` is which homes the preset answers - the Configuration
+ * dropdown's own values - and replaces guessing it from the preset's name.
  */
 export async function GET(request: NextRequest) {
   const guard = await protectApiRoute(request, { requiredPermissions: ["quotations.view"] });
@@ -44,6 +47,8 @@ export async function POST(request: NextRequest) {
       name,
       description: String(body.description ?? "").trim() || null,
       items: items.items,
+      configurations: cleanConfigurations(body.configurations),
+      property_types: cleanPropertyTypes(body.property_types),
       display_order: (last?.display_order ?? -1) + 1,
       created_by: user.id,
     })

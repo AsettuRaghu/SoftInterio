@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ScopePresetItem } from "@/types/property-scope";
+import { isConfiguration } from "./configuration";
 
 /**
  * Validates a preset's items against the tenant's own space and component
@@ -34,4 +35,20 @@ export async function cleanPresetItems(
   if ((spaces ?? []).length !== spaceIds.length) return { ok: false, error: "A space type is not available" };
   if ((comps ?? []).length !== compIds.length) return { ok: false, error: "A component type is not available" };
   return { ok: true, items };
+}
+
+/**
+ * Which homes a preset answers, as the Configuration dropdown names them.
+ * Unknown values are dropped rather than refused: the list is the tenant's
+ * to grow and a stale value from an older client must not fail a save.
+ */
+export function cleanConfigurations(v: unknown): string[] {
+  const list = Array.isArray(v) ? v : [];
+  return [...new Set(list.map(String).filter(isConfiguration))];
+}
+
+/** A preset narrowed to a kind of building - a villa beats a plain BHK preset. */
+export function cleanPropertyTypes(v: unknown): string[] {
+  const list = Array.isArray(v) ? v : [];
+  return [...new Set(list.map(String).map((x) => x.trim()).filter(Boolean))].slice(0, 20);
 }

@@ -163,6 +163,10 @@ export interface ScopePreset {
   items: ScopePresetItem[];
   display_order: number;
   is_active: boolean;
+  /** Configuration values this preset answers. Empty falls back to matching the name. */
+  configurations?: string[] | null;
+  /** Optional narrowing - a preset for villas only, which then beats a plain BHK preset. */
+  property_types?: string[] | null;
 }
 
 /** What the customer asked for, beside the scope rows. */

@@ -183,12 +183,19 @@ from a lead. The empty scope shows them as cards that open the add dialog
 filled in; the dialog's chips offer them too. Five were seeded per tenant
 from the old quick starts.
 
-**A preset is found by NAME, and every configuration now has one.**
-`presetMatches()` strips the spaces and looks for the configuration inside
-the preset's name; a villa / independent house / farmhouse property type
-looks for "villa" first. So the link is the name, not a column - renaming
-"3 BHK" is enough to break the auto-apply, which is the cost of letting a
-tenant name its own presets. Of the seven configurations, **studio**,
+**A preset says which homes it is for** (`20260923220000`). It used to be
+found by NAME - `presetMatches()` stripped the spaces and looked for "3bhk"
+inside it - so the link between the Configuration dropdown and the preset
+was a convention nobody was told about, and renaming "3 BHK" to "3 Bedroom
+Flat" silently stopped qualification laying a scope down. `configurations`
+(text[], the dropdown's own values) and `property_types` (optional, which is
+how a Villa beats the plain 4 BHK) are now chosen in the preset editor and
+shown as chips on the Presets tab. `pickPreset()` takes a preset naming this
+property type first, then one naming the configuration, then - **only for a
+preset that declares neither** - the old name match, so a tenant who never
+opens the editor keeps working; ties go to the lower `display_order`. Eight
+tests cover it. The shipped presets were backfilled from their names, so
+nothing changed on the day. Of the seven configurations, **studio**,
 **5bhk_plus** and **other** matched nothing and laid down an empty scope in
 silence; Studio and 5+ BHK were seeded (`20260923210000`, per tenant, only
 where absent) and `other` matches nothing on purpose. A no-match is now

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
-import { cleanPresetItems } from "@/lib/scope/presets";
+import { cleanPresetItems, cleanConfigurations, cleanPropertyTypes } from "@/lib/scope/presets";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
-/** PATCH { name?, description?, items?, is_active?, display_order? } */
+/** PATCH { name?, description?, items?, is_active?, display_order?, configurations?, property_types? } */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const guard = await protectApiRoute(request, { requiredPermissions: ["quotations.edit"] });
   if (!guard.success) return createErrorResponse(guard.error!, guard.statusCode!);
@@ -23,6 +23,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   if ("description" in body) patch.description = String(body.description ?? "").trim() || null;
   if ("is_active" in body) patch.is_active = !!body.is_active;
   if ("display_order" in body) patch.display_order = Number(body.display_order) || 0;
+  if ("configurations" in body) patch.configurations = cleanConfigurations(body.configurations);
+  if ("property_types" in body) patch.property_types = cleanPropertyTypes(body.property_types);
   if ("items" in body) {
     const items = await cleanPresetItems(supabase, user.tenantId, body.items);
     if (!items.ok) return NextResponse.json({ error: items.error }, { status: 400 });
