@@ -313,6 +313,10 @@ export function StageTransitionModal({
       setSuccessMessage(
         data.scope_laid_down
           ? `Lead qualified. The Scope tab now has ${data.scope_laid_down.spaces} spaces from the "${data.scope_laid_down.applied}" preset - adjust them there.`
+          : data.scope_untouched
+            ? // A scope built before qualifying is left exactly as it is. The
+              // guarantee is only reassuring if it is said out loud.
+              `Lead qualified. The Scope tab already has ${data.scope_untouched.spaces} space${data.scope_untouched.spaces === 1 ? "" : "s"}, so ${data.scope_untouched.skipped ? `the "${data.scope_untouched.skipped}" preset was not laid down` : "no preset was laid down"} - your scope is untouched.`
           : data.scope_preset_missing
             ? // A preset is found by name, so a configuration nobody has named
               // one for leaves the Scope tab blank. Saying so beats letting the

@@ -52,10 +52,14 @@ export function pickPreset(
 }
 
 export interface ScopePresetOutcome {
+  /** The preset that was laid down. Null unless `reason` is "applied". */
   applied: string | null;
   spaces: number;
   components: number;
   reason: "applied" | "scope_not_empty" | "no_preset";
+  /** On "scope_not_empty": what is already there, and what was therefore skipped. */
+  existingSpaces?: number;
+  skipped?: string | null;
 }
 
 export async function applyPresetForConfiguration(
@@ -63,11 +67,25 @@ export async function applyPresetForConfiguration(
   args: { tenantId: string; userId: string; propertyId: string; configuration: Configuration; propertyType?: string | null },
 ): Promise<ScopePresetOutcome> {
   const none = (reason: ScopePresetOutcome["reason"]): ScopePresetOutcome => ({ applied: null, spaces: 0, components: 0, reason });
-  const { count } = await supabase.from("property_scope_items").select("id", { count: "exact", head: true }).eq("property_id", args.propertyId);
-  if ((count ?? 0) > 0) return none("scope_not_empty");
-
-  const { data: presets } = await supabase.from("scope_presets").select("*").eq("tenant_id", args.tenantId).eq("is_active", true).order("display_order");
+  const [{ count }, { data: presets }] = await Promise.all([
+    supabase.from("property_scope_items").select("id", { count: "exact", head: true }).eq("property_id", args.propertyId),
+    supabase.from("scope_presets").select("*").eq("tenant_id", args.tenantId).eq("is_active", true).order("display_order"),
+  ]);
   const preset = pickPreset((presets ?? []) as ScopePreset[], args.configuration, args.propertyType ?? null);
+
+  // A scope somebody built before qualifying is theirs; the preset is a
+  // starting point, not a correction. Say what was skipped rather than
+  // leaving them to wonder whether it was even looked at (2026-09-23).
+  if ((count ?? 0) > 0) {
+    const { count: spaces } = await supabase
+      .from("property_scope_items")
+      .select("id", { count: "exact", head: true })
+      .eq("property_id", args.propertyId)
+      .is("parent_id", null)
+      .is("component_type_id", null);
+    return { ...none("scope_not_empty"), existingSpaces: spaces ?? 0, skipped: preset?.name ?? null };
+  }
+
   if (!preset || preset.items.length === 0) return none("no_preset");
 
   const spaceTypeIds = [...new Set(preset.items.map((i) => i.space_type_id))];

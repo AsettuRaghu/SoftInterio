@@ -198,12 +198,18 @@ tests cover it. The shipped presets were backfilled from their names, so
 nothing changed on the day. Of the seven configurations, **studio**,
 **5bhk_plus** and **other** matched nothing and laid down an empty scope in
 silence; Studio and 5+ BHK were seeded (`20260923210000`, per tenant, only
-where absent) and `other` matches nothing on purpose. A no-match is now
-reported rather than shrugged at - `applyPresetForConfiguration` returns a
-`reason` (`applied` / `scope_not_empty` / `no_preset`), the transition
-writes a timeline entry for `no_preset`, and the stage dialog says the Scope
-tab starts empty and where to add a preset. A scope that already has rows
-stays silent, because that case is correct.
+where absent) and `other` matches nothing on purpose. Neither outcome is
+shrugged at any more - `applyPresetForConfiguration` returns a `reason`
+(`applied` / `scope_not_empty` / `no_preset`). For `no_preset` the
+transition writes a timeline entry and the stage dialog says where to add
+one; for `scope_not_empty` the dialog names what was left alone - "already
+has 8 spaces, so the 3 BHK preset was not laid down - your scope is
+untouched" - which is the only way the guarantee is visible. **A scope built
+before qualifying is never recreated**, and there is no route to a preset
+once any row exists: the empty-state cards and the add dialog's chips both
+render on `items.length === 0` only, and the transition counts rows first.
+From Requirement discussion on, removal is guarded too - the last space, and
+the last component of a space of ours, cannot be deleted.
 
 **What lands in each room has two levers.** A preset row's
 `component_type_ids` wins where it is set; where it is null the room takes

@@ -1035,6 +1035,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       project_created: projectId !== null,
       scope_laid_down: scopeLaidDown?.applied ? scopeLaidDown : null,
       scope_preset_missing: scopeLaidDown?.reason === "no_preset" ? true : undefined,
+      scope_untouched:
+        scopeLaidDown?.reason === "scope_not_empty"
+          ? { spaces: scopeLaidDown.existingSpaces ?? 0, skipped: scopeLaidDown.skipped ?? null }
+          : undefined,
     });
   } catch (error) {
     log.error("Stage transition API error", error);
