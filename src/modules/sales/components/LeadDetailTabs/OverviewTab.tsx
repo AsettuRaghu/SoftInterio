@@ -8,7 +8,11 @@ import {
   ServiceTypeLabels,
   LeadSourceLabels,
   BudgetRangeLabels,
+  LostReasonLabels,
+  DisqualificationReasonLabels,
+  LeadActivityTypeLabels,
 } from "@/types/leads";
+import { CONFIGURATION_LABELS, isConfiguration } from "@/lib/scope/configuration";
 import { formatCurrency, formatDate } from "@/modules/sales/utils/formatters";
 import { LeadActivity } from "@/types/leads";
 
@@ -105,6 +109,14 @@ export default function OverviewTab({ lead }: OverviewTabProps) {
               {lead.property?.property_subtype
                 ? PropertySubtypeLabels[lead.property.property_subtype]
                 : "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-900">
+              <span className="text-slate-500">Configuration</span> :{" "}
+              {isConfiguration(lead.property?.configuration)
+                ? CONFIGURATION_LABELS[lead.property.configuration]
+                : lead.property?.configuration || "—"}
             </p>
           </div>
           <div>
@@ -214,6 +226,27 @@ export default function OverviewTab({ lead }: OverviewTabProps) {
               {lead.created_at ? formatDate(lead.created_at) : "—"}
             </p>
           </div>
+          <div>
+            <p className="text-sm font-medium text-slate-900">
+              <span className="text-slate-500">In This Stage Since</span> :{" "}
+              {lead.stage_changed_at ? formatDate(lead.stage_changed_at) : "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-900">
+              <span className="text-slate-500">Next Follow-up</span> :{" "}
+              {lead.next_follow_up_at ? formatDate(lead.next_follow_up_at) : "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-900">
+              <span className="text-slate-500">Last Activity</span> :{" "}
+              {lead.last_activity_at ? formatDate(lead.last_activity_at) : "—"}
+              {lead.last_activity_type
+                ? ` · ${LeadActivityTypeLabels[lead.last_activity_type] ?? lead.last_activity_type}`
+                : ""}
+            </p>
+          </div>
 
           {/* Separator Line */}
           <div className="lg:col-span-3 border-t border-slate-200 pt-4 mt-2"></div>
@@ -223,6 +256,12 @@ export default function OverviewTab({ lead }: OverviewTabProps) {
             <p className="text-sm font-medium text-slate-900">
               <span className="text-slate-500">Won Amount</span> :{" "}
               {lead.won_amount ? formatCurrency(lead.won_amount) : "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-900">
+              <span className="text-slate-500">Won On</span> :{" "}
+              {lead.won_at ? formatDate(lead.won_at) : "—"}
             </p>
           </div>
           <div>
@@ -250,6 +289,28 @@ export default function OverviewTab({ lead }: OverviewTabProps) {
               {lead.project?.name || "—"}
             </p>
           </div>
+          {(lead.lost_reason || lead.lost_notes) && (
+            <div className="lg:col-span-3">
+              <p className="text-sm font-medium text-slate-900">
+                <span className="text-slate-500">Lost Because</span> :{" "}
+                {lead.lost_reason ? LostReasonLabels[lead.lost_reason] : "—"}
+                {lead.lost_notes ? ` · ${lead.lost_notes}` : ""}
+              </p>
+            </div>
+          )}
+          {(lead.disqualification_reason || lead.disqualification_notes) && (
+            <div className="lg:col-span-3">
+              <p className="text-sm font-medium text-slate-900">
+                <span className="text-slate-500">Disqualified Because</span> :{" "}
+                {lead.disqualification_reason
+                  ? DisqualificationReasonLabels[lead.disqualification_reason]
+                  : "—"}
+                {lead.disqualification_notes
+                  ? ` · ${lead.disqualification_notes}`
+                  : ""}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

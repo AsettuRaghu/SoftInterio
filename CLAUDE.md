@@ -2995,6 +2995,19 @@ Warnings from the route are shown, not swallowed: a save can succeed on the
 project and fail on its linked property, and silence there is how "property edits
 never save" survived.
 
+**The lead's Overview tab had the same third-leg gap** (2026-09-23):
+`configuration` is on the create form, starred on the edit dialog, asked by
+the qualify transition and selected by the GET - and drawn by nothing, so a
+reader could set it and never see it again. Added, with five more the record
+carried and no tab showed: **in this stage since** (`stage_changed_at`),
+**next follow-up** and **last activity** (both on the leads list but nowhere
+on the lead), **won on**, and **why it ended** - `lost_reason`/`lost_notes`
+and `disqualification_reason`/`disqualification_notes`, written by those
+transitions and read nowhere, shown only when set. Every other lead column
+is plumbing or in the header. The client's `city`/`address_line1`/`pincode`
+are selected by the GET and **deliberately still not shown**: no form writes
+them, so they would be three permanently empty rows.
+
 ### Service Type is one field with two names, now called Service Type
 
 `projects.project_category` **is** the lead's `service_type`. The won transition
