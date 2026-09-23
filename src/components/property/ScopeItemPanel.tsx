@@ -165,6 +165,35 @@ const TIER: Record<string, string> = { basic: "Basic", standard: "Standard", pre
 /** What a question is called - the same key `lib/scope/questions` counts by. */
 const keyOf = (o: { group_key: string | null; cost_item_id: string }) => o.group_key ?? o.cost_item_id;
 
+/**
+ * A count with a handful of sensible answers is a question, not a number
+ * box: "Any blind corners? None · One (L) · Two (U)". The seller never types
+ * a number they then have to interpret.
+ *
+ * Module level, and it has to stay there. It was declared inside the render
+ * block *below* the three lines that read it, which TypeScript cannot catch
+ * - the reads are inside arrow functions, so it cannot know when they run -
+ * and every expansion of a component with a costing rule threw "Cannot
+ * access 'CHOICES' before initialization" (2026-09-23).
+ */
+const CHOICES: Record<string, { value: number; label: string }[]> = {
+  corners: [
+    { value: 0, label: "None" },
+    { value: 1, label: "One (L-shaped)" },
+    { value: 2, label: "Two (U-shaped)" },
+  ],
+  exposed_sides: [
+    { value: 0, label: "None" },
+    { value: 1, label: "One end" },
+    { value: 2, label: "Both ends" },
+  ],
+  wall_exposed_sides: [
+    { value: 0, label: "None" },
+    { value: 1, label: "One end" },
+    { value: 2, label: "Both ends" },
+  ],
+};
+
 function Options({
   item,
   propertyId,
@@ -650,26 +679,6 @@ function ComponentCard({
             const questions = costing.fields.filter((f) => CHOICES[f.key]);
             const assumed = costing.fields.filter((f) => !isDim(f.key) && f.default != null && !CHOICES[f.key]);
             const touched = assumed.some((f) => (c.measures as Record<string, number> | null)?.[f.key] != null);
-            // A count with a handful of sensible answers is a question, not
-            // a number box: "Any blind corners? None · One (L) · Two (U)".
-            // The seller never types a number they have to interpret.
-            const CHOICES: Record<string, { value: number; label: string }[]> = {
-              corners: [
-                { value: 0, label: "None" },
-                { value: 1, label: "One (L-shaped)" },
-                { value: 2, label: "Two (U-shaped)" },
-              ],
-              exposed_sides: [
-                { value: 0, label: "None" },
-                { value: 1, label: "One end" },
-                { value: 2, label: "Both ends" },
-              ],
-              wall_exposed_sides: [
-                { value: 0, label: "None" },
-                { value: 1, label: "One end" },
-                { value: 2, label: "Both ends" },
-              ],
-            };
             const ask = (f: (typeof costing.fields)[number]) => {
               const choices = CHOICES[f.key];
               if (!choices) return null;

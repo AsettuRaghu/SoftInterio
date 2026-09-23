@@ -3395,6 +3395,16 @@ worth it before a second subscriber exists.
   sets loading. The Tasks page's own visibility refetch is quiet for the
   same reason. Any new hook listening to auth events must follow this.
 
+- **A `const` read inside an arrow function is not checked for use-before-
+  declaration.** `CHOICES` sat in the room sheet's render block six lines
+  *below* the three `costing.fields.filter((f) => CHOICES[f.key])` calls that
+  read it. TypeScript says nothing - the reads are inside arrow functions, so
+  it cannot know when they run - and `tsc`, eslint and the tests were all
+  clean while **every expansion of a component with a costing rule** threw
+  `Cannot access 'CHOICES' before initialization` at runtime. It is module
+  level now. A fixed lookup table has no reason to be rebuilt per render, and
+  putting one at module level is what makes the ordering impossible to get
+  wrong.
 - **`QuotationPDF.tsx` must not be a client component.** Marking it
   `"use client"` makes route handlers import a client-reference proxy, and
   react-pdf dies with `Cannot read properties of null (reading 'props')`. PDF
