@@ -312,7 +312,9 @@ export function StageTransitionModal({
       // Show success message and close modal immediately
       setSuccessMessage(
         data.scope_laid_down
-          ? `Lead qualified. The Scope tab now has ${data.scope_laid_down.spaces} spaces from the "${data.scope_laid_down.applied}" preset - adjust them there.`
+          ? `Lead qualified. The Scope tab now has ${data.scope_laid_down.spaces} spaces from the "${data.scope_laid_down.applied}" preset${
+              data.scope_laid_down.answered ? `, with ${data.scope_laid_down.answered} questions already answered` : ""
+            } - review them there.`
           : data.scope_untouched
             ? // A scope built before qualifying is left exactly as it is. The
               // guarantee is only reassuring if it is said out loud.

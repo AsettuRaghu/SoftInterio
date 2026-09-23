@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
       name,
       description: String(body.description ?? "").trim() || null,
       items: items.items,
+      package_id: body.package_id ? String(body.package_id) : null,
       configurations: cleanConfigurations(body.configurations),
       property_types: cleanPropertyTypes(body.property_types),
       display_order: (last?.display_order ?? -1) + 1,

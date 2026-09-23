@@ -2,6 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ScopePreset } from "@/types/property-scope";
 import { presetMatches, type Configuration } from "./configuration";
 import { getDefaultMeasurementUnit } from "@/lib/settings/measurement-unit";
+import { applyChoices, componentsInRange } from "./apply-choices";
+import { loadOfferMenu } from "./blanket";
+import { packagePlans } from "./package";
 
 /**
  * Lays a preset down on an empty scope: its spaces with counts, each filled
@@ -60,6 +63,8 @@ export interface ScopePresetOutcome {
   /** On "scope_not_empty": what is already there, and what was therefore skipped. */
   existingSpaces?: number;
   skipped?: string | null;
+  /** Questions the preset's package answered while laying the rooms down. */
+  answered?: number;
 }
 
 export async function applyPresetForConfiguration(
@@ -151,5 +156,45 @@ export async function applyPresetForConfiguration(
     const { error: e2 } = await supabase.from("property_scope_items").insert(compRows);
     if (e2) console.error("[scope] preset components failed", e2.message);
   }
-  return { applied: preset.name, spaces: spaces.length, components: compRows.length, reason: "applied" };
+
+  // The preset's package, if it names one: the rooms arrive listed AND
+  // answered, so Requirement discussion opens on a scope to review rather
+  // than one to fill in. It fails quietly - a scope without its answers is a
+  // button to press, a qualification that rolled back is not.
+  let answered = 0;
+  if (preset.package_id) {
+    try {
+      const { data: fresh } = await supabase
+        .from("property_scope_items")
+        .select("id, parent_id, component_type_id, cost_item_id, choice_status, scope_owner")
+        .eq("property_id", args.propertyId);
+      const rows = (fresh ?? []) as Parameters<typeof applyChoices>[1]["rows"] & { component_type_id: string | null; scope_owner: string | null }[];
+      const inRange = componentsInRange(rows as never, null);
+      const menu = await loadOfferMenu(supabase, inRange.map((c) => c.component_type_id as string));
+      const { data: entries } = await supabase
+        .from("scope_package_items")
+        .select("component_type_id, cost_item_id, quantity")
+        .eq("package_id", preset.package_id);
+      const plans = packagePlans({
+        components: inRange.map((c) => ({ id: c.id, component_type_id: c.component_type_id as string })),
+        entries: (entries ?? []).map((e) => ({
+          component_type_id: e.component_type_id as string,
+          cost_item_id: e.cost_item_id as string,
+          quantity: e.quantity == null ? null : Number(e.quantity),
+        })),
+        offersByType: menu.offersByType,
+        items: menu.items,
+      });
+      if (plans.length) {
+        const out = await applyChoices(supabase, {
+          tenantId: args.tenantId, userId: args.userId, propertyId: args.propertyId, plans, rows, names: menu.names,
+        });
+        answered = out.answered;
+      }
+    } catch (e) {
+      console.error("[scope] preset package failed", (e as Error).message);
+    }
+  }
+
+  return { applied: preset.name, spaces: spaces.length, components: compRows.length, answered, reason: "applied" };
 }

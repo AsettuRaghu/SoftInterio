@@ -332,11 +332,41 @@ Three rules it keeps:
   applied over an existing answer keeps the old one as the ② alternative
   rather than losing it.
 
-Step two, designed and not built: a **package** - a named bundle naming the
-item per question plus accessory counts, seeded from a tier so only the
-by-kind questions are hand-picked, and hung off a preset so qualification
-lays down a scope already answered. It writes the same rows this does, so it
-is where the list comes from and not new plumbing.
+### A package is what the business sells as one thing
+
+Step two, built the same day. `scope_packages` + `scope_package_items`
+(`20260924090000`): one row per answer - *in a Wardrobe - Openable, choose
+Carcass - Standard* - with `quantity` null for an answer to a question and a
+number for an accessory given as standard. Settings → Catalogue →
+**Packages**, one editor page per package asking exactly the questions the
+room sheet asks, through `shapeOptions`, so the two cannot disagree about
+what is a question, what is counted and what prices itself.
+
+**Seeded from a tier on creation**, which is the difference between ten
+minutes and an afternoon: the grade answers every graded family (68 answers
+across this catalogue) and the tenant hand-picks only the by-kind ones. On a
+probe, "Standard" plus three hand-picks - a laminate finish, a hanging rod, two
+tandem drawers - took a wardrobe to **zero questions left**, and 115 answers
+across a 42-component home against the grade's 104.
+
+**A grade and a package write through one path.**
+`lib/scope/apply-choices.ts` holds what happens (which components are in
+range, what is already answered, what is written, what could not be
+answered); `grade.ts` works its list out from `quality_tier` and
+`package.ts` reads it from the table. So the two rules live once: only what
+is unanswered changes, and what could not be answered is reported. A package
+entry the component type no longer offers is dropped rather than written - a
+menu is pruned far more often than a package is revisited.
+
+**`scope_presets.package_id` closes the loop.** Qualifying a lead lays the
+rooms down *and* answers them, so Requirement discussion opens on a scope to
+review rather than one to fill in - which was the whole point. It fails
+quietly, like the playbook auto-start: a scope without its answers is a
+button to press, a qualification that rolled back is not. The stage dialog
+says "12 spaces from the 3 BHK preset, with 47 questions already answered".
+
+No rates anywhere in a package. It says WHICH items; the price stays on the
+item, or a package quietly becomes a second price list.
 
 **The room sheet asks questions, not for data** (2026-09-23: "let us just
 have sort of questionnaire thing so that the seller can collect as much

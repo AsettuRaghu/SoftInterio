@@ -14,6 +14,7 @@ import {
   ChevronDownIcon,
   TagIcon,
   ListBulletIcon,
+  SparklesIcon,
   RectangleStackIcon,
   CalculatorIcon,
   PhotoIcon,
@@ -34,6 +35,9 @@ import type { ScopePreset } from "@/types/property-scope";
 import { CONFIGURATION_LABELS, isConfiguration } from "@/lib/scope/configuration";
 import { PropertyTypeLabels } from "@/types/leads";
 import { useUrlTab } from "@/hooks/useUrlTab";
+import { Modal } from "@/components/ui/Modal";
+import { buttonVariants } from "@/components/ui/Button";
+import { cn } from "@/utils/cn";
 
 interface SpaceType {
   id: string;
@@ -83,10 +87,10 @@ interface QuotationCostItem {
   category?: { id: string; name: string } | null;
 }
 
-type TabType = "spaces" | "components" | "categories" | "costItems" | "presets";
+type TabType = "spaces" | "components" | "categories" | "costItems" | "presets" | "packages";
 
 /** The old /catalogue/presets address forwards to ?tab=presets. */
-const CATALOGUE_TABS: TabType[] = ["spaces", "components", "categories", "costItems", "presets"];
+const CATALOGUE_TABS: TabType[] = ["spaces", "components", "categories", "costItems", "presets", "packages"];
 type SortDirection = "asc" | "desc" | null;
 type SortColumn =
   | "name"
@@ -123,6 +127,11 @@ export default function QuotationsConfigPage() {
   // Presets are a table like the other four; only their editor is their
   // own, because a preset is a list of spaces × counts, not a form of fields.
   const [presets, setPresets] = useState<ScopePreset[]>([]);
+  /** What the business sells as one thing - a package of answers. */
+  const [packages, setPackages] = useState<{ id: string; name: string; description: string | null; answers: number; is_active: boolean }[]>([]);
+  /** The new-package dialog: a name, and which grade to fill it from. */
+  const [newPackage, setNewPackage] = useState<{ name: string; tier: string } | null>(null);
+  const [creatingPackage, setCreatingPackage] = useState(false);
   const [presetEditing, setPresetEditing] = useState<ScopePreset | "new" | null>(null);
 
   // Set from the cost items response. Users without cost_items.pricing get no
@@ -279,6 +288,18 @@ export default function QuotationsConfigPage() {
     }
   }, []);
 
+  const fetchPackages = useCallback(async () => {
+    try {
+      const res = await fetch("/api/scope-packages?all=1");
+      if (!res.ok) throw new Error("Failed to fetch packages");
+      const data = await res.json();
+      setPackages(data.data || []);
+    } catch (err) {
+      uiLogger.error("Error fetching packages", { error: err });
+      setError("Failed to load packages");
+    }
+  }, []);
+
   const fetchAllData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -289,10 +310,11 @@ export default function QuotationsConfigPage() {
       fetchCategories(),
       fetchCostItems(),
       fetchPresets(),
+      fetchPackages(),
     ]);
     setIsLoading(false);
     uiLogger.info("Quotation configuration data loaded");
-  }, [fetchSpaces, fetchComponents, fetchCategories, fetchCostItems, fetchPresets]);
+  }, [fetchSpaces, fetchComponents, fetchCategories, fetchCostItems, fetchPresets, fetchPackages]);
 
   useEffect(() => {
     fetchAllData();
@@ -642,6 +664,10 @@ export default function QuotationsConfigPage() {
       setPresetEditing("new");
       return;
     }
+    if (activeTab === "packages") {
+      setNewPackage({ name: "", tier: "standard" });
+      return;
+    }
     setFormName("");
     setFormDescription("");
     setFormCategoryId("");
@@ -918,6 +944,12 @@ export default function QuotationsConfigPage() {
       count: costItems.filter((x) => matchesStatus(x.is_active)).length,
     },
     {
+      id: "packages" as TabType,
+      label: "Packages",
+      icon: SparklesIcon,
+      count: packages.filter((x) => matchesStatus(x.is_active)).length,
+    },
+    {
       id: "presets" as TabType,
       label: "Presets",
       icon: RectangleStackIcon,
@@ -969,6 +1001,66 @@ export default function QuotationsConfigPage() {
             <PlusIcon className="w-3.5 h-3.5" />
             {getAddButtonLabel()}
           </button>
+        </div>
+      );
+    }
+
+    if (activeTab === "packages") {
+      const togglePackage = async (pk: { id: string; is_active: boolean }) => {
+        const res = await fetch(`/api/scope-packages/${pk.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_active: !pk.is_active }),
+        });
+        if (!res.ok) setError("Could not save the package");
+        await fetchPackages();
+      };
+      const q = searchQuery.trim().toLowerCase();
+      const shown = packages.filter((p) => matchesStatus(p.is_active) && (!q || `${p.name} ${p.description ?? ""}`.toLowerCase().includes(q)));
+      return (
+        <div className="flex-1 overflow-auto min-h-0">
+          <table className="w-full table-auto">
+            <thead className="sticky top-0 bg-slate-50 z-10">
+              <tr className="border-b border-slate-200">
+                <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Name</th>
+                <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">What it includes</th>
+                <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Answers</th>
+                <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-2 text-right text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((pk) => (
+                <tr key={pk.id} className="group border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+                  <td className="px-4 py-2.5 text-xs font-medium text-slate-800">{pk.name}</td>
+                  <td className="px-4 py-2.5 text-xs text-slate-600">{pk.description || "-"}</td>
+                  {/* A package with no answers is a name and nothing else, which
+                      is the one number worth a column here. */}
+                  <td className="px-4 py-2.5 text-xs">
+                    {pk.answers === 0 ? <span className="text-amber-700">nothing set yet</span> : <span className="text-slate-600 tabular-nums">{pk.answers}</span>}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${pk.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                      {pk.is_active ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button onClick={() => void togglePackage(pk)} title={pk.is_active ? "Hide from sellers" : "Show to sellers"} className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+                        {pk.is_active ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+                      </button>
+                      <a href={`/dashboard/settings/catalogue/packages/${pk.id}`} title="What this package answers" className="p-1.5 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50">
+                        <PencilSquareIcon className="w-4 h-4" />
+                      </a>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {shown.length === 0 && (
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-xs text-slate-400">No packages yet. One per grade you sell is the usual shape.</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       );
     }
@@ -2041,11 +2133,74 @@ export default function QuotationsConfigPage() {
 
       {/* Delete Confirmation Modal */}
       {picturesOf && <CostItemPicturesDialog item={picturesOf} onClose={() => setPicturesOf(null)} onChanged={() => void fetchCostItems()} />}
+      {/* Filling a package by hand is an afternoon; filling every graded
+          question from a tier and hand-picking only the finishes is ten
+          minutes. So the tier is offered at creation. */}
+      {newPackage && (
+        <Modal isOpen onClose={() => setNewPackage(null)} title="New package" size="sm">
+          <div className="space-y-4">
+            <label className="block text-xs text-slate-600">
+              Name
+              <input
+                autoFocus
+                value={newPackage.name}
+                onChange={(e) => setNewPackage({ ...newPackage, name: e.target.value })}
+                placeholder="Standard"
+                className="mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-400"
+              />
+            </label>
+            <div>
+              <p className="text-xs text-slate-600 mb-1.5">Start from a grade <span className="text-slate-400">saves filling in the obvious ones</span></p>
+              <div className="flex flex-wrap gap-1.5">
+                {[["", "Empty"], ["basic", "Budget"], ["standard", "Standard"], ["premium", "Premium"], ["luxury", "Luxury"]].map(([v, label]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setNewPackage({ ...newPackage, tier: v })}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
+                      newPackage.tier === v ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-slate-400">
+                Every graded question answered at that level. The by-kind ones - shutter finishes, countertops - are yours to pick afterwards.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setNewPackage(null)} className="px-3 py-2 text-sm font-medium rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button
+                type="button"
+                disabled={creatingPackage || !newPackage.name.trim()}
+                onClick={async () => {
+                  setCreatingPackage(true);
+                  const res = await fetch("/api/scope-packages", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name: newPackage.name.trim(), from_tier: newPackage.tier || undefined }),
+                  });
+                  const json = await res.json().catch(() => ({}));
+                  setCreatingPackage(false);
+                  if (!res.ok) return setError(json.error || "Could not create the package");
+                  setNewPackage(null);
+                  window.location.href = `/dashboard/settings/catalogue/packages/${json.data.id}`;
+                }}
+                className={cn(buttonVariants(), "disabled:opacity-60")}
+              >
+                {creatingPackage ? "Creating…" : "Create"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {presetEditing && (
         <PresetEditor
           preset={presetEditing === "new" ? null : presetEditing}
           spaceTypes={spaces.filter((sp) => sp.is_active).map((sp) => ({ id: sp.id, name: sp.name }))}
           componentTypes={components.filter((c) => c.is_active).map((c) => ({ id: c.id, name: c.name, applicable_space_types: c.applicable_space_types ?? null }))}
+          packages={packages.filter((pk) => pk.is_active).map((pk) => ({ id: pk.id, name: pk.name }))}
           onClose={() => setPresetEditing(null)}
           onSaved={async () => {
             setPresetEditing(null);

@@ -167,6 +167,8 @@ export interface ScopePreset {
   configurations?: string[] | null;
   /** Optional narrowing - a preset for villas only, which then beats a plain BHK preset. */
   property_types?: string[] | null;
+  /** Applied to the scope this preset lays down, so qualifying answers the rooms too. */
+  package_id?: string | null;
 }
 
 /** What the customer asked for, beside the scope rows. */

@@ -994,7 +994,7 @@ export function ScopeItemPanel({
                 <ApplyGradeButton
                   propertyId={propertyId}
                   scopeItemId={item.id}
-                  label="Grade this room"
+                  label="Set this room"
                   title="Answer every graded question in this room at one level, leaving what has been chosen alone"
                   onApplied={async (message) => {
                     setGradeNotice(message);

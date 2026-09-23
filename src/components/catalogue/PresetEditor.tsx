@@ -35,12 +35,15 @@ export function PresetEditor({
   preset,
   spaceTypes,
   componentTypes,
+  packages = [],
   onClose,
   onSaved,
 }: {
   preset: ScopePreset | null;
   spaceTypes: TypeOption[];
   componentTypes: TypeOption[];
+  /** Answer the rooms as they are laid down, not just list them. */
+  packages?: { id: string; name: string }[];
   onClose: () => void;
   onSaved: (message: string) => void | Promise<void>;
 }) {
@@ -49,6 +52,7 @@ export function PresetEditor({
   const [items, setItems] = useState<ScopePresetItem[]>(
     preset?.items ?? [{ space_type_id: spaceTypes[0]?.id ?? "", count: 1, component_type_ids: null }],
   );
+  const [packageId, setPackageId] = useState<string>(preset?.package_id ?? "");
   const [configurations, setConfigurations] = useState<string[]>(preset?.configurations ?? []);
   const [propertyTypes, setPropertyTypes] = useState<string[]>(preset?.property_types ?? []);
   const [saving, setSaving] = useState(false);
@@ -77,6 +81,7 @@ export function PresetEditor({
         items: clean,
         configurations,
         property_types: propertyTypes,
+        package_id: packageId || null,
       }),
     });
     const json = await res.json().catch(() => ({}));
@@ -146,6 +151,24 @@ export function PresetEditor({
               );
             })}
           </div>
+          {packages.length > 0 && (
+            <>
+              <p className="mt-2 text-xs font-medium text-slate-700">
+                Answer the rooms with
+                <span className="ml-1 font-normal text-slate-400">optional - the walkthrough becomes a review</span>
+              </p>
+              <div className="mt-1.5">
+                <SearchSelect
+                  value={packageId}
+                  onChange={setPackageId}
+                  emptyLabel="Just list the rooms"
+                  options={packages.map((p) => ({ value: p.id, label: p.name }))}
+                  className="w-full sm:w-72"
+                  buttonClassName="px-2.5 py-1.5 text-xs"
+                />
+              </div>
+            </>
+          )}
           <p className="mt-2 text-[11px] text-slate-400">
             {configurations.length === 0 && propertyTypes.length === 0
               ? "Nothing chosen - this preset is matched by its name instead, the way it worked before. Pick above so a rename cannot break it."
