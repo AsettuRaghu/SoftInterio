@@ -337,10 +337,13 @@ export async function copyScopeToQuotation(
       }
       const keyFor = new Map<string, string>();
       for (const [typeId, lines] of menuByType) for (const l of lines) if (l.quantity_key) keyFor.set(`${typeId}::${l.cost_item_id}`, l.quantity_key);
-      // One row per decision: among the picked rows of a component that share
-      // a group, the ② when asked for and present, else the ①. Counted rows
-      // (no group) come through on ① alone.
+      // One row per decision - unless the decision is SPLIT. Among the
+      // picked rows of a component sharing a group: the ② when asked for
+      // and present, else the ①. Where several ① carry shares (two glass
+      // doors, four leather), all of them come through and each takes its
+      // fraction of the quantity. Counted rows (no group) come through on ①.
       const chosen: Row[] = [];
+      const shareOf = new Map<string, number>();
       const byComponent = new Map<string, Row[]>();
       for (const r of picked) byComponent.set(r.parent_id as string, [...(byComponent.get(r.parent_id as string) ?? []), r]);
       for (const [parentId, rows] of byComponent) {
@@ -352,6 +355,16 @@ export async function copyScopeToQuotation(
           groups.set(g, [...(groups.get(g) ?? []), r]);
         }
         for (const rows2 of groups.values()) {
+          const counted = rows2.every((r) => shapes?.get(r.cost_item_id as string)?.counted);
+          const split = !counted && rows2.filter((r) => r.choice_status === "p1" && Number(r.choice_quantity) > 0);
+          if (split && split.length > 1) {
+            const total = split.reduce((sum, r) => sum + Number(r.choice_quantity), 0);
+            for (const r of split) {
+              chosen.push(r);
+              shareOf.set(r.id, Number(r.choice_quantity) / total);
+            }
+            continue;
+          }
           const p1 = rows2.find((r) => r.choice_status === "p1");
           const p2 = rows2.find((r) => r.choice_status === "p2");
           const take = preference === "p2" ? p2 ?? p1 : p1;
@@ -360,13 +373,13 @@ export async function copyScopeToQuotation(
       }
       // Auto items on each component, unless a row already says something.
       const rowsFor = (parentId: string) => scope.filter((r) => r.parent_id === parentId && r.cost_item_id);
-      const candidates: { id: string | null; parent_id: string; cost_item_id: string; choice_quantity: number | null }[] = chosen.map((r) => ({ id: r.id, parent_id: r.parent_id as string, cost_item_id: r.cost_item_id as string, choice_quantity: r.choice_quantity == null ? null : Number(r.choice_quantity) }));
+      const candidates: { id: string | null; parent_id: string; cost_item_id: string; choice_quantity: number | null; share: number }[] = chosen.map((r) => ({ id: r.id, parent_id: r.parent_id as string, cost_item_id: r.cost_item_id as string, choice_quantity: r.choice_quantity == null ? null : Number(r.choice_quantity), share: shareOf.get(r.id) ?? 1 }));
       for (const r of scope) {
         if (!targetByScopeComp.has(r.id) || !OURS(r.scope_owner) || !r.component_type_id) continue;
         const shapes = shapesByType.get(r.component_type_id);
         if (!shapes) continue;
         const said = new Set(rowsFor(r.id).map((x) => x.cost_item_id as string));
-        for (const [itemId, shape] of shapes) if (shape.auto && !said.has(itemId)) candidates.push({ id: null, parent_id: r.id, cost_item_id: itemId, choice_quantity: null });
+        for (const [itemId, shape] of shapes) if (shape.auto && !said.has(itemId)) candidates.push({ id: null, parent_id: r.id, cost_item_id: itemId, choice_quantity: null, share: 1 });
       }
       const lineRows: Record<string, unknown>[] = [];
       for (const r of candidates) {
@@ -385,17 +398,21 @@ export async function copyScopeToQuotation(
         const rule = target.componentTypeId ? ruleByType.get(target.componentTypeId) : undefined;
         const quantityKey = target.componentTypeId ? keyFor.get(`${target.componentTypeId}::${ci.id}`) ?? null : null;
         const ruled = !!(rule && hasCosting(rule) && quantityKey && rule.quantities.some((q) => q.key === quantityKey));
-        const derived = ruled ? quantify(rule!, mergeMeasures(target), unit).values[quantityKey!] ?? 0 : null;
+        // A share splits the quantity: two of six doors in glass take a
+        // third of the front area. One choice has a share of 1.
+        const derived = ruled ? (quantify(rule!, mergeMeasures(target), unit).values[quantityKey!] ?? 0) * r.share : null;
         // An auto item with nothing to measure against is not a line.
         if (r.id === null && !(derived && derived > 0)) continue;
         // A per-piece item carries how many were chosen (two wooden drawers).
-        const count = kind === "quantity" ? Number(r.choice_quantity) || 1 : 1;
+        // A counted item's number is how many; a share's number is how many
+        // doors, which the pro-rata quantity already carries.
+        const count = kind === "quantity" && r.share === 1 ? Number(r.choice_quantity) || 1 : 1;
         // The quantity a line carries must be the one its amount was worked
         // out from. A face-priced line stored 1 while the amount came from
         // the component's size, so "1 sqft × 4000 = 488,251" sat in the
         // first real quotation - the builder recomputed it on screen and
         // nothing else could (2026-09-22).
-        const faceQty = kind === "area" ? calculateSqft(target.width, target.height, unit) : kind === "length" ? convertToFeet(target.width || 0, unit) : null;
+        const faceQty = kind === "area" ? calculateSqft(target.width, target.height, unit) * r.share : kind === "length" ? convertToFeet(target.width || 0, unit) * r.share : null;
         const quantity = ruled ? Math.round((derived ?? 0) * 100) / 100 : faceQty != null ? Math.round(faceQty * 100) / 100 : count;
         const amount = ruled
           ? (derived ?? 0) * rate
@@ -417,7 +434,7 @@ export async function copyScopeToQuotation(
           company_cost: ci.company_cost ?? null,
           vendor_cost: ci.vendor_cost ?? null,
           display_order: target.lines.size + lineRows.filter((l) => l.quotation_component_id === target.id).length,
-          metadata: { follows_component: !ruled && (kind === "area" || kind === "length"), scope_item_id: r.id ?? undefined, auto: r.id === null || undefined, quantity_key: ruled ? quantityKey : null },
+          metadata: { follows_component: !ruled && (kind === "area" || kind === "length"), scope_item_id: r.id ?? undefined, auto: r.id === null || undefined, quantity_key: ruled ? quantityKey : null, ...(r.share !== 1 ? { share: Math.round(r.share * 10000) / 10000 } : {}) },
         });
         target.lines.add(ci.id);
         result.added.lines.push(`${ci.name} (${scope.find((x) => x.id === r.parent_id)?.name ?? ""})`);

@@ -18,7 +18,12 @@ type RouteParams = { params: Promise<{ id: string; itemId: string }> };
  * `trg_scope_choice_alternatives` keeps one ① and one ② per group on every
  * write, and the sheet mirrors that rule locally so nothing repaints.
  *
- * GET  -> { groups: [{ category, items: [{ cost_item_id, name, tier, counted, group_key, status, row_id, scope_owner }] }], from_templates }
+ * GET  -> { groups: [{ category, items: [{ cost_item_id, name, tier, counted, group_key, quantity, status, row_id, scope_owner }] }], from_templates }
+ *
+ * `quantity` on a COUNTED item is how many; on one of several alternatives
+ * it is a SHARE - how many of the component's doors take this finish - and
+ * several first preferences may then stand together (two glass, four
+ * leather), each taking its fraction of the quantity in the quotation.
  * PUT  { cost_item_id, status: "p1" | "p2" | null, scope_owner?, quantity? }
  *      quantity: how many, for an item priced per piece (two wooden drawers)
  *      p1 = first preference (what a quotation starts from), p2 = second;
