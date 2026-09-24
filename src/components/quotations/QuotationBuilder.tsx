@@ -27,6 +27,7 @@ import { useDefaultMeasurementUnit } from "@/lib/settings/use-default-unit";
 import { deriveQuantities } from "@/lib/costing/derive-quantities";
 import { RepriceModal } from "@/components/quotations/RepriceModal";
 import { PrintQuotationModal } from "@/components/quotations/PrintQuotationModal";
+import { ShareQuotationModal } from "@/components/quotations/ShareQuotationModal";
 import { TemplateModal } from "@/components/quotations/TemplateModal";
 import { SaveAsTemplateModal } from "@/components/quotations/SaveAsTemplateModal";
 import { NewVersionModal } from "@/components/quotations/NewVersionModal";
@@ -101,7 +102,18 @@ export function QuotationBuilder({
   // fields, so the profitability panel would have nothing to show anyway.
   const [canViewCosts, setCanViewCosts] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [duplicating, setDuplicating] = useState(false);
+  /**
+   * Sharing lives HERE, which is where it was missing.
+   *
+   * A draft opens straight into the builder, and Share sat only on the summary
+   * page - so sending a quotation to a customer meant pressing a button called
+   * "Summary" first, which nobody would guess. Sharing is also what a draft is
+   * built towards, and the dialog marks it sent, so this is the end of the
+   * editing job rather than a detour from it.
+   */
+  const [showShareModal, setShowShareModal] = useState(false);
+  /** The customer, for the WhatsApp hand-off inside the share dialog. */
+  const [client, setClient] = useState<{ name: string | null; phone: string | null } | null>(null);
   /** Components with lines that cannot be priced yet. Reported, never blocking. */
   const [incomplete, setIncomplete] = useState<
     Array<{ component: string; space: string; missing: number; what: string }>
@@ -185,7 +197,6 @@ export function QuotationBuilder({
   const [showRepriceModal, setShowRepriceModal] =
     useState(false);
   const [versionNotes, setVersionNotes] = useState("");
-  const [isCreatingRevision, setIsCreatingRevision] = useState(false);
 
   // Template modal
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -280,6 +291,8 @@ export function QuotationBuilder({
         setQuotationNumber(q.quotation_number || "");
         setStatus(q.status || "draft");
         setScopePreference(q.scope_preference === "p2" ? "p2" : "p1");
+        const c = (q.client ?? q.lead?.client) as { name?: string; phone?: string } | null;
+        setClient(c ? { name: c.name ?? null, phone: c.phone ?? null } : null);
         // Which record this quotation belongs to. The breadcrumb otherwise
         // shows only the quotation number, which says nothing about whose job
         // is being priced.
@@ -1388,32 +1401,17 @@ export function QuotationBuilder({
    * quotation on this lead was superseded by it.
    */
   /**
-   * A second document from this one: the same lines under a new number, as a
-   * draft, which Reprice then moves to another grade or another kind.
+   * Duplicate and Revise are NOT here, and both were.
    *
-   * This is the answer to "show the customer two levels", and it replaced the
-   * scope's second preference on 2026-09-24 - it needs nothing learnt on the
-   * room sheet, it works on a document that has already been checked, and
-   * Reprice swaps any item for any other in its category rather than only a
-   * tier. Saves first: leaving unsaved work behind to go and look at a copy of
-   * it is how a morning gets lost.
+   * Each makes a DIFFERENT document and then navigates away, which is not what
+   * an editor is for - and this editor only ever shows a draft, because only a
+   * draft is editable. On a draft, Revise is actively wrong: you are already in
+   * the editable version, so it creates v+1 and strands the one you were in.
+   * That is on record - QT-20251216-001 reached ten versions and three numbers
+   * still hold more than one live draft - and the API refuses it now too.
+   * Duplicate means "a second offer beside a finished one", so it belongs where
+   * the finished one is read. Both live on the summary page (2026-09-24).
    */
-  const duplicateQuotation = async () => {
-    if (!quotationId || duplicating) return;
-    setDuplicating(true);
-    try {
-      if (hasUnsavedChanges) await saveQuotation(false, false);
-      const res = await fetch(`/api/quotations/${quotationId}/duplicate`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) {
-        setSaveError(data.error || "Could not duplicate this quotation");
-        return;
-      }
-      router.push(`/dashboard/quotations/${data.quotation.id}?edit=1`);
-    } finally {
-      setDuplicating(false);
-    }
-  };
 
   const approveQuotation = async () => {
     if (!quotationId) return;
@@ -1794,32 +1792,6 @@ export function QuotationBuilder({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
-  // Create a new revision and open it for editing
-  const handleCreateRevision = async () => {
-    try {
-      setIsCreatingRevision(true);
-      const response = await fetch(`/api/quotations/${quotationId}/revision`, {
-        method: "POST",
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to create revision");
-      }
-
-      const data = await response.json();
-      // Redirect to edit the new revision
-      router.push(`/dashboard/quotations/${data.quotation.id}?edit=1`);
-    } catch (err) {
-      console.error("Error creating revision:", err);
-      setSaveError(
-        err instanceof Error ? err.message : "Failed to create revision"
-      );
-    } finally {
-      setIsCreatingRevision(false);
-    }
-  };
-
   const totals = calculateTotals();
 
   // Loading state
@@ -1932,91 +1904,11 @@ export function QuotationBuilder({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {/* A second document for the same job - Standard priced here,
-                  Budget beside it - made by copying this one and repricing
-                  the copy. It is what the scope's second preference used to
-                  be for, on a document instead of a room sheet. */}
-              <button
-                onClick={() => void duplicateQuotation()}
-                disabled={duplicating || isSaving}
-                title="Copy this quotation to a new draft under its own number - then Reprice the copy to show another grade or another kind"
-                className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1.5"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-                {duplicating ? "Duplicating…" : "Duplicate"}
-              </button>
-
-              {/* Print shows the actual PDF the client receives. It sits here
-                  rather than only on the summary page because a draft opens
-                  straight into the builder now, and checking the document is
-                  part of building it. */}
-              <button
-                onClick={() => setShowPrintModal(true)}
-                className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center gap-1.5"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
-                  />
-                </svg>
-                Print
-              </button>
-
-              {/*
-               * Approving where the quotation is built.
-               *
-               * A draft opens straight into the builder, and the builder had
-               * no header - so the only route to approving was a page you had
-               * to know to ask for by URL. Unsaved work is saved first;
-               * approving a price that is not what is on screen would be worse
-               * than making someone press save.
-               */}
-              {!["approved", "superseded", "rejected", "cancelled"].includes(
-                status
-              ) && (
-                <button
-                  onClick={() => void approveQuotation()}
-                  disabled={approving || isSaving}
-                  className="px-3 py-1.5 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-                >
-                  {approving ? "Approving…" : "Approve"}
-                </button>
-              )}
-
-              {/* Status, versions, sharing and margin live on the summary; it
-                  is not a preview of the printed document, so it no longer
-                  claims to be one. */}
-              <button
-                // Wrapped: onExit now takes an optional notice, and handing it
-                // the click event straight would send a MouseEvent as the text.
-                onClick={() => onExit()}
-                className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center gap-1.5"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  />
-                </svg>
-                Summary
-              </button>
+              {/* Left to right is increasing commitment: change the document
+                  (Template, Reprice), check it (Print), keep it (Save), leave it
+                  (Done), agree it (Approve), send it (Share). They had accumulated
+                  in the order they were written, with "leave the editor" in the
+                  middle of the row and the primary action absent. */}
               <button
                 onClick={() => openTemplateModal({ level: "quotation" })}
                 className="px-3 py-1.5 text-sm text-purple-600 hover:text-purple-700 border border-purple-300 rounded-lg hover:bg-purple-50 flex items-center gap-1.5"
@@ -2056,39 +1948,111 @@ export function QuotationBuilder({
                 </svg>
                 Reprice
               </button>
+              {/* Print shows the actual PDF the client receives. It sits here
+                  rather than only on the summary page because a draft opens
+                  straight into the builder now, and checking the document is
+                  part of building it. */}
               <button
-                onClick={handleCreateRevision}
-                disabled={isCreatingRevision}
-                className="px-3 py-1.5 text-sm text-amber-700 border border-amber-300 bg-amber-50 rounded-lg hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                onClick={() => setShowPrintModal(true)}
+                className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center gap-1.5"
               >
-                {isCreatingRevision ? (
-                  <div className="w-3.5 h-3.5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
-                ) : (
-                  <svg
-                    className="w-3.5 h-3.5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                    />
-                  </svg>
-                )}
-                {isCreatingRevision ? "Creating..." : "Revise"}
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
+                  />
+                </svg>
+                Print
               </button>
+              {/* Save no longer navigates away.
+                  The document autosaves three seconds after every change and
+                  the bar below says so, which made this button's only unique
+                  behaviour `redirectAfterSave = true` - so the two controls that
+                  left the editor were called "Save" and "Summary" and neither
+                  said "leave". It is kept rather than deleted because pressing
+                  it is how people check that their work is safe; it now just
+                  saves, and the bar confirms it. */}
               <button
-                onClick={() => saveQuotation(false, true)}
-                disabled={isSaving}
+                onClick={() => saveQuotation(false, false)}
+                disabled={isSaving || !hasUnsavedChanges}
+                title={hasUnsavedChanges ? "Save now instead of waiting for the autosave" : "Everything is saved"}
+                className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-40 flex items-center gap-1.5"
+              >
+                {isSaving ? "Saving..." : hasUnsavedChanges ? "Save" : "Saved"}
+                <span className="text-xs text-slate-400 hidden sm:inline">⌘S</span>
+              </button>
+              {/* Status, versions, sharing and margin live on the summary; it
+                  is not a preview of the printed document, so it no longer
+                  claims to be one. */}
+              <button
+                // Wrapped: onExit now takes an optional notice, and handing it
+                // the click event straight would send a MouseEvent as the text.
+                onClick={() => onExit()}
+                className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center gap-1.5"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+                Done
+              </button>
+              {/*
+               * Approving where the quotation is built.
+               *
+               * A draft opens straight into the builder, and the builder had
+               * no header - so the only route to approving was a page you had
+               * to know to ask for by URL. Unsaved work is saved first;
+               * approving a price that is not what is on screen would be worse
+               * than making someone press save.
+               */}
+              {!["approved", "superseded", "rejected", "cancelled"].includes(
+                status
+              ) && (
+                <button
+                  onClick={() => void approveQuotation()}
+                  disabled={approving || isSaving}
+                  className="px-3 py-1.5 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  {approving ? "Approving…" : "Approve"}
+                </button>
+              )}
+              {/* The primary act, and the one this header was missing: a draft
+                  is built in order to be sent. The dialog marks it sent and
+                  mints the link, so this is also the only route to the public
+                  link from the page a draft actually opens on. */}
+              <button
+                onClick={() => {
+                  if (hasUnsavedChanges) void saveQuotation(false, false);
+                  setShowShareModal(true);
+                }}
+                disabled={isSaving || spaces.length === 0}
+                title={
+                  spaces.length === 0
+                    ? "Add something to the quotation first"
+                    : "Send this to the customer - it is marked as sent and you get a link to share"
+                }
                 className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5"
               >
-                {isSaving ? "Saving..." : "Save"}
-                <span className="text-xs text-blue-200 hidden sm:inline">
-                  ⌘S
-                </span>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342a3 3 0 100-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 9.632a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684zm0-12.632a3 3 0 105.368-2.684 3 3 0 00-5.368 2.684z" />
+                </svg>
+                Share
               </button>
             </div>
           </div>
@@ -2716,6 +2680,23 @@ export function QuotationBuilder({
         onClose={() => setShowPrintModal(false)}
         quotationId={quotationId}
         quotationNumber={quotationNumber}
+      />
+
+      {/* Sharing marks a draft as sent, so it is the last thing you do in the
+          editor rather than something you leave the editor to find. The dialog
+          saves nothing itself - unsaved work is flushed before it opens. */}
+      <ShareQuotationModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        quotation={{
+          id: quotationId,
+          quotation_number: quotationNumber,
+          status,
+          client_name: client?.name ?? null,
+          client_phone: client?.phone ?? null,
+          grand_total: totals.total,
+        }}
+        onShared={() => setStatus("sent")}
       />
 
       <RepriceModal

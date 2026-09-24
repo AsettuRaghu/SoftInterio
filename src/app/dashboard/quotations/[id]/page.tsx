@@ -1042,11 +1042,15 @@ export default function QuotationDetailPage() {
               </span>
             )}
             {/* Revise stays available while the lead is open, whatever the
-                quotation's own status - that is the point of it. */}
-            {(!quotation.lead ||
-              !["won", "lost", "disqualified"].includes(
-                quotation.lead.stage
-              )) && (
+                quotation's own status - that is the point of it. Except a
+                DRAFT: a draft is already the editable version, so revising it
+                forks v+1 and strands the draft, which is how one number reached
+                ten versions. The API refuses it now; this stops offering it. */}
+            {quotation.status !== "draft" &&
+              (!quotation.lead ||
+                !["won", "lost", "disqualified"].includes(
+                  quotation.lead.stage
+                )) && (
               <>
                 <button
                   onClick={handleCreateRevision}
@@ -1105,7 +1109,7 @@ export default function QuotationDetailPage() {
                   d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                 />
               </svg>
-              PDF
+              Print
             </button>
             {/* One action instead of two half-working ones. The modal mints
                 the link, offers WhatsApp / email / copy, and marks the

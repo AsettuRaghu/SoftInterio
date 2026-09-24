@@ -25,6 +25,41 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const supabase = await createClient();
 
+    /**
+     * **A draft cannot be revised**, because it already IS the editable version.
+     *
+     * Revise exists to fork a document that has gone out: the price was sent,
+     * the client wants changes, and the sent version has to stay on record while
+     * a new one is written. On a draft it does the opposite of what anyone
+     * means - it creates v+1 and strands the draft you were working in, under
+     * the same number, both editable, with nothing on either saying which is
+     * live.
+     *
+     * There was no guard here and the button sat in the builder's header, which
+     * is the one place you only ever see a draft. The damage is on record:
+     * QT-20251216-001 reached **ten versions** (v1-v8 all cancelled), and three
+     * quotation numbers still hold more than one live draft (2026-09-24).
+     */
+    const { data: current } = await supabase
+      .from("quotations")
+      .select("status, quotation_number, version")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (!current) {
+      return NextResponse.json({ error: "Quotation not found" }, { status: 404 });
+    }
+    if (current.status === "draft") {
+      return NextResponse.json(
+        {
+          error:
+            "This is still a draft, so there is nothing to revise - edit it directly. Revise is for a quotation that has already gone out.",
+          reason: "draft_is_already_editable",
+        },
+        { status: 409 }
+      );
+    }
+
     // Call the database function to create revision
     const { data, error } = await supabase.rpc("create_quotation_revision", {
       p_quotation_id: id,

@@ -2894,6 +2894,77 @@ Approving still asks for no confirmation, on either path. It supersedes another
 quotation silently, so one is arguable - but it belongs on both the detail page
 and the builder or not at all.
 
+### What each button in the quotation module is for
+
+Counted on 2026-09-24 after "there are tons of buttons at the top": **fourteen
+across two pages, four of them the same action twice.** The builder had
+Duplicate, Print, Approve, Summary, Template, Reprice, Revise, Save; the summary
+had Approve, Edit, Revise, Duplicate, PDF, Share. Approve, Revise, Duplicate and
+Print/PDF each existed in both places, the last under two different names.
+
+Three of them were not what their label said, and the diagnosis matters more
+than the tidying:
+
+- **"Summary" was `onExit()`** - the close-the-editor button, named after the
+  page it happens to land on. It says **Done** now, and pairs with the summary's
+  **Edit**.
+- **"Save" was a redirect.** The document autosaves three seconds after every
+  change and the bar underneath says "Saving… / Saved", so the button's only
+  unique behaviour was `redirectAfterSave = true` - which meant the two controls
+  that left the editor were called "Save" and "Summary". It is kept, because
+  pressing it is how people check their work is safe, but it now only saves, and
+  reads **Saved** and disables itself when there is nothing to save.
+- **"Revise" in the editor was a footgun**, and it had already cost data. Revise
+  forks a document that has gone out; the builder only ever shows a **draft**,
+  because only a draft is editable - so revising created v+1 and stranded the
+  draft you were in, under the same number, both editable, with nothing saying
+  which was live. `QT-20251216-001` reached **ten versions** (v1-v8 all
+  cancelled) and three numbers still held more than one live draft.
+  `POST /api/quotations/[id]/revision` now refuses a draft with
+  `draft_is_already_editable`, and neither page offers it on one.
+
+**Share was missing from the builder entirely**, which was the real gap behind
+the complaint. A draft opens straight into the builder and Share sat only on the
+summary, so sending a quotation to a customer meant pressing a button called
+"Summary" first. It is the builder's **primary action** now: it flushes any
+unsaved work, marks the draft sent and mints the link, which is the whole of
+"I have finished this, send it". An incomplete draft is refused by the status
+route with the sentence it already had ("12 lines still need a measurement,
+quantity or rate"), and the dialog shows it.
+
+**Duplicate came off the builder.** Adding it to both pages three days earlier
+was over-applying the rule that an action a draft needs must not live only on the
+summary - Duplicate means "a second offer beside a finished one", so it belongs
+where the finished one is read.
+
+So the builder is **Template · Reprice · Print · Save · Done · Approve · Share**,
+left to right in increasing commitment: change the document, check it, keep it,
+leave it, agree it, send it. They had accumulated in the order they were written,
+with "leave the editor" in the middle of the row.
+
+**The summary page was NOT removed**, and the earlier decision is narrower than
+it reads: an *editable* quotation opens straight into the builder, so a draft
+never **shows** the summary - the page still exists for anything sent, approved
+or rejected. The reason to keep it is not Share (that moved) but four things the
+builder has nowhere to put: **Version History, Activity, Statistics and the
+validity date.** Those are the record, not the document.
+
+**The bigger simplification is still on the table and deliberately not taken.**
+The two pages already share the document rendering (`SpaceCard` with `readOnly`),
+so the difference between them is chrome: one page, editable when the status
+allows, with the record in a collapsible rail, would delete Edit, Done and all
+four duplicated buttons - six controls removed by removing a concept rather than
+hiding anything, with the action row varying by status instead (draft: Print ·
+Template · Reprice · Share · Approve; approved: Print · Duplicate · Revise).
+It is real work on the module's two largest files and was not worth bundling into
+a tidy-up. Do it when one of them next needs a substantial change.
+
+Two open questions, asked and not yet answered: whether **Template** still earns
+its place now that every quotation on a lead starts from the scope (its remaining
+use is a standalone quotation with no lead), and whether **Approve** belongs in
+the editor at all - it is there only because a draft never showed the summary,
+which the merge above would make moot.
+
 ### One line, one arithmetic
 
 `lib/quotations/line-amount.ts` `lineAmount()` is the only place a line's
