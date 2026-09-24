@@ -1,10 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { canShareStatus } from "@/lib/quotations/client-link";
 
 /**
- * Generate a shareable client access link for a quotation
- * POST /api/quotations/[id]/share
+ * The link a customer opens, issued, read and revoked.
+ *
+ *   POST   /api/quotations/[id]/share    issue a fresh token (revokes the old one)
+ *   GET    /api/quotations/[id]/share    whether one is out, and whether it has been read
+ *   DELETE /api/quotations/[id]/share    revoke it
+ *
+ * **Only a quotation that has been issued may be shared** - `sent` or
+ * `approved`, per `canShareStatus`. A draft is a price nobody has agreed to
+ * show, and one existed on this tenant with a live token valid for another
+ * eleven days, which became publicly readable the moment the public path
+ * opened. The gate behind the token refuses it too; this refuses it earlier,
+ * where somebody can be told why.
+ *
+ * Revoking is how a link that reached the wrong person is dealt with, so it is
+ * worth knowing this is the whole of the answer to that: there is no per-person
+ * link and no way to tell who opened one. A link is a bearer token, and anybody
+ * holding it is the customer as far as this route is concerned.
  */
 export async function POST(
   request: NextRequest,
@@ -33,6 +49,20 @@ export async function POST(
       return NextResponse.json(
         { success: false, error: "Quotation not found" },
         { status: 404 }
+      );
+    }
+
+    if (!canShareStatus(quotation.status)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            quotation.status === "draft"
+              ? "Mark this quotation as sent before sharing it - a draft is not a price anybody has agreed to show."
+              : `A ${quotation.status} quotation cannot be shared. Revise it and share the new version.`,
+          reason: "not_shareable",
+        },
+        { status: 409 }
       );
     }
 
@@ -105,21 +135,18 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // A session was the only check here, so anybody signed in to the tenant
+    // could read out a live customer link for any quotation. Reading a share
+    // link is reading the quotation.
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["quotations.view"],
+    });
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
     const { id } = await params;
     const supabase = await createClient();
-
-    // Get current user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
 
     // Get quotation with share info
     const { data: quotation, error: quotationError } = await supabase
@@ -188,21 +215,19 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Revoking is the answer to a link that reached the wrong person, so it
+    // needs to be available to whoever may edit the quotation - and to nobody
+    // who merely holds a session.
+    const guard = await protectApiRoute(request, {
+      requiredPermissions: ["quotations.edit", "quotations.create"],
+      requireAllPermissions: false,
+    });
+    if (!guard.success) {
+      return createErrorResponse(guard.error!, guard.statusCode!);
+    }
+
     const { id } = await params;
     const supabase = await createClient();
-
-    // Get current user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
 
     // Revoke access token
     const { error: updateError } = await supabase

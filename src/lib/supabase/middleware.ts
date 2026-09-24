@@ -14,6 +14,7 @@ import {
   routePermissions,
   type RoutePermission,
 } from "@/config/route-permissions";
+import { isPublicPath } from "@/lib/auth/public-paths";
 
 // ============================================
 // ROUTE PERMISSION CONFIGURATION
@@ -101,9 +102,16 @@ export async function updateSession(request: NextRequest) {
     console.log("[MIDDLEWARE] Error getting user session:", error);
   }
 
-  // Protected routes logic
+  // Protected routes logic.
+  //
+  // isPublicPath is the deliberate exception: a customer with a quotation link
+  // has no account and never will, so sending them to sign-in makes the link
+  // useless. The list is exact prefixes and nothing else - see
+  // lib/auth/public-paths.ts, which also carries what a handler behind one of
+  // them owes, now that RLS is not making the decision.
   if (
     !user &&
+    !isPublicPath(request.nextUrl.pathname) &&
     !request.nextUrl.pathname.startsWith("/auth") &&
     request.nextUrl.pathname !== "/"
   ) {

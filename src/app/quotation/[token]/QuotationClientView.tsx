@@ -125,6 +125,16 @@ export function QuotationClientView({ quotation, company, token }: Props) {
   const [actionComplete, setActionComplete] = useState<
     "approved" | "rejected" | null
   >(null);
+  /**
+   * What the server said when it refused.
+   *
+   * Both handlers used to check `response.ok` and do nothing at all when it was
+   * false - so a customer pressing Approve on a link that had expired, or on a
+   * quotation somebody had already withdrawn, saw the spinner stop and the page
+   * sit there. They press it again. On the one screen a customer ever sees,
+   * that is the least forgivable place to throw the reason away.
+   */
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const showFullDetail = quotation.presentation_level === "full_detail";
   const showComponents = quotation.presentation_level !== "space_only";
@@ -151,15 +161,21 @@ export function QuotationClientView({ quotation, company, token }: Props) {
 
   const handleApprove = async () => {
     setIsApproving(true);
+    setActionError(null);
     try {
       const response = await fetch(`/api/quotations/client/${token}/approve`, {
         method: "POST",
       });
       if (response.ok) {
         setActionComplete("approved");
+        return;
       }
-    } catch (error) {
-      console.error("Error approving:", error);
+      const json = await response.json().catch(() => null);
+      setActionError(
+        json?.error || "We could not record your approval. Please contact us."
+      );
+    } catch {
+      setActionError("We could not reach the server. Please check your connection and try again.");
     } finally {
       setIsApproving(false);
     }
@@ -167,6 +183,7 @@ export function QuotationClientView({ quotation, company, token }: Props) {
 
   const handleReject = async () => {
     setIsRejecting(true);
+    setActionError(null);
     try {
       const response = await fetch(`/api/quotations/client/${token}/reject`, {
         method: "POST",
@@ -176,9 +193,16 @@ export function QuotationClientView({ quotation, company, token }: Props) {
       if (response.ok) {
         setActionComplete("rejected");
         setShowRejectModal(false);
+        return;
       }
-    } catch (error) {
-      console.error("Error rejecting:", error);
+      const json = await response.json().catch(() => null);
+      setActionError(
+        json?.error || "We could not send your feedback. Please contact us."
+      );
+      setShowRejectModal(false);
+    } catch {
+      setActionError("We could not reach the server. Please check your connection and try again.");
+      setShowRejectModal(false);
     } finally {
       setIsRejecting(false);
     }
@@ -608,6 +632,14 @@ export function QuotationClientView({ quotation, company, token }: Props) {
         {/* Action Buttons */}
         {canTakeAction && !isExpired && (
           <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+            {/* The server's own sentence - an expired link, a withdrawn
+                quotation, one already answered. It tells the customer what to
+                do next, which "something went wrong" never does. */}
+            {actionError && (
+              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm text-amber-900">
+                {actionError}
+              </div>
+            )}
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button
                 onClick={handleApprove}

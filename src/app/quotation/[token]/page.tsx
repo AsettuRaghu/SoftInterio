@@ -1,21 +1,74 @@
-import { createClient } from "@/lib/supabase/server";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveClientLink, refusalMessage } from "@/lib/quotations/client-link";
 import { QuotationClientView } from "./QuotationClientView";
 
+/**
+ * A quotation as its customer sees it, opened with a token and no account.
+ *
+ * **Two things had to change for this page to work at all.** It is reachable -
+ * `/quotation` is on the middleware's public allowlist, where before every
+ * unauthenticated request was redirected to sign-in, so nobody outside the
+ * business had ever seen it. And it reads through the ADMIN client: RLS
+ * correctly returns zero rows to `anon` on quotations and every table below, so
+ * the session client found nothing and this page answered notFound() to the one
+ * audience it exists for.
+ *
+ * Bypassing RLS means this handler is the only wall. `resolveClientLink` is it:
+ * status, expiry and a rate limit, in one place shared with the PDF, approve and
+ * reject routes. **Nothing below selects a cost column** - `company_cost`,
+ * `vendor_cost` and `margin_amount` are on `quotation_line_items` and reach only
+ * holders of `cost_items.pricing` inside the app, let alone a customer.
+ */
 interface PageProps {
   params: Promise<{ token: string }>;
+}
+
+/** What the customer is told, on its own, with no app chrome around it. */
+function LinkMessage({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-lg p-8 max-w-md text-center">
+        <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg className="w-8 h-8 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h1 className="text-xl font-bold text-slate-900 mb-2">{title}</h1>
+        <p className="text-slate-600">{body}</p>
+      </div>
+    </div>
+  );
 }
 
 export default async function ClientQuotationPage({ params }: PageProps) {
   const { token } = await params;
 
-  if (!token || token.length < 32) {
-    notFound();
+  // The rate limit is keyed on the token here rather than the IP, because a
+  // server component cannot see the request - and the token is the thing worth
+  // metering anyway.
+  await headers();
+
+  const gate = await resolveClientLink(token, "read");
+  if (!gate.ok) {
+    if (gate.refusal.kind === "not_found") notFound();
+    const { message } = refusalMessage(gate.refusal);
+    const title =
+      gate.refusal.kind === "expired"
+        ? "Link expired"
+        : gate.refusal.kind === "superseded"
+        ? "Replaced by a newer version"
+        : gate.refusal.kind === "rate_limited"
+        ? "Too many requests"
+        : "Link not active";
+    return <LinkMessage title={title} body={message} />;
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
-  // Find quotation by token (no auth required) with relations
+  // Re-read for the whole document now that the token has been accepted. The
+  // gate selected only what it needed to decide.
   const { data: rawQuotation, error } = await supabase
     .from("quotations")
     .select(
@@ -41,8 +94,6 @@ export default async function ClientQuotationPage({ params }: PageProps) {
       notes,
       presentation_level,
       hide_dimensions,
-      client_access_token,
-      client_access_expires_at,
       client:clients!client_id(
         id,
         name,
@@ -93,41 +144,6 @@ export default async function ClientQuotationPage({ params }: PageProps) {
     property_type: (property?.property_type || undefined) as string | undefined,
     carpet_area: (property?.carpet_area || undefined) as number | undefined,
   };
-
-  // Check if expired
-  if (quotation.client_access_expires_at) {
-    const expiresAt = new Date(quotation.client_access_expires_at);
-    if (expiresAt < new Date()) {
-      return (
-        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-lg p-8 max-w-md text-center">
-            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg
-                className="w-8 h-8 text-amber-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
-            <h1 className="text-xl font-bold text-slate-900 mb-2">
-              Link Expired
-            </h1>
-            <p className="text-slate-600">
-              This quotation link has expired. Please contact the sender to
-              request a new link.
-            </p>
-          </div>
-        </div>
-      );
-    }
-  }
 
   // Track view (server action would be better but this works)
   try {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveClientLink, refusalMessage } from "@/lib/quotations/client-link";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { QuotationPDF } from "@/components/quotations/QuotationPDF";
 import type { 
@@ -37,9 +38,23 @@ export async function GET(
 ) {
   try {
     const { token } = await params;
-    const supabase = await createClient();
 
-    // Find quotation by token (no auth required) with relations
+    // The token is the authentication; this is the authorisation, shared with
+    // the page, approve and reject. Before it, this route looked the quotation
+    // up through the session client - which RLS answers with nothing for
+    // somebody who is not signed in - and let any status through, a draft
+    // included.
+    const gate = await resolveClientLink(token, "read");
+    if (!gate.ok) {
+      const { status, message } = refusalMessage(gate.refusal);
+      return NextResponse.json({ success: false, error: message }, { status });
+    }
+    // No session behind the token, so the reads are the admin client's. The
+    // selects below carry no cost column: `company_cost`, `vendor_cost` and
+    // `margin_amount` are on `quotation_line_items` and are not the customer's
+    // to see.
+    const supabase = createAdminClient();
+
     const { data: quotation, error: quotationError } = await supabase
       .from("quotations")
       .select(`
@@ -71,17 +86,6 @@ export async function GET(
     const client = quotation.client as { name?: string; email?: string; phone?: string } | null;
     const lead = quotation.lead as { property?: Record<string, unknown> } | null;
     const property = lead?.property as Record<string, unknown> | null;
-
-    // Check if expired
-    if (quotation.client_access_expires_at) {
-      const expiresAt = new Date(quotation.client_access_expires_at);
-      if (expiresAt < new Date()) {
-        return NextResponse.json(
-          { success: false, error: "Link has expired" },
-          { status: 410 }
-        );
-      }
-    }
 
     // Get spaces
     const { data: spacesData } = await supabase

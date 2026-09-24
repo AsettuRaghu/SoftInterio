@@ -544,6 +544,64 @@ missing (rows owned by client/vendor/excluded are never brought in); after
 kick-off anyone with project edit may change the scope and every change is
 logged; nothing here is customer-facing.
 
+### A customer is several people, and the seller records them
+
+Built 2026-09-24. `partner_contacts` has held name, designation, phone, email,
+`is_primary` and notes since Partners was built, and this tenant had **30
+partners with exactly 30 contacts** - nobody had ever added a second person.
+The reason was a permission: those routes are gated on `partners.edit`, which is
+Owner and Admin alone by decision, while the person who actually talks to the
+family is **Sales, who holds no `partners.*` key at all**. The only screen was
+Settings-adjacent, and nobody working a lead goes there.
+
+**Contacts are now reached through the lead**, on the Client Details block of
+its Overview tab, gated on access to the **lead**: `lib/leads/partner-guard.ts`
+`requireLeadPartner()` resolves lead -> client -> partner and applies
+`canWriteLead`. That is the rule `requireProjectAccess` already follows - access
+to the parent proves the right to the child - and it is **narrower** than
+`partners.edit`, not wider: it grants nothing about the relationship book as a
+whole. Lineage is checked rather than assumed; the `.eq("partner_id", ...)` on
+the contact lookup is what stops a caller pairing a lead id they hold with a
+contact id they do not.
+
+**`partner_contacts` is the home, not a per-lead table**, because the customer
+outlives the lead: the same family reappears on the project, on the next flat,
+and eventually on a portal, where people have to hang off the party and not off a
+sales record. `/api/partners/match` already searched contact phones for this
+reason ("the couple who share a home give either number").
+
+**Two facts, not one.** `is_primary` is who we ring - exactly one, held by a
+partial unique index, and that contact cannot be removed (the button is disabled
+with the reason rather than hidden). `is_decision_maker` is who signs off, and
+any number may hold it. In a family sale they are different people, and which of
+the three to get into the room is what closes the deal. Deliberately **one
+boolean and no permissions model**: who may approve what is a question for a
+portal that does not exist, and inventing the gate now would be the second
+preference again.
+
+**`lead_family_members` never existed.** Not in the baseline, not in the
+database - and `GET /api/sales/leads/[id]` queried it on every page load,
+destructured only `data`, and so swallowed the error and served a permanently
+empty list through the hook to nothing at all. A wasted round trip on a page
+that already costs six, plus a type, hook state and a response field for a table
+nobody created. Retired; `is_decision_maker` is the one idea carried across from
+its type. The contacts ride in on the client embed instead
+(`client -> partner -> contacts`, two levels, verified), so the page **gained
+the people and lost a query**.
+
+Two things found on the way and fixed here: the lead GET re-selected `users` for
+a `tenant_id` the guard already held - the fourth instance of that trap - and
+the response now carries **`canEdit`**, so the block draws the controls the
+server would actually accept rather than offering a `leads.edit_own` holder an
+action on somebody else's lead.
+
+There are **two `Client` interfaces**, in `types/leads.ts` and `types/clients.ts`,
+and both describe columns `clients` does not have - `contact_person_name/phone/
+email/designation`, `company_name`, `gst_number`, `address_line2`, `landmark`,
+`locality`. The lead uses the one in `types/leads.ts`. Left alone, but note that
+`contact_person_*` quartet: it is a **third** place this codebase tried to record
+a second person at a customer, which is the argument for there being one home.
+
 ### A project's Spaces are the lead's Spaces
 Scope lives on `property_scope_items`, which hangs off the property, and a
 project shares its lead's `property_id`. So the project's Spaces tab renders the
@@ -2881,6 +2939,78 @@ both, and retired the same day with the second preference - the lesson is the
 one worth keeping. Before adding an action to the summary page, ask whether it
 applies to a draft; if it does, it belongs in the builder's header too.
 
+### The one public path, and what a handler behind it owes
+
+Built 2026-09-24, and it had never worked: `/quotation/[token]`, its
+`client_access_token` column, the share route, approve, reject, the PDF and
+`QuotationClientView` all existed since before the baseline, and the middleware
+redirected every unauthenticated request that was not `/auth/*` or `/` to
+sign-in - so a customer opening the link landed on a login page they could never
+pass, and nobody outside the business had ever seen the page.
+
+**`lib/auth/public-paths.ts` is the allowlist, and it is the whole wall.** Exact
+prefixes, never a pattern: a prefix matches by equality or by the prefix plus
+`/`, so `/quotation/abc` is public and `/quotationsecret` is not. Three tests
+pin that boundary, because a regex is how `/quotations` ends up public for
+sharing six characters with something that is. Adding a path here is a decision
+about the product, not a refactor.
+
+**A handler behind it must use the admin client, and then owes every check RLS
+was making.** Probed: `anon` gets zero rows on `quotations`,
+`quotation_spaces`, `quotation_components`, `quotation_line_items`,
+`tenant_quotation_settings`, `clients` and `properties` - so the session client
+sees nothing and 404s, which is exactly what the page did. Bypassing RLS makes
+the handler the only wall.
+
+`lib/quotations/client-link.ts` `resolveClientLink()` is that wall, in one place
+for all four surfaces, because they had already drifted apart:
+
+- **Status.** Readable is `sent`, `approved`, `rejected`; answerable is `sent`
+  alone. The page let **any** status through - and a **draft with a live token
+  valid for another eleven days** existed on this tenant, so opening the public
+  path would have published a price nobody had agreed to show. `superseded` is
+  refused with its own sentence, because a bookmarked v1 showing a price that is
+  no longer the agreed one is worse than an error.
+- **Expiry**, on every surface rather than three of four.
+- **A rate limit**, keyed on the token for an answer (10/min) and for a read
+  (60/min) - `public_rate_hit()` in the database, not in memory, because a
+  per-instance counter on serverless resets whenever a new instance takes the
+  request and so counts almost nothing. Fixed window, one row, one statement.
+- **No cost column anywhere.** `company_cost`, `vendor_cost` and
+  `margin_amount` are on `quotation_line_items`; verified against the rendered
+  page that none of the 18 lines' internal figures appears in it.
+
+**Not single use**, which is what this was sized as. A customer opens their
+quotation more than once and forwards it to their spouse; a link that dies on
+first read would be a broken feature, not a safe one. The controls that fit a
+bearer token are the ones above plus revocation, and revocation is the answer to
+a link that reached the wrong person - there is no per-person link and no way to
+know who opened one.
+
+**Two of those four routes could never have run.** Reject wrote
+`status: "negotiating"`, retired on 2026-09-17 as "a fact, not a status", and
+the CHECK on the column refuses it - verified against the live constraint. It
+now writes `rejected` with the reason, stamps `rejected_at`, and **tells the
+seller**: nobody is signed in when a customer answers, so
+`quotation_rejected` beside `quotation_approved` is the only way it is heard.
+And `/api/quotations/[id]/share` gated its GET and DELETE on **a session with no
+permission at all**, so anybody signed in to the tenant could read out a live
+customer link for any quotation; it also refuses to share anything but a `sent`
+or `approved` document.
+
+**The customer sees the server's sentence.** Both handlers in
+`QuotationClientView` checked `response.ok` and did nothing when it was false,
+so pressing Approve on an expired link stopped the spinner and changed nothing -
+and they press it again. On the one screen a customer ever sees, that is the
+least forgivable place to throw a reason away.
+
+Verified end to end against the running app, unauthenticated: a `sent` token
+renders the document, a draft reads "Link not active", an expired one "Link
+expired", a superseded one "Replaced by a newer version", a bogus one 404s,
+`/quotationsecret` still redirects to sign-in, approve supersedes the previously
+approved version and refuses the second attempt, the 11th answer in a minute is
+429, and the PDF is a real PDF for `sent` and a refusal otherwise.
+
 ### A small change refreshes a small thing
 
 Ticking a follow-up done on a lead's Notes tab took about a second and a half
@@ -3657,8 +3787,10 @@ not on the hot path and were left alone.
 `npm test` runs vitest over `src/**/*.test.ts` - the pure pieces that turn a
 customer's measurement into a price, none of which touch the database:
 the formula evaluator (`lib/costing/formula`), the costing rule
-(`quantify`, `validateCosting`, `mergeMeasures`) and the option shapes
-(`lib/scope/options`). Added 2026-09-21; the first run found that
+(`quantify`, `validateCosting`, `mergeMeasures`), the option shapes
+(`lib/scope/options`) and the **public path allowlist**
+(`lib/auth/public-paths`, where the test that matters is the one proving
+`/quotationsecret` is not public). Added 2026-09-21; the first run found that
 `validateCosting` refused a quantity sharing a field's key, which every
 seeded rule does (`shelves: shelves`), so the wardrobe calculator could not
 have been saved as seeded. When a rule about pricing changes, change its
@@ -3810,18 +3942,6 @@ when they were live.
 
 ## Still open
 
-- **The quotation client link has never been reachable.** `/quotation/[token]`,
-  its `client_access_token` column, the share route, the approve and reject
-  routes and `QuotationClientView` all exist - and the middleware redirects
-  every unauthenticated request that is not `/auth/*` or `/` to sign-in, so a
-  customer opening the link lands on a login page. Found 2026-09-23 while
-  sizing a customer intake form. Making it work needs an **explicit public
-  path allowlist** in `lib/supabase/middleware.ts` - exact prefixes, never a
-  pattern - and the routes behind it must use the admin client, because RLS
-  correctly returns nothing to `anon` on `quotations`, `leads`, `properties`,
-  `documents` and `clients` (probed, all zero rows). It would be the product's
-  first public write path; the token is the authentication, so single use, an
-  expiry, a rate limit, and nothing on the page beyond the customer's own name
 - **No email is sent anywhere.** The stub service was dead code and was
   deleted; there is no send path at all. `api/team/members/[id]/reset-password`
   still takes a `sendEmail` flag in its body that controls nothing

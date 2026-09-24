@@ -38,6 +38,14 @@ export const NOTIFICATION_KINDS = {
     group: "Sales",
     tone: "emerald",
   },
+  // The other half of the same answer. A customer who asks for changes is
+  // waiting on a revision, so it is at least as urgent as an approval - and
+  // nobody is signed in when it happens, which is the whole reason it is told.
+  quotation_rejected: {
+    label: "A client asks for changes to a quotation of mine",
+    group: "Sales",
+    tone: "amber",
+  },
   lead_converted: {
     label: "A won lead becomes my project",
     group: "Projects",

@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notify } from "@/lib/notifications/notify";
+import { resolveClientLink, refusalMessage } from "@/lib/quotations/client-link";
 
 /**
- * Client approves quotation via token
+ * The customer approves their quotation, with no account.
+ *
  * POST /api/quotations/client/[token]/approve
+ *
+ * `protectApiRoute` is deliberately NOT called - the token is the
+ * authentication. `resolveClientLink` is the authorisation, and it is shared
+ * with the page, the PDF and reject so the four surfaces cannot drift: it
+ * looked up the quotation through the SESSION client before, which RLS answers
+ * with nothing for a caller who is not signed in, so this route could only ever
+ * have 404'd for the audience it was written for.
  */
 export async function POST(
   request: NextRequest,
@@ -13,44 +21,15 @@ export async function POST(
 ) {
   try {
     const { token } = await params;
-    const supabase = await createClient();
 
-    // Find quotation by token
-    const { data: quotation, error: findError } = await supabase
-      .from("quotations")
-      .select("id, tenant_id, status, quotation_number, version, client_access_expires_at, lead_id, project_id, created_by, assigned_to")
-      .eq("client_access_token", token)
-      .single();
-
-    if (findError || !quotation) {
-      return NextResponse.json(
-        { success: false, error: "Invalid or expired link" },
-        { status: 404 }
-      );
+    const gate = await resolveClientLink(token, "answer");
+    if (!gate.ok) {
+      const { status, message } = refusalMessage(gate.refusal);
+      return NextResponse.json({ success: false, error: message }, { status });
     }
-
-    // Check if expired
-    if (quotation.client_access_expires_at) {
-      const expiresAt = new Date(quotation.client_access_expires_at);
-      if (expiresAt < new Date()) {
-        return NextResponse.json(
-          { success: false, error: "Link has expired" },
-          { status: 410 }
-        );
-      }
-    }
-
-    // Check if quotation can be approved
-    const validStatuses = ["sent"];
-    if (!validStatuses.includes(quotation.status)) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: `Quotation cannot be approved (current status: ${quotation.status})` 
-        },
-        { status: 400 }
-      );
-    }
+    const { quotation } = gate;
+    // Past the token, every write is the admin client's: there is no session.
+    const supabase = createAdminClient();
 
     // The same rule as approving from inside: one approved version per
     // quotation number, so the version the client approves supersedes the
@@ -97,7 +76,7 @@ export async function POST(
     // through the admin client. Audience: whoever owns the lead or manages
     // the project, else whoever made the quotation.
     try {
-      const admin = createAdminClient();
+      const admin = supabase;
       const owners: (string | null)[] = [];
       if (quotation.lead_id) {
         const { data: lead } = await admin.from("leads").select("assigned_to").eq("id", quotation.lead_id).maybeSingle();
