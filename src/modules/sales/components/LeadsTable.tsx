@@ -5,7 +5,7 @@ import {
   LastActivityCell,
   FollowUpCell,
 } from "@/components/leads/activity-cells";
-import { Lead, LeadStage } from "@/types/leads";
+import { Lead, LeadStage, LeadSourceLabels } from "@/types/leads";
 import {
   LeadStageLabels as StageLabels,
   LeadStageColors as StageColors,
@@ -64,17 +64,32 @@ export function LeadsTable({
       {
         key: "client_name",
         header: "Client",
-        width: "15%",
+        width: "17%",
         sortable: true,
         render: (lead) => (
-          <div className="space-y-1">
-            <p className="font-semibold text-sm text-slate-900">
+          <div className="space-y-0.5">
+            <p className="font-semibold text-sm text-slate-900 truncate">
               {lead.client?.name || "Unknown"}
             </p>
-            {lead.client?.email && (
+            {/* Where they came from, on the row.
+                More than 95% of these arrive as referrals, and until now the
+                list said nothing about it at all - so "who sent us our work"
+                was a question you had to open nineteen leads to answer. The
+                referrer's name is the part that matters; the source alone is a
+                category. */}
+            {lead.lead_source && (
               <p className="text-xs text-slate-500 truncate">
-                {lead.client.email}
+                {LeadSourceLabels[lead.lead_source] ?? lead.lead_source}
+                {lead.referred_by?.name && (
+                  <>
+                    <span className="text-slate-300"> · </span>
+                    <span className="text-slate-700 font-medium">{lead.referred_by.name}</span>
+                  </>
+                )}
               </p>
+            )}
+            {lead.client?.email && (
+              <p className="text-xs text-slate-400 truncate">{lead.client.email}</p>
             )}
           </div>
         ),

@@ -183,6 +183,13 @@ function PartnerDetail() {
   const isVendor =
     !!partner?.vendor ||
     !!partner?.types.some((t) => ["distributor", "producer", "interior_factory", "contractor"].includes(t));
+  /**
+   * A partner whose whole purpose is sending work our way. Referring is what an
+   * architect IS, so the tab is theirs whether or not anything has arrived yet -
+   * an empty one saying "no lead names Naveen yet" is a page that explains
+   * itself, where an absent one just looks poorer than a customer's.
+   */
+  const isReferrer = !!partner?.types.includes("architect");
 
   const setStatus = async (status: "active" | "inactive") => {
     if (
@@ -230,15 +237,31 @@ function PartnerDetail() {
     { key: "contacts", label: "Contacts", show: true },
     // An architect refers work without ever being a customer, so this tab shows
     // whenever there is anything to show rather than depending on a hat.
-    { key: "referred", label: "Referred to Us", show: counts.referred > 0 },
-    { key: "work", label: "Leads & Projects", show: !!isCustomer },
+    /**
+     * **A tab shows when it has something to show, or when the hat says it will.**
+     *
+     * These were gated on the HAT alone - `work` on `isCustomer`, `orders` on
+     * `isVendor` - so an architect saw Overview and Contacts and nothing else,
+     * which read as a different, poorer page than a customer's (2026-09-24).
+     * Gating on content fixes it without inventing anything: an architect gets
+     * Referred to Us, and gets Leads & Projects the day one of them is also a
+     * customer of ours.
+     *
+     * The hat is still consulted, so a customer with nothing yet still sees where
+     * their leads WILL appear rather than a page that grows tabs later.
+     */
+    { key: "referred", label: "Referred to Us", show: isReferrer || counts.referred > 0 },
+    { key: "work", label: "Leads & Projects", show: !!isCustomer || counts.leads + counts.projects > 0 },
     { key: "quotations", label: "Quotations", show: !!isCustomer || counts.quotations > 0 },
-    { key: "orders", label: "Purchase Orders", show: isVendor },
+    { key: "orders", label: "Purchase Orders", show: isVendor || counts.orders > 0 },
   ];
   const visible = tabs.filter((t) => t.show);
   // A tab in the URL that this partner does not have - ?tab=orders on a
   // customer - falls back rather than rendering an empty page.
   const active: Tab = visible.some((t) => t.key === tab) ? tab : "overview";
+
+  /** What their referrals have actually won us - the number an incentive is worked out from. */
+  const referredWon = (related?.referred ?? []).reduce((n, l) => n + Number(l.won_amount ?? 0), 0);
 
   const mainContact = partner.contacts.find((c) => c.is_primary) ?? partner.contacts[0] ?? null;
   const deciders = partner.contacts.filter((c) => c.is_decision_maker);
@@ -426,11 +449,25 @@ function PartnerDetail() {
                 {counts.referred > 0 && (
                   <DetailField label="Referred to us" value={plural(counts.referred, "lead")} />
                 )}
-                {isCustomer && <DetailField label="Projects" value={plural(counts.projects, "project")} />}
-                {isCustomer && <DetailField label="Leads" value={plural(counts.leads, "lead")} />}
-                <DetailField label="Quotations" value={plural(counts.quotations, "quotation")} />
-                {isVendor && (
+                {counts.referred > 0 && (
+                  <DetailField label="Won from referrals" value={money(referredWon) } />
+                )}
+                {(isCustomer || counts.projects > 0) && (
+                  <DetailField label="Projects" value={plural(counts.projects, "project")} />
+                )}
+                {(isCustomer || counts.leads > 0) && (
+                  <DetailField label="Leads" value={plural(counts.leads, "lead")} />
+                )}
+                {(isCustomer || counts.quotations > 0) && (
+                  <DetailField label="Quotations" value={plural(counts.quotations, "quotation")} />
+                )}
+                {(isVendor || counts.orders > 0) && (
                   <DetailField label="Purchase orders" value={plural(counts.orders, "purchase order")} />
+                )}
+                {/* A partner who is only a referrer would otherwise show an empty
+                    card, which reads as a missing feature rather than a fact. */}
+                {!isCustomer && !isVendor && counts.referred === 0 && (
+                  <DetailField label="Together so far" value={null} />
                 )}
               </DetailFields>
             </DetailCard>

@@ -82,6 +82,7 @@ export async function GET(request: NextRequest) {
         `
         *,
         client:clients!leads_client_id_fkey(id, name, phone, email, city),
+        referred_by:partners!leads_referred_by_partner_id_fkey(id, name),
         property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, address_line1, city, pincode),
         assigned_user:users!leads_assigned_to_fkey(id, name, avatar_url),
         created_user:users!leads_created_by_fkey(id, name, avatar_url)

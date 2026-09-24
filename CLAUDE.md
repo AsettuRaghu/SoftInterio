@@ -1386,6 +1386,41 @@ list, which reads "Not yet" on every row because no partner is linked yet. It is
 a documented decision (see Partners above) rather than an oversight, but it is
 the first thing to reconsider if that page is ever short of room.
 
+### The leads list says where each lead came from
+
+The Client column carries the source and, where there is one, **the referrer's
+name** - "Architect Referral · Naveen" under the customer. On a business where
+more than 95% of leads arrive as referrals, the list that exists to answer "what
+is in the pipeline" said nothing at all about who sent it, so "who brings us our
+work" was a question you had to open nineteen leads to answer. The name is the
+part that matters; the source alone is a category.
+
+**The filter bar is the shared one now.** `LeadsFilterBar` was the module's own
+copy, written before `components/ui/ListFilterBar` existed and named in this file
+as drift; it is gone. One line: Status, **Source**, **Service**, and **Referred
+by** - the last a `SearchSelect`, because it grows with every architect and
+customer on the books and is the filter that answers "what has Naveen sent us".
+
+An empty filter means no filter, which is why the new ones default to empty
+rather than to every value selected: a filter nobody has touched should not have
+to know the full list of values to be a no-op. Filtering is client-side over the
+page's own rows, as the stage filter already was.
+
+### A partner's tabs follow their content, not their hat
+
+`work` was gated on `isCustomer` and `orders` on `isVendor`, so an **architect saw
+Overview and Contacts and nothing else** - a visibly poorer page than a
+customer's, for a party whose relationship is the most valuable kind this business
+has (2026-09-24). Each tab now shows when the hat says it will **or when there is
+something in it**, so an architect who is also a customer gets Leads & Projects
+the day it means something, and nothing is invented for anybody.
+
+**Referred to Us is an architect's tab whether or not anything has arrived**,
+because referring is what an architect *is*: an empty tab saying "no lead names
+Naveen yet" explains itself, where an absent one just looks like less. Work
+Together leads with **Won from referrals** - the total won across the leads they
+introduced, which is the number an incentive is actually worked out from.
+
 ### A dropdown with more than a handful of entries is a `SearchSelect`
 
 `components/ui/SearchSelect` (2026-09-22): a single-choice dropdown you

@@ -13,6 +13,8 @@ import type {
 import {
   LeadActivityTypeLabels,
   LeadStageLabels as StageLabels,
+  LeadSourceLabels,
+  ServiceTypeLabels,
 } from "@/types/leads";
 import {
   PageLayout,
@@ -25,7 +27,9 @@ import {
   useAppTableSearch,
 } from "@/components/ui/AppTable";
 import { uiLogger } from "@/lib/logger";
-import { LeadsFilterBar, LeadsTable } from "@/modules/sales/components";
+import { LeadsTable } from "@/modules/sales/components";
+import { ListFilterBar, MultiSelectFilter } from "@/components/ui/ListFilterBar";
+import ReferrerFilter from "@/components/leads/ReferrerFilter";
 import {
   UserGroupIcon,
   PlusIcon,
@@ -48,6 +52,19 @@ export default function LeadsPage() {
   const [, setTeamMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Source, who referred it, and what we are selling.
+   *
+   * The list could be narrowed by status alone, on a business where more than
+   * 95% of leads arrive as referrals - so "how is JustDial doing against the
+   * architects" and "what has Naveen sent us" were both unanswerable from the
+   * screen that exists to answer them. Empty means no filter, which is why the
+   * default is empty rather than every value selected: a filter nobody has
+   * touched should not need to know the full list to be a no-op.
+   */
+  const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [referrerId, setReferrerId] = useState<string>("");
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([
     "active",
   ]);
@@ -214,6 +231,16 @@ export default function LeadsPage() {
       return false;
     });
 
+    if (selectedSources.length) {
+      result = result.filter((lead) => lead.lead_source && selectedSources.includes(lead.lead_source));
+    }
+    if (selectedServices.length) {
+      result = result.filter((lead) => lead.service_type && selectedServices.includes(lead.service_type));
+    }
+    if (referrerId) {
+      result = result.filter((lead) => lead.referred_by_partner_id === referrerId);
+    }
+
     // Apply search
     result = filterData(result, searchValue);
 
@@ -265,6 +292,9 @@ export default function LeadsPage() {
   }, [
     allLeads,
     selectedStatuses,
+    selectedSources,
+    selectedServices,
+    referrerId,
     searchValue,
     filterData,
     sortData,
@@ -334,16 +364,60 @@ export default function LeadsPage() {
           </div>
         ) : (
           <>
-            {/* Filter Bar Component */}
-            <LeadsFilterBar
+            {/* One line, the shared bar - the module's own copy predated
+                components/ui/ListFilterBar and was the drift this file's notes
+                already named. */}
+            <ListFilterBar
               searchValue={searchValue}
               onSearchChange={(value) => {
                 setSearchValue(value);
                 setPage(1);
               }}
-              selectedStatuses={selectedStatuses}
-              onStatusChange={setSelectedStatuses}
-            />
+              searchPlaceholder="Search by name, email, property..."
+            >
+              <MultiSelectFilter
+                label="Status"
+                options={[
+                  { value: "active", label: "Active" },
+                  { value: "won", label: "Won" },
+                  { value: "lost", label: "Lost" },
+                  { value: "disqualified", label: "Disqualified" },
+                ]}
+                selected={selectedStatuses}
+                onChange={(v) => {
+                  setSelectedStatuses(v);
+                  setPage(1);
+                }}
+              />
+              <MultiSelectFilter
+                label="Source"
+                options={Object.entries(LeadSourceLabels).map(([value, label]) => ({ value, label: String(label) }))}
+                selected={selectedSources}
+                onChange={(v) => {
+                  setSelectedSources(v);
+                  setPage(1);
+                }}
+              />
+              <MultiSelectFilter
+                label="Service"
+                options={Object.entries(ServiceTypeLabels).map(([value, label]) => ({ value, label: String(label) }))}
+                selected={selectedServices}
+                onChange={(v) => {
+                  setSelectedServices(v);
+                  setPage(1);
+                }}
+              />
+              {/* A SearchSelect, not a dropdown: this grows with every architect
+                  and customer on the books, and it is the filter that answers
+                  "what has Naveen sent us". */}
+              <ReferrerFilter
+                value={referrerId}
+                onChange={(v) => {
+                  setReferrerId(v);
+                  setPage(1);
+                }}
+              />
+            </ListFilterBar>
 
             {/* Leads Table Component */}
             <LeadsTable
