@@ -125,8 +125,37 @@ export async function scopeDrift(
           }
           continue;
         }
+        /**
+         * **The row id is a hint; the cost item is the answer.**
+         *
+         * `metadata.scope_item_id` points at the `property_scope_items` ROW the
+         * line came from, and that row does not survive being re-chosen: one
+         * answer per question is kept by deleting whatever else answered it, so
+         * clearing a carcass and picking the same one again produces a NEW row
+         * with a new id. Every quotation line pointing at the old id then read
+         * as "no longer chosen" while the room sheet said exactly what it had
+         * always said.
+         *
+         * Found on QT-20260924-001 (2026-09-24): its Master Bedroom wardrobe
+         * reported "Carcass - Standard no longer chosen", and the scope had
+         * Carcass - Standard chosen all along - on a row created an hour after
+         * the quotation, the original having been deleted by the trigger.
+         *
+         * **Retiring the second preference is what exposed this.** Until
+         * 2026-09-24 a displaced answer was demoted to `p2`, so the row survived
+         * with its id and a re-choice left the pointer intact. Deleting it
+         * instead is right, and it means nothing may depend on a scope row's
+         * identity outliving a change of mind.
+         *
+         * So a line is dropped only when the scope no longer chooses that cost
+         * item on that component. A genuine change - Standard swapped for
+         * Premium - still reports, because Standard leaves `chosen`.
+         */
         const lrow = scope.get(lsid);
-        if (!lrow || lrow.choice_status !== "p1") out.dropped.push({ line: l.name, component: `${c.name} (${sp.name})` });
+        const stillChosen =
+          lrow?.choice_status === "p1" ||
+          (!!l.quotation_cost_item_id && chosen.has(l.quotation_cost_item_id));
+        if (!stillChosen) out.dropped.push({ line: l.name, component: `${c.name} (${sp.name})` });
       }
     }
   }

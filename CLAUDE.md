@@ -2937,10 +2937,21 @@ was over-applying the rule that an action a draft needs must not live only on th
 summary - Duplicate means "a second offer beside a finished one", so it belongs
 where the finished one is read.
 
-So the builder is **Template · Reprice · Print · Save · Done · Approve · Share**,
-left to right in increasing commitment: change the document, check it, keep it,
-leave it, agree it, send it. They had accumulated in the order they were written,
-with "leave the editor" in the middle of the row.
+So the builder is **Reprice · Print · Save · Approve · Share** - five, each a
+different verb: change the price, check the document, keep the work, agree it,
+send it. **Template** and **Done** went the same day on the instruction "keep the
+quotation page very simple and less confusing, I do not want to overload with
+features": Done existed only to reach the summary page, and Template asks at the
+wrong moment - what a quotation starts from is settled once in the create dialog,
+and applying a second template over a priced document is not a thing anyone asked
+for. Template survives where it is actually useful: in the **empty state**,
+beside "Add Space" and "Bring in from scope", and per space and per component.
+
+**For a draft it is now one page.** The summary is only rendered for a quotation
+that cannot be edited, nothing produces `?view=1` any more, and there is no
+button out of the editor except the breadcrumb back to the list. That was the
+ask, and the boundary is worth knowing rather than assuming: an approved or sent
+quotation still opens as the record.
 
 **The summary page was NOT removed**, and the earlier decision is narrower than
 it reads: an *editable* quotation opens straight into the builder, so a draft
@@ -2964,6 +2975,62 @@ its place now that every quotation on a lead starts from the scope (its remainin
 use is a standalone quotation with no lead), and whether **Approve** belongs in
 the editor at all - it is there only because a draft never showed the summary,
 which the merge above would make moot.
+
+### Two false alarms, both from asking a rule-priced line the wrong question
+
+Found 2026-09-24 while the user was testing, and both had the same effect: the
+app reported a problem with a document that was entirely correct.
+
+**"45 lines still need a measurement, quantity or rate" blocked sending.** The
+guard in `PATCH /api/quotations/[id]/status` demanded a length and a width for
+every sqft line - and **a rule-priced line has neither, by design**: its quantity
+comes from the component's costing rule and is stored on the line, while length
+and width are meaningless for it. On QT-20260924-001, 45 of 97 lines were
+reported incomplete and **every one had a quantity, a rate and an amount**; zero
+lines genuinely lacked a rate. A line carrying `metadata.quantity_key` is now
+judged on whether the rule produced anything, which is the only honest question
+to ask it.
+
+This is the **same bug** as the amber "43 lines need size" strip, fixed in the
+builder two days earlier and left here - which is the argument for the two tests
+agreeing. After the fix two lines remain and they are real: a *Blind Corner
+Pull-out* priced per `corners` on a kitchen with no corners, deriving 0. **The
+message now names the lines** and where they are, because "2 lines still need a
+measurement" on a 97-line quotation is true, blocking, and useless.
+
+**"1 item no longer chosen" was the drift notice reading a deleted row id.**
+`metadata.scope_item_id` points at the `property_scope_items` ROW a line came
+from, and that row does not survive being re-chosen: one answer per question is
+kept by **deleting** whatever else answered it, so clearing a carcass and picking
+the same one again produces a new row with a new id. Every line pointing at the
+old id then read as dropped while the room sheet said exactly what it always had.
+QT-20260924-001's Master Bedroom wardrobe reported "Carcass - Standard no longer
+chosen" against a scope that had chosen Carcass - Standard throughout, on a row
+created an hour after the quotation.
+
+**Retiring the second preference is what exposed it.** Until 2026-09-24 a
+displaced answer was demoted to `p2`, so the row survived with its id. Deleting
+it instead is right, and the lesson generalises: **nothing may depend on a scope
+row's identity outliving a change of mind.** `scopeDrift` now treats the id as a
+hint and the cost item as the answer - a line is dropped only when the scope no
+longer chooses that item on that component, so a real swap still reports. The
+same set was already being computed one branch away for `not_in_scope`.
+
+### What a quotation starts from is asked once, and honestly
+
+Creating from the scope has been the default since 2026-09-18
+(`fromScope: !selectedTemplateId`) - and the empty option on the create dialog
+read **"Start from scratch"**, which is the one thing it does not do. So "we do
+not see any option to create the quotation from the current scope" (2026-09-24)
+was true of the label and false of the behaviour, which is worse than a missing
+feature: the person picks a template to avoid the blank document they were
+promised, and loses the room sheet they had just filled in.
+
+The control is now "What should it start from?", with **"The room sheet
+(recommended)"** as the default and the templates beneath it. On a standalone
+quotation there is no property and so no scope, and "Start from scratch" is then
+the honest word. Choosing a template says so in amber, because it replaces the
+room sheet rather than adding to it.
 
 ### One line, one arithmetic
 

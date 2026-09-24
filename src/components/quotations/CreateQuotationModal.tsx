@@ -376,20 +376,35 @@ export function CreateQuotationModal({
                   </div>
                 </div>
 
-                {/* Template Selection (Optional) */}
+                {/*
+                  * **What the quotation starts from**, said plainly.
+                  *
+                  * Creating from the scope has been the default since
+                  * 2026-09-18 (`fromScope: !selectedTemplateId`) - but the empty
+                  * option read **"Start from scratch"**, which is the one thing
+                  * it does not do. So "there is no option to create from the
+                  * current scope" (2026-09-24) was true of the label and false of
+                  * the behaviour, which is worse than a missing feature: the
+                  * person picks a template to avoid the blank document they were
+                  * promised, and loses the room sheet they already filled in.
+                  *
+                  * On a standalone quotation there is no property and so no
+                  * scope, and "from scratch" is then the honest word.
+                  */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Load from Template{" "}
-                    <span className="text-slate-400 font-normal">
-                      (optional)
-                    </span>
+                    What should it start from?
                   </label>
                   <select
                     value={selectedTemplateId}
                     onChange={(e) => setSelectedTemplateId(e.target.value)}
                     className="w-full max-w-full truncate px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
                   >
-                    <option value="">Start from scratch</option>
+                    <option value="">
+                      {source === "standalone"
+                        ? "Start from scratch"
+                        : "The room sheet (recommended)"}
+                    </option>
                     {templates.map((template) => (
                       <option key={template.id} value={template.id}>
                         {template.name}
@@ -414,7 +429,12 @@ export function CreateQuotationModal({
                     - it is a deliberate choice of contents. */}
                 {!selectedTemplateId && source !== "standalone" && (
                   <p className="text-[11px] text-slate-500">
-                    Starts from the Scope tab - its rooms, components and sizes. Rooms marked as the client&apos;s, a vendor&apos;s or excluded are left out. Anything can be changed afterwards without touching the scope.
+                    The rooms, components and sizes from the Scope tab, priced. Rooms marked as the client&apos;s, a vendor&apos;s or excluded are left out. Anything can be changed afterwards without touching the scope.
+                  </p>
+                )}
+                {selectedTemplateId && source !== "standalone" && (
+                  <p className="text-[11px] text-amber-700">
+                    A template replaces the room sheet as the starting point - this quotation will not be built from the scope.
                   </p>
                 )}
               </>

@@ -1904,30 +1904,19 @@ export function QuotationBuilder({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {/* Left to right is increasing commitment: change the document
-                  (Template, Reprice), check it (Print), keep it (Save), leave it
-                  (Done), agree it (Approve), send it (Share). They had accumulated
-                  in the order they were written, with "leave the editor" in the
-                  middle of the row and the primary action absent. */}
-              <button
-                onClick={() => openTemplateModal({ level: "quotation" })}
-                className="px-3 py-1.5 text-sm text-purple-600 hover:text-purple-700 border border-purple-300 rounded-lg hover:bg-purple-50 flex items-center gap-1.5"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
-                  />
-                </svg>
-                Template
-              </button>
+              {/* Five, and each one is a different verb: change the price
+                  (Reprice), check the document (Print), keep the work (Save),
+                  agree it (Approve), send it (Share). Left to right is increasing
+                  commitment.
+
+                  Gone on 2026-09-24, on the instruction "keep the quotation page
+                  very simple and less confusing, I do not want to overload with
+                  features": **Done**, which only existed to reach the summary page
+                  and made a draft look like it had somewhere else to be; **Template**,
+                  because what a quotation starts from is now asked once in the create
+                  dialog and applying a second template over a priced document is a
+                  thing nobody asked for; and **Duplicate** and **Revise**, which make a
+                  DIFFERENT document and belong where a finished one is read. */}
               <button
                 onClick={() => setShowRepriceModal(true)}
                 disabled={spaces.length === 0}
@@ -1987,30 +1976,6 @@ export function QuotationBuilder({
               >
                 {isSaving ? "Saving..." : hasUnsavedChanges ? "Save" : "Saved"}
                 <span className="text-xs text-slate-400 hidden sm:inline">⌘S</span>
-              </button>
-              {/* Status, versions, sharing and margin live on the summary; it
-                  is not a preview of the printed document, so it no longer
-                  claims to be one. */}
-              <button
-                // Wrapped: onExit now takes an optional notice, and handing it
-                // the click event straight would send a MouseEvent as the text.
-                onClick={() => onExit()}
-                className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center gap-1.5"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  />
-                </svg>
-                Done
               </button>
               {/*
                * Approving where the quotation is built.

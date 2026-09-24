@@ -160,12 +160,35 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (status === "sent") {
       const { data: lines } = await supabase
         .from("quotation_line_items")
-        .select("id, unit_code, length, width, quantity, rate")
+        .select(
+          "id, name, unit_code, length, width, quantity, rate, metadata, component:quotation_components(name, space:quotation_spaces(name))"
+        )
         .eq("quotation_id", id);
 
       const unpriced = (lines || []).filter((li) => {
         const unit = (li.unit_code || "").toLowerCase();
         if (!li.rate || Number(li.rate) <= 0) return true;
+
+        /**
+         * **A rule-priced line has no length or width, by design**, so asking
+         * for them calls a correctly priced line incomplete.
+         *
+         * `metadata.quantity_key` means the quantity comes from the component's
+         * costing rule - 95.91 sqft of front elevation derived from its size -
+         * and is stored on the line, while length and width are meaningless for
+         * it. Demanding them here refused to SEND a quotation that was entirely
+         * right: on QT-20260924-001, 45 of 97 lines were reported as needing a
+         * measurement and every one of them had a quantity, a rate and an
+         * amount, with zero lines genuinely missing a rate. That was the whole
+         * of "45 lines still need a measurement" (2026-09-24).
+         *
+         * This is the same bug that produced the amber "43 lines need size"
+         * strip in the builder, fixed there two days earlier and left here -
+         * which is the argument for the two tests agreeing. The honest question
+         * for a ruled line is whether the rule produced anything.
+         */
+        if (li.metadata?.quantity_key) return !li.quantity || Number(li.quantity) <= 0;
+
         if (["sqft", "sqm"].includes(unit)) return !li.length || !li.width;
         if (["rft", "rm"].includes(unit)) return !li.length;
         if (["nos", "set", "kg", "ltr"].includes(unit)) return !li.quantity;
@@ -173,13 +196,38 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       });
 
       if (unpriced.length > 0) {
+        /**
+         * **Name them.** "2 lines still need a measurement, quantity or rate" is
+         * a dead end on a 97-line quotation: it is true, it blocks the send, and
+         * it does not say where to look. The two that survive the ruled-line fix
+         * above are a real case worth seeing - a Blind Corner Pull-out priced per
+         * `corners` on a kitchen with no corners, so the rule derives 0 and the
+         * line is worth nothing. That is a decision to take (drop the line, or
+         * say how many corners there are), not a mystery to hunt.
+         */
+        const where = (li: { component?: unknown }) => {
+          const c = (Array.isArray(li.component) ? li.component[0] : li.component) as
+            | { name?: string; space?: { name?: string } | { name?: string }[] }
+            | null;
+          const sp = Array.isArray(c?.space) ? c?.space[0] : c?.space;
+          return [c?.name, sp?.name].filter(Boolean).join(", ");
+        };
+        const named = unpriced.slice(0, 4).map((li) => {
+          const w = where(li);
+          return w ? `${li.name} (${w})` : li.name;
+        });
+        const rest = unpriced.length - named.length;
+
         return NextResponse.json(
           {
             error: `${unpriced.length} line${
               unpriced.length === 1 ? "" : "s"
-            } still need a measurement, quantity or rate. Complete them before sending.`,
+            } still need a measurement, quantity or rate before this can be sent: ${named.join("; ")}${
+              rest > 0 ? `, and ${rest} more` : ""
+            }.`,
             code: "QUOTATION_INCOMPLETE",
             incomplete_lines: unpriced.length,
+            incomplete: unpriced.map((li) => ({ name: li.name, where: where(li) })),
           },
           { status: 400 }
         );
