@@ -101,6 +101,7 @@ export function QuotationBuilder({
   // fields, so the profitability panel would have nothing to show anyway.
   const [canViewCosts, setCanViewCosts] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
   /** Components with lines that cannot be priced yet. Reported, never blocking. */
   const [incomplete, setIncomplete] = useState<
     Array<{ component: string; space: string; missing: number; what: string }>
@@ -132,8 +133,8 @@ export function QuotationBuilder({
   const [quotationNumber, setQuotationNumber] = useState("");
   const [source, setSource] = useState<{ label: string; href: string } | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
-  const [leadId, setLeadId] = useState<string | null>(null);
-  /** "p2" when this document prices the scope's alternatives - an Option 2. */
+  /** Historical: "p2" on the one document built from the scope's retired
+   *  second preferences. Nothing sets it any more; the badge explains it. */
   const [scopePreference, setScopePreference] = useState<"p1" | "p2">("p1");
   // "Bring in from scope": pull on demand, adds only what is missing. Local
   // edits are saved first so the re-read after it cannot lose them.
@@ -185,17 +186,6 @@ export function QuotationBuilder({
     useState(false);
   const [versionNotes, setVersionNotes] = useState("");
   const [isCreatingRevision, setIsCreatingRevision] = useState(false);
-  /**
-   * The scope's second preferences - what an Option 2 would be built from.
-   *
-   * The button belongs here and not only on the summary page: an editable
-   * quotation opens straight into the builder (that is the whole point of
-   * reading and editing sharing one route), so a draft never shows the
-   * summary and the action was unreachable exactly when it was wanted
-   * (2026-09-24).
-   */
-  const [secondPreferences, setSecondPreferences] = useState(0);
-  const [isCreatingOption2, setIsCreatingOption2] = useState(false);
 
   // Template modal
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -289,11 +279,10 @@ export function QuotationBuilder({
 
         setQuotationNumber(q.quotation_number || "");
         setStatus(q.status || "draft");
+        setScopePreference(q.scope_preference === "p2" ? "p2" : "p1");
         // Which record this quotation belongs to. The breadcrumb otherwise
         // shows only the quotation number, which says nothing about whose job
         // is being priced.
-        setLeadId(q.lead_id || null);
-        setScopePreference(q.scope_preference === "p2" ? "p2" : "p1");
         if (q.lead_id && q.lead?.lead_number) {
           setSource({
             label: q.lead.lead_number,
@@ -320,18 +309,6 @@ export function QuotationBuilder({
         setCanViewCosts(!!data.can_view_costs);
         setLoadError(null);
 
-        // Read before the loading flag clears, so the header is right the
-        // first time it paints. Fetched after the quotation rather than
-        // beside it only because it needs the id; a control that appears two
-        // seconds late reads as the screen changing its mind, which is the
-        // same reason the plan tab's buttons wait for their gates.
-        try {
-          const dr = await fetch(`/api/quotations/${quotationId}/scope-drift`);
-          const dj = dr.ok ? await dr.json() : null;
-          setSecondPreferences(Number(dj?.data?.second_preferences) || 0);
-        } catch {
-          setSecondPreferences(0);
-        }
 
       } catch (error) {
         console.error("Error loading quotation:", error);
@@ -1410,6 +1387,34 @@ export function QuotationBuilder({
    * decides whether they may - quotations.approve - and tells us if another
    * quotation on this lead was superseded by it.
    */
+  /**
+   * A second document from this one: the same lines under a new number, as a
+   * draft, which Reprice then moves to another grade or another kind.
+   *
+   * This is the answer to "show the customer two levels", and it replaced the
+   * scope's second preference on 2026-09-24 - it needs nothing learnt on the
+   * room sheet, it works on a document that has already been checked, and
+   * Reprice swaps any item for any other in its category rather than only a
+   * tier. Saves first: leaving unsaved work behind to go and look at a copy of
+   * it is how a morning gets lost.
+   */
+  const duplicateQuotation = async () => {
+    if (!quotationId || duplicating) return;
+    setDuplicating(true);
+    try {
+      if (hasUnsavedChanges) await saveQuotation(false, false);
+      const res = await fetch(`/api/quotations/${quotationId}/duplicate`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setSaveError(data.error || "Could not duplicate this quotation");
+        return;
+      }
+      router.push(`/dashboard/quotations/${data.quotation.id}?edit=1`);
+    } finally {
+      setDuplicating(false);
+    }
+  };
+
   const approveQuotation = async () => {
     if (!quotationId) return;
     setApproving(true);
@@ -1790,49 +1795,6 @@ export function QuotationBuilder({
   }, [hasUnsavedChanges]);
 
   // Create a new revision and open it for editing
-  /**
-   * A second quotation from the scope's alternatives: the ② wherever there is
-   * one and the ① everywhere else, under its own number. Saves first, because
-   * it is built from the scope and leaving unsaved work behind to go and look
-   * at a new document is how a morning gets lost.
-   */
-  // Refreshed after a save: answering a question on the scope is exactly what
-  // creates an alternative, so the button can appear without a reload. The
-  // FIRST read happens inside the load, before the page paints.
-  useEffect(() => {
-    if (!quotationId || !lastSavedAt) return;
-    let live = true;
-    fetch(`/api/quotations/${quotationId}/scope-drift`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (live) setSecondPreferences(Number(j?.data?.second_preferences) || 0);
-      })
-      .catch(() => {});
-    return () => {
-      live = false;
-    };
-  }, [quotationId, lastSavedAt]);
-
-  const handleCreateOption2 = async () => {
-    if (isCreatingOption2) return;
-    try {
-      setIsCreatingOption2(true);
-      if (hasUnsavedChanges) await saveQuotation(false, false);
-      const response = await fetch("/api/quotations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lead_id: leadId || null, project_id: projectId || null, from_scope: true, preference: "p2" }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Could not create Option 2");
-      router.push(`/dashboard/quotations/${data.quotation.id}?edit=1`);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Could not create Option 2");
-    } finally {
-      setIsCreatingOption2(false);
-    }
-  };
-
   const handleCreateRevision = async () => {
     try {
       setIsCreatingRevision(true);
@@ -1947,13 +1909,14 @@ export function QuotationBuilder({
                 <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
                   v{version}
                 </span>
-                {/* Says what this document IS, beside its number - so nobody
-                    reads the alternative as the price, and so the drift
-                    notice's silence makes sense. */}
+                {/* Historical: a document built from the scope's second
+                    preferences, before those were retired. Kept so it still
+                    explains itself; a second document is now made with
+                    Duplicate and Reprice. */}
                 {scopePreference === "p2" && (
                   <span
                     className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded"
-                    title="Built from the scope's second preferences - the alternative discussed with the customer, priced beside the main quotation"
+                    title="Built from the scope's alternatives, before those were retired. A second document is now made with Duplicate and Reprice."
                   >
                     Alternative
                   </span>
@@ -1969,6 +1932,22 @@ export function QuotationBuilder({
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {/* A second document for the same job - Standard priced here,
+                  Budget beside it - made by copying this one and repricing
+                  the copy. It is what the scope's second preference used to
+                  be for, on a document instead of a room sheet. */}
+              <button
+                onClick={() => void duplicateQuotation()}
+                disabled={duplicating || isSaving}
+                title="Copy this quotation to a new draft under its own number - then Reprice the copy to show another grade or another kind"
+                className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                {duplicating ? "Duplicating…" : "Duplicate"}
+              </button>
+
               {/* Print shows the actual PDF the client receives. It sits here
                   rather than only on the summary page because a draft opens
                   straight into the builder now, and checking the document is
@@ -2101,18 +2080,6 @@ export function QuotationBuilder({
                 )}
                 {isCreatingRevision ? "Creating..." : "Revise"}
               </button>
-              {/* Only when the room sheet actually holds alternatives - there
-                  is nothing to build a second document from otherwise. */}
-              {secondPreferences > 0 && (
-                <button
-                  onClick={handleCreateOption2}
-                  disabled={isCreatingOption2}
-                  title={`A second quotation from the scope's ${secondPreferences} second preference${secondPreferences === 1 ? "" : "s"} - the alternative the customer discussed, priced beside this one`}
-                  className="px-3 py-1.5 text-sm text-emerald-700 border border-emerald-300 bg-emerald-50 rounded-lg hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                >
-                  {isCreatingOption2 ? "Creating..." : "Option 2"}
-                </button>
-              )}
               <button
                 onClick={() => saveQuotation(false, true)}
                 disabled={isSaving}

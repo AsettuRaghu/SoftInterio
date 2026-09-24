@@ -9,7 +9,7 @@ type RouteParams = { params: Promise<{ id: string }> };
  * POST /api/quotations/[id]/to-scope - "Add to the scope".
  *
  * The other direction, and the only writing it does: cost items priced on
- * this quotation that the room sheet does not list become first-preference
+ * this quotation that the room sheet does not list become chosen
  * choices on the matching scope component. A quotation may be ahead of the
  * scope as easily as behind it - somebody adds a line in the builder - and
  * until now nothing said so, let alone offered to put it right.
@@ -65,6 +65,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   return NextResponse.json({
     success: true,
     added,
-    message: added === 0 ? "Already on the room sheet." : `Added ${added} item${added === 1 ? "" : "s"} to the room sheet as first preferences.`,
+    message: added === 0 ? "Already on the room sheet." : `Added ${added} item${added === 1 ? "" : "s"} to the room sheet.`,
   });
 }

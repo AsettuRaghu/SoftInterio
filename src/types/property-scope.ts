@@ -79,10 +79,10 @@ export interface PropertyScopeItem {
   /** Questions on this component with neither an answer nor a "not needed" - sent by the scope GET. */
   still_to_ask?: number;
   questions?: number;
-  /** Set on a cost-item row under a component: which catalogue item, and
-   *  whether it is the customer's first or second preference. Never a price. */
+  /** Set on a cost-item row under a component: which catalogue item answers
+   *  its question. One answer per question; never a price. */
   cost_item_id?: string | null;
-  choice_status?: "p1" | "p2" | null;
+  choice_status?: "p1" | null;
   /** The finish they want here, when it differs from the brief. */
   preferred_finish?: string | null;
   /** For a client/vendor row: what is arriving from them, and by when. */

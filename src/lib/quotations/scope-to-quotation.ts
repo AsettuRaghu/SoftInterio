@@ -31,17 +31,14 @@ import { shapeOptions, type Offer } from "@/lib/scope/options";
  *    row's "length" is its second face dimension.
  *  - `metadata.measurement_status` is carried so the builder can say a size
  *    is still rough.
- *  - A component's FIRST-PREFERENCE cost items (the third level of the
- *    scope) become its line items, at the catalogue's rate and sized from
- *    the component; second preferences stay behind (an alternative
- *    quotation is a later feature), and so does any item the client keeps
- *    for themselves. A line already present for that cost item is left alone.
+ *  - A component's CHOSEN cost items (the third level of the scope) become
+ *    its line items, at the catalogue's rate and sized from the component;
+ *    any item the client keeps for themselves stays behind. A line already
+ *    present for that cost item is left alone.
  *
  * Options (2026-09-21):
  *  - `dryRun`     report what WOULD be added, by name, and write nothing -
  *                 the scope-drift notice on a quotation is this.
- *  - `preference` "p2" builds the alternative quotation: for each decision
- *                 the ② is taken where there is one, else the ①.
  *  - `pricedOn`   a variation: items already priced on those quotations
  *                 (the project's approved ones) count as present, and a
  *                 component or space created here that ends up carrying
@@ -51,7 +48,6 @@ import { shapeOptions, type Offer } from "@/lib/scope/options";
 
 export interface ScopeCopyOptions {
   dryRun?: boolean;
-  preference?: "p1" | "p2";
   pricedOn?: string[];
 }
 
@@ -101,7 +97,6 @@ export async function copyScopeToQuotation(
 ): Promise<ScopeCopyResult> {
   const empty: ScopeCopyResult = { spaces: 0, components: 0, lines: 0, skipped: 0, already: 0, added: { spaces: [], components: [], lines: [] }, unsized: [] };
   const dry = !!options.dryRun;
-  const preference = options.preference ?? "p1";
 
   try {
     // Scope hangs off the property, which both a lead and a project point at.
@@ -302,16 +297,14 @@ export async function copyScopeToQuotation(
       }
     }
 
-    // The third level: first-preference cost items become line items, sized
-    // from the component at the catalogue's rate. Second preferences and
-    // items the client keeps stay behind. An AUTO item - the only item on
+    // The third level: the chosen cost items become line items, sized from
+    // the component at the catalogue's rate. Items the client keeps stay
+    // behind. An AUTO item - the only item on
     // the offer that follows a rule quantity (Shelf per shelves) - is a
     // decision with one answer, so it is priced from the measurement without
     // having been tapped, and skipped when its quantity is 0.
-    // The picked rows under components we can price. Resolved per decision
-    // once the shapes are known: ① by default; for the alternative quotation
-    // the ② where a decision has one, else its ①.
-    const picked = scope.filter((r) => r.cost_item_id && (r.choice_status === "p1" || r.choice_status === "p2") && OURS(r.scope_owner) && r.parent_id && targetByScopeComp.has(r.parent_id));
+    // The chosen rows under components we can price.
+    const picked = scope.filter((r) => r.cost_item_id && r.choice_status === "p1" && OURS(r.scope_owner) && r.parent_id && targetByScopeComp.has(r.parent_id));
     const typeIds = [...new Set([...targetByScopeComp.values()].map((t) => t.componentTypeId).filter(Boolean) as string[])];
     const [{ data: types }, { data: offerRows }] = await Promise.all([
       typeIds.length ? supabase.from("component_types").select("id, config_schema").in("id", typeIds) : Promise.resolve({ data: [] as { id: string; config_schema: unknown }[] }),
@@ -338,8 +331,8 @@ export async function copyScopeToQuotation(
       const keyFor = new Map<string, string>();
       for (const [typeId, lines] of menuByType) for (const l of lines) if (l.quantity_key) keyFor.set(`${typeId}::${l.cost_item_id}`, l.quantity_key);
       // One row per decision: among the picked rows of a component that
-      // share a group, the ② when asked for and present, else the ①.
-      // Counted rows (no group) come through on ① alone.
+      // share a group, the chosen one. Counted rows have no group and come
+      // through on their own.
       const chosen: Row[] = [];
       const byComponent = new Map<string, Row[]>();
       for (const r of picked) byComponent.set(r.parent_id as string, [...(byComponent.get(r.parent_id as string) ?? []), r]);
@@ -351,10 +344,11 @@ export async function copyScopeToQuotation(
           const g = shapes?.get(r.cost_item_id as string)?.group_key ?? `row:${r.id}`;
           groups.set(g, [...(groups.get(g) ?? []), r]);
         }
+        // One answer per question, so one row per group at most. The group is
+        // still walked rather than the rows filtered: it is what stops a
+        // second row sneaking a duplicate line in if the trigger ever misses.
         for (const rows2 of groups.values()) {
-          const p1 = rows2.find((r) => r.choice_status === "p1");
-          const p2 = rows2.find((r) => r.choice_status === "p2");
-          const take = preference === "p2" ? p2 ?? p1 : p1;
+          const take = rows2.find((r) => r.choice_status === "p1");
           if (take) chosen.push(take);
         }
       }

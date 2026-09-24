@@ -309,9 +309,9 @@ export interface PaymentTerm {
  */
 export interface Quotation {
   /**
-   * Which half of the room sheet this document prices: "p1" the answers,
-   * "p2" the alternatives - an Option 2. Drift compares against the matching
-   * one, and the header says "Alternative" so nobody reads it as the price.
+   * Historical. "p2" marked a document priced from the scope's alternatives -
+   * an Option 2 - before second preferences were retired on 2026-09-24.
+   * Nothing sets it any more; the header still labels the one that exists.
    */
   scope_preference?: "p1" | "p2" | null;
   /** For the list: the project this belongs to, when it is a project's. */

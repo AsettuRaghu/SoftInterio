@@ -7,7 +7,7 @@
  *
  * Both directions: the scope may be ahead of the quotation (additions) or
  * the quotation ahead of the scope (lines added in the builder), and
- * "Add to the scope" writes those back as first preferences.
+ * "Add to the scope" writes those back as chosen items.
  *
  * What it offers depends on where the quotation is:
  *   draft              Bring in (the additions; sizes and drops are for the
@@ -122,7 +122,7 @@ export function ScopeDriftNotice({
         <span className="flex-1" />
         {error && <span className="text-red-700">{error}</span>}
         {drift.not_in_scope.some((l) => l.cost_item_id && l.scope_item_id) && (
-          <button type="button" onClick={() => void addToScope()} disabled={pushing} className="px-2.5 py-1 rounded-md border border-amber-300 text-amber-800 font-medium hover:bg-amber-100 disabled:opacity-60" title="Put what is priced here onto the room sheet as first preferences">
+          <button type="button" onClick={() => void addToScope()} disabled={pushing} className="px-2.5 py-1 rounded-md border border-amber-300 text-amber-800 font-medium hover:bg-amber-100 disabled:opacity-60" title="Put what is priced here onto the room sheet">
             {pushing ? "Adding…" : "Add to the scope"}
           </button>
         )}
@@ -160,7 +160,7 @@ export function ScopeDriftNotice({
           )}
           {drift.dropped.length > 0 && (
             <div>
-              <p className="font-medium mb-0.5">No longer the first preference</p>
+              <p className="font-medium mb-0.5">No longer chosen on the scope</p>
               <ul className="space-y-0.5 text-amber-900/90">
                 {drift.dropped.map((d, i) => <li key={i}>{d.line} on {d.component}</li>)}
               </ul>

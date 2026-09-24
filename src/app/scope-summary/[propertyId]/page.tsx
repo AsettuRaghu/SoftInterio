@@ -3,7 +3,7 @@
 /**
  * The scope as a page for the customer - opened from the Scope tab's
  * "Customer summary", printed or saved as PDF from the browser. No app
- * chrome, no prices, no internal notes, no second preferences: room by
+ * chrome, no prices, no internal notes: room by
  * room, what is planned, the finishes chosen, the pictures they liked, the
  * decisions written down. The document a seller sends the evening after
  * the showroom visit, so the customer sees that the conversation was heard.

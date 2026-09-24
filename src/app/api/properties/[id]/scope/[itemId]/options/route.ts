@@ -14,21 +14,18 @@ type RouteParams = { params: Promise<{ id: string; itemId: string }> };
  * under Settings → Catalogue - grouped by cost category. An item picked
  * here that the type no longer offers still shows, under its category.
  *
- * What each item IS - counted, one of several alternatives, or automatic
- * - is decided in `lib/scope/options` (shared with the quotation copy);
- * `trg_scope_choice_alternatives` keeps one ① and one ② per group on every
+ * What each item IS - counted, one of several answers to one question, or
+ * automatic - is decided in `lib/scope/options` (shared with the quotation
+ * copy); `trg_scope_choice_alternatives` keeps one answer per group on every
  * write, and the sheet mirrors that rule locally so nothing repaints.
  *
  * GET  -> { groups: [{ category, items: [{ cost_item_id, name, tier, counted, group_key, quantity, status, row_id, scope_owner }] }], from_templates }
  *
- * `quantity` on a COUNTED item is how many; on one of several alternatives
- * it is a SHARE - how many of the component's doors take this finish - and
- * several first preferences may then stand together (two glass, four
- * leather), each taking its fraction of the quantity in the quotation.
- * PUT  { cost_item_id, status: "p1" | "p2" | null, scope_owner?, quantity? }
+ * `quantity` on a COUNTED item is how many; an item that answers a question
+ * carries none.
+ * PUT  { cost_item_id, status: "p1" | null, scope_owner?, quantity? }
  *      quantity: how many, for an item priced per piece (two wooden drawers)
- *      p1 = first preference (what a quotation starts from), p2 = second;
- *      null removes the row. scope_owner (us / client / vendor / excluded)
+ *      p1 = the answer to this question; null removes the row. scope_owner (us / client / vendor / excluded)
  *      is who does that item - used on the project, kept for the sale.
  *      Prices never come through here; the tier is a word.
  */
@@ -109,7 +106,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const questions = questionsOf(
     templated.lines,
     menu,
-    // Only a ① answers a question; a ② is the alternative Option 2 prices.
+    // An answered question is one holding a chosen item.
     (picked ?? []).filter((p) => p.choice_status === "p1").map((p) => p.cost_item_id as string),
     declined,
   );
@@ -141,7 +138,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   const { id, itemId } = await params;
   const supabase = await createClient();
   const body = await request.json().catch(() => ({}));
-  const status = body.status === "p1" || body.status === "p2" ? body.status : null;
+  // One answer per question: p1 or nothing (the second preference was retired 2026-09-24).
+  const status = body.status === "p1" ? "p1" : null;
   const OWNERS = new Set(["us", "client", "vendor", "excluded"]);
   const owner = typeof body.scope_owner === "string" && OWNERS.has(body.scope_owner) ? body.scope_owner : undefined;
   const quantity = body.quantity === null ? null : Number.isFinite(Number(body.quantity)) && Number(body.quantity) > 0 ? Math.round(Number(body.quantity) * 100) / 100 : undefined;

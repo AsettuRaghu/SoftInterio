@@ -303,10 +303,8 @@ export async function POST(request: NextRequest) {
     //   variation   (project only) a quotation of only what the scope has
     //               gained since the project's approved quotations - the
     //               extra work after sign-off, priced on its own.
-    //   preference  "p2": the alternative - each decision's ② where it has
-    //               one, else its ①. "Option 2" beside the first quotation.
     const variation = body.variation === true && !!project_id;
-    const preference: "p1" | "p2" = body.preference === "p2" ? "p2" : "p1";
+
 
     // Standalone quotations are allowed (no lead_id or project_id required).
     // They carry the customer the person typed: a clients row, created here
@@ -486,8 +484,6 @@ export async function POST(request: NextRequest) {
 
     const quotationTitle = variation
       ? `Variation for ${clientName || "New Client"}`
-      : preference === "p2"
-      ? `Option 2 for ${clientName || "New Client"}`
       : `Quotation for ${clientName || "New Client"}`;
 
     const { data: newQuotation, error: createError } = await supabase
@@ -501,11 +497,6 @@ export async function POST(request: NextRequest) {
         client_id: clientId || null,
         status: "draft",
         title: quotationTitle,
-        // Which half of the room sheet this is: the answers, or the
-        // alternatives. Drift compares against the matching one, so an
-        // Option 2 is not reported as having drifted from the ①s it was
-        // deliberately built without.
-        scope_preference: preference,
         presentation_level: "space_component",
         hide_dimensions: true,
         valid_from: today.toISOString(),
@@ -557,7 +548,7 @@ export async function POST(request: NextRequest) {
         newQuotation.id,
         lead_id || null,
         project_id || null,
-        { pricedOn, preference }
+        { pricedOn }
       );
     }
 
@@ -568,7 +559,7 @@ export async function POST(request: NextRequest) {
       description: template_id
         ? "Created from a template"
         : from_scope
-        ? `${variation ? "Variation - only what the scope gained since approval" : preference === "p2" ? "Option 2 - second preferences from the scope" : "Started from the scope"} - ${generated.spaces} space(s), ${generated.components} component(s), ${generated.lines} item(s)${
+        ? `${variation ? "Variation - only what the scope gained since approval" : "Started from the scope"} - ${generated.spaces} space(s), ${generated.components} component(s), ${generated.lines} item(s)${
             generated.skipped ? `; ${generated.skipped} not ours to price` : ""
           }`
         : undefined,

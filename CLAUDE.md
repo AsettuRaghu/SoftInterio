@@ -40,12 +40,11 @@ real quotation.
 
 `lib/quotations/scope-drift.ts` reads, for one quotation, how far the
 scope has moved: **additions** (a dry run of `copyScopeToQuotation`),
-**resized** components, **dropped** lines (no longer ①), **not_ours**,
+**resized** components, **dropped** lines (no longer chosen), **not_ours**,
 **not_in_scope** - lines priced here that the room sheet does not list,
-which is the quotation being *ahead* of the scope - the last history
-stamp, and how many ② the scope holds. `POST /api/quotations/[id]/
-to-scope` ("Add to the scope") writes those back as first-preference
-choices; like the pull the other way it only ever adds.
+which is the quotation being *ahead* of the scope - and the last history
+stamp. `POST /api/quotations/[id]/to-scope` ("Add to the scope") writes
+those back as chosen items; like the pull the other way it only ever adds.
 
 **A line carries its provenance through the builder.** `metadata.
 scope_item_id` and `auto` are mapped onto the `LineItem` and written back
@@ -60,15 +59,14 @@ no scope row names it.
 Built 2026-09-22 after the first real quotation carried nine unmeasured
 components and eight lines priced at nothing.
 
-**Only a FIRST preference answers a question.** A ② becomes a line on Option
-2 and nowhere else, so a question holding nothing but a ② produces no line on
-the quotation being built - and both `unaskedByComponent` and the options
-route counted any `choice_status` as answered, so it was invisible. Found
+**Only a chosen item answers a question.** Both `unaskedByComponent` and the
+options route counted any `choice_status` as answered, and a second preference
+is not an answer - a question holding only one produced no line. Found
 reviewing LD-202609-005 before it moved (2026-09-24): a 75 sqft TV unit was
 about to be quoted with one line of four - no hinges, no handles - while the
-sheet read "nothing left to ask". The state is reachable by ordinary use,
-because clearing a ① deliberately does not promote the ②, so it was waiting
-for whoever changed their mind twice.
+sheet read "nothing left to ask". Second preferences went the same day (see
+below); the filter stays, because a counted row with no choice is not an
+answer either.
 
 `lib/scope/measured.ts` `missingMeasures(row, rule)` is the one answer to
 "what has this component not been measured for": the rule's fields that
@@ -137,28 +135,49 @@ counted: exposed sides are "ends you can see from the room - a run between
 two walls is 0, one open end 1, an island 2", blind corners "right-angle
 turns in this run - an L-shaped kitchen has 1, a U-shaped one 2".
 
-### A quotation says which half of the room sheet it prices
+### One answer per question. The second preference is gone
 
-`quotations.scope_preference` - `p1` the answers, `p2` the alternatives
-(`20260924130000`). Without it, **an Option 2 reported the maximum possible
-drift the moment it was created**: on LD-202609-005, 50 items "not in it yet"
-and 53 "no longer chosen", against a scope of 92 ①s and 53 ②s. Every number
-true and every number meaningless - the document was exactly right and the
-notice was comparing it with the other one. A notice that cries wolf on a
-correct document teaches people to dismiss the one that matters.
+Retired 2026-09-24 (`20260924140000`), four days after it was built, and the
+reason is the product's own aim: "I want to build a tool that is simple to
+understand and reduce as much confusion as possible ... most users would be in
+the unorganised sector and they might hate the complexity". A chip with three
+states - tap for ①, tap again and it slides to ②, tap again to clear - is a
+concept a seller has to be taught, and most of the people this is for will
+never be taught anything.
 
-`scopeDrift` now compares against the quotation's own preference: the
-additions dry-run is passed it, and a line is "dropped" only if its scope row
-no longer holds it. **An Option 2 accepts either**, because it is "the ②
-where there is one, else the ①" - read as "must be a ②" it called the 42
-lines that simply had no alternative dropped. Both quotations on that lead
-now read no drift, while an older one still reports its four real additions.
+It bought exactly one thing: **Option 2**, a second quotation priced from the
+alternatives. **Duplicate + Reprice does that better** - on a document that
+exists and has been checked, by whoever is pricing, and Reprice swaps any item
+for any other in its category rather than only a tier, so it covers the by-kind
+cases the grade ladder cannot.
 
-**Option 2 is offered on a `p1` quotation only** - an alternative of an
-alternative is the same document again - and the header carries an
-**Alternative** chip beside the version, on the builder and the summary
-alike, so two documents on one lead are told apart by more than their
-numbers.
+**Duplicate had no button until now.** `POST /api/quotations/[id]/duplicate`
+has copied a quotation's whole tree to a fresh draft under a new number since
+before the baseline and nothing in `src/` called it, so the replacement for
+Option 2 was unreachable while being named as the reason Option 2 could go. It
+is now in the builder's header and in the summary page's actions - both, for
+the reason Option 2 taught: a draft opens straight into the builder and never
+shows the summary. **Duplicate is not Revise**, and the difference is the
+point: a revision is another version of the same price and supersedes it when
+approved; a duplicate is a second offer standing beside it, with its own
+number.
+
+So the tap is now what anyone would expect: **choose, choose again, or clear**.
+What did not change is the rule that made it safe to remove - one answer per
+question, kept by the same `trg_scope_choice_alternatives`; only the demotion
+went, and an answer that is replaced is deleted rather than kept. 86 second
+preferences were removed, a CHECK pins `choice_status` to `p1` or null, and
+`quotations.scope_preference` is **kept as history** so the one Option 2 ever
+built still explains itself with its **Alternative** chip. Nothing sets `p2`
+any more.
+
+Four days of scaffolding went with it: the ②/① glyphs and the cycle in
+`ScopeItemPanel`, the Option 2 button and its `scope-drift` read in the
+builder and on the summary page, the `preference` option on
+`copyScopeToQuotation`, `second_preferences` on the drift read, and the
+"record as the alternative" tick on Apply grade. **Do not rebuild any of it
+without a real case asking** - and if a second document is wanted, that case
+is Duplicate + Reprice.
 
 ### The customer summary is the scope as a page, and it carries no price
 
@@ -169,8 +188,8 @@ sign-in and `leads.view`. `GET /api/properties/[id]/scope/summary` shapes
 it: room by room, size, the pictures they liked (starred first, uploaded
 references and pinned library entries, up to four), the components with
 their chosen finishes by category and tier word, what the client is
-bringing, and the thread entries marked as decisions. **No prices, no
-second preferences, no notes that are not decisions, no excluded rows.**
+bringing, and the thread entries marked as decisions. **No prices, no notes
+that are not decisions, no excluded rows.**
 It stores nothing - the document a seller sends the evening after the
 showroom visit so the customer sees the conversation was heard. The
 customer is read from the lead or project (properties carry no client).
@@ -308,17 +327,15 @@ timeline are the lead's.
 **The scope is the quotation's tree: Space → Component → Cost item**
 (2026-09-18, decided with the user). A cost item is a third kind of row in
 `property_scope_items` - `cost_item_id` set, hanging off its component,
-`choice_status` `p1 | p2` (first / second preference), one row per item per
-component -
+`choice_status` `p1` when it is the answer, one row per item per component -
 holding WHICH items, never a rate, a quantity or a total; the quotation
 holds how much. The options a component offers are the cost items the
 tenant's quotation templates list for its component type
 (`…/scope/[itemId]/options`), grouped by cost category - nothing new to
-configure. `copyScopeToQuotation` turns **first-preference** items (that the client
-does not keep) into line items under the matched component, sized from it at the catalogue's rate (the
-builder's own arithmetic, from `components/quotations/types`); second
-preferences stay behind for the alternative quotation that comes later.
-The tier shows on each option as a word so the seller can steer to the
+configure. `copyScopeToQuotation` turns **chosen** items (that the client
+does not keep) into line items under the matched component, sized from it at
+the catalogue's rate (the builder's own arithmetic, from
+`components/quotations/types`). The tier shows on each option as a word so the seller can steer to the
 budget. Done-by per item (`scope_owner` on the row) is shown on a project
 only - it is decided there, kept from the sale. An item priced per piece (nos/set…) and not
 quantified by a costing rule takes a count on the sheet (`choice_quantity`,
@@ -334,7 +351,7 @@ is now one option category among the others.
 
 Built 2026-09-23, step one of "blanket first, refine later". **Apply a
 grade** on the Scope header (the whole property) or in a room sheet (that
-room) sets the first preference of every graded question to that tier -
+room) answers every graded question at that tier -
 Budget · Standard · Premium · Luxury, or whatever words the tenant's ladder
 uses, since `quality_tier` is text. **It needs no configuration at all**: the
 tiers are already on the cost items.
@@ -361,9 +378,8 @@ Three rules it keeps:
 - **A lone yes/no is never set.** One optional item in its category is a
   question, not a ladder, and pressing Standard must not quietly add the
   lighting nobody asked for.
-- **The one-first-preference-per-question trigger does the rest**, so a grade
-  applied over an existing answer keeps the old one as the ② alternative
-  rather than losing it.
+- **The one-answer-per-question trigger does the rest**, so a grade applied
+  over an existing answer replaces it rather than leaving two standing.
 
 ### A package is what the business sells as one thing
 
@@ -419,15 +435,11 @@ questions still to ask**: Budget 1,31,850 · Standard 1,65,400 · Premium
 2,49,400 · Luxury 3,37,201. Every preset answers with **Standard** unless the
 tenant says otherwise.
 
-**Either blanket can be laid down as the ALTERNATIVE** (`preference: "p2"`,
-the checkbox in the menu), which is how one customer is shown two levels:
-Standard as the ①, Budget as the ②, then **Option 2** on the quotation builds
-the whole second document from the ②s (2026-09-24). Three rules differ and
-all three matter: an item already chosen as the ① is skipped, because nothing
-is its own alternative and the row is one per item - writing p2 on it would
-demote the answer; **counted accessories are skipped entirely**, since two
-tandem drawers are not an alternative to anything; and "already answered"
-means the question already has a ②, not a ①.
+Either blanket could briefly be laid down as a second preference, so one
+customer could be shown two levels at once. That went with the second
+preference itself on 2026-09-24 - **two levels are now two documents**,
+made with Duplicate + Reprice on the quotation. See "One answer per
+question" above.
 
 **"Start again" empties the scope**, because picking the wrong preset used to
 mean deleting rooms one at a time and the row delete correctly refuses to
@@ -1225,25 +1237,26 @@ rule was seeded where such types existed; the tenant edits or replaces it.
   is a property of the component type, like its rule, so it lives beside
   it. `quotation_template_line_items.quantity_key` and the flag are gone;
   templates are templates again.
-- **Alternatives hold one ① and one ②, kept by a trigger.** Within a
-  category, items priced per the same quantity (two carcass grades, both
-  per front area) are ways of pricing one thing: `group_key` on the option,
-  "one of these" under the category name, and
-  `trg_scope_choice_alternatives` (`scope_item_group_key()`) moves the old
-  ① to ② when a new ① lands (dropping the ② that was there) and drops the
-  old ② for a new ②. It was first written in the options route and two taps
-  a second apart - two concurrent requests - left two ①s standing; a
+- **One answer per question, kept by a trigger.** Within a category, items
+  priced per the same quantity (two carcass grades, both per front area) are
+  ways of pricing one thing: `group_key` on the option, "one of these" under
+  the category name, and `trg_scope_choice_alternatives`
+  (`scope_item_group_key()`) deletes whatever else answered that question when
+  a new answer lands. It was first written in the options route and two taps a
+  second apart - two concurrent requests - left two answers standing; a
   read-then-write rule belongs in the database. The route also treats a
   duplicate-key insert (the same race) as the update it meant. Counted
-  items are independent - a wardrobe has drawers AND a tray.
+  items are independent - a wardrobe has drawers AND a tray. Until
+  2026-09-24 the displaced answer was demoted to a second preference rather
+  than deleted; see "One answer per question" above.
 - **An option is one of three things**, decided in `lib/scope/options`
   (shared by the options route and the quotation copy, so a tap and a line
   never disagree) - settled on the second walk-through, 2026-09-19, after
   the three-state tap cycle and a repaint after every tap read as "jibbery":
   - *exclusive* - several answers to one decision (four carcass grades, all
-    per front area): chips that behave like a radio. **Your last tap is ①;
-    the previous ① slides to ②** by itself; tap ① or ② again to clear. No
-    cycle to learn, and **one ① per decision, full stop**. Splitting a
+    per front area): chips that behave like a radio. **Tap to choose - what
+    was chosen before makes way - and tap it again to clear.** Nothing to
+    learn, and **one answer per decision, full stop**. Splitting a
     decision across the doors - two glass, four leather, each taking its
     share of the front area - was built on 2026-09-23 and removed the same
     day: "the shutter split concept is looking complex, let us keep it
@@ -1252,8 +1265,8 @@ rule was seeded where such types existed; the tenant edits or replaces it.
     two components, or a line added in the builder. Do not rebuild it
     without a real case asking.
   - *counted* - per piece and not quantified by the rule (a tray, a
-    pull-out): a list with a × n stepper and a ✕; "+ Tray" chips to add. No
-    preference - a tray is not an answer to a question.
+    pull-out): a list with a × n stepper and a ✕; "+ Tray" chips to add - a
+    tray is not an answer to a question.
   - *auto* - **marked so on the offer** (`component_type_offers.auto`, the
     Automatic checkbox on the component page; Shelf per `shelves`,
     Exposed Side Finish per `exposed_side_sqft`): shows as "✓ Shelf ·
@@ -1301,7 +1314,7 @@ rule was seeded where such types existed; the tenant edits or replaces it.
   for ever, invisibly.
 
   Every tap changes the screen at once and nothing repaints afterwards: the
-  one-①-one-② rule is applied locally (mirroring the trigger), the save goes
+  one-answer rule is applied locally (mirroring the trigger), the save goes
   out behind it, only a failure re-reads, and the list behind the sheet is
   told once the tapping has paused (900 ms), not per tap.
 - **A drawer is one counted row, named by its kind** - "Tandem Box Drawer
@@ -2861,12 +2874,12 @@ replaced by a locked builder. They now share the rendering, not the role.
 
 **But an editable quotation opens straight into the builder**, so for a draft
 the summary is never seen - which means **an action only on the summary page
-is unreachable exactly when it is wanted**. `Option 2` was one: it needs the
+is unreachable exactly when it is wanted**. `Option 2` was one: it needed the
 scope's second preferences, which only exist while a quotation is still being
-negotiated, and it sat on the page a draft skips (2026-09-24). It is on both
-now, on the same condition and reading the same `scope-drift`. Before adding
-an action to the summary page, ask whether it applies to a draft; if it does,
-it belongs in the builder's header too.
+negotiated, and it sat on the page a draft skips (2026-09-24). It was put on
+both, and retired the same day with the second preference - the lesson is the
+one worth keeping. Before adding an action to the summary page, ask whether it
+applies to a draft; if it does, it belongs in the builder's header too.
 
 ### A small change refreshes a small thing
 
@@ -3687,16 +3700,16 @@ worth it before a second subscriber exists.
   `POST /api/quotations` read `users` through the session client for a
   `tenant_id` that `guard.user.tenantId` was already holding, and answered
   **"Failed to get user tenant"** with a 500 when it came back empty - on the
-  way to creating Option 2, with nothing the person could do about it
-  (2026-09-24). `users` is the one table whose only SELECT policy is
+  way to creating a second quotation, with nothing the person could do about
+  it (2026-09-24). `users` is the one table whose only SELECT policy is
   `id = auth.uid()`, so it is the worst table to ask a redundant question of.
   The calendar carried the same read and lost it for the same reason. Three
   more remain in `quotations/[id]` and `quotations/[id]/revision`.
 - **A control that appears seconds after the page settles reads as a bug.**
-  Option 2 is drawn from a `scope-drift` read; done in its own effect the
-  button arrived two seconds late. The first read now happens inside the
-  load, before `isLoading` clears, and the standing effect only refreshes
-  after a save - the same reasoning as the Plan tab's buttons waiting for
+  The since-retired Option 2 button was drawn from a `scope-drift` read; done
+  in its own effect it arrived two seconds late. That first read happens
+  inside the load, before `isLoading` clears, and the standing effect only
+  refreshes after a save - the same reasoning as the Plan tab's buttons waiting for
   their gates rather than appearing and then changing their minds.
 - **A new API route directory can leave the dev server 404ing.** Turbopack did
   not register `src/app/api/scope-packages/` until a file inside it changed:

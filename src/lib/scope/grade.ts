@@ -6,7 +6,7 @@
  * the handful of things the customer actually cares about. The tiers are
  * already on the cost items (`quality_tier`), so this needs no configuration
  * at all: for every question whose answers are a graded family, the answer
- * at that grade becomes the first preference.
+ * at that grade becomes the answer.
  *
  * **It cannot answer everything, and says so.** A wardrobe's shutter finish
  * is laminate or acrylic or veneer - chosen by kind, not by grade - and it
@@ -26,7 +26,7 @@ export interface GradedItem extends MenuItem {
 }
 
 export interface GradePlan {
-  /** Cost items to make the first preference, one per graded question. */
+  /** Cost items to choose, one per graded question. */
   pick: { group_key: string; cost_item_id: string }[];
   /** Questions no grade can answer - chosen by kind, not by grade. */
   ungraded: string[];

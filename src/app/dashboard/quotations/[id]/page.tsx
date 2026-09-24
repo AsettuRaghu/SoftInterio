@@ -109,7 +109,7 @@ interface User {
 interface Quotation {
   id: string;
   quotation_number: string;
-  /** "p2" when this prices the scope's alternatives - an Option 2. */
+  /** Historical: "p2" on a document built from the scope's retired alternatives. */
   scope_preference?: "p1" | "p2" | null;
   title?: string;
   description?: string;
@@ -562,10 +562,7 @@ export default function QuotationDetailPage() {
 
   // Revision state
   const [isCreatingRevision, setIsCreatingRevision] = useState(false);
-  // "Option 2": the alternative quotation from the scope's second
-  // preferences. Offered only when the scope holds any.
-  const [secondPreferences, setSecondPreferences] = useState(0);
-  const [isCreatingOption2, setIsCreatingOption2] = useState(false);
+  const [isDuplicating, setIsDuplicating] = useState(false);
 
   // PDF and Share state
   /**
@@ -587,32 +584,32 @@ export default function QuotationDetailPage() {
     variant: "success" | "error";
   } | null>(null);
 
-  useEffect(() => {
-    if (!quotation?.id || (!quotation.lead_id && !quotation.project_id)) return;
-    let live = true;
-    fetch(`/api/quotations/${quotation.id}/scope-drift`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (live) setSecondPreferences(Number(j?.data?.second_preferences) || 0); })
-      .catch(() => {});
-    return () => { live = false; };
-  }, [quotation?.id, quotation?.lead_id, quotation?.project_id, quotation?.version]);
 
-  const handleCreateOption2 = async () => {
-    if (!quotation || isCreatingOption2) return;
-    setIsCreatingOption2(true);
+  /**
+   * A second document for the same job: this one's lines under a new number,
+   * as a draft, which Reprice then moves to another grade or another kind.
+   *
+   * Different from Revise, and the difference is the whole point: a revision
+   * is another version of THIS price and supersedes it when approved, while a
+   * duplicate is a second offer standing beside it. It is what the scope's
+   * second preference used to be for, retired 2026-09-24 in favour of doing it
+   * on a document instead of on the room sheet.
+   */
+  const handleDuplicate = async () => {
+    if (!quotation || isDuplicating) return;
     try {
-      const response = await fetch("/api/quotations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lead_id: quotation.lead_id || null, project_id: quotation.project_id || null, from_scope: true, preference: "p2" }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "Could not create Option 2");
+      setIsDuplicating(true);
+      const response = await fetch(`/api/quotations/${quotation.id}/duplicate`, { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not duplicate this quotation");
       router.push(`/dashboard/quotations/${data.quotation.id}?edit=1`);
     } catch (err) {
-      setNotice({ message: err instanceof Error ? err.message : "Could not create Option 2", variant: "error" });
+      setNotice({
+        message: err instanceof Error ? err.message : "Could not duplicate this quotation",
+        variant: "error",
+      });
     } finally {
-      setIsCreatingOption2(false);
+      setIsDuplicating(false);
     }
   };
 
@@ -923,7 +920,7 @@ export default function QuotationDetailPage() {
             {quotation.scope_preference === "p2" && (
               <span
                 className="flex items-center px-2.5 py-1.5 text-sm text-emerald-800 bg-emerald-100 rounded-lg shrink-0"
-                title="Built from the scope's second preferences - the alternative discussed with the customer, priced beside the main quotation"
+                title="Built from the scope's alternatives, before those were retired. Kept so this document still explains itself; a second document is now made with Duplicate and Reprice."
               >
                 Alternative
               </span>
@@ -1075,18 +1072,22 @@ export default function QuotationDetailPage() {
                   )}
                   {isCreatingRevision ? "Creating..." : "Revise"}
                 </button>
-                {secondPreferences > 0 && (
-                  <button
-                    onClick={handleCreateOption2}
-                    disabled={isCreatingOption2}
-                    title={`A second quotation built from the scope's ${secondPreferences} second preference${secondPreferences === 1 ? "" : "s"} - the fallback the customer discussed, priced beside this one`}
-                    className="flex items-center gap-1.5 px-3 py-2 text-sm border border-emerald-300 text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors font-medium disabled:opacity-50"
-                  >
-                    {isCreatingOption2 ? "Creating..." : "Option 2"}
-                  </button>
-                )}
               </>
             )}
+            {/* A second offer beside this one - Standard priced here, Budget
+                next to it - rather than another version of this one, which is
+                what Revise makes. */}
+            <button
+              onClick={() => void handleDuplicate()}
+              disabled={isDuplicating}
+              title="Copy this quotation to a new draft under its own number - then Reprice the copy to show another grade or another kind"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium disabled:opacity-50"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              {isDuplicating ? "Duplicating…" : "Duplicate"}
+            </button>
             <button
               onClick={() => setShowPrintModal(true)}
               className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"

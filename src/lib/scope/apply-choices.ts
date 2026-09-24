@@ -15,26 +15,14 @@
  *   * **what could not be answered is reported**, never swallowed. A grade
  *     cannot choose a shutter finish; a package with a gap in it cannot
  *     either. A seller who is not told walks away thinking the room is done.
- *
- * A blanket can also be laid down as the **alternative** rather than the
- * answer (`preference: "p2"`), which is how a customer is shown two levels:
- * Standard as the first preference, Budget as the second, then Option 2 on
- * the quotation builds the whole second document from the ②s. Three things
- * differ there and all three matter:
- *
- *   - an item already chosen as the ① is skipped, because nothing can be its
- *     own alternative - the row is one per item and writing p2 on it would
- *     demote the answer instead of offering a choice;
- *   - counted accessories are skipped entirely: two tandem drawers are not an
- *     alternative to anything, they are a thing in the wardrobe;
- *   - "already answered" means the question already has a ②, not a ①.
+
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface ComponentPlan {
   componentId: string;
-  /** One answer per question: the item to make the first preference. */
+  /** One answer per question: the item to choose. */
   pick: { group_key: string; cost_item_id: string }[];
   /** Accessories given as standard, with how many. */
   counted: { cost_item_id: string; quantity: number }[];
@@ -60,11 +48,8 @@ export async function applyChoices(
     rows: { id: string; parent_id: string | null; cost_item_id: string | null; choice_status: string | null }[];
     names: Map<string, string>;
     replace?: boolean;
-    /** "p1" answers the questions; "p2" records the alternative. */
-    preference?: "p1" | "p2";
   },
 ): Promise<ApplyResult> {
-  const want: "p1" | "p2" = args.preference === "p2" ? "p2" : "p1";
   const picked = new Map<string, { id: string; cost_item_id: string; status: string | null }[]>();
   for (const r of args.rows) {
     if (!r.cost_item_id || !r.parent_id) continue;
@@ -83,23 +68,17 @@ export async function applyChoices(
     // A question counts as answered when any of the items this blanket would
     // put there already holds the place being written.
     const done = new Set(
-      mine.filter((m) => m.status === want).map((m) => groupOf.get(m.cost_item_id)).filter(Boolean) as string[],
+      mine.filter((m) => m.status === "p1").map((m) => groupOf.get(m.cost_item_id)).filter(Boolean) as string[],
     );
 
     const wanted: { cost_item_id: string; quantity: number | null; group_key: string | null }[] = [
       ...plan.pick.map((p) => ({ cost_item_id: p.cost_item_id, quantity: null, group_key: p.group_key })),
-      // An alternative to an accessory is not a thing: a tandem drawer is in
-      // the wardrobe or it is not.
-      ...(want === "p2" ? [] : plan.counted.map((c) => ({ cost_item_id: c.cost_item_id, quantity: c.quantity, group_key: null as string | null }))),
+      ...plan.counted.map((c) => ({ cost_item_id: c.cost_item_id, quantity: c.quantity, group_key: null as string | null })),
     ];
 
     for (const w of wanted) {
       const already = mine.find((m) => m.cost_item_id === w.cost_item_id);
-      if (already?.status === want) { kept++; continue; }
-      // Nothing is its own alternative. The row is one per item, so writing
-      // p2 over an existing p1 would demote the answer rather than offer a
-      // choice beside it.
-      if (want === "p2" && already?.status === "p1") { kept++; continue; }
+      if (already?.status === "p1") { kept++; continue; }
       // An accessory somebody removed is not put back by a blanket; only a
       // question nobody has answered is filled.
       if (!args.replace && w.group_key && done.has(w.group_key)) { kept++; continue; }
@@ -111,7 +90,7 @@ export async function applyChoices(
           property_id: args.propertyId,
           parent_id: plan.componentId,
           cost_item_id: w.cost_item_id,
-          choice_status: want,
+          choice_status: "p1",
           ...(w.quantity != null ? { choice_quantity: w.quantity } : {}),
           name: args.names.get(w.cost_item_id) ?? "Item",
           display_order: 0,
@@ -124,15 +103,13 @@ export async function applyChoices(
   for (const u of updates) {
     const { error } = await supabase
       .from("property_scope_items")
-      .update({ choice_status: want, ...(u.quantity != null ? { choice_quantity: u.quantity } : {}) })
+      .update({ choice_status: "p1", ...(u.quantity != null ? { choice_quantity: u.quantity } : {}) })
       .eq("id", u.id);
     if (error) throw new Error("Could not apply that");
   }
   if (inserts.length) {
-    // The one-①-one-② trigger sorts the rest out: a new p1 moves whatever
-    // held that place to second, so a blanket applied over an answer keeps
-    // the old one as the alternative rather than losing it; a new p2 replaces
-    // whatever alternative was there.
+    // The one-answer-per-question trigger sorts the rest out: a new choice
+    // removes whatever else answered that question.
     const { error } = await supabase.from("property_scope_items").insert(inserts);
     if (error) throw new Error("Could not apply that");
   }

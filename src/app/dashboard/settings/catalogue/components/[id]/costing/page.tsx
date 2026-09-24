@@ -97,7 +97,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
     if (sh.counted) return { label: "Counted", hint: "In or out, with a × n", tone: "text-slate-600 bg-slate-50 border-slate-200" };
     const alone = !lines.some((o) => o.cost_item_id !== costItemId && shapes.get(o.cost_item_id)?.group_key === sh.group_key);
     if (alone) return { label: "Optional", hint: "Tap to include, tap again to leave out - the customer's choice", tone: "text-slate-700 bg-slate-50 border-slate-200" };
-    return { label: "One of these", hint: "An alternative among the items of its category priced the same way - one ① and one ② between them", tone: "text-blue-700 bg-blue-50 border-blue-200" };
+    return { label: "One of these", hint: "One of the items of its category priced the same way - choosing one replaces whichever was chosen before", tone: "text-blue-700 bg-blue-50 border-blue-200" };
   };
 
   // Adding and removing take effect at once - the offer is not part of Save,

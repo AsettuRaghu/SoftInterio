@@ -15,12 +15,12 @@
  * Every offered item is one of three things:
  *
  *   counted    priced per piece and not quantified by the rule (a tray, a
- *              pull-out): in or out, with a "× n". No preference - a tray
- *              is not an answer to a question.
+ *              pull-out): in or out, with a "× n" - a tray is not an answer
+ *              to a question.
  *   exclusive  one of several answers to one decision - items in the same
  *              category priced per the same quantity (four carcass grades,
- *              all per front area). They share a `group_key`; a component
- *              holds one ① and at most one ② among them.
+ *              all per front area). They share a `group_key`, and a component
+ *              holds exactly one of them: choosing one replaces the last.
  *   auto       marked so on the offer (Shelf per shelves, Exposed Side
  *              Finish per exposed side area): it prices itself from the
  *              measurement and there is nothing to tap, and is skipped
@@ -48,7 +48,7 @@ export interface MenuItem {
 export interface OptionShape {
   quantity_key: string | null;
   counted: boolean;
-  /** Shared by the alternatives of one decision; null for a counted item. */
+  /** Shared by the answers to one decision; null for a counted item. */
   group_key: string | null;
   auto: boolean;
 }

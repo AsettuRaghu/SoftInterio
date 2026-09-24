@@ -97,12 +97,11 @@ describe("packagePlans", () => {
   });
 });
 
-describe("a blanket as the alternative", () => {
-  // applyChoices needs a database, so these check the rule it depends on:
-  // a package plan is the same either way, and the preference only changes
-  // what is written. The p2-specific rules are asserted in the route's own
-  // shape - here we pin the two facts the plan must carry for them to work.
-  it("separates answers from accessories, so p2 can skip the accessories", () => {
+describe("what a plan must carry for applyChoices to write it", () => {
+  // applyChoices needs a database, so these check the two facts the plan it
+  // is handed has to carry: which entries are answers and which are counted
+  // accessories, and which question each answer belongs to.
+  it("separates answers from accessories", () => {
     const [plan] = packagePlans({
       components, offersByType, items,
       entries: [
@@ -114,7 +113,7 @@ describe("a blanket as the alternative", () => {
     expect(plan.counted).toHaveLength(1);
   });
 
-  it("gives every answer its question, so p2 knows which alternative it replaces", () => {
+  it("gives every answer its question, so it replaces the right one", () => {
     const [plan] = packagePlans({
       components, offersByType, items,
       entries: [

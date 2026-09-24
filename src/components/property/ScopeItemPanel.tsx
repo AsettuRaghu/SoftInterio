@@ -121,19 +121,18 @@ function Thread({
 
 /**
  * What a component can carry - the cost items its type offers,
- * grouped by category - and what the customer prefers. Three kinds of item,
+ * grouped by category - and what the customer chose. Three kinds of item,
  * decided in `lib/scope/options` and drawn differently:
  *
  *   exclusive  several answers to one decision (four carcass grades). Tap
- *              one: it is ① and the previous ① slides to ② by itself. Tap
- *              the ① again to clear it; tap the ② to drop the fallback.
- *              Your last tap is your first choice.
- *   counted    in or out, with a "× n" - a tray, a pull-out. No preference.
+ *              one to choose it - whatever was chosen before makes way - and
+ *              tap it again to clear. One answer per question, full stop.
+ *   counted    in or out, with a "× n" - a tray, a pull-out.
  *   auto       the only item that follows a rule quantity (Shelf per
  *              shelves): priced from the measurement, nothing to tap.
  *
  * Every tap changes the screen at once and nothing repaints afterwards: the
- * one-①-one-② rule is applied locally (the same rule the database keeps),
+ * one-answer rule is applied locally (the same rule the database keeps),
  * the save goes out behind it, and only a failure re-reads. The tier shows
  * as a word so the seller can steer to the budget; no prices here - this
  * sheet is shown with the customer.
@@ -151,7 +150,7 @@ interface OptionItem {
   quantity_key: string | null;
   auto: boolean;
   quantity: number | null;
-  status: "p1" | "p2" | null;
+  status: "p1" | null;
   row_id: string | null;
   scope_owner: string | null;
 }
@@ -240,7 +239,7 @@ function Options({
   /** Applies a local change to every item at once, then saves the one that was tapped. */
   const apply = (
     next: (items: OptionItem[]) => OptionItem[],
-    tapped: { cost_item_id?: string; status?: "p1" | "p2" | null; scope_owner?: string; quantity?: number | null; decision_key?: string; declined?: boolean },
+    tapped: { cost_item_id?: string; status?: "p1" | null; scope_owner?: string; quantity?: number | null; decision_key?: string; declined?: boolean },
   ) => {
     setGroups((prev) => (prev ?? []).map((g) => ({ ...g, items: next(g.items) })));
     if (tapped.decision_key) {
@@ -269,7 +268,14 @@ function Options({
     })();
   };
 
-  /** Exclusive: your last tap is ①; the previous ① becomes ②; tap ① or ② to clear. */
+  /**
+   * One answer per question: tap to choose, tap the chosen one to clear.
+   *
+   * It used to cycle - your last tap was ①, the one it displaced slid to ②,
+   * a third tap cleared it. Three states on a chip is a concept a seller has
+   * to be taught, and it existed only to feed "Option 2"; Duplicate + Reprice
+   * makes a second document without anybody learning anything (2026-09-24).
+   */
   const tapExclusive = (o: OptionItem) => {
     if (readOnly) return;
     if (o.status) {
@@ -278,13 +284,13 @@ function Options({
     }
     apply(
       (items) =>
-        items.map((x) => {
-          if (x.cost_item_id === o.cost_item_id) return { ...x, status: "p1" as const };
-          if (x.group_key !== o.group_key) return x;
-          if (x.status === "p1") return { ...x, status: "p2" as const };
-          if (x.status === "p2") return { ...x, status: null };
-          return x;
-        }),
+        items.map((x) =>
+          x.cost_item_id === o.cost_item_id
+            ? { ...x, status: "p1" as const }
+            : x.group_key === o.group_key && x.status
+            ? { ...x, status: null }
+            : x,
+        ),
       { cost_item_id: o.cost_item_id, status: "p1", decision_key: keyOf(o), declined: false },
     );
   };
@@ -330,7 +336,7 @@ function Options({
   // Every picture of every option in a group, captioned by the option - the
   // finishes side by side, for the conversation at the showroom table.
   const compare = (g: OptionGroup) => {
-    const items = g.items.flatMap((o) => (pictures[o.cost_item_id] ?? []).map((p) => ({ id: p.entry_id, name: o.name, url: p.url, type: "image/jpeg", caption: o.status === "p1" ? "First preference" : o.status === "p2" ? "Second preference" : null })));
+    const items = g.items.flatMap((o) => (pictures[o.cost_item_id] ?? []).map((p) => ({ id: p.entry_id, name: o.name, url: p.url, type: "image/jpeg", caption: o.status ? "Chosen" : null })));
     if (items.length) setViewing({ items, index: 0 });
   };
   // Pictures stay out of the way: a small "N pictures" link shows when the
@@ -474,14 +480,12 @@ function Options({
                         type="button"
                         disabled={readOnly}
                         onClick={() => tapExclusive(o)}
-                        title={o.status === "p1" ? "First preference - tap to clear" : o.status === "p2" ? "Second preference - tap to drop" : "Tap to make this the first preference"}
+                        title={o.status ? "Chosen - tap to clear" : "Tap to choose this"}
                         className={cn(
                           "inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full border transition-colors disabled:cursor-default",
-                          o.status === "p1" ? "bg-emerald-600 text-white border-emerald-600" : o.status === "p2" ? "bg-white text-emerald-700 border-emerald-500" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400",
+                          o.status ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400",
                         )}
                       >
-                        {o.status === "p1" && <span className="text-[10px]">①</span>}
-                        {o.status === "p2" && <span className="text-[10px]">②</span>}
                         {o.name}
                         {tier(o, o.status === "p1")}
                       </button>

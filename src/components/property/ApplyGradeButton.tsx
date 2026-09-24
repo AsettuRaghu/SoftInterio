@@ -18,12 +18,7 @@
  * what they could NOT answer - a grade cannot choose a shutter finish, and a
  * package can have a gap in it - so nobody walks away thinking the room is
  * finished.
- *
- * **Either can be laid down as the alternative** instead of the answer, which
- * is how a customer is shown two levels: Standard as the ①, Budget as the ②,
- * then Option 2 on the quotation builds the whole second document from the
- * ②s. The toggle sits in the menu rather than being a second button, because
- * it is the same act on a different shelf (2026-09-24).
+
  */
 
 import React, { useEffect, useRef, useState } from "react";
@@ -54,8 +49,6 @@ export function ApplyGradeButton({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [packages, setPackages] = useState<{ id: string; name: string; description: string | null }[] | null>(null);
-  /** Answer the questions, or record the alternative beside the answers. */
-  const [asAlternative, setAsAlternative] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   // Read when the menu is first opened, not on mount: most visits to a scope
@@ -87,7 +80,6 @@ export function ApplyGradeButton({
       body: JSON.stringify({
         ...(what.packageId ? { package_id: what.packageId } : { tier: what.tier }),
         scope_item_id: scopeItemId,
-        preference: asAlternative ? "p2" : "p1",
       }),
     });
     const json = await res.json().catch(() => ({}));
@@ -96,10 +88,8 @@ export function ApplyGradeButton({
     if (!res.ok) return void onApplied(json.error || "Could not apply that grade");
     const d = json.data ?? {};
     const parts = [
-      asAlternative
-        ? `${label} recorded as the alternative on ${d.answered} question${d.answered === 1 ? "" : "s"} - press Option 2 on the quotation to price it`
-        : `${label}: ${d.answered} question${d.answered === 1 ? "" : "s"} answered across ${d.components} component${d.components === 1 ? "" : "s"}`,
-      d.kept ? `${d.kept} already ${asAlternative ? "had an alternative, or is the answer itself" : "answered"}, left alone` : null,
+      `${label}: ${d.answered} question${d.answered === 1 ? "" : "s"} answered across ${d.components} component${d.components === 1 ? "" : "s"}`,
+      d.kept ? `${d.kept} already answered, left alone` : null,
       // The honest half. A grade cannot choose a finish, and saying so is
       // the difference between a head start and a quotation missing a line.
       d.unanswered ? `${d.unanswered} still to ask - those are chosen by kind, not by grade` : null,
@@ -161,27 +151,8 @@ export function ApplyGradeButton({
               {busy === t.value ? "Applying…" : t.label}
             </button>
           ))}
-          {/* Two levels for one customer: the answer, and the alternative
-              beside it. Accessories are never an alternative - a tandem
-              drawer is in the wardrobe or it is not. */}
-          <label className="flex items-start gap-2 px-2.5 py-2 mt-1 border-t border-slate-100 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={asAlternative}
-              onChange={(e) => setAsAlternative(e.target.checked)}
-              className="mt-0.5 rounded border-slate-300"
-            />
-            <span className="text-[11px] text-slate-600">
-              Record as the <b>alternative</b> (②)
-              <span className="block text-slate-400">
-                For showing two levels. Option 2 on the quotation then prices the whole alternative.
-              </span>
-            </span>
-          </label>
-          <p className="px-2.5 pb-1.5 text-[11px] text-slate-400">
-            {asAlternative
-              ? "Questions already answered with this exact item are left alone - nothing is its own alternative."
-              : "Only unanswered questions change. What you have already chosen stays."}
+          <p className="px-2.5 py-1.5 text-[11px] text-slate-400 border-t border-slate-100 mt-1">
+            Only unanswered questions change. What you have already chosen stays.
           </p>
         </div>
       )}

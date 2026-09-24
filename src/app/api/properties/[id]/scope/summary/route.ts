@@ -11,7 +11,7 @@ type RouteParams = { params: Promise<{ id: string }> };
  *
  * The scope as a page for the CUSTOMER: room by room, what is planned in
  * each, the finishes they chose, the pictures they liked, the decisions
- * written down - and no prices, no internal notes, no second preferences.
+ * written down - and no prices and no internal notes.
  * It is the document a seller sends the evening after the showroom visit,
  * so the customer sees that the conversation was heard. Everything comes
  * from rows that already exist; nothing is stored for it.
