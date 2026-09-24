@@ -4,7 +4,7 @@
  * Pictures of one cost item - what acrylic looks like, which handle that
  * is. Stored as Design Library entries linked to the item (one entry per
  * picture, kind `product`), so nothing is a second file store: they show in
- * the library under the item, on the room sheet's chips, and - when marked
+ * the library under the item, on the Scope Sheet's chips, and - when marked
  * visible to the customer - beside the chosen item on the customer summary.
  */
 
@@ -66,7 +66,7 @@ export function CostItemPicturesDialog({ item, onClose, onChanged }: { item: { i
   };
 
   return (
-    <Modal isOpen onClose={onClose} size="lg" title={item.name} subtitle="Pictures shown on the room sheet while choosing, and - where marked visible - beside the chosen item on the customer summary.">
+    <Modal isOpen onClose={onClose} size="lg" title={item.name} subtitle="Pictures shown on the Scope Sheet while choosing, and - where marked visible - beside the chosen item on the customer summary.">
       <div className="p-5">
         {pictures === null ? (
           <p className="text-xs text-slate-400 py-6">Loading…</p>

@@ -19,13 +19,13 @@ import { copyScopeToQuotation } from "./scope-to-quotation";
  *               chosen, or is gone
  *   not_ours    components the quotation prices whose scope row now says
  *               the client or a vendor does it
- *   not_in_scope  lines priced here that the room sheet does not list -
+ *   not_in_scope  lines priced here that the Scope Sheet does not list -
  *               somebody added them in the builder. The other direction,
  *               and the one that was missing: a quotation may be ahead of
  *               the scope as easily as behind it (2026-09-22)
  *   last_change when the scope last changed, from its history
  *
- * It compares against the answers on the room sheet. The one quotation ever
+ * It compares against the answers on the Scope Sheet. The one quotation ever
  * built from the retired second preferences is compared the same way - its
  * lines were chosen once, and reporting them all as drifted would be true
  * and useless.
@@ -38,7 +38,7 @@ export interface ScopeDrift {
   resized: { component: string; space: string; from: string; to: string }[];
   dropped: { line: string; component: string }[];
   not_ours: { component: string; owner: string }[];
-  /** Priced here, not on the room sheet - with what it would take to add it back. */
+  /** Priced here, not on the Scope Sheet - with what it would take to add it back. */
   not_in_scope: { line: string; component: string; cost_item_id: string | null; scope_item_id: string | null }[];
   last_change: string | null;
   total: number;
@@ -109,7 +109,7 @@ export async function scopeDrift(
           out.resized.push({ component: c.name, space: sp.name, from: describe(qm), to: describe(sm) });
         }
       }
-      // What the component's room sheet says it carries, so a line with no
+      // What the component's Scope Sheet says it carries, so a line with no
       // provenance can still be recognised by its cost item.
       const chosen = new Set(
         [...scope.values()].filter((x) => x.parent_id === sid && x.cost_item_id && x.choice_status === "p1").map((x) => x.cost_item_id as string),
@@ -133,7 +133,7 @@ export async function scopeDrift(
          * answer per question is kept by deleting whatever else answered it, so
          * clearing a carcass and picking the same one again produces a NEW row
          * with a new id. Every quotation line pointing at the old id then read
-         * as "no longer chosen" while the room sheet said exactly what it had
+         * as "no longer chosen" while the Scope Sheet said exactly what it had
          * always said.
          *
          * Found on QT-20260924-001 (2026-09-24): its Master Bedroom wardrobe

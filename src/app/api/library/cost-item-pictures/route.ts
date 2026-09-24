@@ -8,7 +8,7 @@ import { ENTRY_SELECT, shapeEntries } from "@/lib/library/shape";
  *
  * The pictures of cost items - library entries linked to them (kind
  * `product` or `material`, one entry per picture as the catalogue's Pictures
- * dialog uploads them), grouped by item, signed for an hour. The room sheet
+ * dialog uploads them), grouped by item, signed for an hour. The Scope Sheet
  * reads it once per component so a chip can show what acrylic looks like
  * while the customer chooses; `customer=1` keeps only pictures marked
  * visible to the customer, which is what the summary shows. Gated on

@@ -386,14 +386,14 @@ export function CreateQuotationModal({
                   * current scope" (2026-09-24) was true of the label and false of
                   * the behaviour, which is worse than a missing feature: the
                   * person picks a template to avoid the blank document they were
-                  * promised, and loses the room sheet they already filled in.
+                  * promised, and loses the Scope Sheet they already filled in.
                   *
                   * On a standalone quotation there is no property and so no
                   * scope, and "from scratch" is then the honest word.
                   */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    What should it start from?
+                    How should this be built?
                   </label>
                   <select
                     value={selectedTemplateId}
@@ -403,11 +403,11 @@ export function CreateQuotationModal({
                     <option value="">
                       {source === "standalone"
                         ? "Start from scratch"
-                        : "The room sheet (recommended)"}
+                        : "Based on Scope Sheet (recommended)"}
                     </option>
                     {templates.map((template) => (
                       <option key={template.id} value={template.id}>
-                        {template.name}
+                        Based on template: {template.name}
                         {template.spaces_count
                           ? ` (${template.spaces_count} spaces, ${
                               template.components_count || 0
@@ -434,7 +434,7 @@ export function CreateQuotationModal({
                 )}
                 {selectedTemplateId && source !== "standalone" && (
                   <p className="text-[11px] text-amber-700">
-                    A template replaces the room sheet as the starting point - this quotation will not be built from the scope.
+                    A template replaces the Scope Sheet as the starting point - this quotation will not be built from the scope.
                   </p>
                 )}
               </>

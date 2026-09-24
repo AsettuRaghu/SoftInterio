@@ -9,10 +9,10 @@
  *   Quantities  what you cost against - a formula over the fields, written
  *               the way you would on paper, evaluated live against a sample
  *               measurement so a mistake shows as it is typed
- *   Offers      what this component offers on the Scope room sheet - the
+ *   Offers      what this component offers on the Scope Scope Sheet - the
  *               cost items a seller can pick for it - and what each one is
  *               priced per (`component_type_offers`). The one place the
- *               offer is decided; the room sheet and the builder read it.
+ *               offer is decided; the Scope Sheet and the builder read it.
  *
  * Lengths are typed in whatever unit the row uses and are in feet inside a
  * formula, so multiplying two lengths gives square feet.
@@ -84,7 +84,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
   }, [load]);
 
   const problems = useMemo(() => (costing ? validateCosting(costing) : []), [costing]);
-  // How each offered item will behave on the room sheet, from the same
+  // How each offered item will behave on the Scope Sheet, from the same
   // rule the sheet and the quotation use.
   const shapes = useMemo(
     () => shapeOptions(lines.map((l) => ({ cost_item_id: l.cost_item_id, quantity_key: l.quantity_key, auto: l.auto, ask_as: l.ask_as })), lines.map((l) => ({ id: l.cost_item_id, category_id: l.category_id, unit_code: l.unit_code }))),
@@ -167,7 +167,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
     <PageLayout isLoading={!costing} loadingText="Loading…">
       <PageHeader
         title={name || "Component"}
-        subtitle="How this component is measured, what it offers on the room sheet, and what each item is priced per. Lengths are in feet inside a formula, whatever unit was typed."
+        subtitle="How this component is measured, what it offers on the Scope Sheet, and what each item is priced per. Lengths are in feet inside a formula, whatever unit was typed."
         basePath={{ label: "Settings", href: "/dashboard/settings" }}
         breadcrumbs={[
           { label: "Catalogue", href: "/dashboard/settings/catalogue" },
@@ -250,7 +250,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
                             <input
                               value={f.question ?? ""}
                               placeholder='Ask it as a question, e.g. "Any blind corners?" (optional)'
-                              title="With answers below, the room sheet asks this instead of showing a number box."
+                              title="With answers below, the Scope Sheet asks this instead of showing a number box."
                               onChange={(e) => setField(i, { question: e.target.value || undefined })}
                               className="px-2 py-1.5 text-xs border border-slate-200 rounded-md outline-none focus:border-blue-400"
                             />
@@ -364,9 +364,9 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
               <section className="rounded-lg border border-slate-200 bg-white">
                 <div className="px-4 py-3 border-b border-slate-100 flex items-start gap-3">
                   <div className="flex-1">
-                    <h2 className="text-sm font-semibold text-slate-900">What it offers on the room sheet</h2>
+                    <h2 className="text-sm font-semibold text-slate-900">What it offers on the Scope Sheet</h2>
                     <p className="text-xs text-slate-500">
-                      The items a seller can pick for a {name || "component"} of this type, what each is priced per, and how the room sheet asks for it. <b>One of these</b> makes the items of a group answers to one question; <b>How many</b> is a thing you count with a × n; <b>Automatic</b> prices it from the measurement with nothing to tap, and is only right for a quantity that can be 0. Left to <b>work it out</b>, a per-piece item with no quantity is counted and everything else is a question. Adding and removing take effect at once; Save is for the rule and these dropdowns.
+                      The items a seller can pick for a {name || "component"} of this type, what each is priced per, and how the Scope Sheet asks for it. <b>One of these</b> makes the items of a group answers to one question; <b>How many</b> is a thing you count with a × n; <b>Automatic</b> prices it from the measurement with nothing to tap, and is only right for a quantity that can be 0. Left to <b>work it out</b>, a per-piece item with no quantity is counted and everything else is a question. Adding and removing take effect at once; Save is for the rule and these dropdowns.
                     </p>
                   </div>
                   <button type="button" onClick={() => setPicking((p) => !p)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0">
@@ -395,7 +395,7 @@ export default function ComponentCostingPage({ params }: { params: Promise<{ id:
                   </div>
                 )}
                 {lines.length === 0 ? (
-                  <p className="px-4 py-6 text-xs text-slate-400">This component offers nothing yet - add items from the catalogue and they appear on every room sheet that has one.</p>
+                  <p className="px-4 py-6 text-xs text-slate-400">This component offers nothing yet - add items from the catalogue and they appear on every Scope Sheet that has one.</p>
                 ) : (
                   <ul className="divide-y divide-slate-100">
                     {lines.map((l) => {

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * One room sheet: a space opened out, with its components inside it. A
+ * One Scope Sheet: a space opened out, with its components inside it. A
  * slide-over from the right, so the list stays behind it, with Previous /
  * Next so a meeting can walk the scope room by room. No tabs (2026-09-18,
  * after a tabbed version with the same headings at two depths read as
@@ -566,7 +566,7 @@ function Options({
   );
 }
 
-/** One component on the room sheet: finish, what is arriving from whom, pictures, its thread. */
+/** One component on the Scope Sheet: finish, what is arriving from whom, pictures, its thread. */
 function ComponentCard({
   c,
   chosen,
@@ -857,7 +857,7 @@ export function ScopeItemPanel({
   onReload,
   costingByType,
 }: {
-  /** The space being shown - one room sheet. Components sit inside it. */
+  /** The space being shown - one Scope Sheet. Components sit inside it. */
   item: PropertyScopeItem;
   items: PropertyScopeItem[];
   propertyId: string;

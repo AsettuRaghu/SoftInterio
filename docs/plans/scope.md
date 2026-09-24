@@ -52,7 +52,7 @@ references, discussion and changes.
 ## The third level: cost items (2026-09-18)
 Space → Component → Cost item, the quotation's own tree. A component's
 options are the cost items the quotation templates list for its type,
-grouped by category; on the room sheet one tap = considering, two = chosen,
+grouped by category; on the Scope Sheet one tap = considering, two = chosen,
 three = clear. Never a price on the sheet. Chosen items become line items
 when the quotation starts from the scope or *Bring in from scope* runs.
 

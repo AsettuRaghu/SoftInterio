@@ -593,7 +593,7 @@ export default function QuotationDetailPage() {
    * is another version of THIS price and supersedes it when approved, while a
    * duplicate is a second offer standing beside it. It is what the scope's
    * second preference used to be for, retired 2026-09-24 in favour of doing it
-   * on a document instead of on the room sheet.
+   * on a document instead of on the Scope Sheet.
    */
   const handleDuplicate = async () => {
     if (!quotation || isDuplicating) return;

@@ -2,7 +2,7 @@
  * How many questions each component of a property still has to be asked.
  *
  * One read for the whole property, shared by the Scope list (the amber
- * "2 to ask" on a row), the room sheet's header and `scopeReadiness` - so
+ * "2 to ask" on a row), the Scope Sheet's header and `scopeReadiness` - so
  * the number on the row, the number in the sheet and the reason the stage
  * is refused can never disagree.
  *

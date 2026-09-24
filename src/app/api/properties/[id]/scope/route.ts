@@ -92,7 +92,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // What each component still has to be asked, so the list can show it
-    // without opening every room sheet.
+    // without opening every Scope Sheet.
     const unasked = await unaskedByComponent(supabase, propertyId);
     const items = (data || []).map((r) => {
       const q = unasked.get(r.id as string);

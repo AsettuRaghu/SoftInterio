@@ -1,6 +1,6 @@
 /**
  * The shape of a component's options - shared by the options route (what
- * the room sheet draws), the component page and the scope-to-quotation
+ * the Scope Sheet draws), the component page and the scope-to-quotation
  * copy (what becomes a line), so none of them disagree about what a tap
  * means. The options themselves are `component_type_offers`: one row per
  * item a component type offers, with what it is priced per.

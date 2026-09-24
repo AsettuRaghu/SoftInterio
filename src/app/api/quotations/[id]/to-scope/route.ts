@@ -9,7 +9,7 @@ type RouteParams = { params: Promise<{ id: string }> };
  * POST /api/quotations/[id]/to-scope - "Add to the scope".
  *
  * The other direction, and the only writing it does: cost items priced on
- * this quotation that the room sheet does not list become chosen
+ * this quotation that the Scope Sheet does not list become chosen
  * choices on the matching scope component. A quotation may be ahead of the
  * scope as easily as behind it - somebody adds a line in the builder - and
  * until now nothing said so, let alone offered to put it right.
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const drift = await scopeDrift(supabase, user.tenantId, id, quotation.lead_id, quotation.project_id);
   const wanted = drift.not_in_scope.filter((l) => l.cost_item_id && l.scope_item_id);
   if (wanted.length === 0) {
-    return NextResponse.json({ success: true, added: 0, message: "Everything priced here is already on the room sheet." });
+    return NextResponse.json({ success: true, added: 0, message: "Everything priced here is already on the Scope Sheet." });
   }
 
   const [{ data: items }, { data: parents }] = await Promise.all([
@@ -65,6 +65,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   return NextResponse.json({
     success: true,
     added,
-    message: added === 0 ? "Already on the room sheet." : `Added ${added} item${added === 1 ? "" : "s"} to the room sheet.`,
+    message: added === 0 ? "Already on the Scope Sheet." : `Added ${added} item${added === 1 ? "" : "s"} to the Scope Sheet.`,
   });
 }

@@ -41,7 +41,7 @@ real quotation.
 `lib/quotations/scope-drift.ts` reads, for one quotation, how far the
 scope has moved: **additions** (a dry run of `copyScopeToQuotation`),
 **resized** components, **dropped** lines (no longer chosen), **not_ours**,
-**not_in_scope** - lines priced here that the room sheet does not list,
+**not_in_scope** - lines priced here that the Scope Sheet does not list,
 which is the quotation being *ahead* of the scope - and the last history
 stamp. `POST /api/quotations/[id]/to-scope` ("Add to the scope") writes
 those back as chosen items; like the pull the other way it only ever adds.
@@ -49,7 +49,7 @@ those back as chosen items; like the pull the other way it only ever adds.
 **A line carries its provenance through the builder.** `metadata.
 scope_item_id` and `auto` are mapped onto the `LineItem` and written back
 on save - the save used to build a fresh metadata object, so opening the
-builder once wiped every line's link to the room sheet and a quotation
+builder once wiped every line's link to the Scope Sheet and a quotation
 read as full of items "not in the scope" that the scope had produced.
 An item the offer marks `auto` is never a builder addition, even though
 no scope row names it.
@@ -73,7 +73,7 @@ answer either.
 have no value on the row, where width / height / length come from the
 row's own size columns and a field with a **default** counts as filled.
 Read in three places - the Scope tab's row (an amber "2 not measured"
-button that opens the room sheet), the room sheet's Measurements (amber
+button that opens the Scope Sheet), the Scope Sheet's Measurements (amber
 label and box per blank, and "not measured" on the closed component), and
 `scopeReadiness`, which now refuses **proposal_discussion** until every
 component of ours whose type has a rule is measured.
@@ -92,7 +92,7 @@ the measurements through `splitMeasures`, the PATCH and the jsonb column with
 no second store - and because the sheet, the builder's totals and
 `copyScopeToQuotation` all read `quantify`, every one of them honours it for
 free. The rule is still evaluated: `ruled` carries what it said and
-`overridden` which keys were changed, so the room sheet shows the number in
+`overridden` which keys were changed, so the Scope Sheet shows the number in
 amber with **rule says 30** beside it, one press to put it back. A tall pair
 of doors takes six hinges whatever the formula says (2026-09-23).
 
@@ -111,7 +111,7 @@ and the loft height stay 0: those are nothing until somebody sees the room.
 The test is whether the trade would answer the same way without asking the
 customer.
 
-**A field with a default is not shown.** The room sheet asks for the size
+**A field with a default is not shown.** The Scope Sheet asks for the size
 and anything the rule cannot work out for itself; everything else is one
 line - "Taking depth 600 mm · shutters 8 · exposed sides 0 · *adjust*" -
 which opens the boxes only when somebody wants to change them, and opens
@@ -343,14 +343,14 @@ the "× n" stepper) - two wooden drawers, one tandem box are three rows with
 their own counts - and the copy makes a line of that many. The list row
 shows the component's name and nothing else - a chip of chosen items was
 tried and read as clutter (2026-09-19) - and never lists cost-item rows
-themselves; the room sheet is where choices are seen. The finish chips
+themselves; the Scope Sheet is where choices are seen. The finish chips
 and the "preferred finish" ordering in the builder went with this; a finish
 is now one option category among the others.
 
 ### A grade answers every graded question at once
 
 Built 2026-09-23, step one of "blanket first, refine later". **Apply a
-grade** on the Scope header (the whole property) or in a room sheet (that
+grade** on the Scope header (the whole property) or in a Scope Sheet (that
 room) answers every graded question at that tier -
 Budget · Standard · Premium · Luxury, or whatever words the tenant's ladder
 uses, since `quality_tier` is text. **It needs no configuration at all**: the
@@ -388,7 +388,7 @@ Step two, built the same day. `scope_packages` + `scope_package_items`
 Carcass - Standard* - with `quantity` null for an answer to a question and a
 number for an accessory given as standard. Settings → Catalogue →
 **Packages**, one editor page per package asking exactly the questions the
-room sheet asks, through `shapeOptions`, so the two cannot disagree about
+Scope Sheet asks, through `shapeOptions`, so the two cannot disagree about
 what is a question, what is counted and what prices itself.
 
 **Seeded from a tier on creation**, which is the difference between ten
@@ -459,7 +459,7 @@ default is a conversation; over-selling by default is a quotation nobody can
 defend. If declining ever needs to be expressible, that is a real feature and
 not a workaround.
 
-**The room sheet asks questions, not for data** (2026-09-23: "let us just
+**The Scope Sheet asks questions, not for data** (2026-09-23: "let us just
 have sort of questionnaire thing so that the seller can collect as much
 information as possible"). Same model, nothing new stored - the options
 ARE the answers:
@@ -515,14 +515,14 @@ options that are neither counted nor automatic, plus the lone counted item
 a category holds on its own, which the sheet draws as "Sensor light? No ·
 Yes". Counted accessories are an "Add:" row, not a question; an automatic
 item states itself. `lib/scope/unasked.ts` runs it over a whole property in
-one read, and the Scope list's amber **"2 to ask"**, the room sheet's
+one read, and the Scope list's amber **"2 to ask"**, the Scope Sheet's
 header, the unanswered question in amber, and `scopeReadiness` all count
 through it - so the row, the sheet and the refusal can never disagree.
 Proposal discussion now refuses with "Finish the walkthrough - 7 questions
 still to ask on …" beside the measurement gate. On this tenant a wardrobe
 asks 5, a kitchen base unit 7, a TV unit 8.
 
-**Each space opens out as a room sheet** (`ScopeItemPanel`, the
+**Each space opens out as a Scope Sheet** (`ScopeItemPanel`, the
 speech-bubble on the row, or **Walkthrough** from the header with ←/→).
 No tabs - a tabbed version with the same four headings at two depths was
 tried and read as noise (2026-09-18). The room has its pictures (Documents
@@ -1336,7 +1336,7 @@ rule was seeded where such types existed; the tenant edits or replaces it.
   ARE the row's size columns (`mergeMeasures` / `splitMeasures` in
   `lib/costing/component-costing`); `measures` holds only the rule's other
   fields. The Scope list asks width × height on a component (length × width
-  on a space, its floor); the room sheet's Measurements show the same two
+  on a space, its floor); the Scope Sheet's Measurements show the same two
   numbers pre-filled plus the rest. The builder does the same: a rule's
   width/height fields write the component's own size, so a line priced on
   the one face and a rule-priced line read one number.
@@ -1345,7 +1345,7 @@ rule was seeded where such types existed; the tenant edits or replaces it.
   `quality_tier` stays on the row, read by nothing.
 - **What a component offers is a table on the type**:
   `component_type_offers` (`20260920090000`) - one row per item a
-  component type offers on the room sheet, with `quantity_key`, what that
+  component type offers on the Scope Sheet, with `quantity_key`, what that
   item is priced per on it. Edited on the component's own page (Settings →
   Catalogue → Components → calculator, "What it offers on the room
   sheet": add / remove, a plain word for how each behaves from
@@ -1486,7 +1486,7 @@ field, and "Cost Items" read as a list of what things cost us.
 
 **What one is, in a sentence: one thing you sell, in one unit, at one
 rate.** It wears three hats and they are the same row - an **answer** on
-the room sheet ("Which carcass?" -> BWP Ply), a **line** on the quotation
+the Scope Sheet ("Which carcass?" -> BWP Ply), a **line** on the quotation
 with a quantity and a snapshotted rate, and a **description** in the
 printed document's Material column.
 
@@ -1646,7 +1646,7 @@ account of what and why is the Scope to Quotation Handbook artifact
 - **Every new cost item's description says "Starting rate - edit."** They
   are placeholders for the tenant's finance to replace, not prices.
 - **One "<Component> - Options Menu" template per component type.** The
-  room sheet's options are the distinct cost items across the active
+  Scope Sheet's options are the distinct cost items across the active
   templates for the type, so a type absent from every template offers
   nothing to pick. These templates exist to make every component pickable
   on day one; a business prunes them like any template.
@@ -3014,7 +3014,7 @@ correct quotation is the worse of the two errors.
 The message names the lines and where they are when it does fire, because
 "2 lines still need a measurement" on a 97-line quotation is true, blocking and
 useless. **A zero-amount line still prints**, though - nothing filters it out of
-the PDF - so an item chosen on the room sheet whose rule derives nothing is worth
+the PDF - so an item chosen on the Scope Sheet whose rule derives nothing is worth
 deleting from the document rather than leaving at ₹0.
 
 **"1 item no longer chosen" was the drift notice reading a deleted row id.**
@@ -3022,7 +3022,7 @@ deleting from the document rather than leaving at ₹0.
 from, and that row does not survive being re-chosen: one answer per question is
 kept by **deleting** whatever else answered it, so clearing a carcass and picking
 the same one again produces a new row with a new id. Every line pointing at the
-old id then read as dropped while the room sheet said exactly what it always had.
+old id then read as dropped while the Scope Sheet said exactly what it always had.
 QT-20260924-001's Master Bedroom wardrobe reported "Carcass - Standard no longer
 chosen" against a scope that had chosen Carcass - Standard throughout, on a row
 created an hour after the quotation.
@@ -3035,6 +3035,30 @@ hint and the cost item as the answer - a line is dropped only when the scope no
 longer chooses that item on that component, so a real swap still reports. The
 same set was already being computed one branch away for `not_in_scope`.
 
+### The Scope Sheet is the name; "room sheet" was the old one
+
+Renamed on 2026-09-24 at the user's request. The tab is **Scope**, so the panel
+inside it is the **Scope Sheet** - one name for one thing, and one that says
+where to find it. It was called the "room sheet" in 75 places across the code,
+its comments, this file and `docs/plans/scope.md`, and all of them moved
+together: a term renamed in the UI and left in the comments is how the next
+person ends up unsure whether they are two different things.
+
+**The applied migrations were deliberately not rewritten.** Twenty-two of their
+SQL comments still say "room sheet", and they are the record of what was true
+when each was written - editing an applied migration changes the history without
+changing the database.
+
+Nothing in storage carried the old word, which is why a clean rename was possible
+here and is not for Playbook / procedure: there the tables, the enum and the RPC
+are named `procedure_*` and only the words above storage say Playbook. The rule
+is the same in both cases - **do not fix a mismatch by half.**
+
+On the create dialog the option reads **"Based on Scope Sheet (recommended)"**
+rather than "The Scope Sheet", and the templates read "Based on template: …",
+because a dropdown is read collapsed: the chosen value has to say what it means
+without the label above it.
+
 ### What a quotation starts from is asked once, and honestly
 
 Creating from the scope has been the default since 2026-09-18
@@ -3043,13 +3067,13 @@ read **"Start from scratch"**, which is the one thing it does not do. So "we do
 not see any option to create the quotation from the current scope" (2026-09-24)
 was true of the label and false of the behaviour, which is worse than a missing
 feature: the person picks a template to avoid the blank document they were
-promised, and loses the room sheet they had just filled in.
+promised, and loses the Scope Sheet they had just filled in.
 
-The control is now "What should it start from?", with **"The room sheet
+The control is now "What should it start from?", with **"The Scope Sheet
 (recommended)"** as the default and the templates beneath it. On a standalone
 quotation there is no property and so no scope, and "Start from scratch" is then
 the honest word. Choosing a template says so in amber, because it replaces the
-room sheet rather than adding to it.
+Scope Sheet rather than adding to it.
 
 ### One line, one arithmetic
 
@@ -4088,7 +4112,7 @@ worth it before a second subscriber exists.
   curl it** - a 404 beside a 401 on its neighbour is the whole diagnosis, and
   a restart is the fix.
 - **A `const` read inside an arrow function is not checked for use-before-
-  declaration.** `CHOICES` sat in the room sheet's render block six lines
+  declaration.** `CHOICES` sat in the Scope Sheet's render block six lines
   *below* the three `costing.fields.filter((f) => CHOICES[f.key])` calls that
   read it. TypeScript says nothing - the reads are inside arrow functions, so
   it cannot know when they run - and `tsc`, eslint and the tests were all

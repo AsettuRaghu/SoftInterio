@@ -1,7 +1,7 @@
 /**
  * What a component still has to be asked.
  *
- * The room sheet is a questionnaire, so "we asked and they said no" and
+ * The Scope Sheet is a questionnaire, so "we asked and they said no" and
  * "nobody has asked yet" are different answers - and until 2026-09-23 they
  * were the same blank. "Not needed" and "No" merely cleared the picks, so
  * a wardrobe nobody had discussed looked exactly like one whose customer

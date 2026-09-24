@@ -14,7 +14,7 @@ type RouteParams = { params: Promise<{ id: string }> };
  * GET  -> { costing, lines: [{ cost_item_id, name, unit_code, category, category_id, quantity_key }],
  *           catalogue: [{ id, name, unit_code, category, category_id }] }
  * PUT  { costing?, lines?: [{ cost_item_id, quantity_key | null, ask_as?, auto? }], add?: [cost_item_id], remove?: [cost_item_id] }
- *         `ask_as`: one_of | count | auto - how the room sheet asks for it.
+ *         `ask_as`: one_of | count | auto - how the Scope Sheet asks for it.
  *         Null leaves it to the old inference. `auto` is kept in step with it.
  *         `auto`: the item prices itself from the measurement with nothing
  *         to tap - only meaningful with a quantity_key, and only right for

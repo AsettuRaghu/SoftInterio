@@ -44,7 +44,7 @@ export interface CostingField {
    */
   default?: number | string;
   /**
-   * How the room sheet asks for a count, when a handful of answers is kinder
+   * How the Scope Sheet asks for a count, when a handful of answers is kinder
    * than a number box: "Any blind corners? None · One (L-shaped) · Two
    * (U-shaped)". The seller never types a number whose meaning they then
    * have to work out.

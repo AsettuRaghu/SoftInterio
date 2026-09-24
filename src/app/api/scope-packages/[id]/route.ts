@@ -10,7 +10,7 @@ type RouteParams = { params: Promise<{ id: string }> };
  *
  * GET   -> { package, entries, catalogue }
  *          `catalogue` is every component type with what it offers, already
- *          shaped - the editor asks the same questions the room sheet does,
+ *          shaped - the editor asks the same questions the Scope Sheet does,
  *          because a package is answers to those questions and nothing else.
  * PATCH { name?, description?, is_active?, entries? }
  *          `entries` replaces the lot: [{ component_type_id, cost_item_id, quantity? }].

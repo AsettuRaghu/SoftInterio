@@ -30,7 +30,7 @@ const offer = [
   { cost_item_id: "rod", quantity_key: null },
 ];
 
-describe("shapeOptions - what a tap on the room sheet means", () => {
+describe("shapeOptions - what a tap on the Scope Sheet means", () => {
   const s = shapeOptions(offer, items);
 
   it("two grades priced per the same quantity in one category are alternatives", () => {

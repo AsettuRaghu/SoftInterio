@@ -63,7 +63,7 @@ interface CostItemCategory {
   id: string;
   name: string;
   description: string | null;
-  /** How the room sheet asks for it, and the decision it shares with others. */
+  /** How the Scope Sheet asks for it, and the decision it shares with others. */
   question?: string | null;
   decision?: string | null;
   is_active: boolean;
@@ -1480,7 +1480,7 @@ export default function QuotationsConfigPage() {
                           each cost line is priced per - the tenant's rule. */}
                       <Link
                         href={`/dashboard/settings/catalogue/components/${component.id}/costing`}
-                        title="How it is measured, what it offers on the room sheet, and what each item is priced per"
+                        title="How it is measured, what it offers on the Scope Sheet, and what each item is priced per"
                         className={`w-6.5 h-6.5 flex items-center justify-center rounded-md border transition-all ${
                           component.config_schema && (component.config_schema as { fields?: unknown[] }).fields?.length
                             ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
@@ -1727,7 +1727,7 @@ export default function QuotationsConfigPage() {
                         stand out in the list. */}
                     <button
                       onClick={() => setPicturesOf({ id: item.id, name: item.name })}
-                      title={item.picture_count ? `${item.picture_count} picture${item.picture_count === 1 ? "" : "s"} - shown on the room sheet while choosing` : "No pictures yet - add some for the room sheet"}
+                      title={item.picture_count ? `${item.picture_count} picture${item.picture_count === 1 ? "" : "s"} - shown on the Scope Sheet while choosing` : "No pictures yet - add some for the Scope Sheet"}
                       className={`relative p-1.5 rounded-lg transition-colors ${item.picture_count ? "text-emerald-600 hover:bg-emerald-50" : "text-slate-300 hover:text-slate-600 hover:bg-slate-200"}`}
                     >
                       <PhotoIcon className="w-4 h-4" />
@@ -2158,7 +2158,7 @@ export default function QuotationsConfigPage() {
                 </div>
               )}
 
-              {/* How the room sheet asks for this category, and which other
+              {/* How the Scope Sheet asks for this category, and which other
                   categories it is asked alongside. Both belong to the
                   category record, so they are edited here - they were once
                   rendered in the filter bar by mistake. */}
@@ -2166,7 +2166,7 @@ export default function QuotationsConfigPage() {
                 <>
                   <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                      Question on the room sheet
+                      Question on the Scope Sheet
                       <span className="ml-1 font-normal text-slate-400">optional</span>
                     </label>
                     <input

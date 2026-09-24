@@ -62,7 +62,7 @@ export interface LineItem {
   derivedQuantity?: number | null;
   /** Which scope choice this line came from, and whether the rule priced it
    *  without anyone tapping. Carried through the builder so a save does not
-   *  wipe the bridge back to the room sheet. */
+   *  wipe the bridge back to the Scope Sheet. */
   scopeItemId?: string | null;
   auto?: boolean;
   costItemId: string;

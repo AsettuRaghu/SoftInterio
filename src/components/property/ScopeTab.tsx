@@ -317,7 +317,7 @@ export function ScopeTab({
     .filter((i) => !i.parent_id && !i.component_type_id)
     .sort(byOrder);
   // Cost-item rows (a component's chosen items) are not listed here; the
-  // room sheet shows them. They still travel in `items` for the panel.
+  // Scope Sheet shows them. They still travel in `items` for the panel.
   const childrenOf = (id: string) =>
     items.filter((i) => i.parent_id === id && !i.cost_item_id).sort(byOrder);
 

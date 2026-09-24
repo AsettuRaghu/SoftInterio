@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Filling in a package: the same questions the room sheet asks, answered once
+ * Filling in a package: the same questions the Scope Sheet asks, answered once
  * for the business instead of once per customer.
  *
  * Grouped by component type, and inside that by question, using

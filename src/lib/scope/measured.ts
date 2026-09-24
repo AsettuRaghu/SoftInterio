@@ -8,7 +8,7 @@ import { hasCosting, mergeMeasures, readCosting, type ComponentCosting } from "@
  * shutter count, a corner solution with no corner count. The first real
  * quotation had nine components with nothing typed and eight lines at
  * zero (2026-09-22), so this is read in three places: the Scope tab marks
- * the row, the room sheet marks the blanks, and the readiness gate refuses
+ * the row, the Scope Sheet marks the blanks, and the readiness gate refuses
  * Proposal discussion until they are filled.
  *
  * A length field is exempt when the row's own size covers it (width and

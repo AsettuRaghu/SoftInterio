@@ -89,7 +89,7 @@ export default function LibraryPage() {
   const [collectionId, setCollectionId] = useState<string | null>(null);
   const [customerView, setCustomerView] = useState(false);
 
-  // Opened with a question already asked - from the room sheet: "show me
+  // Opened with a question already asked - from the Scope Sheet: "show me
   // the shutter finishes", in customer view. Read once, on arrival.
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
