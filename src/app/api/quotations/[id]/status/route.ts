@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
+import { lineIsIncomplete } from "@/lib/quotations/line-completeness";
 import {
   logQuotationActivity,
   quotationLabel,
@@ -165,35 +166,28 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         )
         .eq("quotation_id", id);
 
-      const unpriced = (lines || []).filter((li) => {
-        const unit = (li.unit_code || "").toLowerCase();
-        if (!li.rate || Number(li.rate) <= 0) return true;
-
-        /**
-         * **A rule-priced line has no length or width, by design**, so asking
-         * for them calls a correctly priced line incomplete.
-         *
-         * `metadata.quantity_key` means the quantity comes from the component's
-         * costing rule - 95.91 sqft of front elevation derived from its size -
-         * and is stored on the line, while length and width are meaningless for
-         * it. Demanding them here refused to SEND a quotation that was entirely
-         * right: on QT-20260924-001, 45 of 97 lines were reported as needing a
-         * measurement and every one of them had a quantity, a rate and an
-         * amount, with zero lines genuinely missing a rate. That was the whole
-         * of "45 lines still need a measurement" (2026-09-24).
-         *
-         * This is the same bug that produced the amber "43 lines need size"
-         * strip in the builder, fixed there two days earlier and left here -
-         * which is the argument for the two tests agreeing. The honest question
-         * for a ruled line is whether the rule produced anything.
-         */
-        if (li.metadata?.quantity_key) return !li.quantity || Number(li.quantity) <= 0;
-
-        if (["sqft", "sqm"].includes(unit)) return !li.length || !li.width;
-        if (["rft", "rm"].includes(unit)) return !li.length;
-        if (["nos", "set", "kg", "ltr"].includes(unit)) return !li.quantity;
-        return false;
-      });
+      /**
+       * One rule, in `lib/quotations/line-completeness`, shared with the
+       * builder's amber strip - because this test has been written twice and
+       * been wrong twice in the same way. See that file for the history.
+       *
+       * The rule is deliberately NOT passed here: the server does not load
+       * component types, and `deriveQuantities` collapses "the rule says zero"
+       * and "the rule has no such quantity" both to 0, so guessing from the
+       * stored number alone is what refused to send 45 correct lines. Without
+       * the rule, a ruled line is judged on its rate - the builder, which has
+       * the rule, is where the finer warning belongs.
+       */
+      const unpriced = (lines || []).filter((li) =>
+        lineIsIncomplete({
+          rate: li.rate,
+          quantityKey: (li.metadata as { quantity_key?: string } | null)?.quantity_key ?? null,
+          quantity: li.quantity,
+          unitCode: li.unit_code,
+          length: li.length,
+          width: li.width,
+        })
+      );
 
       if (unpriced.length > 0) {
         /**

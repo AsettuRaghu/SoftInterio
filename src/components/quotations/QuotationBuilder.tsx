@@ -25,6 +25,7 @@ import { BuilderSidebar } from "@/components/quotations/BuilderSidebar";
 import { Toast } from "@/components/ui/Toast";
 import { useDefaultMeasurementUnit } from "@/lib/settings/use-default-unit";
 import { deriveQuantities } from "@/lib/costing/derive-quantities";
+import { lineShortfall } from "@/lib/quotations/line-completeness";
 import { RepriceModal } from "@/components/quotations/RepriceModal";
 import { PrintQuotationModal } from "@/components/quotations/PrintQuotationModal";
 import { ShareQuotationModal } from "@/components/quotations/ShareQuotationModal";
@@ -1352,30 +1353,17 @@ export function QuotationBuilder({
       space.components.forEach((comp) => {
         const needsSize: string[] = [];
         let missing = 0;
+        // The component's own rule, so "the rule priced it at nothing" can be
+        // told from "the rule cannot price this at all" - see
+        // lib/quotations/line-completeness, which is tested for exactly this.
+        const ruleQuantities = comp.costing
+          ? new Set((comp.costing.quantities ?? []).map((q) => q.key))
+          : null;
         comp.lineItems.forEach((item) => {
-          const noRate = !item.rate || item.rate <= 0;
-          // Priced per a quantity of the rule: the component's measurements
-          // size it, so the line is short only if the rule yielded nothing.
-          if (item.quantityKey) {
-            const noDerived = !(item.derivedQuantity && item.derivedQuantity > 0);
-            if (noRate || noDerived) {
-              missing += 1;
-              if (noDerived) needsSize.push("a measurement");
-              if (noRate) needsSize.push("rate");
-            }
-            return;
-          }
-          const type = getMeasurementInfo(item.unitCode).type;
-          const noArea =
-            type === "area" &&
-            (!item.length || item.length <= 0 || !item.width || item.width <= 0);
-          const noLength = type === "length" && (!item.length || item.length <= 0);
-          const noQty = type === "quantity" && (!item.quantity || item.quantity <= 0);
-          if (noRate || noArea || noLength || noQty) {
+          const short = lineShortfall(item, ruleQuantities);
+          if (short.length) {
             missing += 1;
-            if (noArea || noLength) needsSize.push("size");
-            if (noQty) needsSize.push("quantity");
-            if (noRate) needsSize.push("rate");
+            short.forEach((w) => needsSize.push(w));
           }
         });
         if (missing > 0) {

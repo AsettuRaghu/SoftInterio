@@ -2981,22 +2981,41 @@ which the merge above would make moot.
 Found 2026-09-24 while the user was testing, and both had the same effect: the
 app reported a problem with a document that was entirely correct.
 
-**"45 lines still need a measurement, quantity or rate" blocked sending.** The
-guard in `PATCH /api/quotations/[id]/status` demanded a length and a width for
-every sqft line - and **a rule-priced line has neither, by design**: its quantity
-comes from the component's costing rule and is stored on the line, while length
-and width are meaningless for it. On QT-20260924-001, 45 of 97 lines were
-reported incomplete and **every one had a quantity, a rate and an amount**; zero
-lines genuinely lacked a rate. A line carrying `metadata.quantity_key` is now
-judged on whether the rule produced anything, which is the only honest question
-to ask it.
+**"45 lines still need a measurement, quantity or rate" blocked sending**, and
+then "2 lines still need details" nagged on every save. Both were the same test
+written twice and wrong twice, which is why it now lives once, in
+**`lib/quotations/line-completeness.ts`**, with a test file naming each
+regression:
 
-This is the **same bug** as the amber "43 lines need size" strip, fixed in the
-builder two days earlier and left here - which is the argument for the two tests
-agreeing. After the fix two lines remain and they are real: a *Blind Corner
-Pull-out* priced per `corners` on a kitchen with no corners, deriving 0. **The
-message now names the lines** and where they are, because "2 lines still need a
-measurement" on a 97-line quotation is true, blocking, and useless.
+1. The builder's amber strip demanded a length and width for every area line, so
+   43 rule-priced lines read as "need size" (2026-09-22).
+2. The send guard had the identical bug: 45 of QT-20260924-001's 97 lines were
+   called incomplete and **every one had a quantity, a rate and an amount**,
+   with zero lines genuinely missing a rate.
+3. Both then read a derived quantity of **0** as a missing measurement - which
+   it is not, and which is what kept appearing "every time without any change".
+
+The third is the one worth understanding. `corners` on the kitchen rules is a
+field with `default: 0`, because blind corners are exactly the case this file
+describes as **0 where the honest answer is "only if somebody says so"**. So a
+Blind Corner Pull-out priced per `corners` on a kitchen with no corners derives
+0: the rule ran, and the answer is *none needed*. So the distinction that matters
+is **"the rule cannot price this"** against **"the rule priced it at nothing"** -
+and `deriveQuantities` collapses both to 0 (`values[key] ?? 0`), so only the
+rule's own list of quantities can tell them apart.
+
+That is why `lineShortfall(item, ruleQuantities)` takes the rule as a parameter.
+The builder passes `comp.costing`'s quantity keys and gets the precise answer; the
+**server deliberately passes nothing**, because it does not load component types
+and guessing from the stored number is what refused to send 45 correct lines - so
+without the rule a ruled line is judged on its rate alone. Refusing to send a
+correct quotation is the worse of the two errors.
+
+The message names the lines and where they are when it does fire, because
+"2 lines still need a measurement" on a 97-line quotation is true, blocking and
+useless. **A zero-amount line still prints**, though - nothing filters it out of
+the PDF - so an item chosen on the room sheet whose rule derives nothing is worth
+deleting from the document rather than leaving at ₹0.
 
 **"1 item no longer chosen" was the drift notice reading a deleted row id.**
 `metadata.scope_item_id` points at the `property_scope_items` ROW a line came
@@ -4004,7 +4023,9 @@ not on the hot path and were left alone.
 customer's measurement into a price, none of which touch the database:
 the formula evaluator (`lib/costing/formula`), the costing rule
 (`quantify`, `validateCosting`, `mergeMeasures`), the option shapes
-(`lib/scope/options`) and the **public path allowlist**
+(`lib/scope/options`), **when a quotation line is incomplete**
+(`lib/quotations/line-completeness` - the one test that has now caught the same
+class of bug three times) and the **public path allowlist**
 (`lib/auth/public-paths`, where the test that matters is the one proving
 `/quotationsecret` is not public). Added 2026-09-21; the first run found that
 `validateCosting` refused a quantity sharing a field's key, which every
