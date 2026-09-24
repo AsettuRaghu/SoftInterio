@@ -179,6 +179,65 @@ builder and on the summary page, the `preference` option on
 without a real case asking** - and if a second document is wanted, that case
 is Duplicate + Reprice.
 
+### "Add to Scope Sheet" now works, and had never worked once
+
+The reverse direction - a line priced in the builder that the Scope Sheet does
+not list - was reported correctly and could not be acted on. Three faults in a
+row, found 2026-09-24 when a Study Table added to a quotation showed up in the
+notice with no way to put it on the sheet:
+
+1. **The button was hidden in the case that actually happens.** It rendered only
+   when `not_in_scope` held a line whose **component** already had a scope row -
+   and adding a whole component in the builder creates no scope row, so the
+   notice listed the lines and offered nothing. It now shows whenever anything
+   priced here is off the sheet.
+2. **`to-scope` filtered those lines out**, for the same reason, and answered
+   "nothing could be matched to a room on the sheet".
+3. **And the insert could never have succeeded anyway.**
+   `onConflict: "parent_id,cost_item_id"` names
+   `property_scope_items_one_choice`, which is a **partial** index
+   (`WHERE cost_item_id IS NOT NULL`) - and PostgREST cannot infer a partial
+   index, so every call came back "there is no unique or exclusion constraint
+   matching the ON CONFLICT specification". **The same trap as
+   `notifications.dedupe_key`**, written up in this file and then walked into
+   again. It reads the existing pairs and filters now, which also lets the reply
+   distinguish "added" from "already there".
+
+**It creates the component too.** Where the SPACE is on the sheet, the missing
+component is created under it from the quotation's own name, type, size **and
+`metadata.measures`** - the measures matter, or the row reports itself as
+"resized" the instant it exists, which is a silly thing to be told - and the
+quotation component gets `metadata.scope_item_id` written back, the same
+provenance pointer the pull the other way uses. Where the space is missing too
+there is nowhere to put it, and the reply says so: *"The room itself is not on the
+Scope Sheet yet (…). Add the room there first."*
+
+`component_ids` in the body narrows it to named components. Nothing sends it yet -
+the notice sweeps everything, and reports what it did - but it exists so an
+offer attached to one component does not have to add the rest.
+
+**The Scope tab still shows nothing about drift, on purpose.** Asked for on
+2026-09-24 and argued down: a line added in the builder is *normal*, not an
+error - the builder is the editor - so an alert there would be on most of the
+time, which is how the two false alarms above earned their reputation. The
+divergence is surfaced where it is created and where it can be fixed, on the
+quotation, which is also the screen that has to be defensible.
+
+### A read that swallows its error can report the opposite of the truth
+
+`scopeDrift` destructures `data` alone from six reads. When one of them named a
+column that does not exist - `quotation_components.measurement_unit`, which lives
+in `metadata` - the spaces came back null, the loop never ran, and the notice
+**confidently reported no drift at all**. For a thing whose entire job is to
+report a difference, that is the worst available failure: a quotation with
+nothing to say and a quotation that could not be read looked identical.
+
+The spaces read now throws on error. It is the third instance of this shape in
+two days - `lead_family_members` (a table that never existed), the `users!` embed
+whose constraint was missing, and this - so the rule is worth stating plainly:
+**where a silent empty result is indistinguishable from a real answer, check the
+error.**
+
 ### The customer summary is the scope as a page, and it carries no price
 
 `/scope-summary/[propertyId]?lead=|project=` (2026-09-21, "Customer

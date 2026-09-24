@@ -39,7 +39,29 @@ export interface ScopeDrift {
   dropped: { line: string; component: string }[];
   not_ours: { component: string; owner: string }[];
   /** Priced here, not on the Scope Sheet - with what it would take to add it back. */
-  not_in_scope: { line: string; component: string; cost_item_id: string | null; scope_item_id: string | null }[];
+  /**
+   * A line priced here that the Scope Sheet does not list.
+   *
+   * `scope_item_id` is the COMPONENT's scope row, and it is null for a whole
+   * component added in the builder - which is the common case, because adding a
+   * Study Table in the editor creates no scope row for it. `space_scope_id` is
+   * then what makes the line placeable: "Add to the Scope Sheet" can create the
+   * component under that space and hang the items off it. With neither there is
+   * nowhere to put it and a person has to decide.
+   */
+  not_in_scope: {
+    line: string;
+    component: string;
+    cost_item_id: string | null;
+    /** The component's own scope row, when it has one. */
+    scope_item_id: string | null;
+    /** The quotation component, so the builder can offer this on the thing itself. */
+    component_id: string | null;
+    component_name: string | null;
+    component_type_id: string | null;
+    /** The space's scope row, so a missing component can be created under it. */
+    space_scope_id: string | null;
+  }[];
   last_change: string | null;
   total: number;
 }
@@ -58,17 +80,33 @@ export async function scopeDrift(
   else if (projectId) propertyId = (await supabase.from("projects").select("property_id").eq("id", projectId).maybeSingle()).data?.property_id ?? null;
   if (!propertyId) return none;
 
-  const [dry, { data: scopeRaw }, { data: spaces }, { data: hist }, { data: autoOffers }, { data: types }] = await Promise.all([
+  const [dry, { data: scopeRaw }, { data: spaces, error: spacesError }, { data: hist }, { data: autoOffers }, { data: types }] = await Promise.all([
     copyScopeToQuotation(supabase, tenantId, quotationId, leadId, projectId, { dryRun: true }),
     supabase.from("property_scope_items").select("id, parent_id, name, scope_owner, choice_status, cost_item_id, width, height, length, measures, measurement_unit").eq("property_id", propertyId).eq("tenant_id", tenantId),
     supabase
       .from("quotation_spaces")
-      .select("id, name, components:quotation_components(id, name, component_type_id, width, height, metadata, lines:quotation_line_items(id, name, quotation_cost_item_id, metadata))")
+      // No `measurement_unit` column on quotation_components - the unit lives in
+      // `metadata.measurement_unit`. Naming it here cost an hour: the select
+      // failed, `spaces` came back null, the loop never ran and the whole notice
+      // silently reported no drift at all.
+      .select("id, name, metadata, components:quotation_components(id, name, component_type_id, width, height, metadata, lines:quotation_line_items(id, name, quotation_cost_item_id, metadata))")
       .eq("quotation_id", quotationId),
     supabase.from("property_scope_item_history").select("changed_at").eq("property_id", propertyId).order("changed_at", { ascending: false }).limit(1),
     supabase.from("component_type_offers").select("component_type_id, cost_item_id").eq("auto", true).eq("tenant_id", tenantId),
     supabase.from("component_types").select("id, config_schema").eq("tenant_id", tenantId),
   ]);
+  /**
+   * **Do not swallow this one.** Every read here destructures `data` alone, and
+   * when the spaces select named a column that does not exist the result was a
+   * notice confidently reporting NO drift - the worst possible failure for a
+   * thing whose entire job is to report a difference. A quotation with nothing
+   * to say and a quotation that could not be read must not look the same.
+   */
+  if (spacesError) {
+    console.error("[scope-drift] could not read the quotation's spaces", spacesError.message);
+    throw new Error(`Could not read the quotation for drift: ${spacesError.message}`);
+  }
+
   // An automatic item is priced by the rule without anyone tapping, so it is
   // never "added in the builder" even though no scope row names it.
   const autoFor = new Set(((autoOffers ?? []) as { component_type_id: string; cost_item_id: string }[]).map((o) => `${o.component_type_id}::${o.cost_item_id}`));
@@ -90,7 +128,7 @@ export async function scopeDrift(
   };
   const fmt = (v: number | null | undefined) => (v == null ? "—" : String(Math.round(Number(v) * 100) / 100));
 
-  for (const sp of (spaces ?? []) as Array<{ id: string; name: string; components: Array<{ id: string; name: string; component_type_id: string | null; width: number | null; height: number | null; metadata: { scope_item_id?: string; measurement_unit?: string; measures?: Record<string, number> } | null; lines: Array<{ name: string; quotation_cost_item_id: string | null; metadata: { scope_item_id?: string; auto?: boolean } | null }> | null }> | null }>) {
+  for (const sp of (spaces ?? []) as Array<{ id: string; name: string; metadata: { scope_item_id?: string } | null; components: Array<{ id: string; name: string; component_type_id: string | null; width: number | null; height: number | null; metadata: { scope_item_id?: string; measurement_unit?: string; measures?: Record<string, number> } | null; lines: Array<{ name: string; quotation_cost_item_id: string | null; metadata: { scope_item_id?: string; auto?: boolean } | null }> | null }> | null }>) {
     for (const c of sp.components ?? []) {
       const sid = c.metadata?.scope_item_id;
       const row = sid ? scope.get(sid) : undefined;
@@ -121,7 +159,16 @@ export async function scopeDrift(
           // Added in the builder: the quotation is ahead of the scope.
           const isAuto = !!c.component_type_id && !!l.quotation_cost_item_id && autoFor.has(`${c.component_type_id}::${l.quotation_cost_item_id}`);
           if (!isAuto && (!l.quotation_cost_item_id || !chosen.has(l.quotation_cost_item_id))) {
-            out.not_in_scope.push({ line: l.name, component: `${c.name} (${sp.name})`, cost_item_id: l.quotation_cost_item_id ?? null, scope_item_id: sid ?? null });
+            out.not_in_scope.push({
+              line: l.name,
+              component: `${c.name} (${sp.name})`,
+              cost_item_id: l.quotation_cost_item_id ?? null,
+              scope_item_id: sid ?? null,
+              component_id: c.id,
+              component_name: c.name,
+              component_type_id: c.component_type_id ?? null,
+              space_scope_id: sp.metadata?.scope_item_id ?? null,
+            });
           }
           continue;
         }

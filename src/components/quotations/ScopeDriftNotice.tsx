@@ -49,6 +49,8 @@ export function ScopeDriftNotice({
   const [open, setOpen] = useState(false);
   const [raising, setRaising] = useState(false);
   const [pushing, setPushing] = useState(false);
+  /** What the last "Add to Scope Sheet" did, in the server's own words. */
+  const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -88,7 +90,11 @@ export function ScopeDriftNotice({
     const res = await fetch(`/api/quotations/${quotationId}/to-scope`, { method: "POST" });
     const json = await res.json().catch(() => ({}));
     setPushing(false);
-    if (!res.ok) return setError(json.error || "Could not add these to the scope");
+    if (!res.ok) return setError(json.error || "Could not add these to the Scope Sheet");
+    // Say what happened even on success: "added 1 component and 2 items" and
+    // "the room itself is not on the Scope Sheet yet" are both worth reading,
+    // and the second is the only sign that nothing moved.
+    if (json.message) setNote(String(json.message));
     await load();
   };
 
@@ -121,9 +127,20 @@ export function ScopeDriftNotice({
         <span className="text-amber-800/80 truncate">· {parts.join(" · ")}</span>
         <span className="flex-1" />
         {error && <span className="text-red-700">{error}</span>}
-        {drift.not_in_scope.some((l) => l.cost_item_id && l.scope_item_id) && (
+        {!error && note && <span className="text-emerald-800">{note}</span>}
+        {/*
+          * Shown whenever anything priced here is off the sheet - it used to
+          * require `l.scope_item_id`, the COMPONENT's scope row, which is null
+          * for a whole component added in the builder. So on the one case that
+          * actually happens - somebody prices a Study Table the customer asked
+          * for late - the notice named the lines and offered no way to act
+          * (2026-09-24). The route now creates the component, and where even the
+          * room is missing it says so, which is a better answer than a hidden
+          * button.
+          */}
+        {drift.not_in_scope.some((l) => l.cost_item_id) && (
           <button type="button" onClick={() => void addToScope()} disabled={pushing} className="px-2.5 py-1 rounded-md border border-amber-300 text-amber-800 font-medium hover:bg-amber-100 disabled:opacity-60" title="Put what is priced here onto the Scope Sheet">
-            {pushing ? "Adding…" : "Add to the scope"}
+            {pushing ? "Adding…" : "Add to Scope Sheet"}
           </button>
         )}
         {canBring && (
