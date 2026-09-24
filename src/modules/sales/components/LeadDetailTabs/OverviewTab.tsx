@@ -15,17 +15,20 @@ import {
 import { CONFIGURATION_LABELS, isConfiguration } from "@/lib/scope/configuration";
 import { formatCurrency, formatDate } from "@/modules/sales/utils/formatters";
 import { LeadActivity } from "@/types/leads";
+import CustomerContacts from "@/components/leads/CustomerContacts";
 
 interface OverviewTabProps {
   lead: Lead;
   activities: LeadActivity[];
   leadClosed: boolean;
+  /** Whether the server would accept a write - drawn from the lead GET. */
+  canEdit?: boolean;
   onEditClick: () => void;
   onAddMeetingClick: () => void;
   formatDateTime: (date: string) => string;
 }
 
-export default function OverviewTab({ lead }: OverviewTabProps) {
+export default function OverviewTab({ lead, leadClosed, canEdit = false }: OverviewTabProps) {
   return (
     <div className="space-y-4">
       {/* CLIENT DETAILS BLOCK */}
@@ -60,6 +63,17 @@ export default function OverviewTab({ lead }: OverviewTabProps) {
             </p>
           </div>
         </div>
+
+        {/* A sale is rarely to one person. These are `partner_contacts` - the
+            customer's own people, which outlive this lead - reached from here
+            because the seller on the call is the one who learns the names.
+            A closed lead is read-only, like every other control on the page. */}
+        <CustomerContacts
+          basePath={`/api/sales/leads/${lead.id}/contacts`}
+          contacts={lead.client?.partner?.contacts ?? []}
+          canEdit={canEdit && !leadClosed}
+          customerName={lead.client?.name}
+        />
       </div>
 
       {/* PROPERTY DETAILS BLOCK */}

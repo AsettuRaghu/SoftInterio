@@ -1,3 +1,5 @@
+import type { PartnerSummary } from "./partners";
+
 // =====================================================
 // Client Module Types
 // =====================================================
@@ -62,6 +64,11 @@ export const PreferredContactTimeLabels: Record<PreferredContactTime, string> = 
 export interface Client {
   id: string;
   tenant_id: string;
+
+  /** The partner this client belongs to - the identity above the record. */
+  partner_id?: string | null;
+  /** Embedded by the lead GET, so the page can name the customer's people. */
+  partner?: PartnerSummary | null;
 
   // Client Type
   client_type: ClientType;

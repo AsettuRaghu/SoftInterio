@@ -1,3 +1,4 @@
+import type { PartnerSummary } from "./partners";
 // =====================================================
 // Lead Module Types
 // =====================================================
@@ -326,9 +327,21 @@ export const MeetingTypeLabels: Record<MeetingType, string> = {
 };
 
 // Client interface (from clients table)
+//
+// NOTE: this duplicates `Client` in types/clients.ts, and both describe columns
+// the table does not have - `contact_person_*`, `company_name`, `gst_number`,
+// `address_line2`, `landmark`, `locality` are none of them on `clients`. Left
+// alone here; the `contact_person_*` quartet is a THIRD place the codebase
+// tried to record a second person at a customer, which is the argument for
+// `partner_contacts` being the one home.
 export interface Client {
   id: string;
   tenant_id: string;
+
+  /** The partner this client belongs to - the identity above the record. */
+  partner_id?: string | null;
+  /** Embedded by the lead GET, so the page can name the customer's people. */
+  partner?: PartnerSummary | null;
   client_type: "individual" | "company" | "partnership" | "huf" | "trust" | "other";
   status: "active" | "inactive" | "blacklisted";
   name: string;
@@ -613,17 +626,11 @@ export interface StageTransitionInput {
 }
 
 // Family Member
-export interface LeadFamilyMember {
-  id: string;
-  lead_id: string;
-  name: string;
-  relation: string | null;
-  phone: string | null;
-  email: string | null;
-  is_decision_maker: boolean;
-  notes: string | null;
-  created_at: string;
-}
+// LeadFamilyMember described a table `lead_family_members` that never existed -
+// not in the baseline, not in the database. The lead GET queried it on every
+// page load and swallowed the error, so the list was permanently empty. The
+// people at a customer are `partner_contacts` (see types/partners.ts), because
+// the customer outlives the lead; `is_decision_maker` was carried across.
 
 // Stage History
 export interface LeadStageHistory {

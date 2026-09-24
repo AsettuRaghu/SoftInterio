@@ -60,6 +60,7 @@ export default function LeadDetailPage() {
   // Use the lead detail hook
   const {
     lead,
+    canEdit,
     activities,
     notes,
     stageHistory,
@@ -362,6 +363,7 @@ export default function LeadDetailPage() {
             lead={lead}
             activities={activities}
             leadClosed={leadClosed}
+            canEdit={canEdit}
             onEditClick={openEditModal}
             onAddMeetingClick={() => {
               setEditingMeeting(null);

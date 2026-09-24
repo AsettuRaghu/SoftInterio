@@ -5,7 +5,6 @@ import type {
   LeadActivity,
   LeadNote,
   LeadStageHistory,
-  LeadFamilyMember,
 } from "@/types/leads";
 import type { Task } from "@/types/tasks";
 import type { DocumentWithUrl, Document } from "@/types/documents";
@@ -42,7 +41,8 @@ export function useLeadDetail() {
   const [stageHistory, setStageHistory] = useState<LeadStageHistory[]>([]);
   const [tasks, setTasks] = useState<TaskWithUser[]>([]);
   const [documents, setDocuments] = useState<DocumentWithUrl[]>([]);
-  const [familyMembers, setFamilyMembers] = useState<LeadFamilyMember[]>([]);
+  /** Whether this caller may change this lead, as the server answered it. */
+  const [canEdit, setCanEdit] = useState(false);
   const [quotations, setQuotations] = useState<any[]>([]);
   const [teamMembers, setTeamMembers] = useState<
     { id: string; name: string; email: string; avatar_url?: string }[]
@@ -86,7 +86,7 @@ export function useLeadDetail() {
       setStageHistory(data.stageHistory || []);
       setTasks(data.tasks || []);
       setDocuments(data.documents || []);
-      setFamilyMembers(data.familyMembers || []);
+      setCanEdit(data.canEdit === true);
       setQuotations(data.quotations || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
@@ -359,7 +359,7 @@ export function useLeadDetail() {
     stageHistory,
     tasks,
     documents,
-    familyMembers,
+    canEdit,
     quotations,
     teamMembers,
     previewDocument,
@@ -376,7 +376,6 @@ export function useLeadDetail() {
     setNotes,
     setTasks,
     setDocuments,
-    setFamilyMembers,
     setQuotations,
     // Methods
     fetchLead,

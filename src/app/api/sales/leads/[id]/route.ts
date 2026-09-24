@@ -10,6 +10,7 @@ import {
 import type { UpdateLeadInput } from "@/types/leads";
 import { validateLeadDates, type LeadDateFields } from "@/lib/dates/lead-dates";
 import { leadAccess, canReadLead, canWriteLead } from "@/lib/leads/access";
+import { sortContacts } from "@/lib/partners/contacts";
 import { requestLogger } from "@/lib/logger/request";
 import { notify } from "@/lib/notifications/notify";
 
@@ -30,7 +31,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const { user } = guard;
     const { id } = await params;
-    const supabase = await createClient();
     log = requestLogger(request, { userId: user.id });
     const access = leadAccess(guard.permissions, user.isSuperAdmin);
 
@@ -45,16 +45,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Use admin client for fetching leads with user data (bypasses RLS for foreign key joins)
     const supabaseAdmin = createAdminClient();
 
-    // Get user's tenant first for security
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.tenant_id) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    // The tenant comes off the guard. Re-selecting `users` for it was a round
+    // trip to the one table whose only SELECT policy is id = auth.uid() - the
+    // trap that answered "Failed to get user tenant" on POST /api/quotations.
+    const tenantId = user.tenantId;
 
     // Get lead with related data using admin client
     const { data: lead, error: leadError } = await supabaseAdmin
@@ -62,14 +56,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .select(
         `
         *,
-        client:clients!leads_client_id_fkey(id, name, phone, email, city, address_line1, pincode),
+        client:clients!leads_client_id_fkey(id, name, phone, email, city, address_line1, pincode, partner_id,
+          partner:partners(id, name,
+            contacts:partner_contacts(id, name, designation, phone, email, is_primary, is_decision_maker, notes, created_at))),
         property:properties!leads_property_id_fkey(id, property_name, unit_number, category, property_type, property_subtype, carpet_area, address_line1, city, pincode, configuration),
         assigned_user:users!leads_assigned_to_fkey(id, name, avatar_url, email),
         created_user:users!leads_created_by_fkey(id, name, avatar_url, email)
       `
       )
       .eq("id", id)
-      .eq("tenant_id", userData.tenant_id)
+      .eq("tenant_id", tenantId)
       .single();
 
     if (leadError) {
@@ -94,7 +90,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     // Fetch related data in parallel using admin client
     const [
-      { data: familyMembers },
       { data: stageHistory },
       { data: activities },
       { data: notes },
@@ -103,11 +98,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       { data: quotations },
       { data: calendarEvents },
     ] = await Promise.all([
-      supabaseAdmin
-        .from("lead_family_members")
-        .select("*")
-        .eq("lead_id", id)
-        .order("created_at", { ascending: true }),
       supabaseAdmin
         .from("lead_stage_history")
         .select(
@@ -163,7 +153,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           created_user:users!tasks_created_by_fkey(id, name, avatar_url, email)
         `
         )
-        .eq("tenant_id", userData.tenant_id)
+        .eq("tenant_id", tenantId)
         .eq("related_type", "lead")
         .eq("related_id", id)
         .is("parent_task_id", null)
@@ -193,7 +183,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           created_user:users!calendar_events_created_by_fkey(id, name, avatar_url)
         `
         )
-        .eq("tenant_id", userData.tenant_id)
+        .eq("tenant_id", tenantId)
         .eq("linked_type", "lead")
         .eq("linked_id", id)
         .order("scheduled_at", { ascending: false }),
@@ -312,9 +302,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       });
     }
 
+    // The people at the customer, main contact first. Sorted here rather than
+    // in the embed because PostgREST cannot order a nested set by a boolean.
+    const leadClient = (lead as Record<string, unknown>).client as
+      | { partner?: { contacts?: { is_primary?: boolean | null; name: string }[] } | null }
+      | null;
+    if (leadClient?.partner?.contacts) {
+      leadClient.partner.contacts = sortContacts(leadClient.partner.contacts);
+    }
+
     return NextResponse.json({
       lead,
-      familyMembers: familyMembers || [],
+      // Whether THIS caller may change THIS lead, so the page draws the
+      // controls the server would actually accept rather than offering an
+      // action that comes back refused - the same reasoning as the Plan tab's
+      // gates. A `leads.edit_own` holder gets it only on their own leads.
+      canEdit: canWriteLead(access, lead, user.id),
       stageHistory: stageHistory || [],
       activities: activities || [],
       notes: notes || [],
