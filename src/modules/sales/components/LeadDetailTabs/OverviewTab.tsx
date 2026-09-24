@@ -17,6 +17,7 @@ import { CONFIGURATION_LABELS, isConfiguration } from "@/lib/scope/configuration
 import { formatCurrency, formatDate } from "@/modules/sales/utils/formatters";
 import { LeadActivity } from "@/types/leads";
 import CustomerContacts from "@/components/leads/CustomerContacts";
+import { REFERRAL_SOURCE_TYPE } from "@/components/leads/ReferrerPicker";
 
 interface OverviewTabProps {
   lead: Lead;
@@ -195,17 +196,24 @@ export default function OverviewTab({ lead, leadClosed, canEdit = false }: Overv
               two are one fact and reading them apart is how "architect referral"
               stayed a statistic for nineteen leads. Links through to the
               referrer so they can be rung. */}
-          {lead.referred_by && (
+          {/* Shown for ANY referral source, named or not. An empty row is the
+              point: a lead marked "Architect Referral" with nobody named is the
+              gap this whole field exists to close, and a row that only appears
+              once it is filled in can never ask to be. */}
+          {(lead.referred_by || (lead.lead_source && lead.lead_source in REFERRAL_SOURCE_TYPE)) && (
             <div>
               <p className="text-sm font-medium text-slate-900">
                 <span className="text-slate-500">Referred by</span> :{" "}
+                {!lead.referred_by && <span className="text-amber-600">not recorded</span>}
+                {lead.referred_by && (
                 <Link
                   href={`/dashboard/partners/${lead.referred_by.id}`}
                   className="text-blue-600 hover:underline"
                 >
                   {lead.referred_by.name}
                 </Link>
-                {lead.referred_by.phone && (
+                )}
+                {lead.referred_by?.phone && (
                   <a
                     href={`tel:${lead.referred_by.phone}`}
                     className="ml-1.5 text-xs text-slate-500 tabular-nums hover:text-blue-600"

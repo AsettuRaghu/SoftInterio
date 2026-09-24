@@ -738,7 +738,24 @@ with them.
 
 `components/leads/ReferrerPicker` shows only for a referral source and **clears
 itself** when the source changes to a walk-in, so a stale architect cannot linger
-on a lead that was not referred. It reads **`GET /api/partners/referrers`**, and
+on a lead that was not referred.
+
+**It shipped saving nothing, and the reason is the lesson already written here.**
+The field was on the form, the picker wrote it into `editForm`, the PATCH
+allowlist accepted it and the GET returned it - and `useLeadDetail`'s payload
+never sent it, so choosing Naveen saved the source and silently dropped the
+architect. That is exactly the failure this file records for the project edit
+dialog: **the payload, the route's allowlist, and the GET's select - missing any
+one of them fails quietly.** Two of the three were checked. Check the payload.
+
+`?? null` rather than `|| null` on that payload line, because the picker's "Not
+recorded" is a deliberate null and clearing a referrer has to reach the server as
+one.
+
+**The Overview shows the row for ANY referral source**, named or not, with an
+amber "not recorded" when nobody is. A lead marked Architect Referral with nobody
+named is the gap the field exists to close, and a row that only appears once it is
+filled in can never ask to be. It reads **`GET /api/partners/referrers`**, and
 that route exists for the reason the contacts routes did: `/api/partners` is gated
 on `partners.view`, Owner and Admin alone, while the person filling in a new lead
 is **Sales**, who holds no `partners.*` key - the dropdown would have been empty

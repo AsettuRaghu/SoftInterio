@@ -213,6 +213,22 @@ export function useLeadDetail() {
             property_pincode: editForm.property_pincode || null,
             service_type: editForm.service_type || null,
             lead_source: editForm.lead_source || null,
+            /**
+             * The third leg, and the one that was missing.
+             *
+             * The field was on the form, the picker wrote it into `editForm`,
+             * the PATCH allowlist accepted it and the GET returned it - and this
+             * payload never sent it, so choosing Naveen saved the source and
+             * silently dropped the architect (2026-09-24). Exactly the failure
+             * this project already wrote down for the project dialog: **the
+             * payload, the route's allowlist, and the GET's select - missing any
+             * one of them fails quietly.** I checked two of the three.
+             *
+             * `?? null` rather than `|| null` because the picker's "Not
+             * recorded" is a deliberate null, and clearing a referrer has to
+             * reach the server as one.
+             */
+            referred_by_partner_id: editForm.referred_by_partner_id ?? null,
             budget_range: editForm.budget_range || null,
             target_start_date: editForm.target_start_date || null,
             target_end_date: editForm.target_end_date || null,
