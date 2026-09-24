@@ -109,6 +109,8 @@ interface User {
 interface Quotation {
   id: string;
   quotation_number: string;
+  /** "p2" when this prices the scope's alternatives - an Option 2. */
+  scope_preference?: "p1" | "p2" | null;
   title?: string;
   description?: string;
   client_name?: string;
@@ -915,6 +917,17 @@ export default function QuotationDetailPage() {
             <span className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-lg shrink-0">
               v{quotation.version}
             </span>
+
+            {/* What this document IS. Two quotations on one lead are otherwise
+                told apart only by their numbers. */}
+            {quotation.scope_preference === "p2" && (
+              <span
+                className="flex items-center px-2.5 py-1.5 text-sm text-emerald-800 bg-emerald-100 rounded-lg shrink-0"
+                title="Built from the scope's second preferences - the alternative discussed with the customer, priced beside the main quotation"
+              >
+                Alternative
+              </span>
+            )}
 
             {/* Where this quotation came from. The header used to show only the
                 client name and property, which are not enough to tell two

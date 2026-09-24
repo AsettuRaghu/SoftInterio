@@ -501,6 +501,11 @@ export async function POST(request: NextRequest) {
         client_id: clientId || null,
         status: "draft",
         title: quotationTitle,
+        // Which half of the room sheet this is: the answers, or the
+        // alternatives. Drift compares against the matching one, so an
+        // Option 2 is not reported as having drifted from the ①s it was
+        // deliberately built without.
+        scope_preference: preference,
         presentation_level: "space_component",
         hide_dimensions: true,
         valid_from: today.toISOString(),

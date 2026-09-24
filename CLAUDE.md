@@ -137,6 +137,29 @@ counted: exposed sides are "ends you can see from the room - a run between
 two walls is 0, one open end 1, an island 2", blind corners "right-angle
 turns in this run - an L-shaped kitchen has 1, a U-shaped one 2".
 
+### A quotation says which half of the room sheet it prices
+
+`quotations.scope_preference` - `p1` the answers, `p2` the alternatives
+(`20260924130000`). Without it, **an Option 2 reported the maximum possible
+drift the moment it was created**: on LD-202609-005, 50 items "not in it yet"
+and 53 "no longer chosen", against a scope of 92 ①s and 53 ②s. Every number
+true and every number meaningless - the document was exactly right and the
+notice was comparing it with the other one. A notice that cries wolf on a
+correct document teaches people to dismiss the one that matters.
+
+`scopeDrift` now compares against the quotation's own preference: the
+additions dry-run is passed it, and a line is "dropped" only if its scope row
+no longer holds it. **An Option 2 accepts either**, because it is "the ②
+where there is one, else the ①" - read as "must be a ②" it called the 42
+lines that simply had no alternative dropped. Both quotations on that lead
+now read no drift, while an older one still reports its four real additions.
+
+**Option 2 is offered on a `p1` quotation only** - an alternative of an
+alternative is the same document again - and the header carries an
+**Alternative** chip beside the version, on the builder and the summary
+alike, so two documents on one lead are told apart by more than their
+numbers.
+
 ### The customer summary is the scope as a page, and it carries no price
 
 `/scope-summary/[propertyId]?lead=|project=` (2026-09-21, "Customer

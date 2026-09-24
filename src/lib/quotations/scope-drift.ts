@@ -15,8 +15,8 @@ import { copyScopeToQuotation } from "./scope-to-quotation";
  *               of the copy) - rooms, components, chosen items
  *   resized     components the quotation holds whose scope row now has a
  *               different size or measurement
- *   dropped     lines the quotation holds whose scope row is no longer a
- *               first preference, or is gone
+ *   dropped     lines the quotation holds whose scope row no longer holds
+ *               the preference this quotation was built from, or is gone
  *   not_ours    components the quotation prices whose scope row now says
  *               the client or a vendor does it
  *   not_in_scope  lines priced here that the room sheet does not list -
@@ -24,6 +24,14 @@ import { copyScopeToQuotation } from "./scope-to-quotation";
  *               and the one that was missing: a quotation may be ahead of
  *               the scope as easily as behind it (2026-09-22)
  *   last_change when the scope last changed, from its history
+ *
+ * **It compares against the preference the quotation was built from**
+ * (`quotations.scope_preference`). An "Option 2" prices the ② wherever there
+ * is one, so measured against the ①s it reported the maximum possible drift
+ * the moment it was created - 50 items "not in it yet" and 53 "no longer
+ * chosen" on a scope of 92 ①s and 53 ②s, every number true and every number
+ * meaningless. A notice that cries wolf on a document that is exactly right
+ * teaches people to dismiss the one that matters (2026-09-24).
  *
  * Nothing here decides anything; the person holding the quotation does -
  * bring the additions in, revise, or leave it.
@@ -55,8 +63,14 @@ export async function scopeDrift(
   else if (projectId) propertyId = (await supabase.from("projects").select("property_id").eq("id", projectId).maybeSingle()).data?.property_id ?? null;
   if (!propertyId) return none;
 
+  // Which half of the room sheet this document is of.
+  const want: "p1" | "p2" =
+    ((await supabase.from("quotations").select("scope_preference").eq("id", quotationId).maybeSingle()).data?.scope_preference as "p1" | "p2" | undefined) === "p2"
+      ? "p2"
+      : "p1";
+
   const [dry, { data: scopeRaw }, { data: spaces }, { data: hist }, { data: autoOffers }, { data: types }] = await Promise.all([
-    copyScopeToQuotation(supabase, tenantId, quotationId, leadId, projectId, { dryRun: true }),
+    copyScopeToQuotation(supabase, tenantId, quotationId, leadId, projectId, { dryRun: true, preference: want }),
     supabase.from("property_scope_items").select("id, parent_id, name, scope_owner, choice_status, cost_item_id, width, height, length, measures, measurement_unit").eq("property_id", propertyId).eq("tenant_id", tenantId),
     supabase
       .from("quotation_spaces")
@@ -84,7 +98,12 @@ export async function scopeDrift(
     ...none,
     additions: dry.added,
     last_change: hist?.[0]?.changed_at ?? null,
-    second_preferences: [...scope.values()].filter((r) => r.cost_item_id && r.choice_status === "p2" && (!r.scope_owner || r.scope_owner === "us")).length,
+    // Offered on the answers' quotation only: an Option 2 of an Option 2 is
+    // the same document again.
+    second_preferences:
+      want === "p2"
+        ? 0
+        : [...scope.values()].filter((r) => r.cost_item_id && r.choice_status === "p2" && (!r.scope_owner || r.scope_owner === "us")).length,
   };
   const fmt = (v: number | null | undefined) => (v == null ? "—" : String(Math.round(Number(v) * 100) / 100));
 
@@ -110,7 +129,7 @@ export async function scopeDrift(
       // What the component's room sheet says it carries, so a line with no
       // provenance can still be recognised by its cost item.
       const chosen = new Set(
-        [...scope.values()].filter((x) => x.parent_id === sid && x.cost_item_id && x.choice_status === "p1").map((x) => x.cost_item_id as string),
+        [...scope.values()].filter((x) => x.parent_id === sid && x.cost_item_id && x.choice_status === want).map((x) => x.cost_item_id as string),
       );
       for (const l of c.lines ?? []) {
         const lsid = l.metadata?.scope_item_id;
@@ -124,7 +143,12 @@ export async function scopeDrift(
           continue;
         }
         const lrow = scope.get(lsid);
-        if (!lrow || lrow.choice_status !== "p1") out.dropped.push({ line: l.name, component: `${c.name} (${sp.name})` });
+        // An Option 2 is "the ② where there is one, else the ①", so either
+        // still counts as chosen on it. Read as "must be a ②" it called the
+        // 42 lines that simply had no alternative dropped.
+        const st = lrow?.choice_status;
+        const stillChosen = want === "p2" ? st === "p1" || st === "p2" : st === "p1";
+        if (!lrow || !stillChosen) out.dropped.push({ line: l.name, component: `${c.name} (${sp.name})` });
       }
     }
   }

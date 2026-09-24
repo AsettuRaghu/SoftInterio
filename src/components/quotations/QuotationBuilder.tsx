@@ -133,6 +133,8 @@ export function QuotationBuilder({
   const [source, setSource] = useState<{ label: string; href: string } | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [leadId, setLeadId] = useState<string | null>(null);
+  /** "p2" when this document prices the scope's alternatives - an Option 2. */
+  const [scopePreference, setScopePreference] = useState<"p1" | "p2">("p1");
   // "Bring in from scope": pull on demand, adds only what is missing. Local
   // edits are saved first so the re-read after it cannot lose them.
   const [bringingScope, setBringingScope] = useState(false);
@@ -291,6 +293,7 @@ export function QuotationBuilder({
         // shows only the quotation number, which says nothing about whose job
         // is being priced.
         setLeadId(q.lead_id || null);
+        setScopePreference(q.scope_preference === "p2" ? "p2" : "p1");
         if (q.lead_id && q.lead?.lead_number) {
           setSource({
             label: q.lead.lead_number,
@@ -1944,6 +1947,17 @@ export function QuotationBuilder({
                 <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
                   v{version}
                 </span>
+                {/* Says what this document IS, beside its number - so nobody
+                    reads the alternative as the price, and so the drift
+                    notice's silence makes sense. */}
+                {scopePreference === "p2" && (
+                  <span
+                    className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded"
+                    title="Built from the scope's second preferences - the alternative discussed with the customer, priced beside the main quotation"
+                  >
+                    Alternative
+                  </span>
+                )}
                 {source && (
                   <Link
                     href={source.href}
