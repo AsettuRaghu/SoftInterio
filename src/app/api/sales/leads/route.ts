@@ -559,6 +559,9 @@ export async function POST(request: NextRequest) {
         property_id: propertyId,
         service_type: body.service_type || null,
         lead_source: body.lead_source || null,
+        // Who sent us this lead. Only meaningful for a referral source, which is
+        // what the form gates the picker on; stored as given either way.
+        referred_by_partner_id: body.referred_by_partner_id || null,
         target_start_date: body.target_start_date || null,
         target_end_date: body.target_end_date || null,
         budget_range: body.budget_range || null,

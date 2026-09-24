@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Lead } from "@/types/leads";
 import {
   PropertyCategoryLabels,
@@ -190,6 +191,31 @@ export default function OverviewTab({ lead, leadClosed, canEdit = false }: Overv
               {lead.lead_source ? LeadSourceLabels[lead.lead_source] : "—"}
             </p>
           </div>
+          {/* Who sent them, beside the source that says it was a referral - the
+              two are one fact and reading them apart is how "architect referral"
+              stayed a statistic for nineteen leads. Links through to the
+              referrer so they can be rung. */}
+          {lead.referred_by && (
+            <div>
+              <p className="text-sm font-medium text-slate-900">
+                <span className="text-slate-500">Referred by</span> :{" "}
+                <Link
+                  href={`/dashboard/partners/${lead.referred_by.id}`}
+                  className="text-blue-600 hover:underline"
+                >
+                  {lead.referred_by.name}
+                </Link>
+                {lead.referred_by.phone && (
+                  <a
+                    href={`tel:${lead.referred_by.phone}`}
+                    className="ml-1.5 text-xs text-slate-500 tabular-nums hover:text-blue-600"
+                  >
+                    {lead.referred_by.phone}
+                  </a>
+                )}
+              </p>
+            </div>
+          )}
           <div>
             <p className="text-sm font-medium text-slate-900">
               <span className="text-slate-500">Stage</span> :{" "}

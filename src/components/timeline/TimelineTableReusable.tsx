@@ -671,9 +671,9 @@ export default function TimelineTableReusable({
                     onClick={() => onItemClick && onItemClick(item)}
                   >
                     {/* Icon Column */}
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-1.5">
                       <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center ${getActivityColor(
+                        className={`w-6 h-6 rounded-full flex items-center justify-center ${getActivityColor(
                           item
                         )}`}
                       >
@@ -681,120 +681,92 @@ export default function TimelineTableReusable({
                       </div>
                     </td>
 
-                    {/* Activity Title */}
-                    <td className="px-3 py-3">
-                      <div className="min-w-0">
+                    {/* Activity Title - the kind sits beside the title, not under
+                        it, so a row is one line high. */}
+                    <td className="px-3 py-1.5">
+                      <div className="min-w-0 flex items-baseline gap-1.5">
                         <p className="text-xs font-medium text-slate-800 truncate">
                           {getActivityTitle(item)}
                         </p>
                         {item.activity_type && (
-                          <p className="text-[10px] text-slate-500 mt-0.5">
+                          <p className="text-[10px] text-slate-400 shrink-0">
                             {getActivityTypeLabel(item.activity_type)}
                           </p>
                         )}
                       </div>
                     </td>
 
-                    {/* Details Column */}
-                    <td className="px-3 py-3 max-w-md">
-                      <div className="space-y-1">
-                        {/* Description or Notes */}
-                        {(item.description ||
-                          item.notes ||
-                          item.meeting_notes) && (
-                          <p className="text-xs text-slate-600 line-clamp-2">
-                            {item.description ||
-                              item.notes ||
-                              item.meeting_notes}
-                          </p>
+                    {/*
+                      * Details on ONE line.
+                      *
+                      * This was seven conditional blocks stacked in a `space-y-1`
+                      * - description, call duration, outcome, meeting time,
+                      * location, attendees, email subject, previous stage - so a
+                      * single call with notes and an outcome stood six lines
+                      * tall and forty entries filled a screen and a half. They
+                      * are facts about one event, and they read as a run
+                      * (2026-09-24). The description truncates; the rest are
+                      * short by nature.
+                      */}
+                    <td className="px-3 py-1.5 max-w-md">
+                      <div className="flex items-center gap-2 min-w-0 text-[11px] text-slate-500">
+                        {(item.description || item.notes || item.meeting_notes) && (
+                          <span className="truncate text-slate-600" title={item.description || item.notes || item.meeting_notes || undefined}>
+                            {item.description || item.notes || item.meeting_notes}
+                          </span>
                         )}
-
-                        {/* Call Details */}
-                        {item.call_duration_seconds !== null &&
-                          item.call_duration_seconds !== undefined && (
-                            <div className="flex items-center gap-3 text-[10px] text-slate-500">
-                              <span className="flex items-center gap-1">
-                                <ClockIcon className="w-3 h-3" />
-                                {formatDuration(item.call_duration_seconds)}
-                              </span>
-                              {item.call_outcome && (
-                                <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700">
-                                  {item.call_outcome}
-                                </span>
-                              )}
-                            </div>
-                          )}
-
-                        {/* Meeting Details */}
+                        {item.call_duration_seconds != null && (
+                          <span className="shrink-0 inline-flex items-center gap-1">
+                            <ClockIcon className="w-3 h-3" />
+                            {formatDuration(item.call_duration_seconds)}
+                          </span>
+                        )}
+                        {item.call_outcome && (
+                          <span className="shrink-0 px-1.5 rounded bg-slate-100 text-slate-700">{item.call_outcome}</span>
+                        )}
                         {item.meeting_scheduled_at && (
-                          <div className="flex items-center gap-3 text-[10px] text-slate-500">
-                            <span className="flex items-center gap-1">
-                              <CalendarIcon className="w-3 h-3" />
-                              {formatDateTime(item.meeting_scheduled_at)}
-                            </span>
-                            {item.meeting_completed && (
-                              <span className="px-2 py-0.5 rounded bg-green-100 text-green-700">
-                                Completed
-                              </span>
-                            )}
-                          </div>
+                          <span className="shrink-0 inline-flex items-center gap-1">
+                            <CalendarIcon className="w-3 h-3" />
+                            {formatDateTime(item.meeting_scheduled_at)}
+                          </span>
                         )}
-
-                        {/* Meeting Location */}
+                        {item.meeting_completed && (
+                          <span className="shrink-0 px-1.5 rounded bg-green-100 text-green-700">Done</span>
+                        )}
                         {item.meeting_location && (
-                          <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                          <span className="shrink-0 inline-flex items-center gap-1 max-w-[9rem]">
                             <MapPinIcon className="w-3 h-3" />
-                            <span className="truncate">
-                              {item.meeting_location}
-                            </span>
-                          </div>
+                            <span className="truncate">{item.meeting_location}</span>
+                          </span>
                         )}
-
-                        {/* Attendees */}
                         {item.attendees && item.attendees.length > 0 && (
-                          <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                          <span className="shrink-0 inline-flex items-center gap-1">
                             <UserGroupIcon className="w-3 h-3" />
-                            <span>
-                              {item.attendees.length}{" "}
-                              {item.attendees.length === 1
-                                ? "attendee"
-                                : "attendees"}
-                            </span>
-                          </div>
+                            {item.attendees.length}
+                          </span>
                         )}
-
-                        {/* Email Subject */}
                         {item.email_subject && (
-                          <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                          <span className="shrink-0 inline-flex items-center gap-1 max-w-[9rem]">
                             <EnvelopeIcon className="w-3 h-3" />
-                            <span className="truncate">
-                              {item.email_subject}
-                            </span>
-                          </div>
+                            <span className="truncate">{item.email_subject}</span>
+                          </span>
                         )}
-
-                        {/* Stage Change */}
                         {item.type === "stage" && item.from_stage && (
-                          <p className="text-[10px] text-slate-500">
-                            From:{" "}
-                            {stageLabels[item.from_stage] || item.from_stage}
-                          </p>
+                          <span className="shrink-0">
+                            from {stageLabels[item.from_stage] || item.from_stage}
+                          </span>
                         )}
                       </div>
                     </td>
 
-                    {/* Date & Time */}
-                    <td className="px-3 py-3">
-                      <div className="text-xs text-slate-800">
-                        {formatDate(item.created_at)}
-                      </div>
-                      <div className="text-[10px] text-slate-500 mt-0.5">
-                        {formatTime(item.created_at)}
-                      </div>
+                    {/* Date & Time - beside each other, not stacked. */}
+                    <td className="px-3 py-1.5 whitespace-nowrap">
+                      <span className="text-xs text-slate-800">{formatDate(item.created_at)}</span>
+                      <span className="ml-1.5 text-[10px] text-slate-400">{formatTime(item.created_at)}</span>
                     </td>
 
                     {/* User */}
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-1.5">
                       <div className="flex items-center gap-2">
                         {avatarUrl ? (
                           <img

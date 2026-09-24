@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import ReferrerPicker from "@/components/leads/ReferrerPicker";
 import { KnownPartnerHint, type KnownPartner } from "@/components/partners/KnownPartnerHint";
 import { SearchSelect } from "@/components/ui/SearchSelect";
 import type {
@@ -69,6 +70,7 @@ export function CreateLeadModal({
     // Lead Details
     service_type: "" as ServiceType | "",
     lead_source: "" as LeadSource | "",
+    referred_by_partner_id: null as string | null,
     budget_range: "",
     target_start_date: "",
     target_end_date: "",
@@ -184,6 +186,7 @@ export function CreateLeadModal({
           // Lead details
           service_type: formData.service_type || undefined,
           lead_source: formData.lead_source || undefined,
+          referred_by_partner_id: formData.referred_by_partner_id || undefined,
           budget_range: formData.budget_range || undefined,
           target_start_date: formData.target_start_date || undefined,
           target_end_date: formData.target_end_date || undefined,
@@ -453,6 +456,18 @@ export function CreateLeadModal({
                   ))}
                 </select>
               </div>
+
+              {/* Only for a referral, and it is the field this business cares
+                  most about: more than 95% of leads arrive this way, and the
+                  referrer is who gets chased or thanked. */}
+              <ReferrerPicker
+                className="md:col-span-2"
+                leadSource={formData.lead_source}
+                value={formData.referred_by_partner_id}
+                onChange={(id) =>
+                  setFormData((prev) => ({ ...prev, referred_by_partner_id: id }))
+                }
+              />
             </div>
           </div>
 

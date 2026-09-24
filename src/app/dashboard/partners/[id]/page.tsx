@@ -107,14 +107,24 @@ interface RelatedOrder {
   expected_delivery: string | null;
   total_amount: number | null;
 }
+interface ReferredLead {
+  id: string;
+  lead_number: string | null;
+  stage: string;
+  won_amount: number | null;
+  created_at: string;
+  client?: { name?: string | null } | null;
+}
 interface Related {
+  /** Leads this partner INTRODUCED - not leads where they are the customer. */
+  referred: ReferredLead[];
   leads: RelatedLead[];
   projects: RelatedProject[];
   quotations: RelatedQuotation[];
   purchase_orders: RelatedOrder[];
 }
 
-const TABS = ["overview", "contacts", "work", "quotations", "orders"] as const;
+const TABS = ["overview", "contacts", "referred", "work", "quotations", "orders"] as const;
 type Tab = (typeof TABS)[number];
 
 const money = (n: number | null | undefined) =>
@@ -208,6 +218,7 @@ function PartnerDetail() {
   }
 
   const counts = {
+    referred: related?.referred?.length ?? 0,
     leads: related?.leads.length ?? 0,
     projects: related?.projects.length ?? 0,
     quotations: related?.quotations.length ?? 0,
@@ -217,6 +228,9 @@ function PartnerDetail() {
   const tabs: { key: Tab; label: string; show: boolean }[] = [
     { key: "overview", label: "Overview", show: true },
     { key: "contacts", label: "Contacts", show: true },
+    // An architect refers work without ever being a customer, so this tab shows
+    // whenever there is anything to show rather than depending on a hat.
+    { key: "referred", label: "Referred to Us", show: counts.referred > 0 },
     { key: "work", label: "Leads & Projects", show: !!isCustomer },
     { key: "quotations", label: "Quotations", show: !!isCustomer || counts.quotations > 0 },
     { key: "orders", label: "Purchase Orders", show: isVendor },
@@ -407,6 +421,11 @@ function PartnerDetail() {
 
             <DetailCard title="Work Together" tone="green" icon={<BriefcaseIcon className="w-3 h-3" />}>
               <DetailFields>
+                {/* First, because for an architect it is the only number that
+                    matters and the reason the record exists. */}
+                {counts.referred > 0 && (
+                  <DetailField label="Referred to us" value={plural(counts.referred, "lead")} />
+                )}
                 {isCustomer && <DetailField label="Projects" value={plural(counts.projects, "project")} />}
                 {isCustomer && <DetailField label="Leads" value={plural(counts.leads, "lead")} />}
                 <DetailField label="Quotations" value={plural(counts.quotations, "quotation")} />
@@ -443,6 +462,59 @@ function PartnerDetail() {
               className="px-4 py-4"
             />
           </div>
+        )}
+
+        {active === "referred" && (
+          <DetailCard
+            title="Referred to Us"
+            tone="violet"
+            icon={<UserGroupIcon className="w-3 h-3" />}
+            bodyClassName="p-0"
+          >
+            <AppTable<ReferredLead>
+              className="table-fixed"
+              data={related?.referred ?? []}
+              keyExtractor={(l) => l.id}
+              showToolbar={false}
+              onRowClick={(l) => router.push(`/dashboard/sales/leads/${l.id}`)}
+              columns={[
+                {
+                  key: "lead",
+                  header: "Lead",
+                  width: "44%",
+                  render: (l) => (
+                    <Headline title={l.client?.name || l.lead_number || "Lead"} line1={l.lead_number ?? undefined} />
+                  ),
+                },
+                {
+                  key: "stage",
+                  header: "Stage",
+                  width: "28%",
+                  render: (l) => (
+                    <StatusPill
+                      label={LeadStageLabels[l.stage as LeadStage] ?? l.stage}
+                      tone={l.stage === "won" ? "green" : ["lost", "disqualified"].includes(l.stage) ? "slate" : "blue"}
+                    />
+                  ),
+                },
+                {
+                  key: "value",
+                  header: "Value",
+                  width: "28%",
+                  render: (l) => (
+                    <span className="text-sm text-slate-600 tabular-nums">
+                      {l.won_amount ? money(l.won_amount) : <span className="text-slate-400">—</span>}
+                    </span>
+                  ),
+                },
+              ]}
+              emptyState={{
+                icon: <UserGroupIcon className="w-6 h-6 text-slate-400" />,
+                title: "Nothing referred yet",
+                description: `No lead so far names ${partner.name} as the referrer.`,
+              }}
+            />
+          </DetailCard>
         )}
 
         {active === "work" && (

@@ -1,4 +1,5 @@
 import { Lead, LeadStage } from "@/types/leads";
+import ReferrerPicker from "@/components/leads/ReferrerPicker";
 import {
   LeadStageLabels,
   PropertyCategoryLabels,
@@ -54,6 +55,7 @@ export interface EditFormData {
   property_pincode: string;
   service_type: string;
   lead_source: string;
+  referred_by_partner_id: string | null;
   budget_range: string;
   target_start_date: string;
   target_end_date: string;
@@ -387,6 +389,14 @@ export function EditLeadModal({
                   ))}
                 </select>
               </div>
+
+              {/* Only for a referral source. The one field this business asks for
+                  most, because 95% of its leads arrive this way. */}
+              <ReferrerPicker
+                leadSource={editForm.lead_source}
+                value={editForm.referred_by_partner_id}
+                onChange={(id) => setEditForm({ ...editForm, referred_by_partner_id: id })}
+              />
 
               {/* Property Information */}
               <div className="md:col-span-3 mt-4">

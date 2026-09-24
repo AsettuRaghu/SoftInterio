@@ -56,6 +56,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .select(
         `
         *,
+        referred_by:partners!leads_referred_by_partner_id_fkey(id, name, phone),
         client:clients!leads_client_id_fkey(id, name, phone, email, city, address_line1, pincode, partner_id,
           partner:partners(id, name,
             contacts:partner_contacts(id, name, designation, phone, email, is_primary, is_decision_maker, notes, created_at))),
@@ -556,6 +557,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const leadAllowedFields = [
       "service_type",
       "lead_source",
+      "referred_by_partner_id",
       "target_start_date",
       "target_end_date",
       "budget_range",

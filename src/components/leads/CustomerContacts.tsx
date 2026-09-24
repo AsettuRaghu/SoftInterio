@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Toast } from "@/components/ui/Toast";
+import { cn } from "@/utils/cn";
 import { sortContacts } from "@/lib/partners/contacts";
 import type { PartnerContact } from "@/types/partners";
 
@@ -100,6 +101,13 @@ export default function CustomerContacts({
   const [draft, setDraft] = useState<Draft>(BLANK);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  /**
+   * Shut by default, because the card above already shows the customer's own
+   * name, phone and email - these are the OTHER people, and the header names
+   * them, so nothing is hidden that the page was not already saying. Opening it
+   * is for reaching one of them.
+   */
+  const [open, setOpen] = useState(false);
   const { confirm, confirmDialog } = useConfirm();
 
   const openAdd = () => {
@@ -192,30 +200,57 @@ export default function CustomerContacts({
       {confirmDialog}
       <Toast message={notice} onDismiss={() => setNotice(null)} />
 
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide hover:text-slate-700"
+        >
+          <svg
+            className={cn("w-3 h-3 transition-transform", open && "rotate-90")}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
           People we talk to
-          {people.length > 0 && <span className="ml-1.5 text-slate-400">({people.length})</span>}
-        </h4>
+          {people.length > 0 && <span className="text-slate-400">({people.length})</span>}
+        </button>
+        {/* Shut, the header still says WHO - so collapsing costs no information,
+            only the phone numbers. */}
+        {!open && people.length > 0 && (
+          <span className="min-w-0 truncate text-xs text-slate-500">
+            {people
+              .slice(0, 3)
+              .map((c) => c.name)
+              .join(" · ")}
+            {people.length > 3 && ` +${people.length - 3}`}
+          </span>
+        )}
+        <span className="flex-1" />
         {canEdit && editing !== "new" && (
           <button
             type="button"
-            onClick={openAdd}
-            className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
+            onClick={() => {
+              setOpen(true);
+              openAdd();
+            }}
+            className="shrink-0 text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
           >
             + Add a person
           </button>
         )}
       </div>
 
-      {people.length === 0 && editing !== "new" && (
-        <p className="text-sm text-slate-500">
+      {open && people.length === 0 && editing !== "new" && (
+        <p className="mt-2 text-sm text-slate-500">
           Only {customerName || "one person"} so far.
           {canEdit && " Add the others who are part of this decision - a spouse, a parent, their architect."}
         </p>
       )}
 
-      <div className="space-y-2">
+      <div className={cn("divide-y divide-slate-100", open || editing === "new" ? "mt-2" : "hidden")}>
         {people.map((c) =>
           editing === c.id ? (
             <ContactForm
@@ -228,47 +263,42 @@ export default function CustomerContacts({
               isOnlyContact={people.length === 1}
             />
           ) : (
-            <div
-              key={c.id}
-              className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2"
-            >
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-sm font-semibold text-slate-900">{c.name}</span>
-                  {c.designation && <span className="text-xs text-slate-500">{c.designation}</span>}
-                  {c.is_primary && (
-                    <span
-                      className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200"
-                      title="Who we ring about this customer"
-                    >
-                      Main contact
-                    </span>
-                  )}
-                  {c.is_decision_maker && (
-                    <span
-                      className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200"
-                      title="This person signs off"
-                    >
-                      Decides
-                    </span>
-                  )}
-                </div>
-                <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-slate-600">
-                  {c.phone && (
-                    <a href={`tel:${c.phone}`} className="hover:text-blue-600 hover:underline">
-                      {c.phone}
-                    </a>
-                  )}
-                  {c.email && (
-                    <a href={`mailto:${c.email}`} className="hover:text-blue-600 hover:underline break-all">
-                      {c.email}
-                    </a>
-                  )}
-                </div>
-                {c.notes && <p className="mt-0.5 text-xs text-slate-500">{c.notes}</p>}
-              </div>
+            <div key={c.id} className="group flex items-center gap-2 py-1.5 text-sm">
+              <span className="font-medium text-slate-900 shrink-0">{c.name}</span>
+              {/* One line each. The pills are a letter, not a word: the tooltip
+                  carries the meaning and the row carries the fact. */}
+              {c.is_primary && (
+                <span
+                  className="shrink-0 text-[10px] font-semibold px-1 rounded bg-blue-100 text-blue-700"
+                  title="Main contact - who we ring"
+                >
+                  MAIN
+                </span>
+              )}
+              {c.is_decision_maker && (
+                <span
+                  className="shrink-0 text-[10px] font-semibold px-1 rounded bg-emerald-100 text-emerald-700"
+                  title="Decides - this person signs off"
+                >
+                  DECIDES
+                </span>
+              )}
+              {c.designation && <span className="text-xs text-slate-400 shrink-0">{c.designation}</span>}
+              <span className="min-w-0 flex-1 truncate text-slate-600" title={c.notes ?? undefined}>
+                {c.phone && (
+                  <a href={`tel:${c.phone}`} className="tabular-nums hover:text-blue-600 hover:underline">
+                    {c.phone}
+                  </a>
+                )}
+                {c.phone && c.email && <span className="text-slate-300"> · </span>}
+                {c.email && (
+                  <a href={`mailto:${c.email}`} className="hover:text-blue-600 hover:underline">
+                    {c.email}
+                  </a>
+                )}
+              </span>
               {canEdit && (
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                   <button
                     type="button"
                     onClick={() => openEdit(c)}

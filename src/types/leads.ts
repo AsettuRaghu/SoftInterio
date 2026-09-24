@@ -498,7 +498,12 @@ export interface Lead {
   // Linked data
   project_id: string | null;
 
+  /** Who referred this lead, when the source says it was a referral. */
+  referred_by_partner_id?: string | null;
+
   // Joined data (from foreign keys)
+  /** The referrer, embedded by the lead GET so the page can name them. */
+  referred_by?: { id: string; name: string; phone: string | null } | null;
   client?: Client;
   property?: Property | null;
   project?: {
@@ -523,6 +528,8 @@ export interface Lead {
 export interface CreateLeadInput {
   /** A partner we already know, chosen on the form instead of typing a new customer. */
   partner_id?: string;
+  /** Who referred this lead - an architect or a customer, both partners. */
+  referred_by_partner_id?: string | null;
   // Client Details (will create a new client record)
   client_name: string;
   phone: string;
