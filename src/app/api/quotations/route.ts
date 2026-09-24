@@ -329,19 +329,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get user's tenant_id
-    const { data: userData, error: userError } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user!.id)
-      .single();
-
-    if (userError || !userData?.tenant_id) {
-      return NextResponse.json(
-        { error: "Failed to get user tenant" },
-        { status: 500 }
-      );
-    }
+    // The guard already resolved the tenant. Re-selecting `users` through the
+    // session client asked the one table whose only SELECT policy is
+    // `id = auth.uid()` for a row it had just been handed, and answered
+    // "Failed to get user tenant" when that came back empty - a 500 with no
+    // way to act on it, on the way to creating Option 2 (2026-09-24). Same
+    // redundant read the calendar carried, same fix.
+    const userData = { tenant_id: user.tenantId };
 
     // Generate or retrieve quotation number
     // For a given lead/project, all quotations share the same number with version incrementing

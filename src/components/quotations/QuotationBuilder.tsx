@@ -317,6 +317,19 @@ export function QuotationBuilder({
         setCanViewCosts(!!data.can_view_costs);
         setLoadError(null);
 
+        // Read before the loading flag clears, so the header is right the
+        // first time it paints. Fetched after the quotation rather than
+        // beside it only because it needs the id; a control that appears two
+        // seconds late reads as the screen changing its mind, which is the
+        // same reason the plan tab's buttons wait for their gates.
+        try {
+          const dr = await fetch(`/api/quotations/${quotationId}/scope-drift`);
+          const dj = dr.ok ? await dr.json() : null;
+          setSecondPreferences(Number(dj?.data?.second_preferences) || 0);
+        } catch {
+          setSecondPreferences(0);
+        }
+
       } catch (error) {
         console.error("Error loading quotation:", error);
         setLoadError(
@@ -1780,11 +1793,11 @@ export function QuotationBuilder({
    * it is built from the scope and leaving unsaved work behind to go and look
    * at a new document is how a morning gets lost.
    */
-  // The same read the summary page uses, so both agree about whether there is
-  // an alternative to price. Re-read after a save, because answering a
-  // question on the scope is exactly what creates one.
+  // Refreshed after a save: answering a question on the scope is exactly what
+  // creates an alternative, so the button can appear without a reload. The
+  // FIRST read happens inside the load, before the page paints.
   useEffect(() => {
-    if (!quotationId) return;
+    if (!quotationId || !lastSavedAt) return;
     let live = true;
     fetch(`/api/quotations/${quotationId}/scope-drift`)
       .then((r) => (r.ok ? r.json() : null))

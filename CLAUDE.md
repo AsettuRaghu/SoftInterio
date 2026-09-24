@@ -3660,6 +3660,21 @@ worth it before a second subscriber exists.
   sets loading. The Tasks page's own visibility refetch is quiet for the
   same reason. Any new hook listening to auth events must follow this.
 
+- **Do not re-select `users` for the tenant; the guard already has it.**
+  `POST /api/quotations` read `users` through the session client for a
+  `tenant_id` that `guard.user.tenantId` was already holding, and answered
+  **"Failed to get user tenant"** with a 500 when it came back empty - on the
+  way to creating Option 2, with nothing the person could do about it
+  (2026-09-24). `users` is the one table whose only SELECT policy is
+  `id = auth.uid()`, so it is the worst table to ask a redundant question of.
+  The calendar carried the same read and lost it for the same reason. Three
+  more remain in `quotations/[id]` and `quotations/[id]/revision`.
+- **A control that appears seconds after the page settles reads as a bug.**
+  Option 2 is drawn from a `scope-drift` read; done in its own effect the
+  button arrived two seconds late. The first read now happens inside the
+  load, before `isLoading` clears, and the standing effect only refreshes
+  after a save - the same reasoning as the Plan tab's buttons waiting for
+  their gates rather than appearing and then changing their minds.
 - **A new API route directory can leave the dev server 404ing.** Turbopack did
   not register `src/app/api/scope-packages/` until a file inside it changed:
   `curl` gave 404 while the sibling `scope-presets` gave a clean 401, and
