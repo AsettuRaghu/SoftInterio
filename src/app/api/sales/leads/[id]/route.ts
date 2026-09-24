@@ -312,8 +312,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       leadClient.partner.contacts = sortContacts(leadClient.partner.contacts);
     }
 
+    /**
+     * Whether this lead has been picked back up, derived from the stage history
+     * the trigger already writes. **No column for it**: a `reopened_at` would be
+     * a second copy of a fact `lead_stage_history` holds completely, and it is
+     * always the copy that goes stale. A lead reopened twice says so.
+     */
+    const reopens = (stageHistory ?? []).filter(
+      (h: { from_stage?: string | null }) => h.from_stage === "lost" || h.from_stage === "disqualified"
+    );
+
     return NextResponse.json({
       lead,
+      reopened: reopens.length
+        ? {
+            count: reopens.length,
+            last_at: reopens[0]?.created_at ?? null,
+            /** What it was before it was reopened, for the chip's tooltip. */
+            from: reopens[0]?.from_stage ?? null,
+          }
+        : null,
       // Whether THIS caller may change THIS lead, so the page draws the
       // controls the server would actually accept rather than offering an
       // action that comes back refused - the same reasoning as the Plan tab's

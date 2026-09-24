@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import ReopenLeadModal from "@/components/leads/ReopenLeadModal";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type {
@@ -94,6 +95,7 @@ export default function LeadDetailPage() {
   // alerts, which cannot be styled and stop the page behind them repainting.
   const [notice, setNotice] = useState<string | null>(null);
   const [showStageModal, setShowStageModal] = useState(false);
+  const [showReopenModal, setShowReopenModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskWithUser | null>(null);
@@ -322,7 +324,19 @@ export default function LeadDetailPage() {
           </div>
         }
         actions={
-          !leadClosed && (
+          leadClosed && ["lost", "disqualified"].includes(lead.stage) ? (
+            /* A closed lead used to show no buttons at all, so a customer who
+               rang back had nowhere to be picked up - the lead was a dead end
+               with its Scope Sheet, quotations and notes still sitting on it.
+               Won stays closed: it has a project. */
+            <button
+              onClick={() => setShowReopenModal(true)}
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              Reopen lead
+            </button>
+          ) : (
+            !leadClosed && (
             <div className="flex gap-3">
               <button
                 onClick={openEditModal}
@@ -337,6 +351,7 @@ export default function LeadDetailPage() {
                 Change Stage
               </button>
             </div>
+            )
           )
         }
       />
@@ -510,6 +525,35 @@ export default function LeadDetailPage() {
             isSaving={isSaving}
             onSave={handleSubmitEdit}
             validationError={null}
+          />
+        )}
+
+        {showReopenModal && lead && (
+          <ReopenLeadModal
+            isOpen
+            onClose={() => setShowReopenModal(false)}
+            leadNumber={lead.lead_number}
+            wasStage={lead.stage}
+            lostReason={lead.lost_reason || lead.disqualification_reason || null}
+            onReopen={async (toStage, note) => {
+              const res = await fetch(`/api/sales/leads/${lead.id}/transition`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ to_stage: toStage, change_reason: note }),
+              });
+              const json = await res.json().catch(() => ({}));
+              if (!res.ok) {
+                // The route answers with the fields it still wants, and that
+                // list is the useful part - a reopened lead can be short of
+                // something a later stage needs.
+                throw new Error(
+                  json.missingFields?.length
+                    ? `Still needed: ${json.missingFields.join(", ")}`
+                    : json.error || "Could not reopen this lead"
+                );
+              }
+              await updateLeadFromStageTransition();
+            }}
           />
         )}
 

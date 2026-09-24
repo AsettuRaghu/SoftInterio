@@ -206,6 +206,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    /**
+     * Reopening a lead that was lost or disqualified. Declared HERE, with the
+     * other pre-conditions, because `missingFields` is answered a few lines
+     * below - a check added further down beside the write would never have been
+     * read, which is the mistake the Project Manager check already made once.
+     */
+    const REOPENABLE_FROM = ["lost", "disqualified"];
+    // Any legal move OUT of a closed stage is a reopen. Which targets are legal
+    // is `ValidStageTransitions`' business, checked above - listing them twice is
+    // how the two come to disagree.
+    const isReopen = REOPENABLE_FROM.includes(lead.stage);
+    if (isReopen && !body.change_reason) {
+      // The one thing a reopen must say: why are we picking this back up.
+      missingFields.push("Notes (why it is being reopened)");
+    }
+
     if (to_stage === "lost") {
       if (!body.lost_reason) {
         missingFields.push("Lost Reason");
@@ -458,6 +474,35 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (to_stage === "lost") {
       updateData.lost_reason = body.lost_reason;
       updateData.lost_notes = body.lost_notes || null;
+    }
+
+    /**
+     * **Reopening a lead that was lost or disqualified.**
+     *
+     * A customer who went quiet in March rings back in September, and the work
+     * already on the record - the Scope Sheet, the quotations, the notes, the
+     * pictures they liked - is exactly what makes the second conversation worth
+     * having. None of it is touched by a stage change, so reopening needs no
+     * copying: it is the same lead picked back up.
+     *
+     * What DOES need doing is clearing the ending. `lost_reason`, `lost_notes`
+     * and the disqualification pair are shown on the Overview under "why it
+     * ended", and an open lead carrying a reason it was lost reads as a bug.
+     * They are cleared from the LEAD and kept in `lead_stage_history`, which the
+     * database trigger writes on every change - so the record of having been
+     * lost, and why, survives exactly where an audit trail belongs.
+     *
+     * Two things deliberately do NOT come back: the tasks and follow-ups that
+     * going lost cancelled, because a reopened lead is a fresh conversation
+     * rather than an old backlog (the same reasoning as a won lead starting its
+     * project with a clean slate); and nothing renumbers, so the lead keeps its
+     * number and its whole history.
+     */
+    if (isReopen) {
+      updateData.lost_reason = null;
+      updateData.lost_notes = null;
+      updateData.disqualification_reason = null;
+      updateData.disqualification_notes = null;
     }
 
     if (to_stage === "won") {

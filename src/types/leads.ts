@@ -789,9 +789,26 @@ export const ValidStageTransitions: Record<LeadStage, LeadStage[]> = {
   qualified: ["requirement_discussion", "lost"], // Can move forward or mark as lost
   requirement_discussion: ["proposal_discussion", "lost"], // Forward only - proposal or lost
   proposal_discussion: ["won", "lost"], // Can move to won or lost
-  disqualified: [], // Terminal
-  won: [], // Terminal
-  lost: ["new", "qualified"], // Can be reopened to early stages only
+  won: [], // Terminal - it has a project
+  /**
+   * **A lost lead can be picked back up**, and where it rejoins is the whole
+   * question. It said `["new", "qualified"]`, which nothing could reach - a
+   * closed lead showed no buttons at all - and which was the wrong answer
+   * anyway: going back to `new` re-asks for the property, the configuration and
+   * the floor plan that the lead already holds, and re-qualifying a lead that
+   * was qualified months ago is ceremony.
+   *
+   * A customer who rings back rejoins at one of two places (asked for
+   * 2026-09-24): still working out what they want, or straight back to the
+   * price. Everything either stage needs is already on the lead.
+   */
+  lost: ["requirement_discussion", "proposal_discussion"],
+  /**
+   * Disqualified is a different judgement - "this was never a real opportunity"
+   * - and such a lead may never have passed qualification, so it comes back
+   * through it rather than resuming mid-pipeline.
+   */
+  disqualified: ["qualified"],
 };
 
 // Required fields per stage transition

@@ -671,6 +671,92 @@ This replaced a Rooms tab that read `quotation_spaces`: a read-only view of what
 was *priced*, which the linked quotation already shows. A project needs what is
 to be *built*.
 
+### A lost lead can be picked back up
+
+Built 2026-09-24. A customer who went quiet in March rings back in September, and
+everything that made the first conversation worth having is still on the record -
+the Scope Sheet, the quotations, the notes, the pictures they liked. A stage change
+touches none of it, so **reopening is not a copy and not a new lead**: it is the
+same lead, with its number and its whole history, carried on.
+
+Before this a closed lead showed **no buttons at all** (`!leadClosed &&` around
+the whole header), so it was a dead end with all of that sitting on it. The
+matrix said `lost: ["new", "qualified"]` - unreachable, and the wrong answer
+anyway: going back to `new` re-asks for the property, configuration and floor plan
+the lead already holds, and re-qualifying a lead qualified months ago is ceremony.
+It is now **`lost: ["requirement_discussion", "proposal_discussion"]`** - the two
+places a returning customer actually rejoins - and `disqualified: ["qualified"]`,
+because that is a different judgement ("never a real opportunity") and such a
+lead may never have passed qualification.
+
+What reopening does, and the reasoning for each:
+
+- **Clears the ending.** `lost_reason`, `lost_notes` and the disqualification
+  pair are shown on the Overview under "why it ended", and an open lead carrying
+  a reason it was lost reads as a bug. They are cleared from the LEAD and kept in
+  `lead_stage_history`, which is where an audit trail belongs.
+- **Requires a note**, which becomes a `note_added` activity on the timeline -
+  the line somebody reads later to find out why it was picked back up. The check
+  sits with the other `missingFields` pre-conditions, **above** the gate that
+  answers them; put beside the write further down it would never have been read,
+  which is the mistake the Project Manager check already made once.
+- **Answers to the same gates as any other move into that stage.** A lead lost
+  before the Scope Sheet existed cannot jump to Requirement Discussion without a
+  configuration and a floor plan, and the refusal names them. That is honest: the
+  stage means something. Verified on a real lead lost in December - it reported
+  exactly `Configuration`, `Floor plan`, and then the scope readiness gate.
+- **Does not bring the cancelled work back.** Tasks and follow-ups that going
+  lost cancelled stay cancelled: a reopened lead is a fresh conversation, not an
+  old backlog, which is the same reasoning as a won lead starting its project
+  with a clean slate. The dialog says so.
+
+**How you know it was reopened** is derived, not stored: `GET /api/sales/leads/
+[id]` returns `reopened: { count, last_at, from }` computed from the stage
+history rows whose `from_stage` was lost or disqualified. **No `reopened_at`
+column** - it would be a second copy of a fact the history holds completely, and
+it is always the copy that goes stale. A lead reopened twice says so.
+
+One thing that needed checking and turned out fine: `trg_lead_stage_change`
+creates a quotation on reaching `proposal_discussion` **only if the lead has
+none**, so reopening a lead that already quoted adds no empty shell. A lead lost
+before it ever quoted gets one, which is correct.
+
+### Who referred this lead
+
+`leads.referred_by_partner_id` (`20260924170000`). `lead_source` has carried
+`architect_referral` and `client_referral` from the beginning with nowhere to say
+WHICH architect or customer - eight of nineteen leads already name one of those
+sources and not one says who. On this business **more than 95% of leads arrive as
+referrals**, so that is the difference between a statistic and a working
+relationship: the referrer is who gets chased when the customer stops answering
+and thanked when the job closes, and neither is possible from a source code.
+
+**One column, not two**, because an architect and a customer are both `partners` -
+that is what the Partners module is for - and `lead_source` says which list to
+pick from. `ON DELETE SET NULL`: a partner leaving the book must not take the lead
+with them.
+
+`components/leads/ReferrerPicker` shows only for a referral source and **clears
+itself** when the source changes to a walk-in, so a stale architect cannot linger
+on a lead that was not referred. It reads **`GET /api/partners/referrers`**, and
+that route exists for the reason the contacts routes did: `/api/partners` is gated
+on `partners.view`, Owner and Admin alone, while the person filling in a new lead
+is **Sales**, who holds no `partners.*` key - the dropdown would have been empty
+for exactly the people who need it. Same shape and same stated reason as
+`/api/partners/match`, and deliberately the narrowest thing that fills a
+dropdown: **id, name and phone of one type**, none of what makes the relationship
+book worth protecting.
+
+**The payoff is on the partner**: a *Referred to Us* tab listing the leads they
+introduced with the customer and the stage, and the count first in Work Together
+because for an architect it is the only number that matters. It is **not** the
+same set as their own leads - an architect refers work without ever being a
+customer, so it needs no `clients` row.
+
+Architects are seeded by `scripts/seed-architects.js` - a script and not a
+migration, because they are one tenant's contacts and not something every future
+database should be born with. Re-running it adds nothing.
+
 ### Winning a lead requires it to be clear
 Open tasks or unhandled follow-ups refuse a `won` transition with a 409 and the
 list. Lost and disqualified cancel that work instead, with the reason recorded.
