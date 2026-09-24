@@ -2753,6 +2753,56 @@ been applied. The builder passes `viewSpaces` everywhere for this reason,
 and the quotation summary page derives too (it rendered the cards from raw
 rows until the same day).
 
+### Every way a line gets into a quotation must price it the same
+
+Reviewed 2026-09-24 for conflicts between the quotation module's own features
+- templates, cost-item bundles, add component, add item - and the scope copy.
+One real conflict, and it was silent:
+
+**A template's lines carried no `quantityKey`.** `addCostItem` looks up what
+an item is priced per on that component type and sets it; `copyScopeToQuotation`
+does the same; `convertTemplateToSpaces` did not, and did not set
+`followsComponent` either. So on any type with a costing rule the same
+catalogue item was priced two entirely different ways depending on how it
+arrived: a carcass applied from a template had no size and priced at **nothing**,
+and hinges arrived as `quantity: 1` - one hinge against the twenty-four the
+rule derives. The conversion now takes the priced-per maps, fetched by
+`pricedPerForTemplate` for the types the template mentions, because the
+conversion is synchronous and the lookup is not.
+
+**A bundle is resolved against its HOST, not its origin.** A cost-item bundle
+drops into an existing component that may be a different type from the one it
+was saved on - a wardrobe bundle into a crockery unit - so what each item is
+priced per is looked up on the target. Carrying the template's key over would
+name a quantity the host's rule does not have, and every such line would
+derive nothing and price at nothing.
+
+Nothing else conflicts: templates and the scope copy both add only, both use
+the catalogue's current rate rather than a stored one, and `metadata.
+scope_item_id` is written by the builder's save and by the copy alike, so a
+line added by hand is correctly reported as "not in the scope" and a line
+brought in from it is not.
+
+### The amber "still need details" strip counts a rule-priced line correctly
+
+`incompleteByComponent` demanded a length and a width for every area line -
+but a rule-priced line has neither, by design: its quantity comes from the
+component's rule and `deriveQuantities` attaches it at render rather than
+storing it. So a quotation built entirely from the scope reported **43 lines
+needing a size** that were all correctly priced, on components whose sizes
+were typed. It now reads the derived spaces rather than state, and judges a
+line with a `quantityKey` by its derived quantity (2026-09-24).
+
+### Expanding a room is not a change to the quotation
+
+The auto-save compares `JSON.stringify` of the whole document, and `expanded`
+lives on a space and on a component - so opening a room marked the quotation
+unsaved and started a save, which is what "just clicking around makes it try
+to save" was. `documentFingerprint()` strips it: expansion is how somebody is
+reading the document, not what it says, and it is never sent to the server nor
+read back from it. Anything else added to a space or component that is
+presentation rather than content belongs in that strip.
+
 ### A quotation has one rendering, and `readOnly` decides if you may change it
 
 The summary page (`/dashboard/quotations/[id]`) used to hand-write its own

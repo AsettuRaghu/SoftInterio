@@ -54,6 +54,36 @@ interface QuotationBuilderProps {
  * should look like when deciding whether to send it, and a grid of disabled
  * inputs is not that.
  */
+/**
+ * What counts as a change to the document.
+ *
+ * `expanded` lives on a space and on a component, and the dirty check used to
+ * stringify the whole array - so opening a room marked the quotation unsaved
+ * and started an auto-save, which is why "just looking at the page" kept
+ * trying to save (2026-09-24). Expansion is how somebody is reading the
+ * document, not what it says: it is never sent to the server and never comes
+ * back from it, so it has no business in the comparison.
+ *
+ * Anything else added to a space or a component that is presentation rather
+ * than content belongs in this strip too.
+ */
+function documentFingerprint(d: {
+  spaces: BuilderSpace[];
+  quotationName: string;
+  notes: string;
+  assignedTo: string | null;
+}): string {
+  return JSON.stringify({
+    spaces: d.spaces.map(({ expanded: _spaceOpen, components, ...space }) => ({
+      ...space,
+      components: components.map(({ expanded: _componentOpen, ...component }) => component),
+    })),
+    quotationName: d.quotationName,
+    notes: d.notes,
+    assignedTo: d.assignedTo,
+  });
+}
+
 export function QuotationBuilder({
   quotationId,
   onExit,
@@ -918,7 +948,34 @@ export function QuotationBuilder({
    * single throwaway space whose components are what actually get inserted, so
    * one conversion serves every insertion point.
    */
-  const convertTemplateToSpaces = (template: any): BuilderSpace[] => {
+  /**
+   * A template's lines must be priced the way the component prices them.
+   *
+   * `addCostItem` looks up what an item is priced per on that component type
+   * and sets `quantityKey`; the template path did not, so the same catalogue
+   * item was priced two entirely different ways depending on how it got into
+   * the document (2026-09-24). On a type with a costing rule that is not a
+   * rounding difference: a carcass arrived with no size and priced at nothing,
+   * and hinges arrived as `quantity: 1` - one hinge instead of the
+   * twenty-four the rule derives.
+   *
+   * Pass the maps in, because the conversion is synchronous and the lookup is
+   * not; `applyTemplate` fetches them for the types the template mentions.
+   */
+  /**
+   * The priced-per maps for every component type a template mentions, so the
+   * synchronous conversion can price each line the way its component does.
+   */
+  const pricedPerForTemplate = async (template: { line_items?: { component_type_id?: string | null }[] }) => {
+    const types = [...new Set((template.line_items ?? []).map((l) => l.component_type_id).filter(Boolean) as string[])];
+    const pairs = await Promise.all(types.map(async (t) => [t, await pricedPerFor(t)] as const));
+    return new Map(pairs);
+  };
+
+  const convertTemplateToSpaces = (
+    template: any,
+    pricedPerByType: Map<string, Map<string, string | null>> = new Map(),
+  ): BuilderSpace[] => {
       // Convert template to quotation spaces
       const newSpaces: BuilderSpace[] = [];
       const lineItemsBySpace: Record<string, Record<string, any[]>> = {};
@@ -1016,6 +1073,12 @@ export function QuotationBuilder({
                   quantity: 1,
                   amount: 0,
                   notes: "",
+                  // Same two things a hand-added line gets: priced per the
+                  // rule's quantity where the component has one, and taking
+                  // the component's size otherwise.
+                  followsComponent: true,
+                  quantityKey:
+                    pricedPerByType.get(firstItem.component_type_id ?? "")?.get(item.cost_item_id) ?? null,
                 };
               }),
             });
@@ -1144,9 +1207,21 @@ export function QuotationBuilder({
       const template = data.template;
       if (!template) throw new Error("Template not found");
 
-      const converted = convertTemplateToSpaces(template);
+      const converted = convertTemplateToSpaces(template, await pricedPerForTemplate(template));
       const components = converted.flatMap((sp) => sp.components);
       if (components.length === 0) return;
+
+      // A bundle lands in a component that may not be the type it was saved
+      // from - a wardrobe bundle dropped into a crockery unit. What an item is
+      // priced per belongs to the component it ends up on, so it is resolved
+      // against the target rather than carried over from the template.
+      let intoTarget: Map<string, string | null> | null = null;
+      if (target.componentId) {
+        const hostType = spaces
+          .find((sp) => sp.id === target.spaceId)
+          ?.components.find((c) => c.id === target.componentId)?.componentTypeId;
+        intoTarget = hostType ? await pricedPerFor(hostType) : new Map();
+      }
 
       setSpaces((prev) =>
         prev.map((space) => {
@@ -1154,7 +1229,9 @@ export function QuotationBuilder({
 
           // A bundle drops its cost items into one existing component.
           if (target.componentId) {
-            const items = components.flatMap((c) => c.lineItems);
+            const items = components
+              .flatMap((c) => c.lineItems)
+              .map((it) => ({ ...it, quantityKey: intoTarget?.get(it.costItemId) ?? null }));
             return {
               ...space,
               components: space.components.map((comp) =>
@@ -1203,7 +1280,7 @@ export function QuotationBuilder({
       const template = data.template;
       if (!template) throw new Error("Template not found");
 
-      const converted = convertTemplateToSpaces(template);
+      const converted = convertTemplateToSpaces(template, await pricedPerForTemplate(template));
 
       setSpaces(mode === "replace" ? converted : [...spaces, ...converted]);
       setAppliedTemplateId(templateId); // Track which template was applied
@@ -1229,7 +1306,20 @@ export function QuotationBuilder({
    * the wardrobe's measurement, so reporting each of them separately names the
    * same missing number three times and points at the wrong control.
    */
-  const incompleteByComponent = (): Array<{
+  /**
+   * What is not finished, by component - the one place a size is typed.
+   *
+   * **Takes the DERIVED spaces**, not the state. A rule-priced line carries no
+   * length or width of its own: its quantity comes from the component's
+   * costing rule, and `deriveQuantities` attaches it at render rather than
+   * storing it. Read from state, every such line looked unmeasured - a
+   * quotation built entirely from the scope reported 43 lines needing a size
+   * that were all correctly priced, on components whose sizes were typed
+   * (2026-09-24).
+   */
+  const incompleteByComponent = (
+    from: BuilderSpace[],
+  ): Array<{
     component: string;
     space: string;
     missing: number;
@@ -1239,13 +1329,24 @@ export function QuotationBuilder({
       component: string; space: string; missing: number; what: string;
     }> = [];
 
-    spaces.forEach((space) => {
+    from.forEach((space) => {
       space.components.forEach((comp) => {
         const needsSize: string[] = [];
         let missing = 0;
         comp.lineItems.forEach((item) => {
-          const type = getMeasurementInfo(item.unitCode).type;
           const noRate = !item.rate || item.rate <= 0;
+          // Priced per a quantity of the rule: the component's measurements
+          // size it, so the line is short only if the rule yielded nothing.
+          if (item.quantityKey) {
+            const noDerived = !(item.derivedQuantity && item.derivedQuantity > 0);
+            if (noRate || noDerived) {
+              missing += 1;
+              if (noDerived) needsSize.push("a measurement");
+              if (noRate) needsSize.push("rate");
+            }
+            return;
+          }
+          const type = getMeasurementInfo(item.unitCode).type;
           const noArea =
             type === "area" &&
             (!item.length || item.length <= 0 || !item.width || item.width <= 0);
@@ -1347,7 +1448,7 @@ export function QuotationBuilder({
       // unfinished lines are reported instead, and the fields stay highlighted,
       // so the gap is visible without holding the work hostage.
       if (hasLineItems) {
-        const groups = incompleteByComponent();
+        const groups = incompleteByComponent(spacesToSave);
         setIncomplete(groups);
         if (groups.length > 0) setShowValidation(true);
       } else {
@@ -1572,12 +1673,7 @@ export function QuotationBuilder({
   useEffect(() => {
     if (isLoading) return;
 
-    const current = JSON.stringify({
-      spaces,
-      quotationName,
-      notes,
-      assignedTo,
-    });
+    const current = documentFingerprint({ spaces, quotationName, notes, assignedTo });
 
     // First settle after a load: this is the document, not a change to it.
     if (baselineRef.current === null) {
