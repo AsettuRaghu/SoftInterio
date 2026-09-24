@@ -36,6 +36,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       phone: normalisePhone(body.phone),
       email: String(body.email ?? "").trim().toLowerCase() || null,
       is_primary: body.is_primary === true,
+      // Who signs off, which is not the same fact as who we ring. Any number of
+      // contacts may hold it; see the 20260924150000 migration.
+      is_decision_maker: body.is_decision_maker === true,
       notes: String(body.notes ?? "").trim() || null,
     })
     .select("*")

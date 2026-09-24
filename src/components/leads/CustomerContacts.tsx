@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Toast } from "@/components/ui/Toast";
 import { sortContacts } from "@/lib/partners/contacts";
@@ -28,13 +28,26 @@ import type { PartnerContact } from "@/types/partners";
  */
 
 interface Props {
-  /** Where the writes go: the lead-scoped route, gated on lead access. */
+  /**
+   * Where the writes go. Two callers, two gates, one component:
+   * `/api/sales/leads/:id/contacts` is gated on access to the lead, and
+   * `/api/partners/:id/contacts` on `partners.edit`. The block is the same
+   * either way, which is the point - a customer's people should not read as two
+   * different features depending on which screen you reached them from.
+   */
   basePath: string;
   contacts: PartnerContact[];
   /** Whether the server would accept a write from this caller. */
   canEdit: boolean;
   /** The customer's own name, for the empty state. */
   customerName?: string | null;
+  /**
+   * The outer frame. The default sits at the foot of an existing card (the
+   * lead's Client Details), so it draws its own top rule; a caller that gives it
+   * a card of its own passes just the padding, or the rule doubles up under the
+   * card's header.
+   */
+  className?: string;
 }
 
 type Draft = {
@@ -47,6 +60,11 @@ type Draft = {
   is_decision_maker: boolean;
 };
 
+/** A stable fingerprint of the set, so a re-render with the same people is not a change. */
+function idsOf(rows: PartnerContact[] | undefined): string {
+  return (rows ?? []).map((r) => r.id).sort().join(",");
+}
+
 const BLANK: Draft = {
   name: "",
   designation: "",
@@ -57,8 +75,26 @@ const BLANK: Draft = {
   is_decision_maker: false,
 };
 
-export default function CustomerContacts({ basePath, contacts, canEdit, customerName }: Props) {
+export default function CustomerContacts({
+  basePath,
+  contacts,
+  canEdit,
+  customerName,
+  className = "border-t border-slate-200 px-4 py-4",
+}: Props) {
   const [people, setPeople] = useState<PartnerContact[]>(() => sortContacts(contacts ?? []));
+  /**
+   * The prop seeds the list and this component then owns it - but a parent that
+   * reloads for its own reasons (the partner page refetches after an edit) hands
+   * down a new set, and ignoring it for ever would leave the two disagreeing.
+   * Keyed on the ids, so our own optimistic writes do not fight the prop.
+   */
+  const seeded = useRef(idsOf(contacts));
+  const incoming = idsOf(contacts);
+  if (incoming !== seeded.current) {
+    seeded.current = incoming;
+    setPeople(sortContacts(contacts ?? []));
+  }
   /** null = closed, "new" = the add form, otherwise the id being edited. */
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(BLANK);
@@ -133,7 +169,7 @@ export default function CustomerContacts({ basePath, contacts, canEdit, customer
   const remove = async (c: PartnerContact) => {
     const ok = await confirm({
       title: `Remove ${c.name}?`,
-      message: "They come off this customer everywhere, not just this lead.",
+      message: "They come off the customer's record, so they go from every lead and project for this customer too.",
       confirmLabel: "Remove",
       tone: "danger",
     });
@@ -152,7 +188,7 @@ export default function CustomerContacts({ basePath, contacts, canEdit, customer
   };
 
   return (
-    <div className="border-t border-slate-200 px-4 py-4">
+    <div className={className}>
       {confirmDialog}
       <Toast message={notice} onDismiss={() => setNotice(null)} />
 

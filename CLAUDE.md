@@ -1176,6 +1176,71 @@ built with its own header and filter row):
   bar of the lead and project pages (`px-4 py-3 text-sm font-medium
   border-b-2`, active `border-blue-600 text-blue-600`).
 
+### The Overview card has one home now
+
+`components/ui/DetailCard.tsx` - `DetailCard`, `DetailFields`, `DetailField`.
+The lead's Overview and the project's Overview are built from the same eight
+classes (a white `rounded-lg` card, a tinted gradient strip, a 20px icon badge,
+a bold title) and a grid of "Label : value" facts, written out by hand in both.
+The partner page was the third to need it and had instead grown plain bordered
+boxes with a `<dl>`, which is why it read as a different product
+(2026-09-24).
+
+`tone` is the strip colour and **carries no meaning** - it tells one card from
+the next down a long page, and the lead and project read blue, purple, green in
+that order. Severity belongs on a `StatusPill`, never on the furniture.
+
+**The lead and project Overviews still hold their own copies**, deliberately:
+they are long and working, and rewriting them in the change that introduced the
+component would have risked two screens to tidy a third. Migrate them when one
+of them is next touched.
+
+### The Partners detail page follows the lead page, finally
+
+Partners was the module that prompted "every list page is built the same way -
+do not ask, copy". The list was converted then; the **detail** page was not, and
+was brought across on 2026-09-24. What was wrong, each of it a rule stated
+elsewhere in this file:
+
+- **The tab lived in `useState`**, so a reload or a shared link always landed on
+  Overview. `useUrlTab` now, like the lead, project and Catalogue pages. A tab in
+  the URL that this partner does not have (`?tab=orders` on a customer) falls
+  back rather than rendering an empty page.
+- **The tabs carried count badges**, which the lead and project tab bars
+  deliberately do not: a number beside a label makes the reader count things
+  before they have decided which tab they want.
+- **The read-only status pills sat in the header's `actions` slot**, among the
+  buttons, so what the record IS read as something you could press. They are in
+  `stats` now - the slot the lead uses for its stage and priority, behind a
+  divider beside the title.
+- **The related records were a hand-rolled list of clickable `<li>`s.** They are
+  `AppTable` now, `table-fixed` with percentage widths, `onRowClick` and an
+  `emptyState`, each inside a `DetailCard` with `bodyClassName="p-0"` so the card
+  supplies the heading and the table sits flush.
+- **A quotation's status keeps `QuotationStatusColors`**, not `StatusPill`:
+  every quotation list in the app renders it from that map, so the pill would
+  have been the inconsistency.
+
+**The Contacts tab is `CustomerContacts`** - the same component the lead's
+Overview carries, pointed at `/api/partners/:id/contacts` instead of the
+lead-scoped route. Two gates, one block: a customer's people should not look or
+behave differently depending on which screen you reached them from. It replaced
+a bespoke list and a bespoke `ContactModal`, and the reason that mattered
+immediately is that the bespoke one **could not set `is_decision_maker` at
+all** - the field existed, the lead could edit it, and the partner page silently
+could not. That is how two editors of one thing always end.
+
+`basePath` and `className` are the two props that make it portable: the default
+frame draws its own top rule for sitting at the foot of the lead's Client
+Details card, and a caller giving it a card of its own passes just the padding.
+It also follows a changed `contacts` prop (fingerprinted by id), because the
+partner page refetches after its own edits and the two would otherwise disagree.
+
+Still there and deliberately untouched: the **"On SoftInterio" column** on the
+list, which reads "Not yet" on every row because no partner is linked yet. It is
+a documented decision (see Partners above) rather than an oversight, but it is
+the first thing to reconsider if that page is ever short of room.
+
 ### A dropdown with more than a handful of entries is a `SearchSelect`
 
 `components/ui/SearchSelect` (2026-09-22): a single-choice dropdown you

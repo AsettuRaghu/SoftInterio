@@ -23,7 +23,7 @@ async function load(supabase: Awaited<ReturnType<typeof createClient>>, id: stri
   const { data } = await supabase
     .from("partners")
     .select(
-      "*, types:partner_type_links(type_code), contacts:partner_contacts(id, name, designation, phone, email, is_primary, notes, created_at), " +
+      "*, types:partner_type_links(type_code), contacts:partner_contacts(id, name, designation, phone, email, is_primary, is_decision_maker, notes, created_at), " +
         "clients:clients(id), vendors:stock_vendors(id, code, payment_terms, credit_days, credit_limit)"
     )
     .eq("id", id)

@@ -29,6 +29,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if ("phone" in body) patch.phone = normalisePhone(body.phone);
   if ("email" in body) patch.email = String(body.email ?? "").trim().toLowerCase() || null;
   if ("notes" in body) patch.notes = String(body.notes ?? "").trim() || null;
+  if ("is_decision_maker" in body) patch.is_decision_maker = body.is_decision_maker === true;
   if (body.is_primary === true && !existing.is_primary) {
     await supabase.from("partner_contacts").update({ is_primary: false }).eq("partner_id", id).eq("is_primary", true);
     patch.is_primary = true;
