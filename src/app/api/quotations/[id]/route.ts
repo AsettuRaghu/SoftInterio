@@ -204,19 +204,28 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         .select("id, version, status, grand_total, created_at")
         .eq("quotation_number", quotation.quotation_number)
         .order("version", { ascending: false }),
-      // Get created by user
+      /**
+       * **`tenant_directory`, not `users`.** The summary page renders
+       * "created … by <name>", and the only SELECT policies on `users` are
+       * `id = auth.uid()` - so through the session client this returned the
+       * caller's own row or nothing, and a quotation somebody else wrote showed
+       * "created" with the name silently missing. Exactly the failure the sales
+       * report's "Unassigned" column was, and the reason the view exists.
+       *
+       * `.maybeSingle()` rather than `.single()`, because a creator who has left
+       * is a null row and not an error.
+       */
       supabase
-        .from("users")
+        .from("tenant_directory")
         .select("id, name, avatar_url, email")
         .eq("id", quotation.created_by)
-        .single(),
-      // Get updated by user
+        .maybeSingle(),
       quotation.updated_by
         ? supabase
-            .from("users")
+            .from("tenant_directory")
             .select("id, name, avatar_url, email")
             .eq("id", quotation.updated_by)
-            .single()
+            .maybeSingle()
         : Promise.resolve({ data: null }),
     ]);
 

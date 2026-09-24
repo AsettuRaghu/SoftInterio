@@ -37,6 +37,7 @@ interface LeadRow {
   stage: string;
   lead_source: string | null;
   service_type: string | null;
+  referred_by_partner_id: string | null;
   priority: string | null;
   budget_range: string | null;
   won_amount: number | null;
@@ -240,7 +241,7 @@ export async function GET(request: NextRequest) {
           supabase
             .from("leads")
             .select(
-              "id, lead_number, stage, lead_source, service_type, priority, budget_range, won_amount, assigned_to, created_at, won_at, stage_changed_at, last_activity_at, next_follow_up_at, lost_reason, disqualification_reason, client:clients(name)"
+              "id, lead_number, stage, lead_source, service_type, referred_by_partner_id, priority, budget_range, won_amount, assigned_to, created_at, won_at, stage_changed_at, last_activity_at, next_follow_up_at, lost_reason, disqualification_reason, client:clients(name)"
             )
             .order("created_at", { ascending: true })
             .range(a, b)
@@ -457,6 +458,46 @@ export async function GET(request: NextRequest) {
       .map(({ key, ...r }) => ({ service: key, ...r }))
       .sort((a, b) => b.total - a.total);
 
+    /**
+     * **Who refers us.** The same reduction again, over the referrer.
+     *
+     * "Where leads come from" answers where to spend the next marketing rupee.
+     * On a business where more than 95% of leads arrive as referrals that
+     * question is nearly always answered "a person", and the useful follow-up is
+     * WHICH person - because an architect who has sent four jobs is someone to
+     * thank, chase and incentivise, and a source code is not.
+     *
+     * Leads with no referrer named are left out rather than bucketed as
+     * "unspecified": this table is a list of people, and a row called
+     * "unspecified" holding most of the pipeline would make it useless while the
+     * field is still being filled in.
+     */
+    const referrerIds = [...new Set(allLeads.map((l) => l.referred_by_partner_id).filter(Boolean))] as string[];
+    const partnerName: Record<string, string> = {};
+    if (referrerIds.length) {
+      const { data: refs } = await supabase
+        .from("partners")
+        .select("id, name")
+        .in("id", referrerIds);
+      for (const r of refs ?? []) partnerName[r.id as string] = r.name as string;
+    }
+    const byReferrer = segment(
+      allLeads.filter((l) => l.referred_by_partner_id),
+      (l) => l.referred_by_partner_id as string,
+      openValue,
+      CLOSED_STAGES
+    )
+      .map(({ key, ...r }) => ({ partner_id: key, name: partnerName[key] || "Unknown", ...r }))
+      .sort((a, b) => b.won_value - a.won_value || b.total - a.total);
+
+    /**
+     * How much of the pipeline has a referral source but nobody named - the one
+     * number that says whether this table can be trusted yet.
+     */
+    const referralSources = ["architect_referral", "client_referral"];
+    const referralLeads = allLeads.filter((l) => l.lead_source && referralSources.includes(l.lead_source));
+    const referralsUnnamed = referralLeads.filter((l) => !l.referred_by_partner_id).length;
+
     // --- How long it takes -------------------------------------------------
     const daysToWin = allLeads
       .filter((l) => l.stage === "won" && l.won_at)
@@ -661,6 +702,8 @@ export async function GET(request: NextRequest) {
       by_source: bySource,
       by_owner: byOwner,
       by_service: byService,
+      by_referrer: byReferrer,
+      referrals: { total: referralLeads.length, unnamed: referralsUnnamed },
       pipeline_by_stage: pipelineByStage,
       velocity,
       loss_reasons: lossReasons,

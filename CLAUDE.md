@@ -2973,6 +2973,57 @@ in one month, so the ninety-day default lands on zero intake and zero closed.
 The page says so and offers All time rather than showing a page of zeroes that
 reads as a broken report.
 
+### The sales report answers "who refers us", not just "where from"
+
+Added 2026-09-24 with the referral field. "Where leads come from" decides where the
+next marketing rupee goes - but on a business where more than 95% of leads arrive
+as referrals that question nearly always answers "a person", and the useful
+follow-up is **which** person. An architect who has sent four jobs is someone to
+thank, chase and incentivise; a source code is not.
+
+`by_referrer` is the same `segment()` reduction as source, owner and service, over
+`referred_by_partner_id`, ordered by **what they have won us** because that is
+what an incentive comes out of. Two decisions inside it:
+
+- **Leads naming nobody are left out**, not bucketed as "unspecified". The table
+  is a list of people, and a row called "unspecified" holding most of the pipeline
+  would make it useless while the field is still being filled in.
+- **The panel says how complete it is**: "7 of 8 referral leads name nobody yet".
+  That is the one number that tells a reader whether to trust the table, and
+  without it a thin table looks like a thin referral network rather than a
+  half-filled field.
+
+The CSV export gained a **Referred By** column beside Source, because a referral
+source without the name is the part a spreadsheet cannot look up later, and that
+file is the one people keep.
+
+### The redundant `users` read, finally swept out of leads and quotations
+
+`users` is the one table whose only SELECT policies are `id = auth.uid()`, and
+reading it for a `tenant_id` the guard already holds was noted here twice - once
+when it answered **"Failed to get user tenant"** with a 500 on the way to creating
+a quotation, and again as "three more remain". A sweep on 2026-09-24 found
+**seven**, all gone now:
+
+- `GET` and `POST /api/sales/leads` - two round trips on the app's most-visited
+  list, which matters because every API route already costs ~650ms before it reads
+  a row, so the lever is fewer round trips per screen.
+- Four in `/api/sales/leads/[id]/activities`, where three handlers then had a
+  session client they no longer used at all.
+- One in `/api/quotations/[id]/revision`.
+
+**And two that were a different bug wearing the same clothes.**
+`GET /api/quotations/[id]` read `users` for the **names** of `created_by` and
+`updated_by` - and the summary page renders "created … by <name>", so a quotation
+somebody else wrote showed "created" with the name silently missing. Those now read
+`tenant_directory`, which is what it is for. `.maybeSingle()` rather than
+`.single()`, because a creator who has left is a null row and not an error.
+
+The rule, stated once more because it has now been met in five places: **reading
+`users` is either asking for something the guard already has, or asking for a
+colleague's name from a table that will not give it.** The first is waste; the
+second is a blank on screen.
+
 ### Two figures a lead carries and the report never used
 
 `service_type` was collected on every lead and aggregated nowhere; it is now

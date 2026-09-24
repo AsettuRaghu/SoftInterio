@@ -101,19 +101,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Log activity in lead's timeline if quotation is linked to a lead
     if (newQuotation.lead_id) {
       try {
-        const { data: userData } = await supabase
-          .from("users")
-          .select("tenant_id")
-          .eq("id", user.id)
-          .single();
+        // The guard already holds the tenant. Re-reading `users` for it is the
+        // trap that answered "Failed to get user tenant" on POST /api/quotations -
+        // and `users` is the one table whose only SELECT policy is id = auth.uid().
+        const tenantId = user.tenantId;
 
-        if (userData?.tenant_id) {
+        if (tenantId) {
           // Was activity_type "quotation_created", which is not a value the
           // lead_activity_type_enum accepts - the insert failed every time and
           // the surrounding catch swallowed it, so revisions have never
           // appeared on a timeline.
           await logQuotationActivity(supabase, {
-            quotation: { ...newQuotation, tenant_id: userData.tenant_id },
+            quotation: { ...newQuotation, tenant_id: tenantId },
             type: "quotation_revised",
             title: `${quotationLabel(newQuotation)} created as a revision`,
             description: `Revision of ${newQuotation.quotation_number}`,

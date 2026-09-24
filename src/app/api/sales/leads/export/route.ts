@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
     const leadQuery = supabase
       .from("leads")
       .select(
-        "id, lead_number, stage, lead_source, service_type, priority, budget_range, won_amount, assigned_to, created_at, won_at, last_activity_at, next_follow_up_at, lost_reason, disqualification_reason, client:clients(name, phone, email), property:properties(property_name, city)"
+        "id, lead_number, stage, lead_source, service_type, referred_by_partner_id, priority, budget_range, won_amount, assigned_to, created_at, won_at, last_activity_at, next_follow_up_at, lost_reason, disqualification_reason, client:clients(name, phone, email), property:properties(property_name, city), referred_by:partners!leads_referred_by_partner_id_fkey(name)"
       )
       .order("created_at", { ascending: false });
 
@@ -84,7 +84,9 @@ export async function GET(request: NextRequest) {
 
     const headers = [
       "Lead Number", "Client", "Phone", "Email", "Property", "City",
-      "Stage", "Source", "Service", "Priority", "Budget Band",
+      // A referral source without the referrer's name is the part a spreadsheet
+      // cannot look up later, and this file is the one people keep.
+      "Stage", "Source", "Referred By", "Service", "Priority", "Budget Band",
       "Owner", "Created", "Age (days)", "Days Since Activity",
       "Next Follow-up", "Quotations", "Best Quotation", "Won Amount",
       "Won On", "Lost / Disqualified Reason",
@@ -104,7 +106,12 @@ export async function GET(request: NextRequest) {
       return [
         l.lead_number, client?.name, client?.phone, client?.email,
         property?.property_name, property?.city,
-        l.stage, l.lead_source, l.service_type, l.priority, l.budget_range,
+        l.stage,
+        l.lead_source,
+        (Array.isArray(l.referred_by) ? l.referred_by[0] : l.referred_by)?.name ?? "",
+        l.service_type,
+        l.priority,
+        l.budget_range,
         userName[l.assigned_to || ""] || "Unassigned",
         l.created_at?.slice(0, 10),
         days(l.created_at),

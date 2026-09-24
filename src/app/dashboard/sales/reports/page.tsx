@@ -71,6 +71,11 @@ interface Analytics {
     service: string; total: number; won: number; lost: number; open: number;
     won_value: number; pipeline_value: number; win_rate: number;
   }>;
+  by_referrer: Array<{
+    partner_id: string; name: string; total: number; won: number; lost: number;
+    open: number; won_value: number; pipeline_value: number; win_rate: number;
+  }>;
+  referrals: { total: number; unnamed: number };
   pipeline_by_stage: Array<{
     stage: string; count: number; value: number; unvalued: number;
     avg_days_in_stage: number; oldest_days: number;
@@ -611,6 +616,34 @@ export default function SalesReportsPage() {
                     ...r,
                     key: r.source,
                     label: humanise(r.source),
+                  }))}
+                />
+              </Panel>
+
+              {/* Who, not just where.
+                  On this business more than 95% of leads arrive as referrals, so
+                  "Where leads come from" almost always answers "a person" and the
+                  useful follow-up is WHICH person - an architect who has sent
+                  four jobs is someone to thank, chase and incentivise, and a
+                  source code is not. Ordered by what they have won us, because
+                  that is the number an incentive comes out of. */}
+              <Panel
+                title="Who refers us"
+                hint={
+                  data?.referrals?.unnamed
+                    ? `${data.referrals.unnamed} of ${data.referrals.total} referral leads name nobody yet`
+                    : "Win rate is won ÷ closed"
+                }
+                flush
+              >
+                <SegmentTable
+                  nameHeader="Referred by"
+                  wide
+                  empty="No lead names a referrer yet. Tag them on the lead and this fills in."
+                  rows={(data?.by_referrer ?? []).map((r) => ({
+                    ...r,
+                    key: r.partner_id,
+                    label: r.name,
                   }))}
                 />
               </Panel>

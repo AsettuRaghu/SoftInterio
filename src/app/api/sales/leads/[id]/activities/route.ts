@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { protectApiRoute, createErrorResponse } from "@/lib/auth/api-guard";
 import type { LeadActivityType } from "@/types/leads";
@@ -24,17 +23,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const { user } = guard;
     const { id: leadId } = await params;
-    const supabase = await createClient();
+    // Only the admin client is needed here now: the session client existed for
+    // the tenant read the guard already answers.
     const supabaseAdmin = createAdminClient();
 
     // Get user's tenant first for security
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
+    // The guard holds the tenant; `users` is the one table whose only SELECT
+    // policy is id = auth.uid(), so this was a round trip for nothing.
+    const tenantId = user.tenantId;
 
-    if (!userData?.tenant_id) {
+    if (!tenantId) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
@@ -43,7 +41,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .from("leads")
       .select("id, tenant_id")
       .eq("id", leadId)
-      .eq("tenant_id", userData.tenant_id)
+      .eq("tenant_id", tenantId)
       .single();
 
     if (leadError || !lead) {
@@ -124,17 +122,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const supabase = await createClient();
+    // Only the admin client is needed here now: the session client existed for
+    // the tenant read the guard already answers.
     const supabaseAdmin = createAdminClient();
 
     // Get user's tenant first for security
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
+    // The guard holds the tenant; `users` is the one table whose only SELECT
+    // policy is id = auth.uid(), so this was a round trip for nothing.
+    const tenantId = user.tenantId;
 
-    if (!userData?.tenant_id) {
+    if (!tenantId) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
@@ -143,7 +140,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .from("leads")
       .select("id, tenant_id")
       .eq("id", leadId)
-      .eq("tenant_id", userData.tenant_id)
+      .eq("tenant_id", tenantId)
       .single();
 
     if (leadError || !lead) {
@@ -155,7 +152,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .from("lead_activities")
       .insert({
         lead_id: leadId,
-        tenant_id: userData.tenant_id,
+        tenant_id: tenantId,
         activity_type: activity_type as LeadActivityType,
         title,
         description: description || null,
@@ -260,17 +257,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const supabase = await createClient();
+    // Only the admin client is needed here now: the session client existed for
+    // the tenant read the guard already answers.
     const supabaseAdmin = createAdminClient();
 
     // Get user's tenant first for security
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
+    // The guard holds the tenant; `users` is the one table whose only SELECT
+    // policy is id = auth.uid(), so this was a round trip for nothing.
+    const tenantId = user.tenantId;
 
-    if (!userData?.tenant_id) {
+    if (!tenantId) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
@@ -279,7 +275,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .from("leads")
       .select("id, tenant_id")
       .eq("id", leadId)
-      .eq("tenant_id", userData.tenant_id)
+      .eq("tenant_id", tenantId)
       .single();
 
     if (leadError || !lead) {
@@ -371,17 +367,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const supabase = await createClient();
+    // Only the admin client is needed here now: the session client existed for
+    // the tenant read the guard already answers.
     const supabaseAdmin = createAdminClient();
 
     // Get user's tenant first for security
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
+    // The guard holds the tenant; `users` is the one table whose only SELECT
+    // policy is id = auth.uid(), so this was a round trip for nothing.
+    const tenantId = user.tenantId;
 
-    if (!userData?.tenant_id) {
+    if (!tenantId) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
@@ -390,7 +385,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       .from("leads")
       .select("id, tenant_id")
       .eq("id", leadId)
-      .eq("tenant_id", userData.tenant_id)
+      .eq("tenant_id", tenantId)
       .single();
 
     if (leadError || !lead) {

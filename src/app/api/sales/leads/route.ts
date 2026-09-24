@@ -38,26 +38,13 @@ export async function GET(request: NextRequest) {
     }
     const supabase = await createClient();
 
-    // Get user's tenant
-    const { data: userData, error: userError } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (userError) {
-      return NextResponse.json(
-        { error: "Failed to fetch user data" },
-        { status: 500 }
-      );
-    }
-
-    if (!userData?.tenant_id) {
-      return NextResponse.json(
-        { error: "User not found or no tenant" },
-        { status: 404 }
-      );
-    }
+    /**
+     * The tenant comes off the guard. This re-read `users` for it - a round trip
+     * on the app's most-visited list, to the one table whose only SELECT policy is
+     * `id = auth.uid()`. Every API route already costs ~650ms before it reads a
+     * row, so the lever that matters is fewer round trips per screen.
+     */
+    const tenantId = user.tenantId;
 
     // Parse query params
     const searchParams = request.nextUrl.searchParams;
@@ -89,7 +76,7 @@ export async function GET(request: NextRequest) {
       `,
         { count: "exact" }
       )
-      .eq("tenant_id", userData.tenant_id);
+      .eq("tenant_id", tenantId);
 
     // Narrowed before any other filter, so nothing downstream can widen it
     // back. This query uses the admin client, which bypasses RLS entirely -
@@ -359,29 +346,8 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient();
 
-    // Get user's tenant
-    const { data: userData, error: userError } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (userError) {
-      log.error("Error fetching user data", userError);
-      return NextResponse.json(
-        { error: "Failed to fetch user data" },
-        { status: 500 }
-      );
-    }
-
-    if (!userData?.tenant_id) {
-      log.debug("User has no tenant");
-      return NextResponse.json(
-        { error: "User not found or no tenant" },
-        { status: 404 }
-      );
-    }
-    log.debug("Tenant ID", { detail: userData.tenant_id });
+    // The guard already holds the tenant - see the GET above.
+    const tenantId = user.tenantId;
 
     const body: CreateLeadInput = await request.json();
     // The whole body was logged as pretty-printed JSON on every request -
@@ -442,7 +408,7 @@ export async function POST(request: NextRequest) {
         const made = await supabase
           .from("clients")
           .insert({
-            tenant_id: userData.tenant_id,
+            tenant_id: tenantId,
             partner_id: partner.id,
             client_type: partner.kind === "organisation" ? "company" : "individual",
             status: "active",
@@ -463,7 +429,7 @@ export async function POST(request: NextRequest) {
       const { data: partner } = await supabase
         .from("partners")
         .insert({
-          tenant_id: userData.tenant_id,
+          tenant_id: tenantId,
           kind: "person",
           name: body.client_name.trim(),
           phone: normalisePhone(body.phone),
@@ -475,7 +441,7 @@ export async function POST(request: NextRequest) {
       if (partner) {
         await supabase.from("partner_type_links").insert({ partner_id: partner.id, type_code: "customer" });
         await supabase.from("partner_contacts").insert({
-          tenant_id: userData.tenant_id,
+          tenant_id: tenantId,
           partner_id: partner.id,
           name: body.client_name.trim(),
           phone: normalisePhone(body.phone),
@@ -486,7 +452,7 @@ export async function POST(request: NextRequest) {
       const made = await supabase
         .from("clients")
         .insert({
-          tenant_id: userData.tenant_id,
+          tenant_id: tenantId,
           partner_id: partner?.id ?? null,
           client_type: "individual",
           status: "active",
@@ -519,7 +485,7 @@ export async function POST(request: NextRequest) {
       const { data: property, error: propertyError } = await supabase
         .from("properties")
         .insert({
-          tenant_id: userData.tenant_id,
+          tenant_id: tenantId,
           property_name: body.property_name || null,
           unit_number: body.unit_number || null,
           category: body.property_category || "residential",
@@ -546,7 +512,7 @@ export async function POST(request: NextRequest) {
 
     // STEP 3: Generate lead number based on tenant_lead_config
     log.debug("Generating lead number");
-    const leadNumber = await generateUniqueLeadNumber(userData.tenant_id);
+    const leadNumber = await generateUniqueLeadNumber(tenantId);
     log.debug("Generated lead number", { detail: leadNumber });
 
     // STEP 4: Create Lead record with linked client and property
@@ -554,7 +520,7 @@ export async function POST(request: NextRequest) {
     const { data: lead, error: createError } = await supabase
       .from("leads")
       .insert({
-        tenant_id: userData.tenant_id,
+        tenant_id: tenantId,
         lead_number: leadNumber,
         client_id: client.id,
         property_id: propertyId,
