@@ -2836,6 +2836,15 @@ The two pages keep their separate jobs. The builder is the editor; the summary
 carries status, versions, Share and the meta, which is why it was not simply
 replaced by a locked builder. They now share the rendering, not the role.
 
+**But an editable quotation opens straight into the builder**, so for a draft
+the summary is never seen - which means **an action only on the summary page
+is unreachable exactly when it is wanted**. `Option 2` was one: it needs the
+scope's second preferences, which only exist while a quotation is still being
+negotiated, and it sat on the page a draft skips (2026-09-24). It is on both
+now, on the same condition and reading the same `scope-drift`. Before adding
+an action to the summary page, ask whether it applies to a draft; if it does,
+it belongs in the builder's header too.
+
 ### A small change refreshes a small thing
 
 Ticking a follow-up done on a lead's Notes tab took about a second and a half

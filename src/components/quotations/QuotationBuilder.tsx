@@ -132,6 +132,7 @@ export function QuotationBuilder({
   const [quotationNumber, setQuotationNumber] = useState("");
   const [source, setSource] = useState<{ label: string; href: string } | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [leadId, setLeadId] = useState<string | null>(null);
   // "Bring in from scope": pull on demand, adds only what is missing. Local
   // edits are saved first so the re-read after it cannot lose them.
   const [bringingScope, setBringingScope] = useState(false);
@@ -182,6 +183,17 @@ export function QuotationBuilder({
     useState(false);
   const [versionNotes, setVersionNotes] = useState("");
   const [isCreatingRevision, setIsCreatingRevision] = useState(false);
+  /**
+   * The scope's second preferences - what an Option 2 would be built from.
+   *
+   * The button belongs here and not only on the summary page: an editable
+   * quotation opens straight into the builder (that is the whole point of
+   * reading and editing sharing one route), so a draft never shows the
+   * summary and the action was unreachable exactly when it was wanted
+   * (2026-09-24).
+   */
+  const [secondPreferences, setSecondPreferences] = useState(0);
+  const [isCreatingOption2, setIsCreatingOption2] = useState(false);
 
   // Template modal
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -278,6 +290,7 @@ export function QuotationBuilder({
         // Which record this quotation belongs to. The breadcrumb otherwise
         // shows only the quotation number, which says nothing about whose job
         // is being priced.
+        setLeadId(q.lead_id || null);
         if (q.lead_id && q.lead?.lead_number) {
           setSource({
             label: q.lead.lead_number,
@@ -1761,6 +1774,49 @@ export function QuotationBuilder({
   }, [hasUnsavedChanges]);
 
   // Create a new revision and open it for editing
+  /**
+   * A second quotation from the scope's alternatives: the ② wherever there is
+   * one and the ① everywhere else, under its own number. Saves first, because
+   * it is built from the scope and leaving unsaved work behind to go and look
+   * at a new document is how a morning gets lost.
+   */
+  // The same read the summary page uses, so both agree about whether there is
+  // an alternative to price. Re-read after a save, because answering a
+  // question on the scope is exactly what creates one.
+  useEffect(() => {
+    if (!quotationId) return;
+    let live = true;
+    fetch(`/api/quotations/${quotationId}/scope-drift`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (live) setSecondPreferences(Number(j?.data?.second_preferences) || 0);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [quotationId, lastSavedAt]);
+
+  const handleCreateOption2 = async () => {
+    if (isCreatingOption2) return;
+    try {
+      setIsCreatingOption2(true);
+      if (hasUnsavedChanges) await saveQuotation(false, false);
+      const response = await fetch("/api/quotations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lead_id: leadId || null, project_id: projectId || null, from_scope: true, preference: "p2" }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not create Option 2");
+      router.push(`/dashboard/quotations/${data.quotation.id}?edit=1`);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Could not create Option 2");
+    } finally {
+      setIsCreatingOption2(false);
+    }
+  };
+
   const handleCreateRevision = async () => {
     try {
       setIsCreatingRevision(true);
@@ -2018,6 +2074,18 @@ export function QuotationBuilder({
                 )}
                 {isCreatingRevision ? "Creating..." : "Revise"}
               </button>
+              {/* Only when the room sheet actually holds alternatives - there
+                  is nothing to build a second document from otherwise. */}
+              {secondPreferences > 0 && (
+                <button
+                  onClick={handleCreateOption2}
+                  disabled={isCreatingOption2}
+                  title={`A second quotation from the scope's ${secondPreferences} second preference${secondPreferences === 1 ? "" : "s"} - the alternative the customer discussed, priced beside this one`}
+                  className="px-3 py-1.5 text-sm text-emerald-700 border border-emerald-300 bg-emerald-50 rounded-lg hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  {isCreatingOption2 ? "Creating..." : "Option 2"}
+                </button>
+              )}
               <button
                 onClick={() => saveQuotation(false, true)}
                 disabled={isSaving}
