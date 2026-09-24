@@ -2998,6 +2998,19 @@ permission at all**, so anybody signed in to the tenant could read out a live
 customer link for any quotation; it also refuses to share anything but a `sent`
 or `approved` document.
 
+**Sharing promotes a draft, and that has to happen BEFORE the link exists.**
+`ShareQuotationModal` created the link on open and marked the quotation sent
+afterwards - so the moment the share route started refusing a draft, the dialog
+became a dead end on exactly the documents people share from. The promotion is
+now the first thing the effect does; pressing Share is the deliberate act, and
+the note under the buttons has always said so. Two consequences worth knowing: a
+draft on a **closed lead** cannot be promoted (the status route refuses a won
+lead's quotations), so Share reports that instead of a link - which is correct
+and was already true; and the effect is keyed on the quotation **id** with a ref
+guard, because it depended on the whole object and any re-render that handed it a
+fresh identity **issued a new token**, silently invalidating the link the person
+was copying.
+
 **The customer sees the server's sentence.** Both handlers in
 `QuotationClientView` checked `response.ok` and did nothing when it was false,
 so pressing Approve on an expired link stopped the spinner and changed nothing -

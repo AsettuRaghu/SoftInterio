@@ -18,7 +18,7 @@
  * the quotation already carries columns for.
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   XMarkIcon,
   LinkIcon,
@@ -62,9 +62,25 @@ export function ShareQuotationModal({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [markedSent, setMarkedSent] = useState(false);
+  /**
+   * One link per opening of this dialog.
+   *
+   * The effect used to depend on the whole `quotation` OBJECT, so any re-render
+   * that handed it a fresh identity issued a NEW token - which silently
+   * invalidates the link the person is in the middle of copying. Keyed on the id
+   * now, and guarded, because issuing a token is not idempotent.
+   */
+  const issuedFor = useRef<string | null>(null);
+  const quotationId = quotation?.id ?? null;
+  const quotationStatus = quotation?.status ?? null;
 
   useEffect(() => {
-    if (!isOpen || !quotation) return;
+    if (!isOpen || !quotationId) {
+      issuedFor.current = null;
+      return;
+    }
+    if (issuedFor.current === quotationId) return;
+    issuedFor.current = quotationId;
 
     setError(null);
     setCopied(false);
@@ -74,16 +90,39 @@ export function ShareQuotationModal({
     void (async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(
-          `/api/quotations/${quotation.id}/share`,
-          { method: "POST" }
-        );
+
+        // **Sent first, then the link.** The share route refuses a draft, and
+        // rightly: a draft carrying a live token is a price nobody agreed to
+        // show, and one was sitting on this tenant readable for another eleven
+        // days. This dialog used to create the link and mark it sent
+        // afterwards, so with that refusal in place a draft could never be
+        // shared at all. Pressing Share IS the deliberate act - the note under
+        // the buttons says so - so the promotion belongs here, ahead of it.
+        if (quotationStatus === "draft") {
+          const sent = await fetch(`/api/quotations/${quotationId}/status`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "sent" }),
+          });
+          if (!sent.ok) {
+            const d = await sent.json().catch(() => ({}));
+            throw new Error(d.error || "Could not mark the quotation as sent");
+          }
+          setMarkedSent(true);
+        }
+
+        const response = await fetch(`/api/quotations/${quotationId}/share`, {
+          method: "POST",
+        });
         const data = await response.json();
         if (!response.ok || !data.success) {
           throw new Error(data.error || "Could not create a share link");
         }
         setShareUrl(data.data.share_url);
         setExpiresAt(data.data.expires_at || null);
+        // Told once, and only after the link exists - the page refetches, which
+        // is what would hand this effect a new object identity.
+        onShared?.();
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Could not create a share link"
@@ -92,14 +131,18 @@ export function ShareQuotationModal({
         setIsLoading(false);
       }
     })();
-  }, [isOpen, quotation]);
+    // onShared is intentionally not a dependency: it is a callback the page
+    // re-creates on every render, and depending on it would re-issue the token.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, quotationId, quotationStatus]);
 
   if (!isOpen || !quotation) return null;
 
   /**
-   * A draft the client can open is a draft the client cannot act on, so any
-   * share moves it to sent. Failure here is reported rather than swallowed:
-   * silently leaving it in draft is what caused the original problem.
+   * A safety net only. Opening this dialog already promotes a draft (see the
+   * effect above), so this returns immediately in the normal case; it stays for
+   * the path where the dialog was opened on a draft whose promotion failed and
+   * the person pressed a share button anyway.
    */
   const markAsSent = async () => {
     if (quotation.status !== "draft" || markedSent) return true;
